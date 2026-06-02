@@ -6,6 +6,7 @@ PYTHON_VERSION="${PYTHON_VERSION:-3.10}"
 USE_CONDA_ENV="${USE_CONDA_ENV:-0}"
 INSTALL_TORCH="${INSTALL_TORCH:-0}"
 INSTALL_DEEPSPEED="${INSTALL_DEEPSPEED:-0}"
+INSTALL_DEMO_DEPS="${INSTALL_DEMO_DEPS:-0}"
 TORCH_INDEX_URL="${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu124}"
 
 if [[ "$USE_CONDA_ENV" == "1" ]]; then
@@ -39,7 +40,13 @@ else
 fi
 python -m pip install -U ms-swift
 python -m pip install -U sentence-transformers faiss-cpu rank-bm25
-python -m pip install -U langgraph fastapi uvicorn "gradio>=3.40.0,<6.0" pandas pyyaml
+python -m pip install -U langgraph fastapi uvicorn pandas pyyaml
+if [[ "$INSTALL_DEMO_DEPS" == "1" ]]; then
+  python -m pip uninstall -y hf-gradio || true
+  python -m pip install -U "gradio>=3.40.0,<6.0"
+else
+  echo "Skipping Gradio demo deps. Set INSTALL_DEMO_DEPS=1 when the demo is needed."
+fi
 python -m pip check
 
 python scripts/check_runtime.py

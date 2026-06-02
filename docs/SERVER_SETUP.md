@@ -51,7 +51,7 @@ python scripts/smoke_test.py
 ```
 
 The default bootstrap uses the current Python environment and keeps the
-preinstalled PyTorch if CUDA is available.
+preinstalled PyTorch. It also skips Gradio demo dependencies by default.
 
 If Python 3.12 causes package compatibility issues, create an isolated Python
 3.10 environment instead:
@@ -69,12 +69,29 @@ Install DeepSpeed only when it is actually needed for training:
 INSTALL_DEEPSPEED=1 bash scripts/bootstrap_autodl.sh
 ```
 
-If an earlier bootstrap run installed `gradio>=6`, repair the ms-swift
-dependency conflict with:
+If an earlier bootstrap run installed `gradio>=6` or reports an `hf-gradio`
+conflict, repair the environment with:
 
 ```bash
-python -m pip install -U "gradio>=3.40.0,<6.0"
+git pull
+bash scripts/repair_autodl_env.sh
+```
+
+`hf-gradio` is not used by DocAgent. It conflicts with the `gradio-client`
+version selected by the gradio stack required by ms-swift, so the repair script
+removes it.
+
+To inspect the current package state before making changes:
+
+```bash
+python scripts/inspect_env.py
 python -m pip check
+```
+
+Install Gradio demo dependencies only when the demo is needed:
+
+```bash
+INSTALL_DEMO_DEPS=1 bash scripts/bootstrap_autodl.sh
 ```
 
 MinerU can be installed in a separate environment if dependencies conflict with
