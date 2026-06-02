@@ -64,3 +64,14 @@ data/benchmark/grpo_train.jsonl
 
 The first dataset milestone is schema correctness, not volume.
 
+## TAT-QA subset smoke
+
+This can run in no-card mode:
+
+```bash
+python scripts/build_tatqa_subset.py --split dev --limit 100
+python scripts/eval_retrieval.py --input data/benchmark/tatqa_dev_subset.jsonl
+```
+
+The script downloads the small dev JSON file from the Hugging Face
+`next-tat/TAT-QA` repository into `data/raw/tatqa/`, which is ignored by git.

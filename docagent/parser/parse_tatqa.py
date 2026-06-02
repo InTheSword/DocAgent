@@ -21,9 +21,12 @@ def convert_tatqa_question(
     question_record: dict[str, Any],
     split: str = "train",
 ) -> DocAgentSample:
-    doc_id = str(context_record.get("uid") or context_record.get("doc_id") or "tatqa_doc")
+    table_obj = context_record.get("table", {})
+    table_uid = table_obj.get("uid") if isinstance(table_obj, dict) else None
+    doc_id = str(context_record.get("uid") or context_record.get("doc_id") or table_uid or "tatqa_doc")
     qid = str(question_record.get("uid") or question_record.get("qid") or question_record.get("question"))
-    table = context_record.get("table", {}).get("table") or context_record.get("table") or []
+    table = table_obj.get("table") if isinstance(table_obj, dict) else context_record.get("table")
+    table = table or []
     paragraphs = context_record.get("paragraphs") or []
     paragraph_text = "\n".join(
         str(item.get("text") if isinstance(item, dict) else item) for item in paragraphs
@@ -58,6 +61,18 @@ def convert_tatqa_question(
         evidence=[table_block, text_block],
         verifiable=bool(answer),
         split=split,
-        metadata={"derivation": question_record.get("derivation"), "scale": question_record.get("scale")},
+        metadata={
+            "derivation": question_record.get("derivation"),
+            "scale": question_record.get("scale"),
+            "answer_from": question_record.get("answer_from"),
+            "gold_block_ids": _gold_block_ids(doc_id, question_record.get("answer_from")),
+        },
     )
 
+
+def _gold_block_ids(doc_id: str, answer_from: str | None) -> list[str]:
+    if answer_from == "table":
+        return [f"{doc_id}_table"]
+    if answer_from == "text":
+        return [f"{doc_id}_paragraphs"]
+    return [f"{doc_id}_table", f"{doc_id}_paragraphs"]

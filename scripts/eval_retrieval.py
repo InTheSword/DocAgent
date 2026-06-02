@@ -40,7 +40,8 @@ def main() -> None:
             answer_type_hint=sample.answer_type,
         )
         ranking = [block.block_id for block, _score in hits]
-        gold = {block.block_id for block in sample.evidence}
+        metadata_gold = sample.metadata.get("gold_block_ids")
+        gold = set(metadata_gold) if metadata_gold else {block.block_id for block in sample.evidence}
         rankings.append(ranking)
         gold_ids.append(gold)
         details.append(
@@ -71,4 +72,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
