@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.metadata as metadata
 import json
 import shutil
 import subprocess
@@ -61,22 +62,22 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", default="outputs/logs/swift_cli_report.json")
     parser.add_argument("--head-lines", type=int, default=80)
+    parser.add_argument("--timeout", type=int, default=180)
     args = parser.parse_args()
 
     swift_path = shutil.which("swift")
-    report: dict[str, object] = {"swift_path": swift_path}
+    report: dict[str, object] = {"swift_path": swift_path, "package_versions": package_versions()}
     if swift_path is None:
         report["error"] = "swift command not found"
     else:
-        version = run_command(["swift", "--version"])
-        sft_help = run_command(["swift", "sft", "--help"])
-        rlhf_help = run_command(["swift", "rlhf", "--help"])
+        top_help = run_command(["swift", "--help"], timeout=args.timeout)
+        sft_help = run_command(["swift", "sft", "--help"], timeout=args.timeout)
+        rlhf_help = run_command(["swift", "rlhf", "--help"], timeout=args.timeout)
         report.update(
             {
-                "version": {
-                    "returncode": version["returncode"],
-                    "stdout": version["stdout"],
-                    "stderr": version["stderr"],
+                "top_help": {
+                    "returncode": top_help["returncode"],
+                    "head": first_lines(str(top_help["stdout"]) + str(top_help["stderr"]), args.head_lines),
                 },
                 "sft": {
                     "returncode": sft_help["returncode"],
@@ -97,6 +98,15 @@ def main() -> None:
     print(json.dumps(report, ensure_ascii=False, indent=2))
 
 
+def package_versions() -> dict[str, str | None]:
+    versions = {}
+    for package in ["ms-swift", "torch", "transformers", "accelerate", "datasets", "peft"]:
+        try:
+            versions[package] = metadata.version(package)
+        except metadata.PackageNotFoundError:
+            versions[package] = None
+    return versions
+
+
 if __name__ == "__main__":
     main()
-
