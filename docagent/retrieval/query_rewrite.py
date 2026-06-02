@@ -13,6 +13,28 @@ class QueryRewriteResult:
 
 YEAR_RE = re.compile(r"\b(?:19|20)\d{2}\b")
 NUMBER_RE = re.compile(r"\b\d+(?:\.\d+)?%?\b")
+TABLE_TERMS = {
+    "average",
+    "calculated",
+    "change",
+    "decrease",
+    "increase",
+    "largest",
+    "less",
+    "more",
+    "percentage",
+    "ratio",
+    "smallest",
+    "table",
+    "total",
+    "value",
+    "amount",
+    "revenue",
+    "sales",
+    "year",
+    "years",
+}
+VISUAL_TERMS = {"chart", "figure", "image", "infographic", "visual"}
 
 
 def rewrite_query(question: str, answer_type_hint: str | None = None) -> QueryRewriteResult:
@@ -26,9 +48,9 @@ def rewrite_query(question: str, answer_type_hint: str | None = None) -> QueryRe
             keywords.append(normalized)
     target = ["text"]
     lowered = question.lower()
-    if answer_type_hint == "numeric" or any(term in lowered for term in ["increase", "decrease", "total", "revenue", "amount"]):
+    if answer_type_hint == "numeric" or any(term in lowered for term in TABLE_TERMS):
         target = ["table", "text"]
-    if answer_type_hint == "visual" or any(term in lowered for term in ["chart", "figure", "highest", "lowest"]):
+    if answer_type_hint == "visual" or any(term in lowered for term in VISUAL_TERMS):
         target = ["image", "text"]
     rewritten = " ".join(keywords)
     return QueryRewriteResult(rewritten_query=rewritten or question, keywords=keywords, target_evidence_type=target)

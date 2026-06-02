@@ -75,3 +75,22 @@ python scripts/eval_retrieval.py --input data/benchmark/tatqa_dev_subset.jsonl
 
 The script downloads the small dev JSON file from the Hugging Face
 `next-tat/TAT-QA` repository into `data/raw/tatqa/`, which is ignored by git.
+
+For large runs, prefer keeping raw datasets outside the repository:
+
+```bash
+mkdir -p /root/autodl-tmp/datasets/tatqa
+python scripts/build_tatqa_subset.py \
+  --split dev \
+  --limit 100 \
+  --raw-dir ../datasets/tatqa \
+  --output data/benchmark/tatqa_dev_subset.jsonl
+```
+
+Recommended AutoDL layout:
+
+```text
+/root/autodl-tmp/docagent   # code and small processed artifacts
+/root/autodl-tmp/datasets   # raw datasets
+/root/autodl-tmp/models     # model weights
+```
