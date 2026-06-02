@@ -4,7 +4,7 @@ set -euo pipefail
 ENV_NAME="${ENV_NAME:-docagent}"
 PYTHON_VERSION="${PYTHON_VERSION:-3.10}"
 USE_CONDA_ENV="${USE_CONDA_ENV:-0}"
-INSTALL_TORCH="${INSTALL_TORCH:-auto}"
+INSTALL_TORCH="${INSTALL_TORCH:-0}"
 INSTALL_DEEPSPEED="${INSTALL_DEEPSPEED:-0}"
 TORCH_INDEX_URL="${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu124}"
 
@@ -24,17 +24,11 @@ fi
 
 python -m pip install -U pip
 
-torch_ok=0
-python - <<'PY' && torch_ok=1 || torch_ok=0
-import torch
-raise SystemExit(0 if torch.cuda.is_available() else 1)
-PY
-
-if [[ "$INSTALL_TORCH" == "1" ]] || [[ "$INSTALL_TORCH" == "auto" && "$torch_ok" == "0" ]]; then
+if [[ "$INSTALL_TORCH" == "1" ]]; then
   echo "Installing PyTorch from $TORCH_INDEX_URL"
   python -m pip install torch torchvision torchaudio --index-url "$TORCH_INDEX_URL"
 else
-  echo "Keeping existing PyTorch installation"
+  echo "Keeping existing PyTorch installation. Set INSTALL_TORCH=1 to reinstall it."
 fi
 
 python -m pip install -U transformers accelerate datasets peft
