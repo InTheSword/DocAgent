@@ -1,0 +1,39 @@
+CREATE TABLE IF NOT EXISTS documents (
+  doc_id TEXT PRIMARY KEY,
+  source TEXT,
+  file_path TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS evidence_blocks (
+  block_id TEXT PRIMARY KEY,
+  doc_id TEXT NOT NULL,
+  page_id INTEGER,
+  block_type TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS qa_logs (
+  qid TEXT PRIMARY KEY,
+  question TEXT NOT NULL,
+  answer_json TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS tool_traces (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  qid TEXT NOT NULL,
+  step TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS eval_results (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_name TEXT NOT NULL,
+  metric TEXT NOT NULL,
+  value REAL NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+

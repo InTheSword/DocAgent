@@ -1,0 +1,13 @@
+model: Qwen/Qwen3-1.7B
+framework: ms-swift
+train_type: lora
+lora_rank: 8
+lora_alpha: 16
+learning_rate: 0.0001
+num_train_epochs: 1
+max_length: 2048
+precision: fp16
+dataset: data/benchmark/train_sft.jsonl
+val_dataset: data/benchmark/dev_sft.jsonl
+output_dir: outputs/checkpoints/qwen3-docagent-sft
+

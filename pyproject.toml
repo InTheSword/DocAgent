@@ -1,0 +1,32 @@
+[project]
+name = "docagent"
+version = "0.1.0"
+description = "Complex document QA and post-training MVP"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.optional-dependencies]
+retrieval = [
+  "sentence-transformers",
+  "faiss-cpu",
+]
+workflow = [
+  "langgraph",
+]
+app = [
+  "fastapi",
+  "uvicorn",
+  "gradio",
+]
+training = [
+  "ms-swift",
+  "transformers",
+  "datasets",
+  "peft",
+  "accelerate",
+  "deepspeed",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

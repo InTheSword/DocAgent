@@ -1,0 +1,15 @@
+model: outputs/checkpoints/qwen3-docagent-sft
+framework: ms-swift
+rlhf_type: grpo
+train_type: lora
+dataset: data/benchmark/grpo_train.jsonl
+reward_functions:
+  - format_reward
+  - answer_reward
+  - location_reward
+reward_weights:
+  format: 0.2
+  answer: 0.6
+  location: 0.2
+output_dir: outputs/checkpoints/qwen3-docagent-grpo
+

@@ -1,0 +1,14 @@
+query_rewrite:
+  mode: hybrid_rules_first
+bm25:
+  top_k: 20
+  k1: 1.5
+  b: 0.75
+dense:
+  enabled: false
+  model_name: BAAI/bge-m3
+reranker:
+  enabled: false
+  model_name: BAAI/bge-reranker-base
+final_top_k: 5
+

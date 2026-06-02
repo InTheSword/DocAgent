@@ -1,0 +1,7 @@
+mineru:
+  enabled: true
+  command: mineru
+  output_dir: data/processed/mineru_outputs
+  use_for_training_data: false
+  use_for_scenario_set: true
+

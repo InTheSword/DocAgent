@@ -1,0 +1,11 @@
+retrieval:
+  top_k: 5
+answer:
+  numeric_tolerance: 0.001
+  normalize_case: true
+location:
+  levels:
+    - page
+    - block_id
+    - table_id
+
