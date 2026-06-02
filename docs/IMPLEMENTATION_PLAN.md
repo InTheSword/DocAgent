@@ -155,6 +155,13 @@ python scripts/build_sft_dataset.py \
 python scripts/inspect_jsonl.py --input data/benchmark/tatqa_sft_smoke.jsonl --head 1
 ```
 
+Before launching GPU training, inspect the installed ms-swift CLI in no-card
+mode:
+
+```bash
+python scripts/inspect_swift_cli.py
+```
+
 ## Stage 6: GRPO post-training
 
 Goal:
