@@ -145,6 +145,16 @@ Verification:
 - Training logs and checkpoint exist.
 - RAG-only vs SFT comparison is available.
 
+Dataset construction smoke:
+
+```bash
+python scripts/build_sft_dataset.py \
+  --input data/benchmark/tatqa_dev_subset.jsonl \
+  --output data/benchmark/tatqa_sft_smoke.jsonl
+
+python scripts/inspect_jsonl.py --input data/benchmark/tatqa_sft_smoke.jsonl --head 1
+```
+
 ## Stage 6: GRPO post-training
 
 Goal:
@@ -167,6 +177,16 @@ Verification:
 
 - SFT vs SFT+GRPO comparison is available.
 - Reward hacking cases are logged.
+
+Dataset construction smoke:
+
+```bash
+python scripts/build_grpo_dataset.py \
+  --input data/benchmark/tatqa_dev_subset.jsonl \
+  --output data/benchmark/tatqa_grpo_smoke.jsonl
+
+python scripts/inspect_jsonl.py --input data/benchmark/tatqa_grpo_smoke.jsonl --head 1
+```
 
 ## Stage 7: VLM visual review ablation
 
