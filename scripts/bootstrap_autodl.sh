@@ -39,6 +39,7 @@ else
 fi
 python -m pip install -U ms-swift
 python -m pip install -U sentence-transformers faiss-cpu rank-bm25
-python -m pip install -U langgraph fastapi uvicorn gradio pandas pyyaml
+python -m pip install -U langgraph fastapi uvicorn "gradio>=3.40.0,<6.0" pandas pyyaml
+python -m pip check
 
 python scripts/check_runtime.py

@@ -33,8 +33,11 @@ AutoDL's default PyTorch image can be used first. For your current instance:
 - Ubuntu 22.04
 - CUDA 12.4
 
-Do not reinstall PyTorch unless `scripts/check_runtime.py` reports that CUDA is
-unavailable.
+Do not reinstall PyTorch just because CUDA is unavailable in no-card mode.
+`torch.cuda.is_available() == false` is expected before switching AutoDL to GPU
+mode. Reinstall PyTorch only if `import torch` fails, the installed wheel is CPU
+only, or CUDA is still unavailable after switching to GPU mode and confirming
+that `/dev/nvidia*` exists.
 
 ```bash
 cd /root/autodl-tmp
@@ -64,6 +67,14 @@ Install DeepSpeed only when it is actually needed for training:
 
 ```bash
 INSTALL_DEEPSPEED=1 bash scripts/bootstrap_autodl.sh
+```
+
+If an earlier bootstrap run installed `gradio>=6`, repair the ms-swift
+dependency conflict with:
+
+```bash
+python -m pip install -U "gradio>=3.40.0,<6.0"
+python -m pip check
 ```
 
 MinerU can be installed in a separate environment if dependencies conflict with
