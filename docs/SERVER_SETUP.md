@@ -26,15 +26,44 @@ Avoid downloading large datasets to the local Windows machine.
 
 ## Recommended environment
 
+AutoDL's default PyTorch image can be used first. For your current instance:
+
+- PyTorch 2.5.1
+- Python 3.12
+- Ubuntu 22.04
+- CUDA 12.4
+
+Do not reinstall PyTorch unless `scripts/check_runtime.py` reports that CUDA is
+unavailable.
+
 ```bash
 cd /root/autodl-tmp
 git clone <your_repo_url> docagent
 cd docagent
 
+python scripts/check_runtime.py
 bash scripts/bootstrap_autodl.sh
+python scripts/check_runtime.py
+python scripts/smoke_test.py
+```
+
+The default bootstrap uses the current Python environment and keeps the
+preinstalled PyTorch if CUDA is available.
+
+If Python 3.12 causes package compatibility issues, create an isolated Python
+3.10 environment instead:
+
+```bash
+USE_CONDA_ENV=1 PYTHON_VERSION=3.10 INSTALL_TORCH=1 bash scripts/bootstrap_autodl.sh
 conda activate docagent
 python scripts/check_runtime.py
 python scripts/smoke_test.py
+```
+
+Install DeepSpeed only when it is actually needed for training:
+
+```bash
+INSTALL_DEEPSPEED=1 bash scripts/bootstrap_autodl.sh
 ```
 
 MinerU can be installed in a separate environment if dependencies conflict with
