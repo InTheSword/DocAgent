@@ -52,6 +52,13 @@ Verification:
   `answer_type`, `evidence`, `verifiable`, and `split`.
 - Every evidence block has `doc_id`, `block_id`, `block_type`, and `location`.
 
+Smoke commands:
+
+```bash
+python scripts/build_smoke_benchmark.py
+python scripts/eval_retrieval.py --input data/benchmark/smoke_eval.jsonl
+```
+
 ## Stage 2: Retrieval evaluation
 
 Goal:
@@ -171,4 +178,3 @@ Verification:
 
 - Report Answer EM/F1 and visual subset accuracy.
 - Keep failure cases for interview discussion.
-
