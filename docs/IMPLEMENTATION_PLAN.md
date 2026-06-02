@@ -162,6 +162,12 @@ mode:
 python scripts/inspect_swift_cli.py
 ```
 
+First GPU smoke:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 bash scripts/train_sft_smoke.sh 2>&1 | tee outputs/logs/sft_smoke.log
+```
+
 ## Stage 6: GRPO post-training
 
 Goal:
