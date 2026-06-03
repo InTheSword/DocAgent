@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from docagent.eval.answer_metrics import normalize_text
 from docagent.schemas import DocAgentSample, EvidenceBlock
 from docagent.utils.jsonl import read_jsonl, write_jsonl
 
@@ -69,12 +71,55 @@ def normalize_answer(answer: str | list[str]) -> str:
     return str(answer)
 
 
+def smart_truncate(text: str, limit: int = TARGET_EVIDENCE_CHARS) -> str:
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) <= limit:
+        return text
+    prefix = text[:limit]
+    split_at = max(prefix.rfind(" "), prefix.rfind(";"), prefix.rfind(","))
+    if split_at >= int(limit * 0.7):
+        prefix = prefix[:split_at]
+    return prefix.rstrip(" ,;:-")
+
+
+def contains_answer(text: str, answer: str) -> bool:
+    if not answer:
+        return False
+    text_norm = normalize_text(text)
+    answer_norm = normalize_text(answer)
+    return bool(answer_norm and answer_norm in text_norm)
+
+
+def extract_target_evidence(block: EvidenceBlock, answer: str) -> str:
+    text = block.retrieval_text.strip()
+    if not text:
+        return ""
+
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if block.block_type == "table":
+        for line in lines:
+            if contains_answer(line, answer):
+                return smart_truncate(line)
+
+    segments = [
+        segment.strip()
+        for segment in re.split(r"(?<=[.!?])\s+|\n+", text)
+        if segment.strip()
+    ]
+    for segment in segments:
+        if contains_answer(segment, answer):
+            return smart_truncate(segment)
+
+    return smart_truncate(text)
+
+
 def build_assistant_target(sample: DocAgentSample) -> dict[str, Any]:
     gold_block = select_gold_block(sample)
+    answer = normalize_answer(sample.answer)
     location = build_location_target(gold_block) if gold_block else {}
-    evidence = gold_block.retrieval_text[:TARGET_EVIDENCE_CHARS] if gold_block else ""
+    evidence = extract_target_evidence(gold_block, answer) if gold_block else ""
     return {
-        "answer": normalize_answer(sample.answer),
+        "answer": answer,
         "evidence_location": location,
         "evidence": evidence,
         "reason": "The answer is supported by the cited evidence block.",
