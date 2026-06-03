@@ -163,6 +163,7 @@ mode:
 
 ```bash
 python scripts/inspect_swift_cli.py
+python scripts/check_local_model.py --model /root/autodl-tmp/models/Qwen3-1.7B
 ```
 
 First GPU smoke:
