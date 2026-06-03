@@ -1,7 +1,7 @@
 # Dataset Notes
 
-Large datasets should be downloaded on AutoDL, not on the local Windows
-machine.
+Large datasets should be downloaded manually on AutoDL, not on the local
+Windows machine. Scripts should read from local dataset paths by default.
 
 ## Primary datasets
 
@@ -69,14 +69,19 @@ The first dataset milestone is schema correctness, not volume.
 This can run in no-card mode:
 
 ```bash
-python scripts/build_tatqa_subset.py --split dev --limit 100
+python scripts/build_tatqa_subset.py \
+  --split dev \
+  --limit 100 \
+  --raw-dir /root/autodl-tmp/datasets/tatqa
+
 python scripts/eval_retrieval.py --input data/benchmark/tatqa_dev_subset.jsonl
 ```
 
-The script downloads the small dev JSON file from the Hugging Face
-`next-tat/TAT-QA` repository into `data/raw/tatqa/`, which is ignored by git.
+The script expects a local file such as
+`/root/autodl-tmp/datasets/tatqa/tatqa_dataset_dev.json`. It only downloads
+from Hugging Face when `--allow-download` is passed explicitly.
 
-For large runs, prefer keeping raw datasets outside the repository:
+Keep raw datasets outside the repository:
 
 ```bash
 mkdir -p /root/autodl-tmp/datasets/tatqa

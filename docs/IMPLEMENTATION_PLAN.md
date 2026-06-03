@@ -7,7 +7,10 @@ has a concrete verification target before the next stage starts.
 
 - Local code lives in `D:\Projects\docagent`.
 - GPU experiments will run on the lab server through git/ssh.
-- The first training target is `Qwen/Qwen3-1.7B`.
+- Model and raw dataset files are downloaded manually on AutoDL. Scripts read
+  local paths by default and should not silently fetch full model/data files.
+- The first training target is local Qwen3-1.7B at
+  `/root/autodl-tmp/models/Qwen3-1.7B`.
 - `Qwen3-4B` is an optional SFT comparison, not the first GRPO target.
 - `Qwen2.5-VL` is only used as a visual review branch.
 - MinerU is required for real uploaded documents and ScenarioSet, but public
@@ -128,7 +131,7 @@ Goal:
 
 First run:
 
-- Model: `Qwen/Qwen3-1.7B`
+- Model: `/root/autodl-tmp/models/Qwen3-1.7B`
 - Precision: `fp16` on RTX 3090 unless bf16 support is confirmed.
 - Dataset: 200-500 examples for smoke test.
 
@@ -167,6 +170,9 @@ First GPU smoke:
 ```bash
 CUDA_VISIBLE_DEVICES=0 bash scripts/train_sft_smoke.sh 2>&1 | tee outputs/logs/sft_smoke.log
 ```
+
+The smoke script expects `config.json` under
+`/root/autodl-tmp/models/Qwen3-1.7B` and runs transformers in offline mode.
 
 ## Stage 6: GRPO post-training
 

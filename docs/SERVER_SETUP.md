@@ -23,6 +23,9 @@ AutoDL may not expose useful output through `nvidia-smi`. Use
 ```
 
 Avoid downloading large datasets to the local Windows machine.
+Model and raw dataset downloads are manual by default. Training scripts read
+local files such as `/root/autodl-tmp/models/Qwen3-1.7B`; they should not be
+used as implicit download commands.
 
 ## Recommended environment
 
@@ -127,6 +130,7 @@ python scripts/check_runtime.py
 2. `python scripts/smoke_test.py`
 3. Build 50-100 sample dataset subsets on the server.
 4. Run retrieval evaluation.
-5. Run `Qwen/Qwen3-1.7B` LoRA-SFT smoke test.
-6. Run a small GRPO reward smoke test.
-7. Expand data volume only after logs and metrics are stable.
+5. Manually download Qwen3-1.7B to `/root/autodl-tmp/models/Qwen3-1.7B`.
+6. Run the local Qwen3-1.7B LoRA-SFT smoke test.
+7. Run a small GRPO reward smoke test.
+8. Expand data volume only after logs and metrics are stable.

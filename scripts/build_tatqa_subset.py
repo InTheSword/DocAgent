@@ -3,8 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import urllib.request
 from pathlib import Path
+from urllib.request import urlretrieve
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -22,15 +22,20 @@ FILES = {
 }
 
 
-def download_if_needed(split: str, raw_dir: Path) -> Path:
+def resolve_raw_path(split: str, raw_dir: Path, allow_download: bool) -> Path:
     raw_dir.mkdir(parents=True, exist_ok=True)
     filename = FILES[split]
     output = raw_dir / filename
     if output.exists() and output.stat().st_size > 0:
         return output
+    if not allow_download:
+        raise FileNotFoundError(
+            f"Missing local TAT-QA file: {output}\n"
+            f"Download {filename} manually to {raw_dir}, or rerun with --allow-download."
+        )
     url = f"{HF_RAW_BASE}/{filename}"
     print(f"downloading {url} -> {output}")
-    urllib.request.urlretrieve(url, output)
+    urlretrieve(url, output)
     return output
 
 
@@ -60,9 +65,10 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=100)
     parser.add_argument("--raw-dir", default="data/raw/tatqa")
     parser.add_argument("--output", default=None)
+    parser.add_argument("--allow-download", action="store_true")
     args = parser.parse_args()
 
-    raw_path = download_if_needed(args.split, ROOT / args.raw_dir)
+    raw_path = resolve_raw_path(args.split, ROOT / args.raw_dir, args.allow_download)
     records = load_records(raw_path)
     samples = build_subset(records, split=args.split, limit=args.limit)
     output = args.output or f"data/benchmark/tatqa_{args.split}_subset.jsonl"
@@ -91,4 +97,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

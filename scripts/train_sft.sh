@@ -1,22 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MODEL="${MODEL:-Qwen/Qwen3-1.7B}"
+MODEL="${MODEL:-/root/autodl-tmp/models/Qwen3-1.7B}"
 DATASET="${DATASET:-data/benchmark/train_sft.jsonl}"
 OUTPUT_DIR="${OUTPUT_DIR:-outputs/checkpoints/qwen3-docagent-sft}"
 PRECISION="${PRECISION:-bfloat16}"
-USE_HF="${USE_HF:-true}"
 CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 
 export CUDA_VISIBLE_DEVICES
-export HF_HOME="${HF_HOME:-/root/autodl-tmp/models/huggingface}"
-export MODELSCOPE_CACHE="${MODELSCOPE_CACHE:-/root/autodl-tmp/models/modelscope}"
+export TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
+export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
 
-mkdir -p "$HF_HOME" "$MODELSCOPE_CACHE" "$OUTPUT_DIR" outputs/logs
+if [[ ! -f "$MODEL/config.json" ]]; then
+  echo "Local model not found or incomplete: $MODEL" >&2
+  echo "Download Qwen3-1.7B manually to /root/autodl-tmp/models/Qwen3-1.7B before training." >&2
+  exit 2
+fi
+
+if [[ ! -f "$DATASET" ]]; then
+  echo "Dataset not found: $DATASET" >&2
+  exit 2
+fi
+
+mkdir -p "$OUTPUT_DIR" outputs/logs
 
 swift sft \
   --model "$MODEL" \
-  --use_hf "$USE_HF" \
   --dataset "$DATASET" \
   --tuner_type lora \
   --torch_dtype "$PRECISION" \
@@ -32,4 +41,3 @@ swift sft \
   --save_total_limit 2 \
   --logging_steps 5 \
   --output_dir "$OUTPUT_DIR"
-

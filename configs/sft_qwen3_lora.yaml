@@ -1,4 +1,4 @@
-model: Qwen/Qwen3-1.7B
+model: /root/autodl-tmp/models/Qwen3-1.7B
 framework: ms-swift
 tuner_type: lora
 lora_rank: 8
