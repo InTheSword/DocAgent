@@ -13,7 +13,13 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 from docagent.schemas import DocAgentSample
 from docagent.utils.jsonl import read_jsonl, write_jsonl
-from build_sft_dataset import SYSTEM_PROMPT, format_evidence, normalize_answer, select_gold_block
+from build_sft_dataset import (
+    SYSTEM_PROMPT,
+    build_location_target,
+    format_evidence,
+    normalize_answer,
+    select_gold_block,
+)
 
 
 def load_samples(path: Path) -> list[DocAgentSample]:
@@ -22,12 +28,13 @@ def load_samples(path: Path) -> list[DocAgentSample]:
 
 def build_grpo_record(sample: DocAgentSample) -> dict[str, Any]:
     gold_block = select_gold_block(sample)
-    gold_location = gold_block.location.to_dict() if gold_block else {}
+    gold_location = build_location_target(gold_block) if gold_block else {}
     user_content = (
         f"Question:\n{sample.question}\n\n"
         f"Answer type: {sample.answer_type}\n\n"
         f"Evidence:\n{format_evidence(sample.evidence)}\n\n"
-        "Required output: JSON with answer, evidence_location, evidence, reason."
+        "Required output: only one JSON object with answer, evidence_location, evidence, reason. "
+        "evidence_location must be an object copied from an evidence header."
     )
     return {
         "id": sample.qid,

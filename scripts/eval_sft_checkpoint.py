@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT))
 from docagent.eval.answer_metrics import exact_match, token_f1
 from docagent.rewards.combined import docqa_reward
 from docagent.rewards.location_reward import location_reward
+from docagent.tools.format_check import check_answer_format
 from docagent.utils.jsonl import read_jsonl, write_jsonl
 
 
@@ -119,11 +120,13 @@ def evaluate_prediction(prediction: dict[str, Any] | None, gold: dict[str, Any],
     if prediction is None:
         return {
             "json_ok": False,
+            "schema_ok": False,
             "answer_em": False,
             "answer_f1": 0.0,
             "location_ok": False,
             "reward": 0.0,
         }
+    format_check = check_answer_format(prediction)
     gold_answer = str(gold.get("answer", ""))
     pred_answer = str(prediction.get("answer", ""))
     gold_location = gold.get("evidence_location") or {}
@@ -131,6 +134,7 @@ def evaluate_prediction(prediction: dict[str, Any] | None, gold: dict[str, Any],
     loc_score = location_reward(pred_location, gold_location)
     return {
         "json_ok": True,
+        "schema_ok": bool(format_check["success"]),
         "answer_em": exact_match(pred_answer, gold_answer),
         "answer_f1": token_f1(pred_answer, gold_answer),
         "location_ok": loc_score == 1.0,
@@ -143,6 +147,7 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         return {
             "num_samples": 0,
             "json_pass_rate": 0.0,
+            "schema_pass_rate": 0.0,
             "thinking_rate": 0.0,
             "answer_em": 0.0,
             "answer_f1": 0.0,
@@ -153,6 +158,7 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "num_samples": n,
         "json_pass_rate": sum(row["metrics"]["json_ok"] for row in rows) / n,
+        "schema_pass_rate": sum(row["metrics"]["schema_ok"] for row in rows) / n,
         "thinking_rate": sum(row["metrics"]["has_thinking"] for row in rows) / n,
         "answer_em": sum(row["metrics"]["answer_em"] for row in rows) / n,
         "answer_f1": sum(row["metrics"]["answer_f1"] for row in rows) / n,

@@ -16,6 +16,7 @@ from docagent.utils.jsonl import read_jsonl, write_jsonl
 SYSTEM_PROMPT = (
     "You are a document QA assistant. Answer only from the provided evidence. "
     "Return only valid JSON with answer, evidence_location, evidence, and reason. "
+    "The evidence_location field must be a JSON object, not a string. "
     "Do not include analysis, chain-of-thought, markdown, or <think> tags."
 )
 
@@ -33,10 +34,16 @@ def select_gold_block(sample: DocAgentSample) -> EvidenceBlock | None:
     return sample.evidence[0] if sample.evidence else None
 
 
+def build_location_target(block: EvidenceBlock) -> dict[str, Any]:
+    location = block.location.to_dict()
+    location["block_id"] = block.block_id
+    return location
+
+
 def format_evidence(blocks: list[EvidenceBlock]) -> str:
     parts = []
     for block in blocks:
-        location = block.location.to_dict()
+        location = build_location_target(block)
         location_text = json.dumps(location, ensure_ascii=False)
         evidence_text = block.retrieval_text[:2500]
         parts.append(
@@ -54,7 +61,7 @@ def normalize_answer(answer: str | list[str]) -> str:
 
 def build_assistant_target(sample: DocAgentSample) -> dict[str, Any]:
     gold_block = select_gold_block(sample)
-    location = gold_block.location.to_dict() if gold_block else {}
+    location = build_location_target(gold_block) if gold_block else {}
     evidence = gold_block.retrieval_text[:500] if gold_block else ""
     return {
         "answer": normalize_answer(sample.answer),
@@ -69,7 +76,9 @@ def build_sft_record(sample: DocAgentSample) -> dict[str, Any]:
         f"Question:\n{sample.question}\n\n"
         f"Answer type: {sample.answer_type}\n\n"
         f"Evidence:\n{format_evidence(sample.evidence)}\n\n"
-        "Required output: only one JSON object with answer, evidence_location, evidence, reason."
+        "Required output: only one JSON object with answer, evidence_location, evidence, reason. "
+        "evidence_location must be an object copied from an evidence header, for example "
+        "{\"block_id\": \"...\"}."
     )
     return {
         "id": sample.qid,
