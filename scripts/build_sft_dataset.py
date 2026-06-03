@@ -67,7 +67,7 @@ def format_evidence(blocks: list[EvidenceBlock]) -> str:
 
 def normalize_answer(answer: str | list[str]) -> str:
     if isinstance(answer, list):
-        return str(answer[0]) if answer else ""
+        return ", ".join(str(item) for item in answer if str(item).strip())
     return str(answer)
 
 

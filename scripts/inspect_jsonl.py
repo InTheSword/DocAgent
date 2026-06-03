@@ -15,14 +15,14 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True)
     parser.add_argument("--head", type=int, default=1)
+    parser.add_argument("--max-chars", type=int, default=4000)
     args = parser.parse_args()
 
     records = read_jsonl(ROOT / args.input)
     print(json.dumps({"input": args.input, "num_records": len(records)}, ensure_ascii=False, indent=2))
     for record in records[: args.head]:
-        print(json.dumps(record, ensure_ascii=False, indent=2)[:4000])
+        print(json.dumps(record, ensure_ascii=False, indent=2)[: args.max_chars])
 
 
 if __name__ == "__main__":
     main()
-

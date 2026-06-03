@@ -157,17 +157,31 @@ def summarize(records: list[dict[str, Any]], max_evidence_chars: int) -> dict[st
     }
 
 
+def compact_report(report: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "num_records": report["num_records"],
+        "clean_records": report["clean_records"],
+        "clean_rate": report["clean_rate"],
+        "issue_counts": report["issue_counts"],
+        "by_answer_type": report["by_answer_type"],
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True)
     parser.add_argument("--output", default=None)
     parser.add_argument("--max-evidence-chars", type=int, default=300)
+    parser.add_argument("--print-mode", choices=["full", "summary", "none"], default="full")
     args = parser.parse_args()
 
     records = read_jsonl(ROOT / args.input)
     report = summarize(records, args.max_evidence_chars)
     text = json.dumps(report, ensure_ascii=False, indent=2)
-    print(text)
+    if args.print_mode == "full":
+        print(text)
+    elif args.print_mode == "summary":
+        print(json.dumps(compact_report(report), ensure_ascii=False, indent=2))
     if args.output:
         output = ROOT / args.output
         output.parent.mkdir(parents=True, exist_ok=True)
