@@ -23,42 +23,86 @@ def parse_target(record: dict[str, Any]) -> dict[str, Any]:
     return json.loads(messages[-1].get("content") or "{}")
 
 
-def build_prompt(tokenizer: Any, record: dict[str, Any]) -> str:
-    messages = list(record["messages"][:-1])
+def build_inference_messages(record: dict[str, Any], disable_thinking: bool) -> list[dict[str, Any]]:
+    messages = [dict(message) for message in record["messages"][:-1]]
+    if not disable_thinking:
+        return messages
+    for message in messages:
+        if message.get("role") == "system":
+            message["content"] = (
+                f"{message.get('content', '')} "
+                "Do not include analysis, chain-of-thought, markdown, or <think> tags. "
+                "Return only one valid JSON object."
+            )
+        elif message.get("role") == "user":
+            message["content"] = (
+                f"{message.get('content', '')}\n\n"
+                "/no_think\n"
+                "Return only one valid JSON object. Start with { and end with }."
+            )
+    return messages
+
+
+def build_prompt(tokenizer: Any, record: dict[str, Any], disable_thinking: bool) -> str:
+    messages = build_inference_messages(record, disable_thinking)
     try:
         return tokenizer.apply_chat_template(
             messages,
             tokenize=False,
             add_generation_prompt=True,
+            enable_thinking=not disable_thinking,
         )
+    except TypeError:
+        try:
+            return tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+        except Exception:
+            pass
     except Exception:
-        parts = []
-        for message in messages:
-            role = message.get("role", "user")
-            content = message.get("content", "")
-            parts.append(f"<|im_start|>{role}\n{content}<|im_end|>")
-        parts.append("<|im_start|>assistant\n")
-        return "\n".join(parts)
+        pass
+
+    parts = []
+    for message in messages:
+        role = message.get("role", "user")
+        content = message.get("content", "")
+        parts.append(f"<|im_start|>{role}\n{content}<|im_end|>")
+    parts.append("<|im_start|>assistant\n")
+    return "\n".join(parts)
+
+
+def decode_first_json(text: str) -> dict[str, Any] | None:
+    decoder = json.JSONDecoder()
+    for index, char in enumerate(text):
+        if char != "{":
+            continue
+        try:
+            parsed, _ = decoder.raw_decode(text[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return None
 
 
 def extract_json_object(text: str) -> dict[str, Any] | None:
     text = text.strip()
     if not text:
         return None
+    if "</think>" in text:
+        text = text.rsplit("</think>", maxsplit=1)[-1].strip()
     try:
         parsed = json.loads(text)
         return parsed if isinstance(parsed, dict) else None
     except json.JSONDecodeError:
-        pass
+        return decode_first_json(text)
 
-    match = re.search(r"\{.*\}", text, flags=re.DOTALL)
-    if not match:
-        return None
-    try:
-        parsed = json.loads(match.group(0))
-    except json.JSONDecodeError:
-        return None
-    return parsed if isinstance(parsed, dict) else None
+
+def has_thinking_text(text: str) -> bool:
+    lowered = text.lower()
+    return "<think>" in lowered or "</think>" in lowered
 
 
 def infer_answer_type(record: dict[str, Any]) -> str:
@@ -99,6 +143,7 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         return {
             "num_samples": 0,
             "json_pass_rate": 0.0,
+            "thinking_rate": 0.0,
             "answer_em": 0.0,
             "answer_f1": 0.0,
             "location_accuracy": 0.0,
@@ -108,6 +153,7 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "num_samples": n,
         "json_pass_rate": sum(row["metrics"]["json_ok"] for row in rows) / n,
+        "thinking_rate": sum(row["metrics"]["has_thinking"] for row in rows) / n,
         "answer_em": sum(row["metrics"]["answer_em"] for row in rows) / n,
         "answer_f1": sum(row["metrics"]["answer_f1"] for row in rows) / n,
         "location_accuracy": sum(row["metrics"]["location_ok"] for row in rows) / n,
@@ -123,9 +169,10 @@ def main() -> None:
     parser.add_argument("--output", default="outputs/eval/sft_checkpoint_eval.jsonl")
     parser.add_argument("--summary-output", default="outputs/eval/sft_checkpoint_eval_summary.json")
     parser.add_argument("--limit", type=int, default=10)
-    parser.add_argument("--max-new-tokens", type=int, default=256)
+    parser.add_argument("--max-new-tokens", type=int, default=512)
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--device", default="cuda")
+    parser.add_argument("--enable-thinking", action="store_true")
     args = parser.parse_args()
 
     import torch
@@ -163,7 +210,7 @@ def main() -> None:
         for record in records:
             gold = parse_target(record)
             answer_type = infer_answer_type(record)
-            prompt = build_prompt(tokenizer, record)
+            prompt = build_prompt(tokenizer, record, disable_thinking=not args.enable_thinking)
             inputs = tokenizer(prompt, return_tensors="pt")
             inputs = {key: value.to(model.device) for key, value in inputs.items()}
             do_sample = args.temperature > 0
@@ -178,6 +225,8 @@ def main() -> None:
             new_tokens = output_ids[0, inputs["input_ids"].shape[-1] :]
             generated = tokenizer.decode(new_tokens, skip_special_tokens=True)
             prediction = extract_json_object(generated)
+            metrics = evaluate_prediction(prediction, gold, answer_type)
+            metrics["has_thinking"] = has_thinking_text(generated)
             rows.append(
                 {
                     "id": record.get("id"),
@@ -185,7 +234,7 @@ def main() -> None:
                     "gold": gold,
                     "generated": generated,
                     "prediction": prediction,
-                    "metrics": evaluate_prediction(prediction, gold, answer_type),
+                    "metrics": metrics,
                 }
             )
 

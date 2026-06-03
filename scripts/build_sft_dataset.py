@@ -15,7 +15,8 @@ from docagent.utils.jsonl import read_jsonl, write_jsonl
 
 SYSTEM_PROMPT = (
     "You are a document QA assistant. Answer only from the provided evidence. "
-    "Return valid JSON with answer, evidence_location, evidence, and reason."
+    "Return only valid JSON with answer, evidence_location, evidence, and reason. "
+    "Do not include analysis, chain-of-thought, markdown, or <think> tags."
 )
 
 
@@ -68,7 +69,7 @@ def build_sft_record(sample: DocAgentSample) -> dict[str, Any]:
         f"Question:\n{sample.question}\n\n"
         f"Answer type: {sample.answer_type}\n\n"
         f"Evidence:\n{format_evidence(sample.evidence)}\n\n"
-        "Required output: JSON with answer, evidence_location, evidence, reason."
+        "Required output: only one JSON object with answer, evidence_location, evidence, reason."
     )
     return {
         "id": sample.qid,
@@ -112,4 +113,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
