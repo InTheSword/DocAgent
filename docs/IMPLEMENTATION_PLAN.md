@@ -169,11 +169,17 @@ python scripts/check_local_model.py --model /root/autodl-tmp/models/Qwen3-1.7B
 First GPU smoke:
 
 ```bash
+# Single GPU
 CUDA_VISIBLE_DEVICES=0 bash scripts/train_sft_smoke.sh 2>&1 | tee outputs/logs/sft_smoke.log
+
+# Two GPUs
+CUDA_VISIBLE_DEVICES=0,1 bash scripts/train_sft_smoke.sh 2>&1 | tee outputs/logs/sft_smoke.log
 ```
 
 The smoke script expects `config.json` under
 `/root/autodl-tmp/models/Qwen3-1.7B` and runs transformers in offline mode.
+Training scripts derive `NPROC_PER_NODE` from `CUDA_VISIBLE_DEVICES`, so
+`0` means one process and `0,1` means two distributed processes.
 
 ## Stage 6: GRPO post-training
 

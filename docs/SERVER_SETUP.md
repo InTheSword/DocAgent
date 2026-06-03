@@ -114,8 +114,15 @@ For long jobs:
 
 ```bash
 tmux new -s docagent
+# Single GPU
+CUDA_VISIBLE_DEVICES=0 bash scripts/train_sft.sh 2>&1 | tee outputs/logs/sft.log
+
+# Two GPUs
 CUDA_VISIBLE_DEVICES=0,1 bash scripts/train_sft.sh 2>&1 | tee outputs/logs/sft.log
 ```
+
+The training scripts derive `NPROC_PER_NODE` from `CUDA_VISIBLE_DEVICES`.
+Override it only when debugging distributed launch behavior.
 
 Monitor:
 

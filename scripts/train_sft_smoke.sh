@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/gpu_env.sh"
+
 MODEL="${MODEL:-/root/autodl-tmp/models/Qwen3-1.7B}"
 DATASET="${DATASET:-data/benchmark/tatqa_sft_smoke.jsonl}"
 OUTPUT_DIR="${OUTPUT_DIR:-outputs/checkpoints/qwen3-docagent-sft-smoke}"
 PRECISION="${PRECISION:-bfloat16}"
-CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 MAX_STEPS="${MAX_STEPS:-5}"
 
-export CUDA_VISIBLE_DEVICES
+prepare_gpu_env
 export TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
 export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
 
