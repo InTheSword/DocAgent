@@ -13,10 +13,13 @@ from docagent.schemas import DocAgentSample, EvidenceBlock
 from docagent.utils.jsonl import read_jsonl, write_jsonl
 
 
+TARGET_EVIDENCE_CHARS = 300
+
 SYSTEM_PROMPT = (
     "You are a document QA assistant. Answer only from the provided evidence. "
     "Return only valid JSON with answer, evidence_location, evidence, and reason. "
     "The evidence_location field must be a JSON object, not a string. "
+    "Keep evidence concise and copy only the supporting span or compact table row. "
     "Do not include analysis, chain-of-thought, markdown, or <think> tags."
 )
 
@@ -32,6 +35,13 @@ def select_gold_block(sample: DocAgentSample) -> EvidenceBlock | None:
             if block.block_id in gold_ids:
                 return block
     return sample.evidence[0] if sample.evidence else None
+
+
+def ordered_evidence_blocks(sample: DocAgentSample) -> list[EvidenceBlock]:
+    gold_block = select_gold_block(sample)
+    if gold_block is None:
+        return list(sample.evidence)
+    return [gold_block] + [block for block in sample.evidence if block.block_id != gold_block.block_id]
 
 
 def build_location_target(block: EvidenceBlock) -> dict[str, Any]:
@@ -62,7 +72,7 @@ def normalize_answer(answer: str | list[str]) -> str:
 def build_assistant_target(sample: DocAgentSample) -> dict[str, Any]:
     gold_block = select_gold_block(sample)
     location = build_location_target(gold_block) if gold_block else {}
-    evidence = gold_block.retrieval_text[:500] if gold_block else ""
+    evidence = gold_block.retrieval_text[:TARGET_EVIDENCE_CHARS] if gold_block else ""
     return {
         "answer": normalize_answer(sample.answer),
         "evidence_location": location,
@@ -75,10 +85,10 @@ def build_sft_record(sample: DocAgentSample) -> dict[str, Any]:
     user_content = (
         f"Question:\n{sample.question}\n\n"
         f"Answer type: {sample.answer_type}\n\n"
-        f"Evidence:\n{format_evidence(sample.evidence)}\n\n"
+        f"Evidence:\n{format_evidence(ordered_evidence_blocks(sample))}\n\n"
         "Required output: only one JSON object with answer, evidence_location, evidence, reason. "
         "evidence_location must be an object copied from an evidence header, for example "
-        "{\"block_id\": \"...\"}."
+        "{\"block_id\": \"...\"}. evidence must be concise and no more than 300 characters."
     )
     return {
         "id": sample.qid,

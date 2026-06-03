@@ -18,6 +18,7 @@ from build_sft_dataset import (
     build_location_target,
     format_evidence,
     normalize_answer,
+    ordered_evidence_blocks,
     select_gold_block,
 )
 
@@ -32,9 +33,10 @@ def build_grpo_record(sample: DocAgentSample) -> dict[str, Any]:
     user_content = (
         f"Question:\n{sample.question}\n\n"
         f"Answer type: {sample.answer_type}\n\n"
-        f"Evidence:\n{format_evidence(sample.evidence)}\n\n"
+        f"Evidence:\n{format_evidence(ordered_evidence_blocks(sample))}\n\n"
         "Required output: only one JSON object with answer, evidence_location, evidence, reason. "
-        "evidence_location must be an object copied from an evidence header."
+        "evidence_location must be an object copied from an evidence header. "
+        "evidence must be concise and no more than 300 characters."
     )
     return {
         "id": sample.qid,

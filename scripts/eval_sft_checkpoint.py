@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from docagent.eval.answer_metrics import exact_match, token_f1
+from docagent.rewards.answer_reward import answer_reward
 from docagent.rewards.combined import docqa_reward
 from docagent.rewards.location_reward import location_reward
 from docagent.tools.format_check import check_answer_format
@@ -131,12 +132,14 @@ def evaluate_prediction(prediction: dict[str, Any] | None, gold: dict[str, Any],
     pred_answer = str(prediction.get("answer", ""))
     gold_location = gold.get("evidence_location") or {}
     pred_location = prediction.get("evidence_location") or {}
+    ans_score = answer_reward(pred_answer, gold_answer, answer_type)
     loc_score = location_reward(pred_location, gold_location)
     return {
         "json_ok": True,
         "schema_ok": bool(format_check["success"]),
         "answer_em": exact_match(pred_answer, gold_answer),
         "answer_f1": token_f1(pred_answer, gold_answer),
+        "answer_score": ans_score,
         "location_ok": loc_score == 1.0,
         "reward": docqa_reward(prediction, gold_answer, gold_location, answer_type),
     }
@@ -151,6 +154,7 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "thinking_rate": 0.0,
             "answer_em": 0.0,
             "answer_f1": 0.0,
+            "answer_score": 0.0,
             "location_accuracy": 0.0,
             "mean_reward": 0.0,
         }
@@ -162,6 +166,7 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "thinking_rate": sum(row["metrics"]["has_thinking"] for row in rows) / n,
         "answer_em": sum(row["metrics"]["answer_em"] for row in rows) / n,
         "answer_f1": sum(row["metrics"]["answer_f1"] for row in rows) / n,
+        "answer_score": sum(row["metrics"].get("answer_score", 0.0) for row in rows) / n,
         "location_accuracy": sum(row["metrics"]["location_ok"] for row in rows) / n,
         "mean_reward": sum(row["metrics"]["reward"] for row in rows) / n,
     }
