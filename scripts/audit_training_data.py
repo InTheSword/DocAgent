@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -24,6 +25,16 @@ def get_user_content(record: dict[str, Any]) -> str:
         if message.get("role") == "user":
             return str(message.get("content", ""))
     return ""
+
+
+def infer_answer_type(record: dict[str, Any]) -> str:
+    answer_type = record.get("answer_type")
+    if answer_type:
+        return str(answer_type)
+    match = re.search(r"Answer type:\s*([A-Za-z_-]+)", get_user_content(record))
+    if match:
+        return match.group(1)
+    return "unknown"
 
 
 def get_assistant_target(record: dict[str, Any]) -> dict[str, Any] | None:
@@ -94,7 +105,7 @@ def audit_record(record: dict[str, Any], max_evidence_chars: int) -> list[str]:
         if is_midword_truncated(evidence, max_evidence_chars):
             issues.append("evidence_may_be_midword_truncated")
 
-    answer_type = str(record.get("answer_type") or "")
+    answer_type = infer_answer_type(record)
     answer = target.get("answer")
     if target_source == "assistant" and answer_type == "extractive" and evidence:
         if not answer_in_text(answer, evidence):
@@ -114,7 +125,7 @@ def summarize(records: list[dict[str, Any]], max_evidence_chars: int) -> dict[st
 
     for record in records:
         issues = audit_record(record, max_evidence_chars)
-        answer_type = str(record.get("answer_type") or "unknown")
+        answer_type = infer_answer_type(record)
         if not issues:
             clean += 1
             by_answer_type[answer_type]["clean"] += 1
