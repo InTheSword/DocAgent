@@ -56,13 +56,13 @@ fi
 
 mkdir -p "$OUTPUT_DIR" outputs/logs
 
-if [[ "$USE_VLLM" == "true" || "$USE_VLLM" == "1" ]]; then
-  launcher=(swift rlhf)
-else
-  export DOCAGENT_NO_VLLM_STUB=1
-  export PYTHONPATH="$ROOT_DIR:${PYTHONPATH:-}"
-  launcher=(python -m scripts.no_vllm_swift_entrypoint)
+if [[ "$USE_VLLM" != "true" && "$USE_VLLM" != "1" ]]; then
+  echo "ms-swift GRPO in this environment requires a real vLLM installation." >&2
+  echo "Use scripts/train_custom_grpo.py for the no-vLLM RL path." >&2
+  exit 2
 fi
+
+launcher=(swift rlhf)
 
 cmd=(
   "${launcher[@]}"
