@@ -186,6 +186,7 @@ def main() -> None:
     parser.add_argument("--top-p", type=float, default=0.9)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--summary-output")
+    parser.add_argument("--allow-cpu", action="store_true")
     args = parser.parse_args()
 
     import torch
@@ -204,7 +205,13 @@ def main() -> None:
         )
     else:
         device = torch.device("cpu")
-        progress("cuda unavailable; training will run on CPU")
+        message = (
+            "CUDA is unavailable. Refusing to run GRPO on CPU because it is too slow for this project. "
+            "Check GPU mode, driver/runtime compatibility, and torch CUDA build."
+        )
+        if not args.allow_cpu:
+            raise RuntimeError(message)
+        progress(f"{message} --allow-cpu was set, continuing on CPU")
 
     model_path = Path(args.model)
     adapter_path = Path(args.adapter)
@@ -279,7 +286,7 @@ def main() -> None:
     progress("trainer.train done")
     if hasattr(trainer, "accelerator"):
         trainer.accelerator.wait_for_everyone()
-    if trainer.is_world_process_zero():
+    if int(os.environ.get("RANK", "0")) == 0:
         progress(f"saving adapter to {output_dir}")
         trainer.save_model(str(output_dir))
         tokenizer.save_pretrained(str(output_dir))

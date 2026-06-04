@@ -47,7 +47,7 @@ def main() -> None:
         "max_steps": summary.get("max_steps"),
         "num_generations": summary.get("num_generations"),
         "logged_steps": len(history),
-        "nonzero_reward_std_steps": sum(value > 0 for value in reward_std),
+        "nonzero_reward_std_steps": sum(value > 1e-6 for value in reward_std),
         "reward": first_last(rewards),
         "reward_std": first_last(reward_std),
         "loss": first_last(losses),
