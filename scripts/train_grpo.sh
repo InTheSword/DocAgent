@@ -60,7 +60,7 @@ if [[ "$USE_VLLM" == "true" || "$USE_VLLM" == "1" ]]; then
   launcher=(swift rlhf)
 else
   export DOCAGENT_NO_VLLM_STUB=1
-  export PYTHONPATH="$ROOT_DIR:$SCRIPT_DIR/no_vllm_sitecustomize:${PYTHONPATH:-}"
+  export PYTHONPATH="$ROOT_DIR:${PYTHONPATH:-}"
   launcher=(python -m scripts.no_vllm_swift_entrypoint)
 fi
 
