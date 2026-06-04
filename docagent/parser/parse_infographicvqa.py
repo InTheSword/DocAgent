@@ -5,10 +5,28 @@ from typing import Any
 from docagent.schemas import DocAgentSample, EvidenceBlock, EvidenceLocation
 
 
+def _text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts = []
+        for item in value:
+            if isinstance(item, dict):
+                parts.append(str(item.get("text") or item.get("answer") or ""))
+            else:
+                parts.append(str(item))
+        return " ".join(part for part in parts if part.strip())
+    if isinstance(value, dict):
+        return str(value.get("text") or value.get("answer") or "")
+    return str(value)
+
+
 def convert_infographic_record(record: dict[str, Any], split: str = "train") -> DocAgentSample:
     qid = str(record.get("questionId") or record.get("qid") or record.get("id"))
     doc_id = str(record.get("image") or record.get("image_id") or record.get("doc_id") or qid)
-    ocr_text = record.get("ocr_text") or record.get("text") or ""
+    ocr_text = _text(record.get("ocr_text") or record.get("ocr") or record.get("context") or record.get("text"))
     image_path = record.get("image_path") or record.get("image")
     block = EvidenceBlock(
         doc_id=doc_id,
@@ -24,10 +42,9 @@ def convert_infographic_record(record: dict[str, Any], split: str = "train") -> 
         source="infographicvqa",
         doc_id=doc_id,
         question=str(record["question"]),
-        answer=record.get("answer") or record.get("answers") or "",
+        answer=_text(record.get("answer") or record.get("answers")),
         answer_type="visual",
         evidence=[block],
-        verifiable=bool(record.get("answer") or record.get("answers")),
+        verifiable=bool(_text(record.get("answer") or record.get("answers"))),
         split=split,
     )
-

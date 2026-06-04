@@ -64,6 +64,44 @@ data/benchmark/grpo_train.jsonl
 
 The first dataset milestone is schema correctness, not volume.
 
+## MP-DocVQA / InfographicVQA local subset conversion
+
+Download only annotation files and small image/OCR subsets first. Keep raw files
+outside the repository, for example:
+
+```text
+/root/autodl-tmp/datasets/mp_docvqa/
+/root/autodl-tmp/datasets/infographicvqa/
+```
+
+Convert local annotations into DocAgent samples:
+
+```bash
+python scripts/build_vqa_subset.py \
+  --source mp_docvqa \
+  --input /root/autodl-tmp/datasets/mp_docvqa/train.json \
+  --output data/benchmark/mp_docvqa_train_subset.jsonl \
+  --split train \
+  --limit 100
+
+python scripts/build_vqa_subset.py \
+  --source infographicvqa \
+  --input /root/autodl-tmp/datasets/infographicvqa/train.json \
+  --output data/benchmark/infographicvqa_train_subset.jsonl \
+  --split train \
+  --limit 100
+```
+
+Then mix dataset shards for schema-level experiments:
+
+```bash
+python scripts/build_mixed_dataset.py \
+  --input data/benchmark/tatqa_train_subset_1000.jsonl:300 \
+  --input data/benchmark/mp_docvqa_train_subset.jsonl:100 \
+  --input data/benchmark/infographicvqa_train_subset.jsonl:100 \
+  --output data/benchmark/mixed_docagent_train_subset.jsonl
+```
+
 ## TAT-QA subset smoke
 
 This can run in no-card mode:
