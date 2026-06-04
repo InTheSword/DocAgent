@@ -26,6 +26,10 @@ def first_last(values: list[float]) -> dict[str, float | None]:
     return {"first": values[0], "last": values[-1], "mean": mean(values)}
 
 
+def max_value(values: list[float]) -> float | None:
+    return max(values) if values else None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True)
@@ -39,6 +43,8 @@ def main() -> None:
     rewards = numeric_values(history, "reward")
     losses = numeric_values(history, "loss")
     grad_norms = numeric_values(history, "grad_norm")
+    clipped_ratios = numeric_values(history, "completions/clipped_ratio")
+    mean_lengths = numeric_values(history, "completions/mean_length")
 
     report = {
         "summary": args.input,
@@ -51,6 +57,9 @@ def main() -> None:
         "reward": first_last(rewards),
         "reward_std": first_last(reward_std),
         "loss": first_last(losses),
+        "completion_clipped_ratio": first_last(clipped_ratios),
+        "completion_mean_length": first_last(mean_lengths),
+        "max_completion_clipped_ratio": max_value(clipped_ratios),
         "max_grad_norm": max(grad_norms) if grad_norms else None,
     }
     if args.log_file:
