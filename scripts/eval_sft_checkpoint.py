@@ -18,6 +18,12 @@ from docagent.tools.format_check import check_answer_format
 from docagent.utils.jsonl import read_jsonl, write_jsonl
 
 
+def batched(items: list[Any], batch_size: int) -> list[list[Any]]:
+    if batch_size < 1:
+        raise ValueError("--batch-size must be >= 1")
+    return [items[index : index + batch_size] for index in range(0, len(items), batch_size)]
+
+
 def parse_target(record: dict[str, Any]) -> dict[str, Any]:
     messages = record.get("messages") or []
     if not messages or messages[-1].get("role") != "assistant":
@@ -184,6 +190,9 @@ def main() -> None:
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--enable-thinking", action="store_true")
+    parser.add_argument("--batch-size", type=int, default=1)
+    parser.add_argument("--num-shards", type=int, default=1)
+    parser.add_argument("--shard-index", type=int, default=0)
     args = parser.parse_args()
 
     import torch
@@ -197,13 +206,21 @@ def main() -> None:
         raise FileNotFoundError(f"local model is missing config.json: {model_path}")
     if not (adapter_path / "adapter_model.safetensors").is_file():
         raise FileNotFoundError(f"adapter checkpoint is missing adapter_model.safetensors: {adapter_path}")
+    if args.num_shards < 1:
+        raise ValueError("--num-shards must be >= 1")
+    if not 0 <= args.shard_index < args.num_shards:
+        raise ValueError("--shard-index must satisfy 0 <= shard-index < num-shards")
     records = read_jsonl(input_path)[: args.limit]
+    records = [record for index, record in enumerate(records) if index % args.num_shards == args.shard_index]
 
     tokenizer = AutoTokenizer.from_pretrained(
         str(model_path),
         local_files_only=True,
         trust_remote_code=True,
     )
+    tokenizer.padding_side = "left"
+    if tokenizer.pad_token_id is None:
+        tokenizer.pad_token = tokenizer.eos_token
     dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
     base_model = AutoModelForCausalLM.from_pretrained(
         str(model_path),
@@ -218,11 +235,13 @@ def main() -> None:
 
     rows: list[dict[str, Any]] = []
     with torch.inference_mode():
-        for record in records:
-            gold = parse_target(record)
-            answer_type = infer_answer_type(record)
-            prompt = build_prompt(tokenizer, record, disable_thinking=not args.enable_thinking)
-            inputs = tokenizer(prompt, return_tensors="pt")
+        for batch_records in batched(records, args.batch_size):
+            golds = [parse_target(record) for record in batch_records]
+            answer_types = [infer_answer_type(record) for record in batch_records]
+            prompts = [
+                build_prompt(tokenizer, record, disable_thinking=not args.enable_thinking) for record in batch_records
+            ]
+            inputs = tokenizer(prompts, return_tensors="pt", padding=True)
             inputs = {key: value.to(model.device) for key, value in inputs.items()}
             do_sample = args.temperature > 0
             generate_kwargs = {
@@ -233,21 +252,23 @@ def main() -> None:
             if do_sample:
                 generate_kwargs["temperature"] = args.temperature
             output_ids = model.generate(**inputs, **generate_kwargs)
-            new_tokens = output_ids[0, inputs["input_ids"].shape[-1] :]
-            generated = tokenizer.decode(new_tokens, skip_special_tokens=True)
-            prediction = extract_json_object(generated)
-            metrics = evaluate_prediction(prediction, gold, answer_type)
-            metrics["has_thinking"] = has_thinking_text(generated)
-            rows.append(
-                {
-                    "id": record.get("id"),
-                    "answer_type": answer_type,
-                    "gold": gold,
-                    "generated": generated,
-                    "prediction": prediction,
-                    "metrics": metrics,
-                }
-            )
+            prompt_width = inputs["input_ids"].shape[-1]
+            for row_index, record in enumerate(batch_records):
+                generated_ids = output_ids[row_index, prompt_width:]
+                generated = tokenizer.decode(generated_ids, skip_special_tokens=True)
+                prediction = extract_json_object(generated)
+                metrics = evaluate_prediction(prediction, golds[row_index], answer_types[row_index])
+                metrics["has_thinking"] = has_thinking_text(generated)
+                rows.append(
+                    {
+                        "id": record.get("id"),
+                        "answer_type": answer_types[row_index],
+                        "gold": golds[row_index],
+                        "generated": generated,
+                        "prediction": prediction,
+                        "metrics": metrics,
+                    }
+                )
 
     output = ROOT / args.output
     summary_output = ROOT / args.summary_output
