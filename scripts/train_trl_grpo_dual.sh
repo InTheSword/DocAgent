@@ -23,6 +23,10 @@ LOG_FILE="${LOG_FILE:-outputs/logs/${RUN_NAME}.log}"
 
 mkdir -p outputs/checkpoints outputs/eval outputs/logs
 
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-4}"
+export MKL_NUM_THREADS="${MKL_NUM_THREADS:-4}"
+export TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
+
 CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES}" \
 PYTHONUNBUFFERED=1 \
 torchrun --standalone --nproc_per_node="${NPROC_PER_NODE}" scripts/train_trl_grpo.py \
@@ -41,7 +45,7 @@ torchrun --standalone --nproc_per_node="${NPROC_PER_NODE}" scripts/train_trl_grp
   --max-completion-length "${MAX_COMPLETION_LENGTH}" \
   --temperature "${TEMPERATURE}" \
   --top-p "${TOP_P}" \
-  > "${LOG_FILE}" 2>&1 || {
+  2>&1 | tee "${LOG_FILE}" || {
     tail -80 "${LOG_FILE}"
     exit 1
   }

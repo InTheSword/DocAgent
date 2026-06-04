@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +13,17 @@ sys.path.insert(0, str(ROOT))
 
 from docagent.rewards.combined import docqa_reward
 from docagent.utils.jsonl import read_jsonl
+
+
+def progress(message: str) -> None:
+    rank = os.environ.get("RANK", "0")
+    local_rank = os.environ.get("LOCAL_RANK", "0")
+    world_size = os.environ.get("WORLD_SIZE", "1")
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    print(
+        f"[docagent-grpo {timestamp} rank={rank}/{world_size} local_rank={local_rank}] {message}",
+        flush=True,
+    )
 
 
 def build_prompt(tokenizer: Any, record: dict[str, Any], max_prompt_tokens: int | None) -> str:
@@ -135,6 +148,7 @@ def build_reward_func():
 def build_dataset(tokenizer: Any, input_path: Path, limit: int | None, max_prompt_tokens: int | None):
     from datasets import Dataset
 
+    progress(f"building dataset from {input_path} limit={limit}")
     records = read_jsonl(input_path)
     if limit is not None:
         records = records[:limit]
@@ -149,7 +163,9 @@ def build_dataset(tokenizer: Any, input_path: Path, limit: int | None, max_promp
                 "sample_id": str(record.get("id") or ""),
             }
         )
-    return Dataset.from_list(rows)
+    dataset = Dataset.from_list(rows)
+    progress(f"built dataset rows={len(dataset)}")
+    return dataset
 
 
 def main() -> None:
@@ -177,6 +193,19 @@ def main() -> None:
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from trl import GRPOConfig, GRPOTrainer
 
+    local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+    if torch.cuda.is_available():
+        torch.cuda.set_device(local_rank)
+        device = torch.device("cuda", local_rank)
+        progress(
+            "cuda ready "
+            f"device={device} name={torch.cuda.get_device_name(device)} "
+            f"bf16={torch.cuda.is_bf16_supported()}"
+        )
+    else:
+        device = torch.device("cpu")
+        progress("cuda unavailable; training will run on CPU")
+
     model_path = Path(args.model)
     adapter_path = Path(args.adapter)
     output_dir = ROOT / args.output_dir
@@ -185,6 +214,7 @@ def main() -> None:
     if not (adapter_path / "adapter_model.safetensors").is_file():
         raise FileNotFoundError(f"adapter checkpoint is missing adapter_model.safetensors: {adapter_path}")
 
+    progress(f"loading tokenizer from {model_path}")
     tokenizer = AutoTokenizer.from_pretrained(str(model_path), local_files_only=True, trust_remote_code=True)
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -192,17 +222,27 @@ def main() -> None:
     train_dataset = build_dataset(tokenizer, ROOT / args.dataset, args.limit, args.max_prompt_tokens)
 
     dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float32
+    progress(f"loading base model dtype={dtype}")
     base_model = AutoModelForCausalLM.from_pretrained(
         str(model_path),
         torch_dtype=dtype,
         local_files_only=True,
         trust_remote_code=True,
     )
+    progress(f"loading trainable adapter from {adapter_path}")
     model = PeftModel.from_pretrained(base_model, str(adapter_path), is_trainable=True)
     model.config.use_cache = False
     if hasattr(model, "enable_input_require_grads"):
         model.enable_input_require_grads()
+    if device.type == "cuda":
+        progress(f"moving model to {device}")
+        model = model.to(device)
 
+    progress(
+        "building GRPO trainer "
+        f"steps={args.max_steps} num_generations={args.num_generations} "
+        f"per_device_batch={args.per_device_train_batch_size}"
+    )
     training_args = GRPOConfig(
         output_dir=str(output_dir),
         max_steps=args.max_steps,
@@ -234,10 +274,13 @@ def main() -> None:
         train_dataset=train_dataset,
         processing_class=tokenizer,
     )
+    progress("trainer.train start")
     trainer.train()
+    progress("trainer.train done")
     if hasattr(trainer, "accelerator"):
         trainer.accelerator.wait_for_everyone()
     if trainer.is_world_process_zero():
+        progress(f"saving adapter to {output_dir}")
         trainer.save_model(str(output_dir))
         tokenizer.save_pretrained(str(output_dir))
 
