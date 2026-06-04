@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$SCRIPT_DIR/lib/gpu_env.sh"
 
 MODEL="${MODEL:-/root/autodl-tmp/models/Qwen3-1.7B}"
@@ -58,6 +59,8 @@ mkdir -p "$OUTPUT_DIR" outputs/logs
 if [[ "$USE_VLLM" == "true" || "$USE_VLLM" == "1" ]]; then
   launcher=(swift rlhf)
 else
+  export DOCAGENT_NO_VLLM_STUB=1
+  export PYTHONPATH="$ROOT_DIR:$SCRIPT_DIR/no_vllm_sitecustomize:${PYTHONPATH:-}"
   launcher=(python -m scripts.no_vllm_swift_entrypoint)
 fi
 
