@@ -102,6 +102,38 @@ python scripts/build_mixed_dataset.py \
   --output data/benchmark/mixed_docagent_train_subset.jsonl
 ```
 
+## LLM-assisted sample audit
+
+Rule-based checks catch schema and simple evidence errors. Complex cross-source
+samples should go through an LLM audit queue before SFT/GRPO construction.
+
+Export audit tasks without calling any API:
+
+```bash
+python scripts/llm_audit_samples.py \
+  --input data/benchmark/mixed_docagent_train_subset.jsonl \
+  --tasks-output outputs/audit/mixed_docagent_audit_tasks.jsonl \
+  --mode export \
+  --limit 20
+```
+
+If an OpenAI-compatible endpoint is configured, run automatic audit:
+
+```bash
+OPENAI_API_KEY=... \
+OPENAI_MODEL=gpt-4.1-mini \
+python scripts/llm_audit_samples.py \
+  --input data/benchmark/mixed_docagent_train_subset.jsonl \
+  --tasks-output outputs/audit/mixed_docagent_audit_tasks.jsonl \
+  --decisions-output outputs/audit/mixed_docagent_audit_decisions.jsonl \
+  --audited-output data/benchmark/mixed_docagent_train_audited.jsonl \
+  --report-output outputs/audit/mixed_docagent_audit_report.json \
+  --mode api
+```
+
+The LLM decision schema is `keep | repair | drop`. Repaired samples preserve
+the original record and add `metadata.llm_audit` for traceability.
+
 ## TAT-QA subset smoke
 
 This can run in no-card mode:
