@@ -20,6 +20,8 @@ def is_image_like(value: Any) -> bool:
 
 
 def serializable_value(value: Any, sample_id: str, key: str, image_dir: Path | None) -> Any:
+    if isinstance(value, dict) and isinstance(value.get("src"), str):
+        return value
     if is_image_like(value):
         if image_dir is None:
             return None
@@ -47,6 +49,9 @@ def normalize_hf_row(row: dict[str, Any], image_dir: Path | None) -> dict[str, A
         for key, value in normalized.items():
             if key.startswith("image") and isinstance(value, str):
                 image_path = value
+                break
+            if key.startswith("image") and isinstance(value, dict) and isinstance(value.get("src"), str):
+                image_path = value["src"]
                 break
     if image_path:
         normalized["image_path"] = image_path

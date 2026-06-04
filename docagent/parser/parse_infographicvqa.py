@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from typing import Any
 
 from docagent.schemas import DocAgentSample, EvidenceBlock, EvidenceLocation
@@ -9,6 +10,14 @@ def _text(value: Any) -> str:
     if value is None:
         return ""
     if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            try:
+                parsed = ast.literal_eval(stripped)
+            except (SyntaxError, ValueError):
+                parsed = None
+            if isinstance(parsed, list):
+                return _text(parsed)
         return value
     if isinstance(value, list):
         parts = []
@@ -24,7 +33,11 @@ def _text(value: Any) -> str:
 
 
 def _string_value(value: Any) -> str:
-    return value if isinstance(value, str) else ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict) and value.get("src"):
+        return str(value["src"])
+    return ""
 
 
 def convert_infographic_record(record: dict[str, Any], split: str = "train") -> DocAgentSample:

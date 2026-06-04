@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from typing import Any
 
 from docagent.schemas import DocAgentSample, EvidenceBlock, EvidenceLocation
@@ -9,6 +10,14 @@ def _first_text(value: Any) -> str:
     if value is None:
         return ""
     if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            try:
+                parsed = ast.literal_eval(stripped)
+            except (SyntaxError, ValueError):
+                parsed = None
+            if isinstance(parsed, list):
+                return _first_text(parsed)
         return value
     if isinstance(value, list):
         parts = []
@@ -24,6 +33,15 @@ def _first_text(value: Any) -> str:
 
 
 def _first_page(value: Any) -> int | None:
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            try:
+                parsed = ast.literal_eval(stripped)
+            except (SyntaxError, ValueError):
+                parsed = None
+            if isinstance(parsed, list):
+                value = parsed
     if isinstance(value, list):
         value = value[0] if value else None
     if value is None:
@@ -53,6 +71,9 @@ def convert_mpdocvqa_record(record: dict[str, Any], split: str = "train") -> Doc
             value = record.get(f"image_{index}")
             if isinstance(value, str):
                 image_path = value
+                break
+            if isinstance(value, dict) and value.get("src"):
+                image_path = str(value["src"])
                 break
     block = EvidenceBlock(
         doc_id=doc_id,
