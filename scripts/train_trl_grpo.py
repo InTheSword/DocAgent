@@ -235,23 +235,26 @@ def main() -> None:
         processing_class=tokenizer,
     )
     trainer.train()
-    trainer.save_model(str(output_dir))
-    tokenizer.save_pretrained(str(output_dir))
+    if hasattr(trainer, "accelerator"):
+        trainer.accelerator.wait_for_everyone()
+    if trainer.is_world_process_zero():
+        trainer.save_model(str(output_dir))
+        tokenizer.save_pretrained(str(output_dir))
 
-    summary = {
-        "model": str(model_path),
-        "start_adapter": str(adapter_path),
-        "dataset": args.dataset,
-        "output_dir": args.output_dir,
-        "limit": args.limit,
-        "max_steps": args.max_steps,
-        "num_generations": args.num_generations,
-        "log_history": trainer.state.log_history,
-    }
-    summary_output = ROOT / (args.summary_output or str(output_dir / "trl_grpo_summary.json"))
-    summary_output.parent.mkdir(parents=True, exist_ok=True)
-    summary_output.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(json.dumps({"output_dir": args.output_dir, "summary_output": str(summary_output)}, ensure_ascii=False, indent=2))
+        summary = {
+            "model": str(model_path),
+            "start_adapter": str(adapter_path),
+            "dataset": args.dataset,
+            "output_dir": args.output_dir,
+            "limit": args.limit,
+            "max_steps": args.max_steps,
+            "num_generations": args.num_generations,
+            "log_history": trainer.state.log_history,
+        }
+        summary_output = ROOT / (args.summary_output or str(output_dir / "trl_grpo_summary.json"))
+        summary_output.parent.mkdir(parents=True, exist_ok=True)
+        summary_output.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(json.dumps({"output_dir": args.output_dir, "summary_output": str(summary_output)}, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
