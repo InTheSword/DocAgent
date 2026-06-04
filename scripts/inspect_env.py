@@ -16,6 +16,7 @@ PACKAGES = [
     "datasets",
     "peft",
     "ms-swift",
+    "msgspec",
     "gradio",
     "gradio-client",
     "hf-gradio",
@@ -65,4 +66,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

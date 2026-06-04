@@ -110,7 +110,7 @@ def main() -> None:
 
 def package_versions() -> dict[str, str | None]:
     versions = {}
-    for package in ["ms-swift", "torch", "transformers", "accelerate", "datasets", "peft"]:
+    for package in ["ms-swift", "msgspec", "torch", "transformers", "accelerate", "datasets", "peft"]:
         try:
             versions[package] = metadata.version(package)
         except metadata.PackageNotFoundError:

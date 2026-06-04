@@ -38,7 +38,7 @@ if [[ "$INSTALL_DEEPSPEED" == "1" ]]; then
 else
   echo "Skipping deepspeed install. Set INSTALL_DEEPSPEED=1 when needed."
 fi
-python -m pip install -U ms-swift
+python -m pip install -U ms-swift msgspec
 python -m pip install -U sentence-transformers faiss-cpu rank-bm25
 python -m pip install -U langgraph fastapi uvicorn pandas pyyaml
 if [[ "$INSTALL_DEMO_DEPS" == "1" ]]; then
