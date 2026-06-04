@@ -30,6 +30,7 @@ CHECKS = {
         "--model",
         "--dataset",
         "--train_type",
+        "--tuner_type",
         "--lora_rank",
         "--lora_alpha",
         "--target_modules",
