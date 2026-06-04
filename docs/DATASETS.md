@@ -92,6 +92,22 @@ python scripts/build_vqa_subset.py \
   --limit 100
 ```
 
+For Hugging Face subsets with image columns, export a very small shard first:
+
+```bash
+python scripts/build_hf_vqa_subset.py \
+  --source infographicvqa \
+  --dataset kenza-ily/infographicvqa_disco \
+  --split train \
+  --output data/benchmark/infographicvqa_disco_subset.jsonl \
+  --image-output-dir data/images/infographicvqa_disco \
+  --limit 50 \
+  --allow-image-only
+```
+
+Image-only samples are marked with `metadata.needs_ocr=true` and should go
+through OCR/VLM parsing plus LLM audit before being used for SFT/GRPO.
+
 Then mix dataset shards for schema-level experiments:
 
 ```bash

@@ -47,14 +47,22 @@ def convert_mpdocvqa_record(record: dict[str, Any], split: str = "train") -> Doc
         or record.get("text")
         or record.get("page_text")
     )
+    image_path = record.get("image_path")
+    if not image_path:
+        for index in range(1, 21):
+            value = record.get(f"image_{index}")
+            if isinstance(value, str):
+                image_path = value
+                break
     block = EvidenceBlock(
         doc_id=doc_id,
         page_id=page,
         block_id=f"{doc_id}_p{page or 0}_gold",
-        block_type="text",
+        block_type="text" if text else "image",
         text=text,
+        image_path=image_path,
         location=EvidenceLocation(page=page),
-        metadata={"source_record": "mp_docvqa"},
+        metadata={"source_record": "mp_docvqa", "needs_ocr": not bool(text)},
     )
     return DocAgentSample(
         qid=qid,
@@ -66,4 +74,5 @@ def convert_mpdocvqa_record(record: dict[str, Any], split: str = "train") -> Doc
         evidence=[block],
         verifiable=bool(answer),
         split=split,
+        metadata={"gold_block_ids": [block.block_id], "needs_ocr": not bool(text)},
     )

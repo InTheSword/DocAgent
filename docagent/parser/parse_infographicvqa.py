@@ -23,11 +23,25 @@ def _text(value: Any) -> str:
     return str(value)
 
 
+def _string_value(value: Any) -> str:
+    return value if isinstance(value, str) else ""
+
+
 def convert_infographic_record(record: dict[str, Any], split: str = "train") -> DocAgentSample:
-    qid = str(record.get("questionId") or record.get("qid") or record.get("id"))
-    doc_id = str(record.get("image") or record.get("image_id") or record.get("doc_id") or qid)
-    ocr_text = _text(record.get("ocr_text") or record.get("ocr") or record.get("context") or record.get("text"))
-    image_path = record.get("image_path") or record.get("image")
+    qid = str(record.get("questionId") or record.get("qid") or record.get("sample_id") or record.get("id"))
+    image_value = record.get("image")
+    image_name = _string_value(image_value)
+    doc_id = str(record.get("doc_id") or record.get("image_id") or record.get("sample_id") or image_name or qid)
+    ocr_text = _text(
+        record.get("ocr_text")
+        or record.get("ocr")
+        or record.get("ocr_tokens")
+        or record.get("context")
+        or record.get("text")
+        or record.get("texts")
+    )
+    image_path = record.get("image_path") or image_name or record.get("image_url")
+    answer = _text(record.get("answer") or record.get("answers") or record.get("ground_truth"))
     block = EvidenceBlock(
         doc_id=doc_id,
         block_id=f"{doc_id}_image",
@@ -42,9 +56,14 @@ def convert_infographic_record(record: dict[str, Any], split: str = "train") -> 
         source="infographicvqa",
         doc_id=doc_id,
         question=str(record["question"]),
-        answer=_text(record.get("answer") or record.get("answers")),
+        answer=answer,
         answer_type="visual",
         evidence=[block],
-        verifiable=bool(_text(record.get("answer") or record.get("answers"))),
+        verifiable=bool(answer),
         split=split,
+        metadata={
+            "question_type": record.get("question_type"),
+            "needs_ocr": not bool(ocr_text),
+            "gold_block_ids": [f"{doc_id}_image"],
+        },
     )

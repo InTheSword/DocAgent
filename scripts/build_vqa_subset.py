@@ -54,6 +54,7 @@ def main() -> None:
     parser.add_argument("--output", required=True)
     parser.add_argument("--split", default="train")
     parser.add_argument("--limit", type=int, default=100)
+    parser.add_argument("--allow-image-only", action="store_true")
     args = parser.parse_args()
 
     raw_path = Path(args.input)
@@ -69,7 +70,9 @@ def main() -> None:
         except (KeyError, TypeError, ValueError):
             skipped += 1
             continue
-        if sample.verifiable and sample.evidence and sample.evidence[0].retrieval_text:
+        has_text = bool(sample.evidence and sample.evidence[0].retrieval_text)
+        has_image = bool(sample.evidence and sample.evidence[0].image_path)
+        if sample.verifiable and sample.evidence and (has_text or (args.allow_image_only and has_image)):
             samples.append(sample)
         else:
             skipped += 1
