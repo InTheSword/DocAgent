@@ -55,8 +55,14 @@ fi
 
 mkdir -p "$OUTPUT_DIR" outputs/logs
 
+if [[ "$USE_VLLM" == "true" || "$USE_VLLM" == "1" ]]; then
+  launcher=(swift rlhf)
+else
+  launcher=(python -m scripts.no_vllm_swift_entrypoint)
+fi
+
 cmd=(
-  swift rlhf
+  "${launcher[@]}"
   --rlhf_type grpo
   --model "$MODEL"
   --dataset "$DATASET"
