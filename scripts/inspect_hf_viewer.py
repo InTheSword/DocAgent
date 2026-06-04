@@ -46,6 +46,11 @@ def main() -> None:
             raise ValueError(f"no splits returned for {args.dataset}")
         config = str(available[0]["config"])
         split = str(available[0]["split"])
+    elif not any(item.get("config") == config and item.get("split") == split for item in available):
+        raise ValueError(
+            f"requested config/split not available: {config}/{split}. "
+            f"Available: {available}"
+        )
 
     first_rows = request_json(
         "first-rows",
