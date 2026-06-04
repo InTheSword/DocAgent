@@ -6,7 +6,7 @@ source "$SCRIPT_DIR/lib/gpu_env.sh"
 
 MODEL="${MODEL:-/root/autodl-tmp/models/Qwen3-1.7B}"
 ADAPTERS="${ADAPTERS:-}"
-REF_ADAPTERS="${REF_ADAPTERS:-$ADAPTERS}"
+REF_ADAPTERS="${REF_ADAPTERS:-}"
 DATASET="${DATASET:-data/benchmark/grpo_train.jsonl}"
 OUTPUT_DIR="${OUTPUT_DIR:-outputs/checkpoints/qwen3-docagent-grpo}"
 PRECISION="${PRECISION:-bfloat16}"
@@ -19,6 +19,9 @@ GRADIENT_ACCUMULATION_STEPS="${GRADIENT_ACCUMULATION_STEPS:-4}"
 LEARNING_RATE="${LEARNING_RATE:-5e-6}"
 SAVE_TOTAL_LIMIT="${SAVE_TOTAL_LIMIT:-1}"
 LOGGING_STEPS="${LOGGING_STEPS:-1}"
+BETA="${BETA:-0}"
+GENERATION_BATCH_SIZE="${GENERATION_BATCH_SIZE:-}"
+DRY_RUN="${DRY_RUN:-0}"
 
 prepare_gpu_env
 export TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
@@ -57,6 +60,7 @@ cmd=(
   --max_length "$MAX_LENGTH"
   --max_completion_length "$MAX_COMPLETION_LENGTH"
   --num_generations "$NUM_GENERATIONS"
+  --beta "$BETA"
   --save_steps "$MAX_STEPS"
   --save_total_limit "$SAVE_TOTAL_LIMIT"
   --logging_steps "$LOGGING_STEPS"
@@ -67,8 +71,18 @@ if [[ -n "$ADAPTERS" ]]; then
   cmd+=(--adapters "$ADAPTERS")
 fi
 
-if [[ -n "$REF_ADAPTERS" ]]; then
+if [[ -n "$GENERATION_BATCH_SIZE" ]]; then
+  cmd+=(--generation_batch_size "$GENERATION_BATCH_SIZE")
+fi
+
+if [[ -n "$REF_ADAPTERS" && "$BETA" != "0" && "$BETA" != "0.0" ]]; then
   cmd+=(--ref_adapters "$REF_ADAPTERS")
+fi
+
+if [[ "$DRY_RUN" == "1" ]]; then
+  printf '%q ' "${cmd[@]}"
+  printf '\n'
+  exit 0
 fi
 
 "${cmd[@]}"
