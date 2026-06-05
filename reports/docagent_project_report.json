@@ -55,5 +55,74 @@
       "mrr_at_k": 0.7134716732542816,
       "num_misses": 61
     }
+  },
+  "sft_reader": {
+    "mp_docvqa_retrieved_1024": {
+      "model": "/root/autodl-tmp/models/Qwen3-1.7B",
+      "adapter": "outputs/checkpoints/qwen3-docagent-sft-mpdocvqa-retrieved-20260605_180454/v0-20260605-180519/checkpoint-155",
+      "input": "data/benchmark/mp_docvqa_dev_sft_retrieved_clean.jsonl",
+      "output": "outputs/eval/sft_mpdocvqa_retrieved_full_eval_1024.jsonl",
+      "num_samples": 393,
+      "json_pass_rate": 1.0,
+      "schema_pass_rate": 0.9974554707379135,
+      "thinking_rate": 0.0,
+      "answer_em": 0.5165394402035624,
+      "answer_f1": 0.5921055195864356,
+      "answer_score": 0.5921055195864356,
+      "location_accuracy": 0.9007633587786259,
+      "mean_reward": 0.7351615305813786
+    },
+    "mp_docvqa_retrieved_1024_strict": {
+      "model": "/root/autodl-tmp/models/Qwen3-1.7B",
+      "adapter": "outputs/checkpoints/qwen3-docagent-sft-mpdocvqa-retrieved-20260605_180454/v0-20260605-180519/checkpoint-155",
+      "input": "data/benchmark/mp_docvqa_dev_sft_retrieved_clean.jsonl",
+      "output": "outputs/eval/sft_mpdocvqa_retrieved_full_eval_1024_strict.jsonl",
+      "num_samples": 393,
+      "json_pass_rate": 1.0,
+      "schema_pass_rate": 0.9974554707379135,
+      "thinking_rate": 0.0,
+      "answer_em": 0.5165394402035624,
+      "answer_f1": 0.5928777877812454,
+      "answer_score": 0.5928777877812454,
+      "location_accuracy": 0.9007633587786259,
+      "mean_reward": 0.7356248914982643
+    },
+    "mp_docvqa_retrieved_1024_vs_strict": {
+      "baseline": "outputs/eval/sft_mpdocvqa_retrieved_full_eval_1024.jsonl",
+      "candidate": "outputs/eval/sft_mpdocvqa_retrieved_full_eval_1024_strict.jsonl",
+      "num_common": 393,
+      "reward_delta_sum": 0.18210084033613527,
+      "improved_count": 9,
+      "regressed_count": 11,
+      "changed_answer_count": 39
+    },
+    "mp_docvqa_retrieved_1024_reader_errors": {
+      "num_records": 393,
+      "outcome_counts": {
+        "answer_ok_location_ok": 192,
+        "answer_bad_location_ok": 162,
+        "gold_in_prompt": 161,
+        "pred_in_prompt": 153,
+        "compact_equal": 2,
+        "answer_bad_location_bad": 27,
+        "answer_ok_location_bad": 11,
+        "schema_bad": 1
+      },
+      "answer_bad_location_ok_f1": {
+        "f1=0": 117,
+        "0.5<=f1<0.9": 34,
+        "0<f1<0.5": 11
+      },
+      "answer_bad_location_ok_question_types": {
+        "abbreviation": 1,
+        "title_or_form": 11,
+        "numeric": 79,
+        "other": 34,
+        "person": 18,
+        "table_or_list": 25,
+        "date_or_time": 26,
+        "page_number": 4
+      }
+    }
   }
 }
