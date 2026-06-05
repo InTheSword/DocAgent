@@ -1,8 +1,9 @@
-model: outputs/checkpoints/qwen3-docagent-sft
+model: /root/autodl-tmp/models/Qwen3-1.7B
 framework: ms-swift
 rlhf_type: grpo
 train_type: lora
-dataset: data/benchmark/grpo_train.jsonl
+adapter: outputs/checkpoints/qwen3-docagent-sft-mpdocvqa-retrieved-20260605_180454/v0-20260605-180519/checkpoint-155
+dataset: data/benchmark/mp_docvqa_train_grpo_retrieved_clean.jsonl
 reward_functions:
   - format_reward
   - answer_reward
@@ -11,5 +12,4 @@ reward_weights:
   format: 0.2
   answer: 0.6
   location: 0.2
-output_dir: outputs/checkpoints/qwen3-docagent-grpo
-
+output_dir: outputs/checkpoints/qwen3-docagent-grpo-mpdocvqa-retrieved

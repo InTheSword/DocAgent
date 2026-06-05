@@ -210,14 +210,27 @@ Verification:
 - SFT vs SFT+GRPO comparison is available.
 - Reward hacking cases are logged.
 
-Dataset construction smoke:
+Current MP-DocVQA retrieved-reader smoke:
 
 ```bash
-python scripts/build_grpo_dataset.py \
-  --input data/benchmark/tatqa_dev_subset.jsonl \
-  --output data/benchmark/tatqa_grpo_smoke.jsonl
+python scripts/build_grpo_from_sft_dataset.py \
+  --input data/benchmark/mp_docvqa_train_sft_retrieved_clean.jsonl \
+  --output data/benchmark/mp_docvqa_train_grpo_retrieved_clean.jsonl
 
-python scripts/inspect_jsonl.py --input data/benchmark/tatqa_grpo_smoke.jsonl --head 1
+python scripts/audit_training_data.py \
+  --input data/benchmark/mp_docvqa_train_grpo_retrieved_clean.jsonl \
+  --output outputs/eval/mp_docvqa_train_grpo_retrieved_audit.json \
+  --print-mode summary
+
+python scripts/profile_sft_lengths.py \
+  --input data/benchmark/mp_docvqa_train_grpo_retrieved_clean.jsonl \
+  --thresholds 1024,2048,3072,4096
+
+ADAPTER="outputs/checkpoints/qwen3-docagent-sft-mpdocvqa-retrieved-20260605_180454/v0-20260605-180519/checkpoint-155" \
+DATASET="data/benchmark/mp_docvqa_train_grpo_retrieved_clean.jsonl" \
+LIMIT=200 \
+MAX_STEPS=20 \
+bash scripts/train_trl_grpo_dual.sh
 ```
 
 ## Stage 7: VLM visual review ablation

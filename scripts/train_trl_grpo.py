@@ -26,8 +26,12 @@ def progress(message: str) -> None:
     )
 
 
+def prompt_messages(record: dict[str, Any]) -> list[dict[str, Any]]:
+    return [dict(message) for message in record["messages"] if message.get("role") != "assistant"]
+
+
 def build_prompt(tokenizer: Any, record: dict[str, Any], max_prompt_tokens: int | None) -> str:
-    messages = [dict(message) for message in record["messages"]]
+    messages = prompt_messages(record)
     for message in messages:
         if message.get("role") == "system":
             message["content"] = (
