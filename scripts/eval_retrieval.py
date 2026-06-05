@@ -25,16 +25,28 @@ def main() -> None:
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--output", default="outputs/eval/retrieval_smoke.json")
     parser.add_argument("--include-details", action="store_true")
+    parser.add_argument("--candidate-scope", choices=["global", "same_doc"], default="global")
     args = parser.parse_args()
 
     samples = load_samples(ROOT / args.input)
     blocks = collect_evidence_blocks(samples)
-    retriever = HybridRetriever(blocks)
+    global_retriever = HybridRetriever(blocks)
+    blocks_by_doc: dict[str, list] = {}
+    for block in blocks:
+        blocks_by_doc.setdefault(block.doc_id, []).append(block)
+    retrievers_by_doc = {
+        doc_id: HybridRetriever(doc_blocks) for doc_id, doc_blocks in blocks_by_doc.items()
+    }
 
     rankings: list[list[str]] = []
     gold_ids: list[set[str]] = []
     details = []
     for sample in samples:
+        retriever = (
+            retrievers_by_doc.get(sample.doc_id, global_retriever)
+            if args.candidate_scope == "same_doc"
+            else global_retriever
+        )
         rewritten_query, hits = retriever.retrieve(
             sample.question,
             top_k=args.top_k,
@@ -66,6 +78,7 @@ def main() -> None:
         "num_samples": len(samples),
         "num_blocks": len(blocks),
         "top_k": args.top_k,
+        "candidate_scope": args.candidate_scope,
         "recall_at_k": recall_at_k(rankings, gold_ids, k=args.top_k),
         "mrr_at_k": mrr_at_k(rankings, gold_ids, k=args.top_k),
         "num_misses": sum(1 for item in details if not item["hit"]),
