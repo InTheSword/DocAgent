@@ -30,13 +30,31 @@ def load_samples(path: Path) -> list[DocAgentSample]:
 def build_grpo_record(sample: DocAgentSample) -> dict[str, Any]:
     gold_block = select_gold_block(sample)
     gold_location = build_location_target(gold_block) if gold_block else {}
+    output_schema = json.dumps(
+        {
+            "answer": "short answer string copied or normalized from evidence",
+            "evidence_location": {"page": 1, "block_id": "candidate_block_id"},
+            "evidence": "minimal supporting span, compact row, or calculation inputs",
+            "reason": "one sentence explaining why the evidence supports the answer",
+        },
+        ensure_ascii=False,
+    )
     user_content = (
-        f"Question:\n{sample.question}\n\n"
-        f"Answer type: {sample.answer_type}\n\n"
-        f"Evidence:\n{format_evidence(ordered_evidence_blocks(sample))}\n\n"
-        "Required output: only one JSON object with answer, evidence_location, evidence, reason. "
-        "evidence_location must be an object copied from an evidence header. "
-        "evidence must be concise and no more than 300 characters."
+        "## Task\n"
+        "Answer the question from the evidence candidates and cite the exact supporting location.\n\n"
+        "## Question\n"
+        f"{sample.question}\n\n"
+        "## Answer Type\n"
+        f"{sample.answer_type}\n\n"
+        "## Evidence Candidates\n"
+        f"{format_evidence(ordered_evidence_blocks(sample))}\n\n"
+        "## Output Contract\n"
+        f"Return JSON matching this schema: {output_schema}\n"
+        "Rules:\n"
+        "- answer must be concise and grounded in the evidence.\n"
+        "- evidence_location must be a JSON object copied from one evidence header.\n"
+        "- evidence must be the shortest sufficient supporting span or compact table row, no more than 300 characters.\n"
+        "- reason must explain the answer-source relation in one sentence."
     )
     return {
         "id": sample.qid,
@@ -62,6 +80,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True)
     parser.add_argument("--output", default="data/benchmark/grpo_train.jsonl")
+    parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--limit", type=int, default=None)
     args = parser.parse_args()
 
@@ -70,6 +89,8 @@ def main() -> None:
         for sample in load_samples(ROOT / args.input)
         if sample.verifiable and sample.answer_type in {"extractive", "numeric", "boolean", "choice", "visual"}
     ]
+    if args.offset:
+        samples = samples[args.offset :]
     if args.limit is not None:
         samples = samples[: args.limit]
     records = [build_grpo_record(sample) for sample in samples]

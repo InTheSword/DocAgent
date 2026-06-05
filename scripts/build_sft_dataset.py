@@ -18,12 +18,17 @@ from docagent.utils.jsonl import read_jsonl, write_jsonl
 TARGET_EVIDENCE_CHARS = 300
 
 SYSTEM_PROMPT = (
-    "You are a document QA assistant. Answer only from the provided evidence. "
-    "Return only valid JSON with answer, evidence_location, evidence, and reason. "
-    "The evidence_location field must be a JSON object, not a string. "
-    "Keep evidence concise and copy only the supporting span or compact table row. "
-    "Do not include analysis, chain-of-thought, markdown, or <think> tags."
+    "You are DocAgent, a document question-answering assistant. "
+    "Use only the provided evidence candidates. Return exactly one valid JSON object. "
+    "Do not include markdown, chain-of-thought, analysis text, or <think> tags."
 )
+
+OUTPUT_SCHEMA = {
+    "answer": "short answer string copied or normalized from evidence",
+    "evidence_location": {"page": 1, "block_id": "candidate_block_id"},
+    "evidence": "minimal supporting span, compact row, or calculation inputs",
+    "reason": "one sentence explaining why the evidence supports the answer",
+}
 
 
 def load_samples(path: Path) -> list[DocAgentSample]:
@@ -149,13 +154,23 @@ def build_assistant_target(sample: DocAgentSample) -> dict[str, Any]:
 
 
 def build_sft_record(sample: DocAgentSample) -> dict[str, Any]:
+    output_schema = json.dumps(OUTPUT_SCHEMA, ensure_ascii=False)
     user_content = (
-        f"Question:\n{sample.question}\n\n"
-        f"Answer type: {sample.answer_type}\n\n"
-        f"Evidence:\n{format_evidence(ordered_evidence_blocks(sample))}\n\n"
-        "Required output: only one JSON object with answer, evidence_location, evidence, reason. "
-        "evidence_location must be an object copied from an evidence header, for example "
-        "{\"block_id\": \"...\"}. evidence must be concise and no more than 300 characters."
+        "## Task\n"
+        "Answer the question from the evidence candidates and cite the exact supporting location.\n\n"
+        "## Question\n"
+        f"{sample.question}\n\n"
+        "## Answer Type\n"
+        f"{sample.answer_type}\n\n"
+        "## Evidence Candidates\n"
+        f"{format_evidence(ordered_evidence_blocks(sample))}\n\n"
+        "## Output Contract\n"
+        f"Return JSON matching this schema: {output_schema}\n"
+        "Rules:\n"
+        "- answer must be concise and grounded in the evidence.\n"
+        "- evidence_location must be a JSON object copied from one evidence header.\n"
+        "- evidence must be the shortest sufficient supporting span or compact table row, no more than 300 characters.\n"
+        "- reason must explain the answer-source relation in one sentence."
     )
     return {
         "id": sample.qid,
@@ -175,10 +190,13 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True)
     parser.add_argument("--output", default="data/benchmark/train_sft.jsonl")
+    parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--limit", type=int, default=None)
     args = parser.parse_args()
 
     samples = [sample for sample in load_samples(ROOT / args.input) if sample.verifiable]
+    if args.offset:
+        samples = samples[args.offset :]
     if args.limit is not None:
         samples = samples[: args.limit]
     records = [build_sft_record(sample) for sample in samples]
