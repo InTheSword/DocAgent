@@ -95,6 +95,65 @@ def contains_answer(text: str, answer: str) -> bool:
     return bool(answer_norm and answer_norm in text_norm)
 
 
+def find_answer_span(text: str, answer: str) -> tuple[int, int] | None:
+    answer = str(answer or "").strip()
+    if not answer:
+        return None
+
+    direct = re.search(re.escape(answer), text, flags=re.IGNORECASE)
+    if direct:
+        return direct.start(), direct.end()
+
+    answer_tokens = normalize_text(answer).split()
+    if not answer_tokens:
+        return None
+
+    tokens: list[tuple[str, int, int]] = []
+    for match in re.finditer(r"[A-Za-z0-9\u4e00-\u9fff.%+-]+", text):
+        token = normalize_text(match.group(0))
+        if token:
+            tokens.append((token, match.start(), match.end()))
+
+    window = len(answer_tokens)
+    for start_idx in range(0, len(tokens) - window + 1):
+        if [item[0] for item in tokens[start_idx : start_idx + window]] == answer_tokens:
+            return tokens[start_idx][1], tokens[start_idx + window - 1][2]
+    return None
+
+
+def centered_evidence_window(text: str, answer: str, limit: int = TARGET_EVIDENCE_CHARS) -> str:
+    compact = re.sub(r"\s+", " ", text).strip()
+    if len(compact) <= limit:
+        return compact
+
+    span = find_answer_span(compact, answer)
+    if span is None:
+        return smart_truncate(compact, limit)
+
+    start, end = span
+    answer_len = max(end - start, 1)
+    side_budget = max((limit - answer_len) // 2, 0)
+    left = max(start - side_budget, 0)
+    right = min(end + side_budget, len(compact))
+
+    if right - left < limit:
+        if left == 0:
+            right = min(limit, len(compact))
+        elif right == len(compact):
+            left = max(0, len(compact) - limit)
+
+    if left > 0:
+        next_space = compact.find(" ", left)
+        if 0 <= next_space < start:
+            left = next_space + 1
+    if right < len(compact):
+        prev_space = compact.rfind(" ", end, right)
+        if prev_space > end:
+            right = prev_space
+
+    return compact[left:right].strip(" ,;:-")
+
+
 def extract_target_evidence(block: EvidenceBlock, answer: str) -> str:
     text = block.retrieval_text.strip()
     if not text:
@@ -104,7 +163,7 @@ def extract_target_evidence(block: EvidenceBlock, answer: str) -> str:
     if block.block_type == "table":
         for line in lines:
             if contains_answer(line, answer):
-                return smart_truncate(line)
+                return centered_evidence_window(line, answer)
 
     segments = [
         segment.strip()
@@ -113,7 +172,7 @@ def extract_target_evidence(block: EvidenceBlock, answer: str) -> str:
     ]
     for segment in segments:
         if contains_answer(segment, answer):
-            return smart_truncate(segment)
+            return centered_evidence_window(segment, answer)
 
     return smart_truncate(text)
 
