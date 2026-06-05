@@ -82,7 +82,7 @@ def smart_truncate(text: str, limit: int = TARGET_EVIDENCE_CHARS) -> str:
         return text
     prefix = text[:limit]
     split_at = max(prefix.rfind(" "), prefix.rfind(";"), prefix.rfind(","))
-    if split_at >= int(limit * 0.7):
+    if split_at >= int(limit * 0.5):
         prefix = prefix[:split_at]
     return prefix.rstrip(" ,;:-")
 

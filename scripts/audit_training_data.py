@@ -31,7 +31,7 @@ def infer_answer_type(record: dict[str, Any]) -> str:
     answer_type = record.get("answer_type")
     if answer_type:
         return str(answer_type)
-    match = re.search(r"Answer type:\s*([A-Za-z_-]+)", get_user_content(record))
+    match = re.search(r"(?:Answer type:|## Answer Type\s*)\s*([A-Za-z_-]+)", get_user_content(record), re.IGNORECASE)
     if match:
         return match.group(1)
     return "unknown"
