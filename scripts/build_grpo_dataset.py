@@ -27,9 +27,12 @@ def load_samples(path: Path) -> list[DocAgentSample]:
     return [DocAgentSample.from_dict(record) for record in read_jsonl(path)]
 
 
-def build_grpo_record(sample: DocAgentSample) -> dict[str, Any]:
+def build_grpo_record(sample: DocAgentSample, max_evidence_blocks: int, max_block_chars: int) -> dict[str, Any]:
     gold_block = select_gold_block(sample)
     gold_location = build_location_target(gold_block) if gold_block else {}
+    gold_answer = normalize_answer(sample.answer)
+    gold_block_id = gold_block.block_id if gold_block else None
+    evidence_blocks = ordered_evidence_blocks(sample)[:max_evidence_blocks]
     output_schema = json.dumps(
         {
             "answer": "short answer string copied or normalized from evidence",
@@ -47,7 +50,7 @@ def build_grpo_record(sample: DocAgentSample) -> dict[str, Any]:
         "## Answer Type\n"
         f"{sample.answer_type}\n\n"
         "## Evidence Candidates\n"
-        f"{format_evidence(ordered_evidence_blocks(sample))}\n\n"
+        f"{format_evidence(evidence_blocks, max_block_chars=max_block_chars, answer=gold_answer, gold_block_id=gold_block_id)}\n\n"
         "## Output Contract\n"
         f"Return JSON matching this schema: {output_schema}\n"
         "Rules:\n"
@@ -63,7 +66,7 @@ def build_grpo_record(sample: DocAgentSample) -> dict[str, Any]:
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_content},
         ],
-        "gold_answer": normalize_answer(sample.answer),
+        "gold_answer": gold_answer,
         "gold_location": gold_location,
         "answer_type": sample.answer_type,
         "reward_schema": ["format_reward", "answer_reward", "location_reward"],
@@ -82,6 +85,8 @@ def main() -> None:
     parser.add_argument("--output", default="data/benchmark/grpo_train.jsonl")
     parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--max-evidence-blocks", type=int, default=5)
+    parser.add_argument("--max-block-chars", type=int, default=1200)
     args = parser.parse_args()
 
     samples = [
@@ -93,7 +98,10 @@ def main() -> None:
         samples = samples[args.offset :]
     if args.limit is not None:
         samples = samples[: args.limit]
-    records = [build_grpo_record(sample) for sample in samples]
+    records = [
+        build_grpo_record(sample, max_evidence_blocks=args.max_evidence_blocks, max_block_chars=args.max_block_chars)
+        for sample in samples
+    ]
     write_jsonl(ROOT / args.output, records)
     print(
         json.dumps(

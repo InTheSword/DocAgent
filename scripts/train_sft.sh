@@ -8,6 +8,7 @@ MODEL="${MODEL:-/root/autodl-tmp/models/Qwen3-1.7B}"
 DATASET="${DATASET:-data/benchmark/train_sft.jsonl}"
 OUTPUT_DIR="${OUTPUT_DIR:-outputs/checkpoints/qwen3-docagent-sft}"
 PRECISION="${PRECISION:-bfloat16}"
+MAX_LENGTH="${MAX_LENGTH:-2048}"
 
 prepare_gpu_env
 export TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
@@ -38,7 +39,7 @@ swift sft \
   --lora_rank 8 \
   --lora_alpha 16 \
   --target_modules all-linear \
-  --max_length 2048 \
+  --max_length "$MAX_LENGTH" \
   --save_steps 50 \
   --save_total_limit 2 \
   --logging_steps 5 \

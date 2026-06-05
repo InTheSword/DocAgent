@@ -57,12 +57,25 @@ def build_location_target(block: EvidenceBlock) -> dict[str, Any]:
     return location
 
 
-def format_evidence(blocks: list[EvidenceBlock]) -> str:
+def format_block_text(block: EvidenceBlock, max_chars: int, answer: str = "") -> str:
+    text = block.retrieval_text.strip()
+    if answer and contains_answer(text, answer):
+        return centered_evidence_window(text, answer, max_chars)
+    return smart_truncate(text, max_chars)
+
+
+def format_evidence(
+    blocks: list[EvidenceBlock],
+    max_block_chars: int = 1200,
+    answer: str = "",
+    gold_block_id: str | None = None,
+) -> str:
     parts = []
     for block in blocks:
         location = build_location_target(block)
         location_text = json.dumps(location, ensure_ascii=False)
-        evidence_text = block.retrieval_text[:2500]
+        block_answer = answer if gold_block_id and block.block_id == gold_block_id else ""
+        evidence_text = format_block_text(block, max_block_chars, block_answer)
         parts.append(
             f"[{block.block_type.upper()} | block_id={block.block_id} | location={location_text}]\n"
             f"{evidence_text}"
@@ -212,8 +225,12 @@ def build_assistant_target(sample: DocAgentSample) -> dict[str, Any]:
     }
 
 
-def build_sft_record(sample: DocAgentSample) -> dict[str, Any]:
+def build_sft_record(sample: DocAgentSample, max_evidence_blocks: int, max_block_chars: int) -> dict[str, Any]:
     output_schema = json.dumps(OUTPUT_SCHEMA, ensure_ascii=False)
+    answer = normalize_answer(sample.answer)
+    gold_block = select_gold_block(sample)
+    gold_block_id = gold_block.block_id if gold_block else None
+    evidence_blocks = ordered_evidence_blocks(sample)[:max_evidence_blocks]
     user_content = (
         "## Task\n"
         "Answer the question from the evidence candidates and cite the exact supporting location.\n\n"
@@ -222,7 +239,7 @@ def build_sft_record(sample: DocAgentSample) -> dict[str, Any]:
         "## Answer Type\n"
         f"{sample.answer_type}\n\n"
         "## Evidence Candidates\n"
-        f"{format_evidence(ordered_evidence_blocks(sample))}\n\n"
+        f"{format_evidence(evidence_blocks, max_block_chars=max_block_chars, answer=answer, gold_block_id=gold_block_id)}\n\n"
         "## Output Contract\n"
         f"Return JSON matching this schema: {output_schema}\n"
         "Rules:\n"
@@ -251,6 +268,8 @@ def main() -> None:
     parser.add_argument("--output", default="data/benchmark/train_sft.jsonl")
     parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--max-evidence-blocks", type=int, default=5)
+    parser.add_argument("--max-block-chars", type=int, default=1200)
     args = parser.parse_args()
 
     samples = [sample for sample in load_samples(ROOT / args.input) if sample.verifiable]
@@ -258,7 +277,10 @@ def main() -> None:
         samples = samples[args.offset :]
     if args.limit is not None:
         samples = samples[: args.limit]
-    records = [build_sft_record(sample) for sample in samples]
+    records = [
+        build_sft_record(sample, max_evidence_blocks=args.max_evidence_blocks, max_block_chars=args.max_block_chars)
+        for sample in samples
+    ]
     write_jsonl(ROOT / args.output, records)
     print(
         json.dumps(

@@ -117,7 +117,7 @@ def infer_answer_type(record: dict[str, Any]) -> str:
     for message in record.get("messages") or []:
         if message.get("role") != "user":
             continue
-        match = re.search(r"Answer type:\s*([A-Za-z_-]+)", message.get("content", ""))
+        match = re.search(r"(?:Answer type:|## Answer Type\s*)\s*([A-Za-z_-]+)", message.get("content", ""), re.IGNORECASE)
         if match:
             return match.group(1)
     return "extractive"
