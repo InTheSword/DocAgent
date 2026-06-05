@@ -17,18 +17,6 @@ Role:
 - Numerical reasoning
 - Calculator and numeric reward
 
-### InfographicVQA
-
-Preferred source:
-
-- Official DocVQA / RRC portal download.
-- Community alternatives may exist on Hugging Face, but field schemas can vary.
-
-Role:
-
-- OCR-only vs OCR + VLM visual review
-- Image/figure evidence block construction
-
 ### MP-DocVQA
 
 Preferred source:
@@ -42,6 +30,18 @@ Role:
 - Multi-page evidence retrieval
 - Page-level location accuracy
 - Evidence-grounded answer policy training
+- OCR/VLM parsing source for multi-page document images
+
+### Deferred datasets
+
+InfographicVQA is temporarily deferred. The public HF mirrors inspected during
+implementation were schema-compatible with MP-DocVQA or unreliable for the
+current pipeline, and the project now prioritizes MP-DocVQA first. After the
+MP-DocVQA flow is complete, consider adding:
+
+- TAT-DQA for table/numeric document QA expansion.
+- M3DocVQA for broader multimodal document VQA.
+- InfographicVQA only if a reliable official/local copy is available.
 
 ## First remote subset target
 
@@ -49,9 +49,8 @@ Do not download or process the full datasets first.
 
 Initial target:
 
-- 50-100 MP-DocVQA-style samples.
-- 50-100 TAT-QA samples.
-- 50-100 InfographicVQA samples.
+- 50-100 MP-DocVQA-style image samples.
+- 50-100 TAT-QA text/table samples.
 
 Expected generated files:
 
@@ -64,14 +63,13 @@ data/benchmark/grpo_train.jsonl
 
 The first dataset milestone is schema correctness, not volume.
 
-## MP-DocVQA / InfographicVQA local subset conversion
+## MP-DocVQA local subset conversion
 
 Download only annotation files and small image/OCR subsets first. Keep raw files
 outside the repository, for example:
 
 ```text
 /root/autodl-tmp/datasets/mp_docvqa/
-/root/autodl-tmp/datasets/infographicvqa/
 ```
 
 Convert local annotations into DocAgent samples:
@@ -84,29 +82,13 @@ python scripts/build_vqa_subset.py \
   --split train \
   --limit 100
 
-python scripts/build_vqa_subset.py \
-  --source infographicvqa \
-  --input /root/autodl-tmp/datasets/infographicvqa/train.json \
-  --output data/benchmark/infographicvqa_train_subset.jsonl \
-  --split train \
-  --limit 100
-```
-
-For Hugging Face subsets with image columns, export a very small shard first:
-
-```bash
-python scripts/build_hf_vqa_subset.py \
-  --source infographicvqa \
-  --dataset kenza-ily/infographicvqa_disco \
-  --split train \
-  --output data/benchmark/infographicvqa_disco_subset.jsonl \
-  --image-output-dir data/images/infographicvqa_disco \
-  --limit 50 \
-  --allow-image-only
 ```
 
 Image-only samples are marked with `metadata.needs_ocr=true` and should go
-through OCR/VLM parsing plus LLM audit before being used for SFT/GRPO.
+through OCR/VLM parsing plus LLM audit before being used for SFT/GRPO. For
+the current implementation, exported MP-DocVQA images live under
+`/root/autodl-tmp/datasets/mp_docvqa/`, while lightweight JSONL indexes live
+under `data/benchmark/`.
 
 Then mix dataset shards for schema-level experiments:
 
@@ -114,7 +96,6 @@ Then mix dataset shards for schema-level experiments:
 python scripts/build_mixed_dataset.py \
   --input data/benchmark/tatqa_train_subset_1000.jsonl:300 \
   --input data/benchmark/mp_docvqa_train_subset.jsonl:100 \
-  --input data/benchmark/infographicvqa_train_subset.jsonl:100 \
   --output data/benchmark/mixed_docagent_train_subset.jsonl
 ```
 

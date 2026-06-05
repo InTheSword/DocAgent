@@ -13,8 +13,12 @@ has a concrete verification target before the next stage starts.
   `/root/autodl-tmp/models/Qwen3-1.7B`.
 - `Qwen3-4B` is an optional SFT comparison, not the first GRPO target.
 - `Qwen2.5-VL` is only used as a visual review branch.
-- MinerU is required for real uploaded documents and ScenarioSet, but public
-  training datasets can use their own OCR/table annotations when sufficient.
+- MP-DocVQA is a multi-page document image QA dataset, not a PDF dataset. It
+  remains the primary document-image source because it has page-level answers
+  and real page images.
+- MinerU is required for real uploaded documents and may also be used for image
+  documents when practical. PaddleOCR is the current lightweight parser for
+  MP-DocVQA image pages.
 
 ## Stage 0: MVP scaffold
 
@@ -38,7 +42,7 @@ Expected:
 
 Goal:
 
-- Convert small subsets from MP-DocVQA, TAT-QA, and InfographicVQA.
+- Convert small subsets from MP-DocVQA and TAT-QA.
 - Normalize them into `DocAgentSample`.
 - Create document-level train/dev/test splits.
 
@@ -115,7 +119,9 @@ Verification:
 
 Goal:
 
-- Parse ScenarioSet and a small public subset with MinerU.
+- Parse real uploaded documents with MinerU.
+- Parse MP-DocVQA image pages with PaddleOCR first, then optionally compare
+  MinerU image parsing if installation and output quality are practical.
 - Convert `content_list.json` or equivalent output into EvidenceBlock.
 
 Verification:
@@ -218,7 +224,8 @@ python scripts/inspect_jsonl.py --input data/benchmark/tatqa_grpo_smoke.jsonl --
 
 Goal:
 
-- Compare OCR-only vs OCR + VLM visual review on InfographicVQA.
+- Compare OCR-only vs OCR + VLM visual review on MP-DocVQA image pages first.
+- Add TAT-DQA or M3DocVQA after the MP-DocVQA flow is complete.
 
 Verification:
 

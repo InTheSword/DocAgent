@@ -59,6 +59,23 @@ def mean_score(lines: list[dict[str, Any]]) -> float | None:
     return sum(scores) / len(scores) if scores else None
 
 
+def create_paddleocr(lang: str) -> Any:
+    from paddleocr import PaddleOCR
+
+    candidates = [
+        {"lang": lang, "use_textline_orientation": True},
+        {"lang": lang, "use_angle_cls": True},
+        {"lang": lang},
+    ]
+    errors = []
+    for kwargs in candidates:
+        try:
+            return PaddleOCR(**kwargs)
+        except (TypeError, ValueError) as exc:
+            errors.append(f"{kwargs}: {exc}")
+    raise RuntimeError("failed to initialize PaddleOCR: " + " | ".join(errors))
+
+
 def convert_sample(sample: DocAgentSample, ocr: Any, min_chars: int) -> tuple[DocAgentSample, dict[str, Any]]:
     new_blocks: list[EvidenceBlock] = []
     report = {
@@ -142,13 +159,11 @@ def main() -> None:
     parser.add_argument("--min-chars", type=int, default=20)
     args = parser.parse_args()
 
-    from paddleocr import PaddleOCR
-
     records = read_jsonl(ROOT / args.input)
     if args.limit is not None:
         records = records[: args.limit]
     samples = [DocAgentSample.from_dict(record) for record in records]
-    ocr = PaddleOCR(lang=args.lang, use_angle_cls=True, show_log=False)
+    ocr = create_paddleocr(args.lang)
 
     converted = []
     reports = []
