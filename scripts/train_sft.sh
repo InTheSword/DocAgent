@@ -9,6 +9,7 @@ DATASET="${DATASET:-data/benchmark/train_sft.jsonl}"
 OUTPUT_DIR="${OUTPUT_DIR:-outputs/checkpoints/qwen3-docagent-sft}"
 PRECISION="${PRECISION:-bfloat16}"
 MAX_LENGTH="${MAX_LENGTH:-2048}"
+MAX_STEPS="${MAX_STEPS:-}"
 
 prepare_gpu_env
 export TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
@@ -27,6 +28,11 @@ fi
 
 mkdir -p "$OUTPUT_DIR" outputs/logs
 
+EXTRA_ARGS=()
+if [[ -n "$MAX_STEPS" ]]; then
+  EXTRA_ARGS+=(--max_steps "$MAX_STEPS")
+fi
+
 swift sft \
   --model "$MODEL" \
   --dataset "$DATASET" \
@@ -43,4 +49,5 @@ swift sft \
   --save_steps 50 \
   --save_total_limit 2 \
   --logging_steps 5 \
-  --output_dir "$OUTPUT_DIR"
+  --output_dir "$OUTPUT_DIR" \
+  "${EXTRA_ARGS[@]}"
