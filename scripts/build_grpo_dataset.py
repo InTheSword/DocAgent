@@ -14,6 +14,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 from docagent.schemas import DocAgentSample
 from docagent.utils.jsonl import read_jsonl, write_jsonl
 from build_sft_dataset import (
+    EXTRACTION_RULES_TEXT,
     SYSTEM_PROMPT,
     build_location_target,
     format_evidence,
@@ -59,6 +60,7 @@ def build_grpo_record(
         "## Output Contract\n"
         f"Return JSON matching this schema: {output_schema}\n"
         "Rules:\n"
+        f"{EXTRACTION_RULES_TEXT}\n"
         "- answer must be concise and grounded in the evidence.\n"
         "- evidence_location must be a JSON object copied from one evidence header.\n"
         "- evidence must be the shortest sufficient supporting span or compact table row, no more than 300 characters.\n"

@@ -23,6 +23,13 @@ SYSTEM_PROMPT = (
     "Do not include markdown, chain-of-thought, analysis text, or <think> tags."
 )
 
+EXTRACTION_RULES_TEXT = (
+    "- Use only evidence text from the candidates; do not use outside knowledge or common expansions.\n"
+    "- Match the exact question intent before selecting an answer span.\n"
+    "- For tables, lists, and key-value blocks, first match the relevant row, column, label, or relation, then copy the value.\n"
+    "- Do not answer with a neighboring entity, label, heading, total, or abbreviation unless the question asks for it."
+)
+
 OUTPUT_SCHEMA = {
     "answer": "short answer string copied or normalized from evidence",
     "evidence_location": {"page": 1, "block_id": "candidate_block_id"},
@@ -250,6 +257,7 @@ def build_sft_record(
         "## Output Contract\n"
         f"Return JSON matching this schema: {output_schema}\n"
         "Rules:\n"
+        f"{EXTRACTION_RULES_TEXT}\n"
         "- answer must be concise and grounded in the evidence.\n"
         "- evidence_location must be a JSON object copied from one evidence header.\n"
         "- evidence must be the shortest sufficient supporting span or compact table row, no more than 300 characters.\n"

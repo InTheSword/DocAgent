@@ -11,6 +11,12 @@ MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-512}"
 TEMPERATURE="${TEMPERATURE:-0.0}"
 BATCH_SIZE="${BATCH_SIZE:-4}"
 NUM_SHARDS="${NUM_SHARDS:-2}"
+STRICT_EXTRACTION="${STRICT_EXTRACTION:-0}"
+
+extra_args=()
+if [[ "${STRICT_EXTRACTION}" == "1" || "${STRICT_EXTRACTION}" == "true" ]]; then
+  extra_args+=(--strict-extraction)
+fi
 
 mkdir -p outputs/eval outputs/logs
 
@@ -36,6 +42,7 @@ for shard in $(seq 0 $((NUM_SHARDS - 1))); do
     --batch-size "${BATCH_SIZE}" \
     --num-shards "${NUM_SHARDS}" \
     --shard-index "${shard}" \
+    "${extra_args[@]}" \
     > "${shard_log}" 2>&1 &
   pids+=("$!")
 done

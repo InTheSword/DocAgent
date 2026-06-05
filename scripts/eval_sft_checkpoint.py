@@ -16,6 +16,7 @@ from docagent.rewards.combined import docqa_reward
 from docagent.rewards.location_reward import location_reward
 from docagent.tools.format_check import check_answer_format
 from docagent.utils.jsonl import read_jsonl, write_jsonl
+from scripts.build_sft_dataset import EXTRACTION_RULES_TEXT
 
 
 def batched(items: list[Any], batch_size: int) -> list[list[Any]]:
@@ -31,8 +32,23 @@ def parse_target(record: dict[str, Any]) -> dict[str, Any]:
     return json.loads(messages[-1].get("content") or "{}")
 
 
-def build_inference_messages(record: dict[str, Any], disable_thinking: bool) -> list[dict[str, Any]]:
+def build_inference_messages(
+    record: dict[str, Any],
+    disable_thinking: bool,
+    strict_extraction: bool = False,
+) -> list[dict[str, Any]]:
     messages = [dict(message) for message in record["messages"][:-1]]
+    if strict_extraction:
+        for message in messages:
+            if message.get("role") == "user":
+                content = message.get("content", "")
+                if EXTRACTION_RULES_TEXT not in content:
+                    message["content"] = (
+                        f"{content}\n\n"
+                        "Additional extraction rules:\n"
+                        f"{EXTRACTION_RULES_TEXT}"
+                    )
+                break
     if not disable_thinking:
         return messages
     for message in messages:
@@ -51,8 +67,13 @@ def build_inference_messages(record: dict[str, Any], disable_thinking: bool) -> 
     return messages
 
 
-def build_prompt(tokenizer: Any, record: dict[str, Any], disable_thinking: bool) -> str:
-    messages = build_inference_messages(record, disable_thinking)
+def build_prompt(
+    tokenizer: Any,
+    record: dict[str, Any],
+    disable_thinking: bool,
+    strict_extraction: bool = False,
+) -> str:
+    messages = build_inference_messages(record, disable_thinking, strict_extraction)
     try:
         return tokenizer.apply_chat_template(
             messages,
@@ -193,6 +214,7 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--num-shards", type=int, default=1)
     parser.add_argument("--shard-index", type=int, default=0)
+    parser.add_argument("--strict-extraction", action="store_true")
     args = parser.parse_args()
 
     import torch
@@ -239,7 +261,13 @@ def main() -> None:
             golds = [parse_target(record) for record in batch_records]
             answer_types = [infer_answer_type(record) for record in batch_records]
             prompts = [
-                build_prompt(tokenizer, record, disable_thinking=not args.enable_thinking) for record in batch_records
+                build_prompt(
+                    tokenizer,
+                    record,
+                    disable_thinking=not args.enable_thinking,
+                    strict_extraction=args.strict_extraction,
+                )
+                for record in batch_records
             ]
             inputs = tokenizer(prompts, return_tensors="pt", padding=True)
             inputs = {key: value.to(model.device) for key, value in inputs.items()}
