@@ -44,7 +44,9 @@ def select_gold_block(sample: DocAgentSample) -> EvidenceBlock | None:
     return sample.evidence[0] if sample.evidence else None
 
 
-def ordered_evidence_blocks(sample: DocAgentSample) -> list[EvidenceBlock]:
+def ordered_evidence_blocks(sample: DocAgentSample, gold_first: bool = True) -> list[EvidenceBlock]:
+    if not gold_first:
+        return list(sample.evidence)
     gold_block = select_gold_block(sample)
     if gold_block is None:
         return list(sample.evidence)
@@ -225,12 +227,17 @@ def build_assistant_target(sample: DocAgentSample) -> dict[str, Any]:
     }
 
 
-def build_sft_record(sample: DocAgentSample, max_evidence_blocks: int, max_block_chars: int) -> dict[str, Any]:
+def build_sft_record(
+    sample: DocAgentSample,
+    max_evidence_blocks: int,
+    max_block_chars: int,
+    gold_first: bool,
+) -> dict[str, Any]:
     output_schema = json.dumps(OUTPUT_SCHEMA, ensure_ascii=False)
     answer = normalize_answer(sample.answer)
     gold_block = select_gold_block(sample)
     gold_block_id = gold_block.block_id if gold_block else None
-    evidence_blocks = ordered_evidence_blocks(sample)[:max_evidence_blocks]
+    evidence_blocks = ordered_evidence_blocks(sample, gold_first=gold_first)[:max_evidence_blocks]
     user_content = (
         "## Task\n"
         "Answer the question from the evidence candidates and cite the exact supporting location.\n\n"
@@ -270,6 +277,7 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--max-evidence-blocks", type=int, default=5)
     parser.add_argument("--max-block-chars", type=int, default=1200)
+    parser.add_argument("--preserve-evidence-order", action="store_true")
     args = parser.parse_args()
 
     samples = [sample for sample in load_samples(ROOT / args.input) if sample.verifiable]
@@ -278,7 +286,12 @@ def main() -> None:
     if args.limit is not None:
         samples = samples[: args.limit]
     records = [
-        build_sft_record(sample, max_evidence_blocks=args.max_evidence_blocks, max_block_chars=args.max_block_chars)
+        build_sft_record(
+            sample,
+            max_evidence_blocks=args.max_evidence_blocks,
+            max_block_chars=args.max_block_chars,
+            gold_first=not args.preserve_evidence_order,
+        )
         for sample in samples
     ]
     write_jsonl(ROOT / args.output, records)
