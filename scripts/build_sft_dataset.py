@@ -113,6 +113,28 @@ def extract_target_evidence(block: EvidenceBlock, answer: str) -> str:
     return smart_truncate(text)
 
 
+def build_reason(sample: DocAgentSample, block: EvidenceBlock | None, evidence: str) -> str:
+    if block is None:
+        return "No supporting evidence block is available."
+
+    page = block.location.page if block.location.page is not None else block.page_id
+    source = sample.source
+    if source == "mp_docvqa":
+        page_text = f"page {page}" if page is not None else "the cited page"
+        return f"The answer is supported by official OCR on {page_text} in block {block.block_id}."
+
+    derivation = sample.metadata.get("derivation")
+    if sample.answer_type == "numeric" and derivation:
+        return f"The numeric answer follows the dataset derivation from block {block.block_id}: {derivation}."
+
+    if block.block_type == "table":
+        return f"The answer is copied or calculated from the cited table block {block.block_id}."
+
+    if evidence:
+        return f"The answer is copied from the cited text block {block.block_id}."
+    return f"The answer is supported by the cited evidence block {block.block_id}."
+
+
 def build_assistant_target(sample: DocAgentSample) -> dict[str, Any]:
     gold_block = select_gold_block(sample)
     answer = normalize_answer(sample.answer)
@@ -122,7 +144,7 @@ def build_assistant_target(sample: DocAgentSample) -> dict[str, Any]:
         "answer": answer,
         "evidence_location": location,
         "evidence": evidence,
-        "reason": "The answer is supported by the cited evidence block.",
+        "reason": build_reason(sample, gold_block, evidence),
     }
 
 
