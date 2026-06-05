@@ -10,6 +10,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from docagent.eval.answer_metrics import normalize_text
 from docagent.schemas import DocAgentSample, EvidenceBlock, EvidenceLocation
 from docagent.utils.jsonl import write_jsonl
 
@@ -34,13 +35,30 @@ def parse_list(value: Any) -> list[Any]:
     return [value]
 
 
-def first_text(value: Any) -> str:
-    values = parse_list(value)
-    for item in values:
-        text = str(item).strip()
-        if text:
-            return text
-    return ""
+def answer_candidates(record: dict[str, Any]) -> list[str]:
+    candidates = []
+    for value in parse_list(record.get("valid_answers") or record.get("answers")):
+        text = str(value).strip()
+        if text and text not in candidates:
+            candidates.append(text)
+    return candidates
+
+
+def answer_in_ocr(answer: str, text: str) -> bool:
+    answer_norm = normalize_text(answer)
+    text_norm = normalize_text(text)
+    return bool(answer_norm and answer_norm in text_norm)
+
+
+def select_answer(record: dict[str, Any], answer_page_idx: int) -> tuple[str, bool]:
+    candidates = answer_candidates(record)
+    if not candidates:
+        return "", False
+    answer_page_text = ocr_page_text(record, answer_page_idx)
+    for candidate in candidates:
+        if answer_in_ocr(candidate, answer_page_text):
+            return candidate, True
+    return candidates[0], False
 
 
 def safe_int(value: Any) -> int | None:
@@ -88,14 +106,21 @@ def ocr_page_text(record: dict[str, Any], page_index: int) -> str:
     return " ".join(token for token in tokens if token)
 
 
-def convert_record(record: dict[str, Any], split: str, image_root: Path | None) -> DocAgentSample | None:
+def convert_record(
+    record: dict[str, Any],
+    split: str,
+    image_root: Path | None,
+    require_answer_in_ocr: bool,
+) -> DocAgentSample | None:
     qid = str(record.get("question_id") or record.get("questionId") or "").strip()
     question = str(record.get("question") or "").strip()
     doc_id = str(record.get("image_id") or (record.get("extra_info") or {}).get("ucsf_doc_id") or qid).strip()
-    answer = first_text(record.get("valid_answers") or record.get("answers"))
     image_names = [str(item) for item in parse_list(record.get("image_name")) if str(item).strip()]
     answer_page_idx = safe_int(record.get("answer_page_idx")) or 0
     answer_page = safe_int(record.get("answer_page"))
+    answer, answer_supported_by_ocr = select_answer(record, answer_page_idx)
+    if require_answer_in_ocr and not answer_supported_by_ocr:
+        return None
     if not qid or not question or not answer or not image_names:
         return None
 
@@ -120,6 +145,7 @@ def convert_record(record: dict[str, Any], split: str, image_root: Path | None) 
                     "answer_page_idx": answer_page_idx,
                     "is_answer_page": page_index == answer_page_idx,
                     "ocr_token_count": len(text.split()),
+                    "answer_supported_by_ocr": answer_supported_by_ocr,
                 },
             )
         )
@@ -143,6 +169,7 @@ def convert_record(record: dict[str, Any], split: str, image_root: Path | None) 
             "imdb_doc_pages": record.get("imdb_doc_pages"),
             "total_doc_pages": record.get("total_doc_pages"),
             "ocr_backend": "official_imdb",
+            "answer_supported_by_ocr": answer_supported_by_ocr,
         },
     )
 
@@ -155,6 +182,7 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=100)
     parser.add_argument("--image-root", default=None)
     parser.add_argument("--min-ocr-tokens", type=int, default=5)
+    parser.add_argument("--require-answer-in-ocr", action="store_true")
     args = parser.parse_args()
 
     imdb_path = Path(args.imdb)
@@ -163,7 +191,7 @@ def main() -> None:
     samples: list[DocAgentSample] = []
     skipped = 0
     for record in records:
-        sample = convert_record(record, args.split, image_root)
+        sample = convert_record(record, args.split, image_root, args.require_answer_in_ocr)
         if sample is None:
             skipped += 1
             continue
