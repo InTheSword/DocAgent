@@ -201,6 +201,24 @@ def main() -> None:
             "mp_docvqa_retrieved_sft_vs_grpo20": compact_eval_comparison(
                 load_json(root / "outputs/eval/sft_mpdocvqa_retrieved_sft_vs_grpo20_compare.json")
             ),
+            "mp_docvqa_retrieved_grpo100_train": compact_grpo_run_summary(
+                load_json(
+                    root
+                    / "outputs/eval/qwen3-docagent-trl-grpo-mpdocvqa-retrieved-100step-20260606_100045_summary.json"
+                )
+            ),
+            "mp_docvqa_retrieved_grpo100_eval": compact_sft_summary(
+                load_json(root / "outputs/eval/sft_mpdocvqa_retrieved_grpo100_eval_1024_summary.json")
+            ),
+            "mp_docvqa_retrieved_grpo100_analysis": compact_eval_analysis(
+                load_json(root / "outputs/eval/sft_mpdocvqa_retrieved_grpo100_eval_1024_analysis.json")
+            ),
+            "mp_docvqa_retrieved_sft_vs_grpo100": compact_eval_comparison(
+                load_json(root / "outputs/eval/sft_mpdocvqa_retrieved_sft_vs_grpo100_compare.json")
+            ),
+            "mp_docvqa_retrieved_grpo20_vs_grpo100": compact_eval_comparison(
+                load_json(root / "outputs/eval/sft_mpdocvqa_retrieved_grpo20_vs_grpo100_compare.json")
+            ),
         },
     }
 

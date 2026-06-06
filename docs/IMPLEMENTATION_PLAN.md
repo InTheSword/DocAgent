@@ -202,7 +202,9 @@ Rewards:
 
 First run:
 
-- 100-200 verifiable examples for smoke test.
+- 20-step smoke on 200 verifiable examples first.
+- 100-step candidate run after reward variance and completion clipping are
+  confirmed acceptable.
 - Expand to 800+ only after reward code and ms-swift integration are stable.
 
 Verification:
@@ -234,6 +236,34 @@ MAX_PROMPT_TOKENS=4096 \
 MAX_COMPLETION_LENGTH=256 \
 bash scripts/train_trl_grpo_dual.sh
 ```
+
+Current 100-step candidate:
+
+```bash
+ADAPTER="outputs/checkpoints/qwen3-docagent-sft-mpdocvqa-retrieved-20260605_180454/v0-20260605-180519/checkpoint-155" \
+DATASET="data/benchmark/mp_docvqa_train_grpo_retrieved_clean.jsonl" \
+LIMIT=200 \
+MAX_STEPS=100 \
+MAX_PROMPT_TOKENS=4096 \
+MAX_COMPLETION_LENGTH=384 \
+RUN_NAME="qwen3-docagent-trl-grpo-mpdocvqa-retrieved-100step-$(date +%Y%m%d_%H%M%S)" \
+bash scripts/train_trl_grpo_dual.sh
+
+ADAPTER="outputs/checkpoints/qwen3-docagent-trl-grpo-mpdocvqa-retrieved-100step-20260606_100045" \
+INPUT="data/benchmark/mp_docvqa_dev_sft_retrieved_clean.jsonl" \
+OUTPUT="outputs/eval/sft_mpdocvqa_retrieved_grpo100_eval_1024.jsonl" \
+SUMMARY_OUTPUT="outputs/eval/sft_mpdocvqa_retrieved_grpo100_eval_1024_summary.json" \
+LIMIT=393 \
+MAX_NEW_TOKENS=1024 \
+bash scripts/eval_checkpoint_parallel.sh
+```
+
+Observed dev result for the 100-step candidate:
+
+- JSON/schema pass rate: 1.0 / 1.0
+- Answer EM/F1: 0.5344 / 0.6127
+- Location accuracy: 0.8906
+- Mean reward: 0.7458
 
 ## Stage 7: VLM visual review ablation
 
