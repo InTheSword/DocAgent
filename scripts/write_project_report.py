@@ -243,6 +243,21 @@ def main() -> None:
             "mp_docvqa_retrieved_grpo100_vs_grounded_grpo100": compact_eval_comparison(
                 load_json(root / "outputs/eval/sft_mpdocvqa_retrieved_old_grpo100_vs_grounded_grpo100_compare.json")
             ),
+            "mp_docvqa_retrieved_grounded_grpo_full500_train": compact_grpo_run_summary(
+                load_json(
+                    root
+                    / "outputs/eval/qwen3-docagent-trl-grpo-mpdocvqa-retrieved-grounded-full500-100step-20260606_113406_summary.json"
+                )
+            ),
+            "mp_docvqa_retrieved_grounded_grpo_full500_eval": compact_sft_summary(
+                load_json(root / "outputs/eval/sft_mpdocvqa_retrieved_grounded_grpo_full500_eval_1024_summary.json")
+            ),
+            "mp_docvqa_retrieved_grounded_grpo_full500_analysis": compact_eval_analysis(
+                load_json(root / "outputs/eval/sft_mpdocvqa_retrieved_grounded_grpo_full500_eval_1024_analysis.json")
+            ),
+            "mp_docvqa_retrieved_sft_vs_grounded_grpo_full500": compact_eval_comparison(
+                load_json(root / "outputs/eval/sft_mpdocvqa_retrieved_sft_vs_grounded_grpo_full500_compare.json")
+            ),
         },
     }
 

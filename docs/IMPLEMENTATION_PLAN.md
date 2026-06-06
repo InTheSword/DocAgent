@@ -294,6 +294,23 @@ This candidate passes the current acceptance gate: location accuracy is above
 the SFT retrieved-reader baseline while answer F1 and grounded mean reward also
 improve.
 
+Full-500 confirmation run:
+
+- Checkpoint:
+  `outputs/checkpoints/qwen3-docagent-trl-grpo-mpdocvqa-retrieved-grounded-full500-100step-20260606_113406`
+- Training used all 500 cleaned retrieved GRPO records with 100 steps.
+- JSON/schema pass rate: 1.0 / 1.0
+- Answer EM/F1: 0.5242 / 0.5999
+- Location accuracy: 0.8957
+- Mean reward under the grounded reward: 0.7114
+- Compared with SFT under the grounded reward: reward delta +0.05,
+  10 improved, 13 regressed, 40 changed answers.
+
+This run does not replace the current grounded 100-step candidate because its
+location accuracy is below the SFT baseline and below the selected 200-record
+grounded GRPO run. Do not continue scaling or sweeping GRPO until the next stage
+requires broader robustness experiments.
+
 ## Stage 7: VLM visual review ablation
 
 Goal:
