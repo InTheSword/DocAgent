@@ -19,6 +19,7 @@ from scripts.analyze_reader_errors import (
     question_buckets,
     user_content,
 )
+from scripts.build_grpo_from_sft_dataset import convert_record
 
 
 def numeric_like(text: Any) -> bool:
@@ -73,13 +74,16 @@ def hard_case_metadata(eval_record: dict[str, Any], grpo_record: dict[str, Any])
 def build_subset(
     eval_records: list[dict[str, Any]],
     grpo_records: list[dict[str, Any]],
+    sft_records: list[dict[str, Any]] | None,
     limit: int | None,
     max_answer_f1: float,
     max_per_question_type: int,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     grpo_by_id = {str(record.get("id")): record for record in grpo_records}
+    sft_by_id = {str(record.get("id")): record for record in sft_records or []}
     candidates: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]] = []
     missing_ids: list[str] = []
+    source_counts: Counter[str] = Counter()
 
     for eval_record in eval_records:
         if not is_answer_hard(eval_record, max_answer_f1=max_answer_f1):
@@ -87,8 +91,14 @@ def build_subset(
         row_id = str(eval_record.get("id"))
         grpo_record = grpo_by_id.get(row_id)
         if grpo_record is None:
-            missing_ids.append(row_id)
-            continue
+            sft_record = sft_by_id.get(row_id)
+            if sft_record is None:
+                missing_ids.append(row_id)
+                continue
+            grpo_record = convert_record(sft_record)
+            source_counts["sft_converted"] += 1
+        else:
+            source_counts["grpo"] += 1
         metadata = hard_case_metadata(eval_record, grpo_record)
         candidates.append((eval_record, grpo_record, metadata))
 
@@ -138,12 +148,14 @@ def build_subset(
     report = {
         "num_eval_records": len(eval_records),
         "num_grpo_records": len(grpo_records),
+        "num_sft_records": len(sft_records or []),
         "num_answer_hard_candidates": len(candidates),
         "num_selected": len(selected),
         "max_answer_f1": max_answer_f1,
         "max_per_question_type": max_per_question_type,
         "skipped_missing_grpo": len(missing_ids),
         "skipped_by_question_cap": skipped_by_question_cap,
+        "candidate_source_counts": dict(source_counts),
         "candidate_f1_buckets": dict(f1_counts),
         "candidate_issue_types": dict(issue_counts),
         "candidate_question_types": dict(all_question_type_counts),
@@ -158,6 +170,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--eval", required=True)
     parser.add_argument("--grpo", required=True)
+    parser.add_argument("--sft", default=None)
     parser.add_argument("--output", required=True)
     parser.add_argument("--report-output", default=None)
     parser.add_argument("--limit", type=int, default=300)
@@ -167,9 +180,11 @@ def main() -> None:
 
     eval_records = read_jsonl(ROOT / args.eval)
     grpo_records = read_jsonl(ROOT / args.grpo)
+    sft_records = read_jsonl(ROOT / args.sft) if args.sft else None
     selected, report = build_subset(
         eval_records,
         grpo_records,
+        sft_records,
         limit=args.limit,
         max_answer_f1=args.max_answer_f1,
         max_per_question_type=args.max_per_question_type,
@@ -178,6 +193,7 @@ def main() -> None:
     report = {
         "eval": args.eval,
         "grpo": args.grpo,
+        "sft": args.sft,
         "output": args.output,
         **report,
     }

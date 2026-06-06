@@ -350,6 +350,7 @@ bash scripts/eval_checkpoint_parallel.sh
 python scripts/build_answer_hard_grpo_subset.py \
   --eval outputs/eval/sft_mpdocvqa_train_retrieved_first500_eval_1024.jsonl \
   --grpo data/benchmark/mp_docvqa_train_grpo_retrieved_clean.jsonl \
+  --sft data/benchmark/mp_docvqa_train_sft_retrieved_clean.jsonl \
   --output data/benchmark/mp_docvqa_train_grpo_retrieved_answer_hard.jsonl \
   --report-output outputs/eval/mp_docvqa_train_grpo_retrieved_answer_hard_report.json \
   --limit 300 \
@@ -364,6 +365,10 @@ python scripts/profile_sft_lengths.py \
   --input data/benchmark/mp_docvqa_train_grpo_retrieved_answer_hard.jsonl \
   --thresholds 1024,2048,3072,4096
 ```
+
+The `--sft` fallback is intentional: the existing 500-record GRPO file may not
+contain the same IDs as the evaluated SFT slice, so answer-hard records missing
+from the GRPO file are converted directly from the SFT target.
 
 Do not run hard-case GRPO if this subset is tiny, dominated by one question
 type, or contains audit issues. If it is clean and sufficiently diverse, run a

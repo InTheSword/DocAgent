@@ -55,6 +55,7 @@ def test_build_subset_keeps_answer_hard_location_ok_records() -> None:
             _eval_record("missing", answer_em=False, location_ok=True, answer_f1=0.0, pred_answer="4 tablets"),
         ],
         grpo_records=[_grpo_record("q1"), _grpo_record("q2"), _grpo_record("q3")],
+        sft_records=None,
         limit=10,
         max_answer_f1=0.999,
         max_per_question_type=0,
@@ -66,3 +67,32 @@ def test_build_subset_keeps_answer_hard_location_ok_records() -> None:
     assert report["num_answer_hard_candidates"] == 1
     assert report["num_selected"] == 1
     assert report["skipped_missing_grpo"] == 1
+
+
+def test_build_subset_falls_back_to_sft_records() -> None:
+    sft_record = _grpo_record("q1")
+    sft_record["messages"] = [
+        *sft_record["messages"],
+        {
+            "role": "assistant",
+            "content": (
+                '{"answer": "600 MG", "evidence_location": {"block_id": "b1"}, '
+                '"evidence": "generic lilly 600 mg 4 tablets", "reason": "supported"}'
+            ),
+        },
+    ]
+
+    selected, report = build_subset(
+        eval_records=[_eval_record("q1", answer_em=False, location_ok=True, answer_f1=0.0, pred_answer="4 tablets")],
+        grpo_records=[],
+        sft_records=[sft_record],
+        limit=10,
+        max_answer_f1=0.999,
+        max_per_question_type=0,
+    )
+
+    assert [record["id"] for record in selected] == ["q1"]
+    assert [message["role"] for message in selected[0]["messages"]] == ["system", "user"]
+    assert selected[0]["gold_answer"] == "600 MG"
+    assert report["candidate_source_counts"] == {"sft_converted": 1}
+    assert report["skipped_missing_grpo"] == 0
