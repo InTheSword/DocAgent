@@ -230,6 +230,7 @@ ADAPTER="outputs/checkpoints/qwen3-docagent-sft-mpdocvqa-retrieved-20260605_1804
 DATASET="data/benchmark/mp_docvqa_train_grpo_retrieved_clean.jsonl" \
 LIMIT=200 \
 MAX_STEPS=20 \
+MAX_PROMPT_TOKENS=4096 \
 bash scripts/train_trl_grpo_dual.sh
 ```
 

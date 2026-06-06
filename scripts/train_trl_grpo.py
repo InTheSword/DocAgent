@@ -262,6 +262,7 @@ def main() -> None:
         learning_rate=args.learning_rate,
         bf16=torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
         gradient_checkpointing=True,
+        max_prompt_length=args.max_prompt_tokens if args.max_prompt_tokens and args.max_prompt_tokens > 0 else None,
         max_completion_length=args.max_completion_length,
         num_generations=args.num_generations,
         generation_batch_size=args.num_generations,
