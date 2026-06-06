@@ -332,6 +332,44 @@ below the SFT baseline and below the selected candidate. The next improvement
 path should focus on answer hard-case mining and reader data/reward refinement,
 not additional full-500 GRPO scaling.
 
+Answer-hard GRPO path:
+
+Use this path only after the full-500 scaling checks above. The goal is to
+target reader extraction failures where the model cites the correct evidence
+location but extracts the wrong answer.
+
+```bash
+ADAPTER="outputs/checkpoints/qwen3-docagent-sft-mpdocvqa-retrieved-20260605_180454/v0-20260605-180519/checkpoint-155" \
+INPUT="data/benchmark/mp_docvqa_train_sft_retrieved_clean.jsonl" \
+OUTPUT="outputs/eval/sft_mpdocvqa_train_retrieved_first500_eval_1024.jsonl" \
+SUMMARY_OUTPUT="outputs/eval/sft_mpdocvqa_train_retrieved_first500_eval_1024_summary.json" \
+LIMIT=500 \
+MAX_NEW_TOKENS=1024 \
+bash scripts/eval_checkpoint_parallel.sh
+
+python scripts/build_answer_hard_grpo_subset.py \
+  --eval outputs/eval/sft_mpdocvqa_train_retrieved_first500_eval_1024.jsonl \
+  --grpo data/benchmark/mp_docvqa_train_grpo_retrieved_clean.jsonl \
+  --output data/benchmark/mp_docvqa_train_grpo_retrieved_answer_hard.jsonl \
+  --report-output outputs/eval/mp_docvqa_train_grpo_retrieved_answer_hard_report.json \
+  --limit 300 \
+  --max-per-question-type 80
+
+python scripts/audit_training_data.py \
+  --input data/benchmark/mp_docvqa_train_grpo_retrieved_answer_hard.jsonl \
+  --output outputs/eval/mp_docvqa_train_grpo_retrieved_answer_hard_audit.json \
+  --print-mode summary
+
+python scripts/profile_sft_lengths.py \
+  --input data/benchmark/mp_docvqa_train_grpo_retrieved_answer_hard.jsonl \
+  --thresholds 1024,2048,3072,4096
+```
+
+Do not run hard-case GRPO if this subset is tiny, dominated by one question
+type, or contains audit issues. If it is clean and sufficiently diverse, run a
+small low-LR continuation from the selected grounded GRPO candidate and validate
+against the same dev acceptance gate.
+
 ## Stage 7: VLM visual review ablation
 
 Goal:
