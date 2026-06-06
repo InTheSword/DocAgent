@@ -279,6 +279,21 @@ python scripts/recompute_sft_eval_metrics.py \
   --summary-template outputs/eval/sft_mpdocvqa_retrieved_full_eval_1024_summary.json
 ```
 
+Current grounded 100-step candidate:
+
+- Checkpoint:
+  `outputs/checkpoints/qwen3-docagent-trl-grpo-mpdocvqa-retrieved-grounded-100step-20260606_105535`
+- JSON/schema pass rate: 1.0 / 1.0
+- Answer EM/F1: 0.5369 / 0.6122
+- Location accuracy: 0.9033
+- Mean reward under the grounded reward: 0.7221
+- Compared with SFT under the grounded reward: reward delta +4.23,
+  17 improved, 9 regressed, 38 changed answers.
+
+This candidate passes the current acceptance gate: location accuracy is above
+the SFT retrieved-reader baseline while answer F1 and grounded mean reward also
+improve.
+
 ## Stage 7: VLM visual review ablation
 
 Goal:
