@@ -199,6 +199,9 @@ Rewards:
 - `format_reward`
 - `answer_reward`
 - `location_reward`
+- For samples with a gold evidence location, answer reward is gated by
+  `location_reward`: a correct answer with the wrong cited evidence does not
+  receive answer credit.
 
 First run:
 
