@@ -1,6 +1,7 @@
 from scripts.build_grpo_from_sft_dataset import convert_record
 from scripts.train_custom_grpo import build_prompt as build_custom_prompt
 from scripts.train_trl_grpo import build_prompt as build_trl_prompt
+from scripts.train_trl_grpo import set_grpo_config_arg_if_supported
 
 
 class FakeTokenizer:
@@ -53,3 +54,21 @@ def test_grpo_prompt_builders_drop_assistant_targets() -> None:
     assert "GOLD_LEAK" not in custom_prompt
     assert "Return only one valid JSON object" in trl_prompt
     assert "Return only one valid JSON object" in custom_prompt
+
+
+def test_grpo_config_optional_arg_is_signature_gated() -> None:
+    class SupportsMaxPrompt:
+        def __init__(self, max_prompt_length=None):
+            pass
+
+    class NoMaxPrompt:
+        def __init__(self, output_dir=None):
+            pass
+
+    kwargs = {}
+    assert set_grpo_config_arg_if_supported(kwargs, SupportsMaxPrompt, "max_prompt_length", 4096)
+    assert kwargs == {"max_prompt_length": 4096}
+
+    kwargs = {}
+    assert not set_grpo_config_arg_if_supported(kwargs, NoMaxPrompt, "max_prompt_length", 4096)
+    assert kwargs == {}

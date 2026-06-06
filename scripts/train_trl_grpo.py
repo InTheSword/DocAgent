@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import os
 import sys
@@ -24,6 +25,19 @@ def progress(message: str) -> None:
         f"[docagent-grpo {timestamp} rank={rank}/{world_size} local_rank={local_rank}] {message}",
         flush=True,
     )
+
+
+def set_grpo_config_arg_if_supported(config_kwargs: dict[str, Any], config_cls: type, name: str, value: Any) -> bool:
+    if value is None:
+        return False
+    try:
+        parameters = inspect.signature(config_cls).parameters
+    except (TypeError, ValueError):
+        return False
+    if name not in parameters:
+        return False
+    config_kwargs[name] = value
+    return True
 
 
 def prompt_messages(record: dict[str, Any]) -> list[dict[str, Any]]:
@@ -254,31 +268,38 @@ def main() -> None:
         f"steps={args.max_steps} num_generations={args.num_generations} "
         f"per_device_batch={args.per_device_train_batch_size}"
     )
-    training_args = GRPOConfig(
-        output_dir=str(output_dir),
-        max_steps=args.max_steps,
-        per_device_train_batch_size=args.per_device_train_batch_size,
-        gradient_accumulation_steps=args.gradient_accumulation_steps,
-        learning_rate=args.learning_rate,
-        bf16=torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
-        gradient_checkpointing=True,
-        max_prompt_length=args.max_prompt_tokens if args.max_prompt_tokens and args.max_prompt_tokens > 0 else None,
-        max_completion_length=args.max_completion_length,
-        num_generations=args.num_generations,
-        generation_batch_size=args.num_generations,
-        temperature=args.temperature,
-        top_p=args.top_p,
-        use_vllm=False,
-        beta=0.0,
-        save_steps=args.max_steps,
-        save_total_limit=1,
-        save_only_model=True,
-        logging_steps=1,
-        report_to="none",
-        dataloader_num_workers=0,
-        remove_unused_columns=False,
-        seed=args.seed,
-    )
+    config_kwargs = {
+        "output_dir": str(output_dir),
+        "max_steps": args.max_steps,
+        "per_device_train_batch_size": args.per_device_train_batch_size,
+        "gradient_accumulation_steps": args.gradient_accumulation_steps,
+        "learning_rate": args.learning_rate,
+        "bf16": torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
+        "gradient_checkpointing": True,
+        "max_completion_length": args.max_completion_length,
+        "num_generations": args.num_generations,
+        "generation_batch_size": args.num_generations,
+        "temperature": args.temperature,
+        "top_p": args.top_p,
+        "use_vllm": False,
+        "beta": 0.0,
+        "save_steps": args.max_steps,
+        "save_total_limit": 1,
+        "save_only_model": True,
+        "logging_steps": 1,
+        "report_to": "none",
+        "dataloader_num_workers": 0,
+        "remove_unused_columns": False,
+        "seed": args.seed,
+    }
+    max_prompt_length = args.max_prompt_tokens if args.max_prompt_tokens and args.max_prompt_tokens > 0 else None
+    if not set_grpo_config_arg_if_supported(config_kwargs, GRPOConfig, "max_prompt_length", max_prompt_length):
+        if max_prompt_length is not None:
+            progress(
+                "GRPOConfig does not support max_prompt_length; "
+                f"using pre-rendered prompt cap only max_prompt_tokens={max_prompt_length}"
+            )
+    training_args = GRPOConfig(**config_kwargs)
     trainer = GRPOTrainer(
         model=model,
         reward_funcs=build_reward_func(),
