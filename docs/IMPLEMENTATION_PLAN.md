@@ -261,12 +261,23 @@ MAX_NEW_TOKENS=1024 \
 bash scripts/eval_checkpoint_parallel.sh
 ```
 
-Observed dev result for the 100-step candidate:
+Observed dev result for the 100-step candidate before the grounding gate:
 
 - JSON/schema pass rate: 1.0 / 1.0
 - Answer EM/F1: 0.5344 / 0.6127
 - Location accuracy: 0.8906
-- Mean reward: 0.7458
+- Mean reward under the pre-gated reward: 0.7458
+
+After reward semantics change, recompute existing eval metrics before comparing
+reward deltas:
+
+```bash
+python scripts/recompute_sft_eval_metrics.py \
+  --input outputs/eval/sft_mpdocvqa_retrieved_full_eval_1024.jsonl \
+  --output outputs/eval/sft_mpdocvqa_retrieved_full_eval_1024_grounded_reward.jsonl \
+  --summary-output outputs/eval/sft_mpdocvqa_retrieved_full_eval_1024_grounded_reward_summary.json \
+  --summary-template outputs/eval/sft_mpdocvqa_retrieved_full_eval_1024_summary.json
+```
 
 ## Stage 7: VLM visual review ablation
 
