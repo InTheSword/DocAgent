@@ -311,6 +311,27 @@ location accuracy is below the SFT baseline and below the selected 200-record
 grounded GRPO run. Do not continue scaling or sweeping GRPO until the next stage
 requires broader robustness experiments.
 
+Full-500 matched-exposure low-LR run:
+
+- Checkpoint:
+  `outputs/checkpoints/qwen3-docagent-trl-grpo-mpdocvqa-retrieved-grounded-full500-250step-lr2e6-20260606_143014`
+- Training used all 500 cleaned retrieved GRPO records with 250 steps and
+  learning rate `2e-6`.
+- JSON/schema pass rate: 1.0 / 1.0
+- Answer EM/F1: 0.5369 / 0.6113
+- Location accuracy: 0.8957
+- Mean reward under the grounded reward: 0.7198
+- Compared with SFT under the grounded reward: reward delta +3.33,
+  13 improved, 8 regressed, 25 changed answers.
+- Compared with the selected 200-record grounded candidate: reward delta -0.90,
+  7 improved, 11 regressed, 33 changed answers.
+
+This matched-exposure run also does not replace the selected 200-record
+grounded candidate. Although answer EM is similar, location accuracy remains
+below the SFT baseline and below the selected candidate. The next improvement
+path should focus on answer hard-case mining and reader data/reward refinement,
+not additional full-500 GRPO scaling.
+
 ## Stage 7: VLM visual review ablation
 
 Goal:

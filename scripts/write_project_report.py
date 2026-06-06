@@ -258,6 +258,36 @@ def main() -> None:
             "mp_docvqa_retrieved_sft_vs_grounded_grpo_full500": compact_eval_comparison(
                 load_json(root / "outputs/eval/sft_mpdocvqa_retrieved_sft_vs_grounded_grpo_full500_compare.json")
             ),
+            "mp_docvqa_retrieved_grounded_grpo_full500_250step_lr2e6_train": compact_grpo_run_summary(
+                load_json(
+                    root
+                    / "outputs/eval/qwen3-docagent-trl-grpo-mpdocvqa-retrieved-grounded-full500-250step-lr2e6-20260606_143014_summary.json"
+                )
+            ),
+            "mp_docvqa_retrieved_grounded_grpo_full500_250step_lr2e6_eval": compact_sft_summary(
+                load_json(
+                    root
+                    / "outputs/eval/sft_mpdocvqa_retrieved_grounded_grpo_full500_250step_lr2e6_eval_1024_summary.json"
+                )
+            ),
+            "mp_docvqa_retrieved_grounded_grpo_full500_250step_lr2e6_analysis": compact_eval_analysis(
+                load_json(
+                    root
+                    / "outputs/eval/sft_mpdocvqa_retrieved_grounded_grpo_full500_250step_lr2e6_eval_1024_analysis.json"
+                )
+            ),
+            "mp_docvqa_retrieved_sft_vs_grounded_grpo_full500_250step_lr2e6": compact_eval_comparison(
+                load_json(
+                    root
+                    / "outputs/eval/sft_mpdocvqa_retrieved_sft_vs_grounded_grpo_full500_250step_lr2e6_compare.json"
+                )
+            ),
+            "mp_docvqa_retrieved_grounded_grpo100_vs_full500_250step_lr2e6": compact_eval_comparison(
+                load_json(
+                    root
+                    / "outputs/eval/sft_mpdocvqa_retrieved_grounded_grpo100_vs_full500_250step_lr2e6_compare.json"
+                )
+            ),
         },
     }
 
