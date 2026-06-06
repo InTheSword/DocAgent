@@ -84,6 +84,68 @@ def compact_eval_comparison(report: dict[str, Any] | None) -> dict[str, Any] | N
     }
 
 
+def compact_eval_analysis(report: dict[str, Any] | None) -> dict[str, Any] | None:
+    if report is None:
+        return None
+    return {
+        "num_records": report.get("num_records"),
+        "location_value_types": report.get("location_value_types", {}),
+        "failure_counts": report.get("failure_counts", {}),
+        "by_answer_type": report.get("by_answer_type", {}),
+    }
+
+
+def numeric_values(history: list[dict[str, Any]], key: str) -> list[float]:
+    values: list[float] = []
+    for row in history:
+        value = row.get(key)
+        if isinstance(value, (int, float)):
+            values.append(float(value))
+            continue
+        if isinstance(value, str):
+            try:
+                values.append(float(value))
+            except ValueError:
+                pass
+    return values
+
+
+def first_last_mean(values: list[float]) -> dict[str, float | None]:
+    if not values:
+        return {"first": None, "last": None, "mean": None}
+    return {"first": values[0], "last": values[-1], "mean": sum(values) / len(values)}
+
+
+def compact_grpo_run_summary(report: dict[str, Any] | None) -> dict[str, Any] | None:
+    if report is None:
+        return None
+    history = report.get("log_history") or []
+    reward_std = numeric_values(history, "reward_std")
+    rewards = numeric_values(history, "reward")
+    losses = numeric_values(history, "loss")
+    clipped_ratios = numeric_values(history, "completions/clipped_ratio")
+    mean_lengths = numeric_values(history, "completions/mean_length")
+    grad_norms = numeric_values(history, "grad_norm")
+    return {
+        "model": report.get("model"),
+        "start_adapter": report.get("start_adapter"),
+        "dataset": report.get("dataset"),
+        "output_dir": report.get("output_dir"),
+        "limit": report.get("limit"),
+        "max_steps": report.get("max_steps"),
+        "num_generations": report.get("num_generations"),
+        "logged_steps": len(history),
+        "nonzero_reward_std_steps": sum(value > 1e-6 for value in reward_std),
+        "reward": first_last_mean(rewards),
+        "reward_std": first_last_mean(reward_std),
+        "loss": first_last_mean(losses),
+        "completion_clipped_ratio": first_last_mean(clipped_ratios),
+        "completion_mean_length": first_last_mean(mean_lengths),
+        "max_completion_clipped_ratio": max(clipped_ratios) if clipped_ratios else None,
+        "max_grad_norm": max(grad_norms) if grad_norms else None,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", default="reports/docagent_project_report.json")
@@ -121,6 +183,23 @@ def main() -> None:
             ),
             "mp_docvqa_retrieved_1024_reader_errors": compact_reader_errors(
                 load_json(root / "outputs/eval/sft_mpdocvqa_retrieved_full_eval_1024_reader_errors.json")
+            ),
+        },
+        "grpo_reader": {
+            "mp_docvqa_train_grpo_retrieved": compact_audit(
+                load_json(root / "outputs/eval/mp_docvqa_train_grpo_retrieved_audit.json")
+            ),
+            "mp_docvqa_retrieved_grpo20_train": compact_grpo_run_summary(
+                load_json(root / "outputs/eval/qwen3-docagent-trl-grpo-ng4-20260606_093651_summary.json")
+            ),
+            "mp_docvqa_retrieved_grpo20_eval": compact_sft_summary(
+                load_json(root / "outputs/eval/sft_mpdocvqa_retrieved_grpo20_eval_1024_summary.json")
+            ),
+            "mp_docvqa_retrieved_grpo20_analysis": compact_eval_analysis(
+                load_json(root / "outputs/eval/sft_mpdocvqa_retrieved_grpo20_eval_1024_analysis.json")
+            ),
+            "mp_docvqa_retrieved_sft_vs_grpo20": compact_eval_comparison(
+                load_json(root / "outputs/eval/sft_mpdocvqa_retrieved_sft_vs_grpo20_compare.json")
             ),
         },
     }
