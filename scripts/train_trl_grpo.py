@@ -199,7 +199,7 @@ def main() -> None:
     parser.add_argument("--gradient-accumulation-steps", type=int, default=2)
     parser.add_argument("--learning-rate", type=float, default=5e-6)
     parser.add_argument("--max-prompt-tokens", type=int, default=768)
-    parser.add_argument("--max-completion-length", type=int, default=64)
+    parser.add_argument("--max-completion-length", type=int, default=256)
     parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--top-p", type=float, default=0.9)
     parser.add_argument("--seed", type=int, default=42)

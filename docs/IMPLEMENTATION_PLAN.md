@@ -231,6 +231,7 @@ DATASET="data/benchmark/mp_docvqa_train_grpo_retrieved_clean.jsonl" \
 LIMIT=200 \
 MAX_STEPS=20 \
 MAX_PROMPT_TOKENS=4096 \
+MAX_COMPLETION_LENGTH=256 \
 bash scripts/train_trl_grpo_dual.sh
 ```
 
