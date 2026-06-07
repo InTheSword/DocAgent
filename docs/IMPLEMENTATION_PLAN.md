@@ -375,6 +375,27 @@ type, or contains audit issues. If it is clean and sufficiently diverse, run a
 small low-LR continuation from the selected grounded GRPO candidate and validate
 against the same dev acceptance gate.
 
+Answer-hard 50-step trial:
+
+- Training subset: 192 clean answer-hard records mined from the first 500
+  retrieved SFT training records.
+- Checkpoint:
+  `outputs/checkpoints/qwen3-docagent-trl-grpo-mpdocvqa-answer-hard-50step-lr1e6-20260607_133500`
+- JSON/schema pass rate: 1.0 / 1.0
+- Answer EM/F1: 0.5344 / 0.6097
+- Location accuracy: 0.9033
+- Mean reward under the grounded reward: 0.7206
+- Compared with the selected grounded GRPO100 candidate: reward delta -0.59,
+  4 improved, 6 regressed, 20 changed answers.
+- Compared with SFT under the grounded reward: reward delta +3.64,
+  17 improved, 11 regressed, 39 changed answers.
+
+This hard-case GRPO trial improves over SFT but does not replace the selected
+grounded GRPO100 candidate. Location is preserved, but answer F1 and grounded
+mean reward are lower. Do not increase hard-case GRPO steps under the current
+reward; the next improvement should refine answer-specific supervision or
+reward shaping before another RL run.
+
 ## Stage 7: VLM visual review ablation
 
 Goal:

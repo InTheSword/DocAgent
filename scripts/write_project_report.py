@@ -288,6 +288,29 @@ def main() -> None:
                     / "outputs/eval/sft_mpdocvqa_retrieved_grounded_grpo100_vs_full500_250step_lr2e6_compare.json"
                 )
             ),
+            "mp_docvqa_train_grpo_retrieved_answer_hard": compact_audit(
+                load_json(root / "outputs/eval/mp_docvqa_train_grpo_retrieved_answer_hard_audit.json")
+            ),
+            "mp_docvqa_retrieved_answer_hard_grpo50_train": compact_grpo_run_summary(
+                load_json(
+                    root
+                    / "outputs/eval/qwen3-docagent-trl-grpo-mpdocvqa-answer-hard-50step-lr1e6-20260607_133500_summary.json"
+                )
+            ),
+            "mp_docvqa_retrieved_answer_hard_grpo50_eval": compact_sft_summary(
+                load_json(root / "outputs/eval/sft_mpdocvqa_retrieved_answer_hard_grpo50_eval_1024_summary.json")
+            ),
+            "mp_docvqa_retrieved_answer_hard_grpo50_analysis": compact_eval_analysis(
+                load_json(root / "outputs/eval/sft_mpdocvqa_retrieved_answer_hard_grpo50_eval_1024_analysis.json")
+            ),
+            "mp_docvqa_retrieved_grounded_grpo100_vs_answer_hard_grpo50": compact_eval_comparison(
+                load_json(
+                    root / "outputs/eval/sft_mpdocvqa_retrieved_grounded_grpo100_vs_answer_hard_grpo50_compare.json"
+                )
+            ),
+            "mp_docvqa_retrieved_sft_vs_answer_hard_grpo50": compact_eval_comparison(
+                load_json(root / "outputs/eval/sft_mpdocvqa_retrieved_sft_vs_answer_hard_grpo50_compare.json")
+            ),
         },
     }
 
