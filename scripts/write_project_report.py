@@ -59,6 +59,29 @@ def compact_sft_summary(report: dict[str, Any] | None) -> dict[str, Any] | None:
     }
 
 
+def compact_workflow_summary(report: dict[str, Any] | None) -> dict[str, Any] | None:
+    if report is None:
+        return None
+    return {
+        "input": report.get("input"),
+        "output": report.get("output"),
+        "policy_mode": report.get("policy_mode"),
+        "num_samples": report.get("num_samples"),
+        "workflow_success_rate": report.get("workflow_success_rate"),
+        "raw_json_rate": report.get("raw_json_rate"),
+        "recovered_json_rate": report.get("recovered_json_rate"),
+        "schema_pass_rate": report.get("schema_pass_rate"),
+        "answer_em": report.get("answer_em"),
+        "answer_f1": report.get("answer_f1"),
+        "location_accuracy": report.get("location_accuracy"),
+        "repair_trigger_rate": report.get("repair_trigger_rate"),
+        "repair_success_rate": report.get("repair_success_rate"),
+        "mean_latency_ms": report.get("mean_latency_ms"),
+        "p95_latency_ms": report.get("p95_latency_ms"),
+        "trace_persist_rate": report.get("trace_persist_rate"),
+    }
+
+
 def compact_reader_errors(report: dict[str, Any] | None) -> dict[str, Any] | None:
     if report is None:
         return None
@@ -311,6 +334,11 @@ def main() -> None:
             "mp_docvqa_retrieved_sft_vs_answer_hard_grpo50": compact_eval_comparison(
                 load_json(root / "outputs/eval/sft_mpdocvqa_retrieved_sft_vs_answer_hard_grpo50_compare.json")
             ),
+        },
+        "workflow_phase1": {
+            "base_10": compact_workflow_summary(load_json(root / "outputs/eval/workflow_phase1_base_10_summary.json")),
+            "sft_50": compact_workflow_summary(load_json(root / "outputs/eval/workflow_phase1_sft_50_summary.json")),
+            "grpo_50": compact_workflow_summary(load_json(root / "outputs/eval/workflow_phase1_grpo_50_summary.json")),
         },
     }
 

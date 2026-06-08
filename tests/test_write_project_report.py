@@ -4,6 +4,7 @@ from scripts.write_project_report import (
     compact_grpo_run_summary,
     compact_reader_errors,
     compact_sft_summary,
+    compact_workflow_summary,
 )
 
 
@@ -144,3 +145,46 @@ def test_compact_grpo_run_summary_computes_training_signal() -> None:
     assert report["reward"]["last"] == 0.85
     assert report["max_completion_clipped_ratio"] == 0.0
     assert report["max_grad_norm"] == 0.32
+
+
+def test_compact_workflow_summary_keeps_phase1_metrics() -> None:
+    report = compact_workflow_summary(
+        {
+            "num_samples": 50,
+            "workflow_success_rate": 1.0,
+            "raw_json_rate": 1.0,
+            "recovered_json_rate": 0.0,
+            "schema_pass_rate": 1.0,
+            "answer_em": 0.56,
+            "answer_f1": 0.67,
+            "location_accuracy": 0.94,
+            "repair_trigger_rate": 0.0,
+            "repair_success_rate": 0.0,
+            "mean_latency_ms": 4859.9,
+            "p95_latency_ms": 9528.8,
+            "trace_persist_rate": 1.0,
+            "input": "dev.jsonl",
+            "output": "workflow.jsonl",
+            "policy_mode": "grpo",
+            "examples": [{"id": "drop"}],
+        }
+    )
+
+    assert report == {
+        "input": "dev.jsonl",
+        "output": "workflow.jsonl",
+        "policy_mode": "grpo",
+        "num_samples": 50,
+        "workflow_success_rate": 1.0,
+        "raw_json_rate": 1.0,
+        "recovered_json_rate": 0.0,
+        "schema_pass_rate": 1.0,
+        "answer_em": 0.56,
+        "answer_f1": 0.67,
+        "location_accuracy": 0.94,
+        "repair_trigger_rate": 0.0,
+        "repair_success_rate": 0.0,
+        "mean_latency_ms": 4859.9,
+        "p95_latency_ms": 9528.8,
+        "trace_persist_rate": 1.0,
+    }

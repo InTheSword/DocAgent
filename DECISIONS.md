@@ -17,3 +17,20 @@ Constraints:
 - Repair is bounded to one deterministic pass and cannot access gold answers or gold locations.
 - Qwen model paths are configurable through CLI/config/environment usage and are not hard-coded into Python source.
 - SQLite stores run summaries and node traces, but full prompts and chain-of-thought are not persisted.
+
+## 2026-06-08: Phase 1 Acceptance
+
+Decision: treat Phase 1 Qwen Answer Policy workflow integration as accepted and move next implementation effort to retrieval enhancement preparation.
+
+Evidence:
+
+- Base, SFT, and GRPO modes run through the same workflow CLI.
+- SFT 50-sample workflow eval reached workflow success 1.0, raw JSON 1.0, schema 1.0, Answer F1 0.6715, location accuracy 0.92, and trace persist 1.0.
+- GRPO 50-sample workflow eval reached workflow success 1.0, raw JSON 1.0, schema 1.0, Answer F1 0.6769, location accuracy 0.94, and trace persist 1.0.
+- SQLite trace inspection successfully recovered the run and ordered node traces.
+
+Follow-up:
+
+- Do not tune prompts around individual low-answer examples in this phase.
+- Track remaining answer mistakes as reader extraction errors for later answer-specific supervision or reward refinement.
+- The next system-level implementation branch should start retrieval enhancement ablations, beginning with BGE-M3 dense retrieval and fusion design.

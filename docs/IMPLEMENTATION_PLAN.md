@@ -92,6 +92,8 @@ Verification:
 
 ## Stage 3: Traceable QA workflow
 
+Status: done for Phase 1 Qwen Answer Policy integration.
+
 Goal:
 
 - Replace the current heuristic answer policy with a Qwen3 inference adapter.
@@ -114,6 +116,20 @@ Verification:
 - A single sample can replay its full trace.
 - Error cases can be categorized by retrieval, table, visual, generation,
   location, or format failure.
+
+Observed Phase 1 workflow validation:
+
+- Base/SFT/GRPO modes are selectable through `scripts/eval_workflow_e2e.py`.
+- SFT 50-sample workflow eval: workflow success 1.0, raw JSON 1.0,
+  schema pass 1.0, Answer F1 0.6715, Location Accuracy 0.92,
+  trace persist 1.0.
+- GRPO 50-sample workflow eval: workflow success 1.0, raw JSON 1.0,
+  schema pass 1.0, Answer F1 0.6769, Location Accuracy 0.94,
+  trace persist 1.0.
+- SQLite trace replay was validated with `scripts/inspect_workflow_trace.py`.
+
+Remaining low-answer failures are reader extraction errors inside the correct
+OCR block, not workflow format or trace failures.
 
 ## Stage 4: MinerU integration
 
