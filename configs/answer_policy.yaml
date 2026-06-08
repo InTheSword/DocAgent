@@ -1,0 +1,23 @@
+answer_policy:
+  backend: qwen
+  mode: grpo
+
+  base_model_path: /root/autodl-tmp/models/Qwen3-1.7B
+  adapter_path: outputs/checkpoints/qwen3-docagent-trl-grpo-mpdocvqa-retrieved-grounded-100step-20260606_105535
+
+  device: cuda
+  torch_dtype: bfloat16
+  trust_remote_code: true
+  local_files_only: true
+
+  max_prompt_tokens: 4096
+  max_new_tokens: 384
+  do_sample: false
+  temperature: 0.0
+  top_p: 1.0
+  enable_thinking: false
+  append_no_think: true
+
+  max_chars_per_block: 1200
+  max_total_chars: 5000
+  max_reason_chars: 300

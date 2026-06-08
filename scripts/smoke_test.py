@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from docagent.eval.retrieval_metrics import mrr_at_k, recall_at_k
+from docagent.models.base import HeuristicAnswerPolicy
 from docagent.rewards.combined import docqa_reward
 from docagent.schemas import EvidenceBlock, EvidenceLocation
 from docagent.storage.db import connect, save_evidence_blocks, save_qa_state
@@ -50,6 +51,7 @@ def main() -> None:
         qid="smoke_001",
         question="What is the invoice date?",
         blocks=blocks,
+        answer_policy=HeuristicAnswerPolicy(),
         top_k=2,
         answer_type_hint="extractive",
     )
@@ -81,4 +83,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -1,0 +1,9 @@
+workflow:
+  retriever:
+    top_k: 5
+    candidate_scope: same_doc
+  answer_type: extractive
+  trace:
+    sqlite_path: outputs/traces/workflow_phase1.sqlite
+  repair:
+    max_attempts: 1

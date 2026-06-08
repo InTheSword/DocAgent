@@ -21,12 +21,34 @@ CREATE TABLE IF NOT EXISTS qa_logs (
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS qa_runs (
+  run_id TEXT PRIMARY KEY,
+  qid TEXT,
+  doc_id TEXT,
+  question TEXT NOT NULL,
+  policy_mode TEXT NOT NULL,
+  status TEXT NOT NULL,
+  final_answer_json TEXT,
+  error TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  completed_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS tool_traces (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  qid TEXT NOT NULL,
-  step TEXT NOT NULL,
-  payload_json TEXT NOT NULL,
-  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  qid TEXT,
+  step TEXT,
+  payload_json TEXT,
+  run_id TEXT,
+  step_index INTEGER,
+  node_name TEXT,
+  input_summary_json TEXT,
+  output_summary_json TEXT,
+  success INTEGER,
+  latency_ms REAL,
+  error TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(run_id) REFERENCES qa_runs(run_id)
 );
 
 CREATE TABLE IF NOT EXISTS eval_results (
@@ -36,4 +58,3 @@ CREATE TABLE IF NOT EXISTS eval_results (
   value REAL NOT NULL,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
-

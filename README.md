@@ -27,6 +27,44 @@ cd docagent
 python scripts/smoke_test.py
 ```
 
+## Phase 1 workflow smoke
+
+The traceable workflow now accepts an explicit answer policy. Local tests use
+the heuristic backend only as a mock policy; server validation should use the
+Qwen base/SFT/GRPO backends.
+
+No-card local smoke:
+
+```bash
+python scripts/smoke_test.py
+```
+
+GPU workflow smoke on AutoDL:
+
+```bash
+python scripts/run_workflow_smoke.py \
+  --input data/benchmark/mp_docvqa_dev_sft_retrieved_clean.jsonl \
+  --index 0 \
+  --policy-mode grpo \
+  --base-model-path /root/autodl-tmp/models/Qwen3-1.7B \
+  --adapter-path outputs/checkpoints/qwen3-docagent-trl-grpo-mpdocvqa-retrieved-grounded-100step-20260606_105535 \
+  --sqlite-path outputs/traces/workflow_grpo_smoke.sqlite \
+  --output outputs/traces/workflow_grpo_smoke_000.json
+```
+
+Small workflow eval:
+
+```bash
+python scripts/eval_workflow_e2e.py \
+  --input data/benchmark/mp_docvqa_dev_sft_retrieved_clean.jsonl \
+  --output outputs/eval/workflow_phase1_grpo.jsonl \
+  --summary-output outputs/eval/workflow_phase1_grpo_summary.json \
+  --limit 20 \
+  --policy-mode grpo \
+  --base-model-path /root/autodl-tmp/models/Qwen3-1.7B \
+  --adapter-path outputs/checkpoints/qwen3-docagent-trl-grpo-mpdocvqa-retrieved-grounded-100step-20260606_105535
+```
+
 ## Planned server workflow
 
 Use local development with git/ssh, then run GPU jobs on the 2x RTX 3090
@@ -47,4 +85,3 @@ ssh user@gpu-server "cd /path/to/docagent && bash scripts/train_grpo.sh"
 5. Qwen3 LoRA-SFT with ms-swift.
 6. GRPO reward training and ablation.
 7. OCR-only vs OCR+VLM review on InfographicVQA.
-

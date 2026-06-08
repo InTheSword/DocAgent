@@ -189,12 +189,21 @@ class QAResult:
 class QAState:
     qid: str
     question: str
+    doc_id: str | None = None
+    answer_type: str | None = None
+    run_id: str | None = None
     rewritten_query: str = ""
     retrieved_blocks: list[EvidenceBlock] = field(default_factory=list)
     table_results: list[dict[str, Any]] = field(default_factory=list)
     visual_results: list[dict[str, Any]] = field(default_factory=list)
     draft_answer: dict[str, Any] = field(default_factory=dict)
+    generation_metadata: dict[str, Any] = field(default_factory=dict)
+    parse_result: dict[str, Any] = field(default_factory=dict)
     format_check: dict[str, Any] = field(default_factory=dict)
     location_check: dict[str, Any] = field(default_factory=dict)
+    repair_attempted: bool = False
+    repair_result: dict[str, Any] | None = None
     final_answer: dict[str, Any] = field(default_factory=dict)
+    status: str = "initialized"
+    error: str | None = None
     trace: list[dict[str, Any]] = field(default_factory=list)

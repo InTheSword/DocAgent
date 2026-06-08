@@ -11,6 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from docagent.eval.answer_metrics import exact_match, token_f1
+from docagent.models.output_parser import has_thinking_text as model_has_thinking_text
+from docagent.models.output_parser import parse_generation_output
 from docagent.rewards.answer_reward import answer_reward
 from docagent.rewards.combined import docqa_reward
 from docagent.rewards.location_reward import location_reward
@@ -117,21 +119,11 @@ def decode_first_json(text: str) -> dict[str, Any] | None:
 
 
 def extract_json_object(text: str) -> dict[str, Any] | None:
-    text = text.strip()
-    if not text:
-        return None
-    if "</think>" in text:
-        text = text.rsplit("</think>", maxsplit=1)[-1].strip()
-    try:
-        parsed = json.loads(text)
-        return parsed if isinstance(parsed, dict) else None
-    except json.JSONDecodeError:
-        return decode_first_json(text)
+    return parse_generation_output(text).parsed
 
 
 def has_thinking_text(text: str) -> bool:
-    lowered = text.lower()
-    return "<think>" in lowered or "</think>" in lowered
+    return model_has_thinking_text(text)
 
 
 def infer_answer_type(record: dict[str, Any]) -> str:
