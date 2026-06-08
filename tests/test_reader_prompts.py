@@ -1,4 +1,5 @@
 from docagent.schemas import DocAgentSample, EvidenceBlock, EvidenceLocation
+from docagent.workflow.prompts import format_evidence_blocks
 from scripts.build_sft_dataset import EXTRACTION_RULES_TEXT, build_sft_record
 from scripts.eval_sft_checkpoint import build_inference_messages
 
@@ -58,3 +59,13 @@ def test_strict_extraction_adds_rules_to_legacy_eval_prompts() -> None:
 
     assert "Additional extraction rules" in strict_messages[1]["content"]
     assert EXTRACTION_RULES_TEXT in strict_messages[1]["content"]
+
+
+def test_workflow_prompt_evidence_header_matches_sft_training_shape() -> None:
+    block = _sample().evidence[0]
+
+    text = format_evidence_blocks([block])
+
+    assert text.startswith('[TEXT | block_id=doc1_p1 | location={"page": 1, "block_id": "doc1_p1"}]')
+    assert "evidence_index=" not in text
+    assert "doc_id=" not in text.split("\n", maxsplit=1)[0]

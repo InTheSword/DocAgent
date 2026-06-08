@@ -45,6 +45,10 @@ def _raw_json_object(text: str) -> tuple[dict[str, Any] | None, str | None]:
     return parsed, None
 
 
+def _has_output_field(parsed: dict[str, Any]) -> bool:
+    return bool(REQUIRED_FIELDS & set(parsed))
+
+
 def _scan_first_json_object(text: str) -> tuple[dict[str, Any] | None, str | None, str | None]:
     decoder = json.JSONDecoder()
     for index, char in enumerate(text):
@@ -54,9 +58,44 @@ def _scan_first_json_object(text: str) -> tuple[dict[str, Any] | None, str | Non
             parsed, end = decoder.raw_decode(text[index:])
         except json.JSONDecodeError:
             continue
-        if isinstance(parsed, dict):
+        if isinstance(parsed, dict) and _has_output_field(parsed):
             return parsed, text[index : index + end], None
     return None, None, "no JSON object found"
+
+
+def _json_value_after_key(text: str, key: str) -> Any:
+    marker = f'"{key}"'
+    index = text.find(marker)
+    if index < 0:
+        return None
+    colon = text.find(":", index + len(marker))
+    if colon < 0:
+        return None
+    value_start = colon + 1
+    while value_start < len(text) and text[value_start].isspace():
+        value_start += 1
+    try:
+        value, _ = json.JSONDecoder().raw_decode(text[value_start:])
+    except json.JSONDecodeError:
+        return None
+    return value
+
+
+def _recover_partial_output_object(text: str) -> dict[str, Any] | None:
+    partial: dict[str, Any] = {}
+    answer = _json_value_after_key(text, "answer")
+    if isinstance(answer, str):
+        partial["answer"] = answer
+    location = _json_value_after_key(text, "evidence_location")
+    if isinstance(location, dict):
+        partial["evidence_location"] = location
+    evidence = _json_value_after_key(text, "evidence")
+    if isinstance(evidence, str):
+        partial["evidence"] = evidence
+    reason = _json_value_after_key(text, "reason")
+    if isinstance(reason, str):
+        partial["reason"] = reason
+    return partial if _has_output_field(partial) else None
 
 
 def validate_schema(parsed: dict[str, Any] | None, max_reason_chars: int | None = 300) -> tuple[bool, str | None]:
@@ -102,10 +141,15 @@ def parse_generation_output(text: str, max_reason_chars: int | None = 300) -> Pa
 
     cleaned = _strip_think_tail(stripped)
     recovered, extracted, recover_error = _scan_first_json_object(cleaned)
+    if recovered is None:
+        recovered = _recover_partial_output_object(cleaned)
+        if recovered is not None:
+            extracted = None
+            recover_error = "partial output object recovered from truncated generation"
     schema_ok, schema_error = validate_schema(recovered, max_reason_chars=max_reason_chars)
     return ParseResult(
         raw_json_ok=False,
-        recovered_json_ok=recovered is not None,
+        recovered_json_ok=recovered is not None and extracted is not None,
         schema_ok=schema_ok,
         parsed=recovered,
         extracted_json_text=extracted,

@@ -48,9 +48,14 @@ python scripts/run_workflow_smoke.py \
   --policy-mode grpo \
   --base-model-path /root/autodl-tmp/models/Qwen3-1.7B \
   --adapter-path outputs/checkpoints/qwen3-docagent-trl-grpo-mpdocvqa-retrieved-grounded-100step-20260606_105535 \
+  --max-new-tokens 1024 \
   --sqlite-path outputs/traces/workflow_grpo_smoke.sqlite \
   --output outputs/traces/workflow_grpo_smoke_000.json
 ```
+
+The workflow smoke/eval scripts preserve retrieved-reader evidence order by
+default. Pass `--rerank-input-evidence` only when the input contains an
+unranked evidence pool.
 
 Small workflow eval:
 
@@ -62,7 +67,8 @@ python scripts/eval_workflow_e2e.py \
   --limit 20 \
   --policy-mode grpo \
   --base-model-path /root/autodl-tmp/models/Qwen3-1.7B \
-  --adapter-path outputs/checkpoints/qwen3-docagent-trl-grpo-mpdocvqa-retrieved-grounded-100step-20260606_105535
+  --adapter-path outputs/checkpoints/qwen3-docagent-trl-grpo-mpdocvqa-retrieved-grounded-100step-20260606_105535 \
+  --max-new-tokens 1024
 ```
 
 ## Planned server workflow

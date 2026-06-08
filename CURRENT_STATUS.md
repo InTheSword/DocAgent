@@ -15,6 +15,7 @@ Completed in this phase:
 - Added bounded repair routing after format/location checks.
 - Added run-level SQLite trace persistence through `TraceRepository`.
 - Added CLI smoke/eval/trace inspection scripts for workflow-level testing.
+- Aligned workflow Qwen generation default with the standalone checkpoint eval `MAX_NEW_TOKENS=1024` setting to avoid truncating valid JSON outputs.
 
 Current boundary:
 

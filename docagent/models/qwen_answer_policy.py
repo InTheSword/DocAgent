@@ -21,14 +21,14 @@ class QwenAnswerPolicyConfig:
     trust_remote_code: bool = True
     local_files_only: bool = True
     max_prompt_tokens: int | None = 4096
-    max_new_tokens: int = 384
+    max_new_tokens: int = 1024
     do_sample: bool = False
     temperature: float = 0.0
     top_p: float = 1.0
     enable_thinking: bool = False
     append_no_think: bool = True
     max_chars_per_block: int = 1200
-    max_total_chars: int | None = 5000
+    max_total_chars: int | None = None
     max_reason_chars: int | None = 300
 
 

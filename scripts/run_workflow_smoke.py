@@ -46,10 +46,11 @@ def main() -> None:
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--torch-dtype", default="bfloat16")
     parser.add_argument("--max-prompt-tokens", type=int, default=4096)
-    parser.add_argument("--max-new-tokens", type=int, default=384)
+    parser.add_argument("--max-new-tokens", type=int, default=1024)
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--top-p", type=float, default=1.0)
     parser.add_argument("--do-sample", action="store_true")
+    parser.add_argument("--rerank-input-evidence", action="store_true")
     parser.add_argument("--sqlite-path", default="outputs/traces/workflow_smoke.sqlite")
     parser.add_argument("--output", default="outputs/traces/workflow_smoke.json")
     args = parser.parse_args()
@@ -69,6 +70,7 @@ def main() -> None:
         top_k=min(5, len(item["blocks"])) if item["blocks"] else 5,
         answer_type_hint=item["answer_type"],
         trace_repository=repository,
+        preserve_input_order=not args.rerank_input_evidence,
     )
     payload = {
         "run_id": state.run_id,

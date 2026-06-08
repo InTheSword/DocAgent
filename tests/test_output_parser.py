@@ -39,7 +39,7 @@ def test_parse_reports_incomplete_json() -> None:
     assert not result.raw_json_ok
     assert not result.recovered_json_ok
     assert result.not_ending_with_brace
-    assert result.parsed is None
+    assert result.parsed == {"answer": "A"}
 
 
 def test_parse_rejects_overlong_reason() -> None:
@@ -52,3 +52,17 @@ def test_parse_rejects_overlong_reason() -> None:
     assert result.raw_json_ok
     assert not result.schema_ok
     assert "reason exceeds" in result.error
+
+
+def test_parse_truncated_answer_object_does_not_return_nested_location_object() -> None:
+    result = parse_generation_output(
+        '{"answer": "BSE", '
+        '"evidence_location": {"page": 24, "block_id": "ynbx0223_p24_official_ocr"}, '
+        '"evidence": "shareholder information monthly high and low quotes'
+    )
+
+    assert result.not_ending_with_brace
+    assert not result.recovered_json_ok
+    assert result.parsed["answer"] == "BSE"
+    assert result.parsed["evidence_location"]["block_id"] == "ynbx0223_p24_official_ocr"
+    assert "reason" not in result.parsed

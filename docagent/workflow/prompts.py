@@ -51,17 +51,14 @@ def format_evidence_blocks(
     blocks: list[EvidenceBlock],
     *,
     max_chars_per_block: int = 1200,
-    max_total_chars: int | None = 5000,
+    max_total_chars: int | None = None,
 ) -> str:
     parts: list[str] = []
     total_chars = 0
     for index, block in enumerate(blocks, start=1):
         location = build_location_target(block)
-        header = (
-            f"[{block.block_type.upper()} | evidence_index={index} | "
-            f"doc_id={block.doc_id} | block_id={block.block_id} | "
-            f"location={json.dumps(location, ensure_ascii=False)}]"
-        )
+        location_text = json.dumps(location, ensure_ascii=False)
+        header = f"[{block.block_type.upper()} | block_id={block.block_id} | location={location_text}]"
         body = smart_truncate(block.retrieval_text, max_chars_per_block)
         item = f"{header}\n{body}"
         if max_total_chars is not None and total_chars + len(item) > max_total_chars:
@@ -83,7 +80,7 @@ def build_answer_messages(
     answer_type: str | None = None,
     append_no_think: bool = True,
     max_chars_per_block: int = 1200,
-    max_total_chars: int | None = 5000,
+    max_total_chars: int | None = None,
 ) -> list[dict[str, str]]:
     output_schema = json.dumps(OUTPUT_SCHEMA, ensure_ascii=False)
     tool_text = json.dumps(tool_results or [], ensure_ascii=False, indent=2)

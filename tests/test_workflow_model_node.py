@@ -54,3 +54,36 @@ def test_workflow_uses_injected_answer_policy() -> None:
     assert state.generation_metadata["policy_mode"] == "fake"
     assert state.parse_result["schema_ok"] is True
     assert "generate_answer" in [item["step"] for item in state.trace]
+
+
+def test_workflow_can_preserve_input_evidence_order() -> None:
+    blocks = [
+        EvidenceBlock(
+            doc_id="doc1",
+            page_id=1,
+            block_id="first",
+            block_type="text",
+            text="unrelated text",
+            location=EvidenceLocation(page=1, block_id="first"),
+        ),
+        EvidenceBlock(
+            doc_id="doc1",
+            page_id=2,
+            block_id="second",
+            block_type="text",
+            text="date date date March 12 2020",
+            location=EvidenceLocation(page=2, block_id="second"),
+        ),
+    ]
+
+    state = run_qa_workflow(
+        qid="q1",
+        question="What is the date?",
+        blocks=blocks,
+        answer_policy=FakePolicy(),
+        answer_type_hint="extractive",
+        preserve_input_order=True,
+    )
+
+    assert [block.block_id for block in state.retrieved_blocks] == ["first", "second"]
+    assert state.trace[0]["preserve_input_order"] is True

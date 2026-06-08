@@ -4,6 +4,7 @@ from typing import Any
 
 from docagent.models.base import AnswerPolicy
 from docagent.retrieval.hybrid_retriever import HybridRetriever
+from docagent.retrieval.query_rewrite import rewrite_query
 from docagent.schemas import EvidenceBlock, QAState
 from docagent.storage.repositories import TraceRepository
 from docagent.tools.answer_repair import repair_answer
@@ -58,6 +59,7 @@ def run_qa_workflow(
     doc_id: str | None = None,
     trace_repository: TraceRepository | None = None,
     run_id: str | None = None,
+    preserve_input_order: bool = False,
 ) -> QAState:
     if answer_policy is None:
         raise ValueError("answer_policy is required; pass HeuristicAnswerPolicy explicitly for tests or smoke runs")
@@ -72,18 +74,24 @@ def run_qa_workflow(
             policy_mode=policy_mode,
         )
     state.status = "running"
-    retriever = HybridRetriever(blocks)
-    rewritten_query, hits = retriever.retrieve(question, top_k=top_k, answer_type_hint=answer_type_hint)
-    state.rewritten_query = rewritten_query
-    state.retrieved_blocks = [block for block, _score in hits]
+    if preserve_input_order:
+        rewrite = rewrite_query(question, answer_type_hint=answer_type_hint)
+        state.rewritten_query = rewrite.rewritten_query
+        state.retrieved_blocks = list(blocks[:top_k])
+    else:
+        retriever = HybridRetriever(blocks)
+        rewritten_query, hits = retriever.retrieve(question, top_k=top_k, answer_type_hint=answer_type_hint)
+        state.rewritten_query = rewritten_query
+        state.retrieved_blocks = [block for block, _score in hits]
     _trace(
         state,
         trace_repository,
         "retrieve_evidence",
         input_summary={"question": question, "top_k": top_k, "answer_type": answer_type_hint},
         output_summary={
-            "query": rewritten_query,
-            "num_hits": len(hits),
+            "query": state.rewritten_query,
+            "num_hits": len(state.retrieved_blocks),
+            "preserve_input_order": preserve_input_order,
             "block_ids": [block.block_id for block in state.retrieved_blocks],
         },
     )
