@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Protocol
 
 from docagent.retrieval.base import RetrievalCandidate
+from docagent.retrieval.bm25_index import tokenize
 
 
 class Reranker(Protocol):
@@ -65,13 +66,40 @@ class CrossEncoderReranker:
 class KeywordOverlapReranker:
     """Small deterministic reranker for tests and no-card smoke runs."""
 
+    stopwords = {
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "by",
+        "for",
+        "form",
+        "from",
+        "full",
+        "in",
+        "is",
+        "of",
+        "on",
+        "or",
+        "the",
+        "to",
+        "what",
+        "which",
+        "who",
+        "whose",
+    }
+
     def score(self, *, query: str, candidates: list[RetrievalCandidate]) -> list[RetrievalCandidate]:
-        query_terms = {term.lower() for term in query.split() if term.strip()}
+        query_terms = {term for term in tokenize(query) if term not in self.stopwords}
+        if not query_terms:
+            query_terms = set(tokenize(query))
         for candidate in candidates:
-            text_terms = {term.lower() for term in candidate.block.retrieval_text.split() if term.strip()}
+            text_terms = set(tokenize(candidate.block.retrieval_text))
             candidate.rerank_score = float(len(query_terms & text_terms))
         return sorted(
             candidates,
             key=lambda item: (-(item.rerank_score or 0.0), item.ranks.get("rrf", 10**9), item.block.block_id),
         )
-
