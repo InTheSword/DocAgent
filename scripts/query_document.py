@@ -50,6 +50,7 @@ def main() -> None:
     parser.add_argument("--dense-model-path")
     parser.add_argument("--dense-device", default="cpu")
     parser.add_argument("--dense-fp16", action="store_true")
+    parser.add_argument("--build-index-if-missing", action="store_true")
     parser.add_argument("--reranker-model-path")
     parser.add_argument("--reranker-device", default="cpu")
     parser.add_argument("--reranker-fp16", action="store_true")
@@ -85,7 +86,25 @@ def main() -> None:
             )
         )
         index_dir = ROOT / args.document_root / args.doc_id
-        dense_index = DenseIndex.load(index_dir=index_dir, blocks=blocks)
+        index_metadata = index_dir / "index_metadata.json"
+        if not index_metadata.exists():
+            if not args.build_index_if_missing:
+                raise SystemExit(
+                    f"dense index is missing for doc_id={args.doc_id}: {index_metadata}. "
+                    "Run scripts/ingest_document.py with --build-index, or pass --build-index-if-missing."
+                )
+            embeddings = dense_encoder.encode_documents([block.retrieval_text for block in blocks])
+            dense_index = DenseIndex.build(blocks=blocks, embeddings=embeddings, model_id=dense_encoder.model_id)
+            metadata = dense_index.save(index_dir)
+            document_repository.save_index_metadata(
+                doc_id=args.doc_id,
+                index_type="dense",
+                model_id=str(metadata.get("model_id") or ""),
+                artifact_path=str(index_dir),
+                metadata=metadata,
+            )
+        else:
+            dense_index = DenseIndex.load(index_dir=index_dir, blocks=blocks)
 
     reranker = None
     if args.retriever == "hybrid_rerank":
@@ -136,4 +155,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

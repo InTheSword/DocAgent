@@ -29,3 +29,13 @@ def test_dense_index_numpy_search_and_save_load(tmp_path) -> None:
     assert metadata["backend"] == "numpy"
     assert loaded.search(np.asarray([[0.1, 0.9]], dtype=np.float32), top_k=1)[0].block.block_id == "b2"
 
+
+def test_dense_index_missing_fails_with_clear_error(tmp_path) -> None:
+    blocks = [_block("b1", "invoice date")]
+
+    try:
+        DenseIndex.load(index_dir=tmp_path, blocks=blocks)
+    except FileNotFoundError as exc:
+        assert "index_metadata.json" in str(exc)
+    else:
+        raise AssertionError("expected FileNotFoundError")

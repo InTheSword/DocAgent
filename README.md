@@ -117,6 +117,7 @@ python scripts/query_document.py \
   --dense-model-path /root/autodl-tmp/models/bge-m3 \
   --dense-device cuda:1 \
   --dense-fp16 \
+  --build-index-if-missing \
   --reranker-model-path /root/autodl-tmp/models/bge-reranker-v2-m3 \
   --reranker-device cuda:1 \
   --reranker-fp16 \

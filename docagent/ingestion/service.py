@@ -120,7 +120,7 @@ class DocumentIngestionService:
                 dense_metadata = json.loads(index_metadata_path.read_text(encoding="utf-8"))
             record.index_status = "ready"
         else:
-            record.index_status = "ready" if blocks else "not_started"
+            record.index_status = "not_started"
 
         self._save_document(record)
         if self.repository is not None:
