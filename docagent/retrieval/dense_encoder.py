@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
+from docagent.retrieval.bm25_index import tokenize
 
 import numpy as np
 
@@ -65,10 +67,35 @@ class DenseEncoder:
         return array
 
 
+class HashDenseEncoder:
+    """Deterministic local encoder for no-download Phase 2 smoke tests."""
+
+    def __init__(self, *, dimension: int = 256) -> None:
+        self.dimension = dimension
+
+    @property
+    def model_id(self) -> str:
+        return f"hash-dense-{self.dimension}"
+
+    def encode_queries(self, texts: list[str]) -> np.ndarray:
+        return self._encode(texts)
+
+    def encode_documents(self, texts: list[str]) -> np.ndarray:
+        return self._encode(texts)
+
+    def _encode(self, texts: list[str]) -> np.ndarray:
+        vectors = np.zeros((len(texts), self.dimension), dtype=np.float32)
+        for row, text in enumerate(texts):
+            for token in tokenize(text):
+                digest = hashlib.sha256(token.encode("utf-8")).digest()
+                bucket = int.from_bytes(digest[:8], "big") % self.dimension
+                vectors[row, bucket] += 1.0
+        return _normalize(vectors)
+
+
 def _normalize(array: np.ndarray) -> np.ndarray:
     if array.size == 0:
         return array.astype(np.float32)
     norms = np.linalg.norm(array, axis=1, keepdims=True)
     norms[norms == 0] = 1.0
     return (array / norms).astype(np.float32)
-

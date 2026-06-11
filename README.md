@@ -127,6 +127,24 @@ python scripts/query_document.py \
   --sqlite-path outputs/docagent.db
 ```
 
+No-download hybrid smoke:
+
+Use this only to verify Phase 2 wiring when BGE-M3 or bge-reranker-v2-m3 are
+not present on the server. The output must be reported as `hash` dense and
+`keyword` reranker, not as a BGE/reranker result.
+
+```bash
+python scripts/query_document.py \
+  --doc-id <doc_id> \
+  --question "..." \
+  --retriever hybrid_rerank \
+  --policy-mode heuristic \
+  --dense-backend hash \
+  --build-index-if-missing \
+  --reranker-backend keyword \
+  --sqlite-path outputs/docagent.db
+```
+
 ## Planned server workflow
 
 Use local development with git/ssh, then run GPU jobs on the 2x RTX 3090

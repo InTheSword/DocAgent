@@ -1,18 +1,12 @@
 from __future__ import annotations
 
-import numpy as np
-
 from docagent.models.base import HeuristicAnswerPolicy
+from docagent.retrieval.dense_encoder import HashDenseEncoder
 from docagent.retrieval.dense_index import DenseIndex
 from docagent.retrieval.index_manager import IndexedDocumentRetriever
 from docagent.retrieval.reranker import KeywordOverlapReranker
 from docagent.schemas import EvidenceBlock, EvidenceLocation
 from docagent.workflow.graph import run_qa_workflow
-
-
-class MockDenseEncoder:
-    def encode_queries(self, texts: list[str]) -> np.ndarray:
-        return np.asarray([[1.0, 0.0]], dtype=np.float32)
 
 
 def test_phase2_mock_hybrid_retriever_runs_workflow() -> None:
@@ -32,16 +26,12 @@ def test_phase2_mock_hybrid_retriever_runs_workflow() -> None:
             location=EvidenceLocation(page=2, block_id="b2"),
         ),
     ]
-    dense_index = DenseIndex(
-        blocks=blocks,
-        embeddings=np.asarray([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
-        model_id="mock-bge",
-        backend="numpy",
-    )
+    encoder = HashDenseEncoder()
+    dense_index = DenseIndex.build(blocks=blocks, embeddings=encoder.encode_documents([block.retrieval_text for block in blocks]), model_id=encoder.model_id)
     retriever = IndexedDocumentRetriever(
         blocks,
         mode="hybrid_rerank",
-        dense_encoder=MockDenseEncoder(),  # type: ignore[arg-type]
+        dense_encoder=encoder,
         dense_index=dense_index,
         reranker=KeywordOverlapReranker(),
     )
@@ -60,4 +50,3 @@ def test_phase2_mock_hybrid_retriever_runs_workflow() -> None:
     assert state.retrieved_blocks[0].block_id == "b1"
     assert state.trace[0]["retriever_mode"] == "hybrid_rerank"
     assert state.location_check["success"] is True
-

@@ -44,9 +44,16 @@ class DenseIndex:
         return cls(blocks=blocks, embeddings=embeddings, model_id=model_id, normalized=True, backend=backend)
 
     @classmethod
-    def load(cls, *, index_dir: str | Path, blocks: list[EvidenceBlock]) -> "DenseIndex":
+    def load(
+        cls,
+        *,
+        index_dir: str | Path,
+        blocks: list[EvidenceBlock],
+        metadata_path: str | Path | None = None,
+    ) -> "DenseIndex":
         path = Path(index_dir)
-        metadata = json.loads((path / "index_metadata.json").read_text(encoding="utf-8"))
+        metadata_file = Path(metadata_path) if metadata_path is not None else path / "index_metadata.json"
+        metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
         embeddings = np.load(metadata["embeddings_path"])
         blocks_by_id = {block.block_id: block for block in blocks}
         ordered_blocks = [blocks_by_id[block_id] for block_id in metadata["block_ids"] if block_id in blocks_by_id]

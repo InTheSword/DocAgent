@@ -68,6 +68,9 @@ Completed locally in this step:
 - Added `scripts/build_phase2_parse_existing_fixture.py` to create
   MinerU-like `content_list.json` fixtures from existing DocAgent JSONL
   records, so Phase 2 can be smoke-tested without installing MinerU.
+- Added explicit no-download smoke backends for Phase 2 retrieval:
+  `HashDenseEncoder` and `KeywordOverlapReranker`. These are for wiring tests
+  only and must not be reported as BGE-M3 or bge-reranker-v2-m3 results.
 
 Local no-card validation:
 

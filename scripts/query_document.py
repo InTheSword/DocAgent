@@ -10,10 +10,10 @@ sys.path.insert(0, str(ROOT))
 
 from docagent.models.base import HeuristicAnswerPolicy
 from docagent.models.qwen_answer_policy import QwenAnswerPolicy, QwenAnswerPolicyConfig
-from docagent.retrieval.dense_encoder import DenseEncoder, DenseEncoderConfig
+from docagent.retrieval.dense_encoder import DenseEncoder, DenseEncoderConfig, HashDenseEncoder
 from docagent.retrieval.dense_index import DenseIndex
 from docagent.retrieval.index_manager import IndexedDocumentRetriever
-from docagent.retrieval.reranker import CrossEncoderReranker, CrossEncoderRerankerConfig
+from docagent.retrieval.reranker import CrossEncoderReranker, CrossEncoderRerankerConfig, KeywordOverlapReranker
 from docagent.storage.db import connect
 from docagent.storage.repositories import DocumentRepository, TraceRepository
 from docagent.workflow.graph import run_qa_workflow
@@ -47,10 +47,12 @@ def main() -> None:
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--sqlite-path", default="outputs/docagent.db")
     parser.add_argument("--document-root", default="data/documents")
+    parser.add_argument("--dense-backend", choices=["bge", "hash"], default="bge")
     parser.add_argument("--dense-model-path")
     parser.add_argument("--dense-device", default="cpu")
     parser.add_argument("--dense-fp16", action="store_true")
     parser.add_argument("--build-index-if-missing", action="store_true")
+    parser.add_argument("--reranker-backend", choices=["cross_encoder", "keyword"], default="cross_encoder")
     parser.add_argument("--reranker-model-path")
     parser.add_argument("--reranker-device", default="cpu")
     parser.add_argument("--reranker-fp16", action="store_true")
@@ -76,17 +78,23 @@ def main() -> None:
     dense_encoder = None
     dense_index = None
     if args.retriever in {"dense", "hybrid", "hybrid_rerank"}:
-        if not args.dense_model_path:
+        if args.dense_backend == "hash":
+            dense_encoder = HashDenseEncoder()
+        elif not args.dense_model_path:
             raise SystemExit(f"{args.retriever} requires --dense-model-path")
-        dense_encoder = DenseEncoder(
-            DenseEncoderConfig(
-                model_path=args.dense_model_path,
-                device=args.dense_device,
-                use_fp16=args.dense_fp16,
+        else:
+            dense_encoder = DenseEncoder(
+                DenseEncoderConfig(
+                    model_path=args.dense_model_path,
+                    device=args.dense_device,
+                    use_fp16=args.dense_fp16,
+                )
             )
-        )
         index_dir = ROOT / args.document_root / args.doc_id
-        index_metadata = index_dir / "index_metadata.json"
+        index_metadata = index_dir / f"index_metadata_{dense_encoder.model_id.replace('/', '_')}.json"
+        legacy_index_metadata = index_dir / "index_metadata.json"
+        if not index_metadata.exists() and legacy_index_metadata.exists() and args.dense_backend == "bge":
+            index_metadata = legacy_index_metadata
         if not index_metadata.exists():
             if not args.build_index_if_missing:
                 raise SystemExit(
@@ -96,6 +104,8 @@ def main() -> None:
             embeddings = dense_encoder.encode_documents([block.retrieval_text for block in blocks])
             dense_index = DenseIndex.build(blocks=blocks, embeddings=embeddings, model_id=dense_encoder.model_id)
             metadata = dense_index.save(index_dir)
+            model_index_metadata = index_dir / f"index_metadata_{dense_encoder.model_id.replace('/', '_')}.json"
+            model_index_metadata.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
             document_repository.save_index_metadata(
                 doc_id=args.doc_id,
                 index_type="dense",
@@ -104,19 +114,22 @@ def main() -> None:
                 metadata=metadata,
             )
         else:
-            dense_index = DenseIndex.load(index_dir=index_dir, blocks=blocks)
+            dense_index = DenseIndex.load(index_dir=index_dir, blocks=blocks, metadata_path=index_metadata)
 
     reranker = None
     if args.retriever == "hybrid_rerank":
-        if not args.reranker_model_path:
+        if args.reranker_backend == "keyword":
+            reranker = KeywordOverlapReranker()
+        elif not args.reranker_model_path:
             raise SystemExit("hybrid_rerank requires --reranker-model-path")
-        reranker = CrossEncoderReranker(
-            CrossEncoderRerankerConfig(
-                model_path=args.reranker_model_path,
-                device=args.reranker_device,
-                use_fp16=args.reranker_fp16,
+        else:
+            reranker = CrossEncoderReranker(
+                CrossEncoderRerankerConfig(
+                    model_path=args.reranker_model_path,
+                    device=args.reranker_device,
+                    use_fp16=args.reranker_fp16,
+                )
             )
-        )
 
     retriever = IndexedDocumentRetriever(
         blocks,
@@ -142,6 +155,8 @@ def main() -> None:
         "doc_id": args.doc_id,
         "question": args.question,
         "retriever": args.retriever,
+        "dense_backend": args.dense_backend if args.retriever in {"dense", "hybrid", "hybrid_rerank"} else None,
+        "reranker_backend": args.reranker_backend if args.retriever == "hybrid_rerank" else None,
         "final_answer": state.final_answer,
         "top_k_evidence": [block.to_dict() for block in state.retrieved_blocks],
         "trace": state.trace,
