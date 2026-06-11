@@ -81,9 +81,14 @@ BGE-M3, bge-reranker-v2-m3, and Qwen policy evaluation should run on AutoDL.
 No-card parse-existing smoke:
 
 ```bash
+python scripts/build_phase2_parse_existing_fixture.py \
+  --input data/benchmark/mp_docvqa_dev_sft_retrieved_clean.jsonl \
+  --output-dir outputs/phase2_parse_existing_fixture \
+  --index 0
+
 python scripts/ingest_document.py \
-  --file examples/sample.pdf \
-  --mineru-output-dir examples/sample_mineru \
+  --file outputs/phase2_parse_existing_fixture/source/<source_file> \
+  --mineru-output-dir outputs/phase2_parse_existing_fixture/mineru \
   --document-root data/documents \
   --sqlite-path outputs/docagent.db
 

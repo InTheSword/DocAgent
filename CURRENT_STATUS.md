@@ -65,6 +65,9 @@ Completed locally in this step:
   `scripts/ingest_document.py`, `scripts/inspect_document.py`,
   `scripts/query_document.py`, `scripts/eval_retrieval_phase2.py`, and
   `scripts/eval_workflow_phase2.py`.
+- Added `scripts/build_phase2_parse_existing_fixture.py` to create
+  MinerU-like `content_list.json` fixtures from existing DocAgent JSONL
+  records, so Phase 2 can be smoke-tested without installing MinerU.
 
 Local no-card validation:
 

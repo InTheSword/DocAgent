@@ -8,7 +8,7 @@ from pathlib import Path
 from docagent.ingestion.hashing import doc_id_from_sha256, sha256_file
 
 
-SUPPORTED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg"}
+SUPPORTED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".txt"}
 
 
 @dataclass
@@ -72,4 +72,3 @@ class DocumentRegistry:
             file_path=str(target),
             document_dir=str(document_dir),
         )
-
