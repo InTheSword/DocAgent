@@ -82,13 +82,17 @@ def evidence_blocks_from_prompt(content: str, fallback_doc_id: str = "") -> list
 def workflow_input_from_record(record: dict[str, Any]) -> dict[str, Any]:
     if "evidence" in record and "question" in record:
         sample = DocAgentSample.from_dict(record)
+        gold_ids = set(sample.metadata.get("gold_block_ids") or [])
+        gold_block = next((block for block in sample.evidence if block.block_id in gold_ids), None)
+        if gold_block is None and sample.evidence:
+            gold_block = sample.evidence[0]
         return {
             "qid": sample.qid,
             "doc_id": sample.doc_id,
             "question": sample.question,
             "answer_type": sample.answer_type,
             "blocks": sample.evidence,
-            "gold": {"answer": sample.answer, "evidence_location": sample.evidence[0].location.to_dict() if sample.evidence else {}},
+            "gold": {"answer": sample.answer, "evidence_location": gold_block.location.to_dict() if gold_block else {}},
         }
 
     content = user_content(record)

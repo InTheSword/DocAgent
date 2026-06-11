@@ -13,10 +13,10 @@ sys.path.insert(0, str(ROOT))
 from docagent.eval.answer_metrics import exact_match, token_f1
 from docagent.models.base import HeuristicAnswerPolicy
 from docagent.models.qwen_answer_policy import QwenAnswerPolicy, QwenAnswerPolicyConfig
-from docagent.retrieval.dense_encoder import DenseEncoder, DenseEncoderConfig
+from docagent.retrieval.dense_encoder import DenseEncoder, DenseEncoderConfig, HashDenseEncoder
 from docagent.retrieval.dense_index import DenseIndex
 from docagent.retrieval.index_manager import IndexedDocumentRetriever
-from docagent.retrieval.reranker import CrossEncoderReranker, CrossEncoderRerankerConfig
+from docagent.retrieval.reranker import CrossEncoderReranker, CrossEncoderRerankerConfig, KeywordOverlapReranker
 from docagent.rewards.location_reward import location_reward
 from docagent.storage.db import connect
 from docagent.storage.repositories import TraceRepository
@@ -59,9 +59,11 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=50)
     parser.add_argument("--retriever", choices=["bm25", "dense", "hybrid", "hybrid_rerank"], default="bm25")
     parser.add_argument("--policy-mode", choices=["heuristic", "base", "sft", "grpo"], default="heuristic")
+    parser.add_argument("--dense-backend", choices=["bge", "hash"], default="bge")
     parser.add_argument("--dense-model-path")
     parser.add_argument("--dense-device", default="cpu")
     parser.add_argument("--dense-fp16", action="store_true")
+    parser.add_argument("--reranker-backend", choices=["cross_encoder", "keyword"], default="cross_encoder")
     parser.add_argument("--reranker-model-path")
     parser.add_argument("--reranker-device", default="cpu")
     parser.add_argument("--reranker-fp16", action="store_true")
@@ -76,26 +78,32 @@ def main() -> None:
 
     dense_encoder = None
     if args.retriever in {"dense", "hybrid", "hybrid_rerank"}:
-        if not args.dense_model_path:
+        if args.dense_backend == "hash":
+            dense_encoder = HashDenseEncoder()
+        elif not args.dense_model_path:
             raise SystemExit(f"{args.retriever} requires --dense-model-path")
-        dense_encoder = DenseEncoder(
-            DenseEncoderConfig(
-                model_path=args.dense_model_path,
-                device=args.dense_device,
-                use_fp16=args.dense_fp16,
+        else:
+            dense_encoder = DenseEncoder(
+                DenseEncoderConfig(
+                    model_path=args.dense_model_path,
+                    device=args.dense_device,
+                    use_fp16=args.dense_fp16,
+                )
             )
-        )
     reranker = None
     if args.retriever == "hybrid_rerank":
-        if not args.reranker_model_path:
+        if args.reranker_backend == "keyword":
+            reranker = KeywordOverlapReranker()
+        elif not args.reranker_model_path:
             raise SystemExit("hybrid_rerank requires --reranker-model-path")
-        reranker = CrossEncoderReranker(
-            CrossEncoderRerankerConfig(
-                model_path=args.reranker_model_path,
-                device=args.reranker_device,
-                use_fp16=args.reranker_fp16,
+        else:
+            reranker = CrossEncoderReranker(
+                CrossEncoderRerankerConfig(
+                    model_path=args.reranker_model_path,
+                    device=args.reranker_device,
+                    use_fp16=args.reranker_fp16,
+                )
             )
-        )
 
     records = read_jsonl(ROOT / args.input)[: args.limit]
     conn = connect(ROOT / args.sqlite_path)
@@ -144,6 +152,8 @@ def main() -> None:
                     "repair_success": state.repair_attempted and state.format_check.get("success", False) and state.location_check.get("success", False),
                     "latency_ms": state.generation_metadata.get("latency_ms"),
                     "retriever": args.retriever,
+                    "dense_backend": args.dense_backend if args.retriever in {"dense", "hybrid", "hybrid_rerank"} else None,
+                    "reranker_backend": args.reranker_backend if args.retriever == "hybrid_rerank" else None,
                     "prediction": state.final_answer,
                     "gold": gold,
                 }
@@ -153,7 +163,16 @@ def main() -> None:
 
     write_jsonl(ROOT / args.output, rows)
     summary = summarize(rows)
-    summary.update({"input": args.input, "output": args.output, "policy_mode": args.policy_mode, "retriever": args.retriever})
+    summary.update(
+        {
+            "input": args.input,
+            "output": args.output,
+            "policy_mode": args.policy_mode,
+            "retriever": args.retriever,
+            "dense_backend": args.dense_backend if args.retriever in {"dense", "hybrid", "hybrid_rerank"} else None,
+            "reranker_backend": args.reranker_backend if args.retriever == "hybrid_rerank" else None,
+        }
+    )
     summary_path = ROOT / args.summary_output
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -162,4 +181,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

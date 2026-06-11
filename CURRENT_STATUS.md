@@ -71,6 +71,9 @@ Completed locally in this step:
 - Added explicit no-download smoke backends for Phase 2 retrieval:
   `HashDenseEncoder` and `KeywordOverlapReranker`. These are for wiring tests
   only and must not be reported as BGE-M3 or bge-reranker-v2-m3 results.
+- `scripts/eval_retrieval_phase2.py` and `scripts/eval_workflow_phase2.py`
+  now support the same `hash` dense and `keyword` reranker smoke backends for
+  no-download batch validation.
 
 Local no-card validation:
 

@@ -145,6 +145,29 @@ python scripts/query_document.py \
   --sqlite-path outputs/docagent.db
 ```
 
+No-download batch retrieval/workflow smoke:
+
+```bash
+python scripts/eval_retrieval_phase2.py \
+  --input data/benchmark/mp_docvqa_dev_sft_retrieved_clean.jsonl \
+  --modes bm25,hybrid_rerank \
+  --dense-backend hash \
+  --reranker-backend keyword \
+  --limit 20 \
+  --output outputs/eval/phase2_retrieval_hash_keyword_20.json
+
+python scripts/eval_workflow_phase2.py \
+  --input data/benchmark/mp_docvqa_dev_sft_retrieved_clean.jsonl \
+  --output outputs/eval/phase2_workflow_hash_keyword_heuristic_20.jsonl \
+  --summary-output outputs/eval/phase2_workflow_hash_keyword_heuristic_20_summary.json \
+  --retriever hybrid_rerank \
+  --policy-mode heuristic \
+  --dense-backend hash \
+  --reranker-backend keyword \
+  --limit 20 \
+  --sqlite-path outputs/traces/phase2_workflow_hash_keyword_heuristic.sqlite
+```
+
 ## Planned server workflow
 
 Use local development with git/ssh, then run GPU jobs on the 2x RTX 3090
