@@ -34,3 +34,29 @@ Follow-up:
 - Do not tune prompts around individual low-answer examples in this phase.
 - Track remaining answer mistakes as reader extraction errors for later answer-specific supervision or reward refinement.
 - The next system-level implementation branch should start retrieval enhancement ablations, beginning with BGE-M3 dense retrieval and fusion design.
+
+## 2026-06-11: Phase 2 MVP Boundary
+
+Decision: start Phase 2 with real-document ingestion, MinerU conversion, and
+hybrid retrieval infrastructure before running additional model training.
+
+Rationale:
+
+- Phase 1 already validated that Base/SFT/GRPO answer policies can run through
+  the traceable workflow.
+- The main project gap is now system shape: accepting real documents, caching
+  parsed blocks, building retrievable indexes, and passing top-k evidence into
+  the existing answer workflow.
+- Dense and reranker model wrappers must fail loudly when model paths or
+  packages are missing. A run must not be labeled `hybrid_rerank` unless the
+  reranker executed.
+
+Constraints:
+
+- No new SFT/GRPO training in this stage.
+- No reward changes or MP-DocVQA split changes.
+- BM25 remains available as a baseline.
+- The default Phase 1 workflow path remains compatible; the new retriever is
+  opt-in through `run_qa_workflow(..., retriever=...)`.
+- Local tests use mock/parse-existing fixtures. Real MinerU, BGE-M3, and
+  reranker validation must run on AutoDL.

@@ -1,0 +1,7 @@
+mineru:
+  mode: parse_existing
+  command: mineru
+  backend: pipeline
+  timeout_seconds: 600
+  output_root: data/documents
+

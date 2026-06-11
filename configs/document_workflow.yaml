@@ -1,0 +1,7 @@
+document_workflow:
+  sqlite_path: outputs/docagent.db
+  document_root: data/documents
+  parser_config: configs/parser_mineru.yaml
+  retrieval_config: configs/retrieval_hybrid.yaml
+  answer_policy_config: configs/answer_policy.yaml
+

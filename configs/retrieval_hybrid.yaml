@@ -1,0 +1,26 @@
+retrieval:
+  mode: hybrid_rerank
+  bm25_top_n: 20
+  dense_top_n: 20
+  fusion_top_n: 20
+  final_top_k: 5
+  rrf_k: 60
+
+dense:
+  model_path: /root/autodl-tmp/models/bge-m3
+  device: cuda:1
+  use_fp16: true
+  batch_size: 16
+  max_length: 1024
+  normalize_embeddings: true
+
+reranker:
+  enabled: true
+  model_path: /root/autodl-tmp/models/bge-reranker-v2-m3
+  device: cuda:1
+  use_fp16: true
+  batch_size: 8
+  candidate_top_n: 20
+  final_top_k: 5
+  max_length: 1024
+

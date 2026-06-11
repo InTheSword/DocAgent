@@ -68,6 +68,8 @@ python scripts/eval_retrieval.py --input data/benchmark/smoke_eval.jsonl
 
 ## Stage 2: Retrieval evaluation
 
+Status: in progress for Phase 2 hybrid retrieval MVP.
+
 Goal:
 
 - Implement retrieval ablations:
@@ -89,6 +91,15 @@ Metrics:
 Verification:
 
 - Evaluation script produces a JSON or CSV report under `outputs/eval/`.
+
+Current Phase 2 implementation:
+
+- `scripts/eval_retrieval_phase2.py` evaluates BM25/Dense/Hybrid/Hybrid+Rerank
+  modes and writes `outputs/eval/phase2_retrieval_ablation.json`.
+- Dense mode uses `DenseEncoder` with BGE-M3 and `DenseIndex`.
+- Hybrid mode fuses BM25 and Dense with RRF.
+- Hybrid+Rerank requires an enabled cross-encoder reranker and errors if it
+  cannot load.
 
 ## Stage 3: Traceable QA workflow
 
@@ -133,6 +144,8 @@ OCR block, not workflow format or trace failures.
 
 ## Stage 4: MinerU integration
 
+Status: in progress for Phase 2 real-document MVP.
+
 Goal:
 
 - Parse real uploaded documents with MinerU.
@@ -144,6 +157,18 @@ Verification:
 
 - Parsed evidence blocks include text/table/image types.
 - At least 20-30 real documents can pass the parse -> index -> QA flow.
+
+Current Phase 2 implementation:
+
+- `scripts/ingest_document.py` registers PDF/PNG/JPG files, computes SHA256,
+  caches the source under `data/documents/<doc_id>/`, parses MinerU
+  `content_list` output, and persists document/block metadata to SQLite.
+- `scripts/inspect_document.py` inspects persisted documents, blocks, and index
+  metadata.
+- `scripts/query_document.py` queries one registered document through BM25,
+  Dense, Hybrid, or Hybrid+Rerank and then calls the Phase 1 answer workflow.
+- Local no-card validation uses MinerU `parse_existing` fixtures. Real MinerU
+  CLI validation remains a server task.
 
 ## Stage 5: Qwen3 LoRA-SFT
 

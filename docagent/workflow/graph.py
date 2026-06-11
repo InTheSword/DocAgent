@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from docagent.models.base import AnswerPolicy
+from docagent.retrieval.base import Retriever
 from docagent.retrieval.hybrid_retriever import HybridRetriever
 from docagent.retrieval.query_rewrite import rewrite_query
 from docagent.schemas import EvidenceBlock, QAState
@@ -60,6 +61,7 @@ def run_qa_workflow(
     trace_repository: TraceRepository | None = None,
     run_id: str | None = None,
     preserve_input_order: bool = False,
+    retriever: Retriever | None = None,
 ) -> QAState:
     if answer_policy is None:
         raise ValueError("answer_policy is required; pass HeuristicAnswerPolicy explicitly for tests or smoke runs")
@@ -78,11 +80,32 @@ def run_qa_workflow(
         rewrite = rewrite_query(question, answer_type_hint=answer_type_hint)
         state.rewritten_query = rewrite.rewritten_query
         state.retrieved_blocks = list(blocks[:top_k])
+        retrieval_metadata: dict[str, Any] = {"retriever_mode": "input_order"}
+        retrieval_candidates: list[dict[str, object]] = []
+    elif retriever is not None:
+        retrieval_result = retriever.retrieve(
+            doc_id=doc_id,
+            question=question,
+            top_k=top_k,
+            answer_type_hint=answer_type_hint,
+        )
+        state.rewritten_query = retrieval_result.rewritten_query
+        state.retrieved_blocks = [candidate.block for candidate in retrieval_result.candidates]
+        retrieval_metadata = dict(retrieval_result.metadata)
+        retrieval_candidates = [
+            candidate.to_trace_dict(final_rank=rank)
+            for rank, candidate in enumerate(retrieval_result.candidates, start=1)
+        ]
     else:
-        retriever = HybridRetriever(blocks)
-        rewritten_query, hits = retriever.retrieve(question, top_k=top_k, answer_type_hint=answer_type_hint)
+        legacy_retriever = HybridRetriever(blocks)
+        rewritten_query, hits = legacy_retriever.retrieve(question, top_k=top_k, answer_type_hint=answer_type_hint)
         state.rewritten_query = rewritten_query
         state.retrieved_blocks = [block for block, _score in hits]
+        retrieval_metadata = {"retriever_mode": "legacy_bm25"}
+        retrieval_candidates = [
+            {"block_id": block.block_id, "page": block.page_id, "score": score, "final_rank": rank}
+            for rank, (block, score) in enumerate(hits, start=1)
+        ]
     _trace(
         state,
         trace_repository,
@@ -93,6 +116,8 @@ def run_qa_workflow(
             "num_hits": len(state.retrieved_blocks),
             "preserve_input_order": preserve_input_order,
             "block_ids": [block.block_id for block in state.retrieved_blocks],
+            "candidates": retrieval_candidates,
+            **retrieval_metadata,
         },
     )
 

@@ -2,6 +2,15 @@ CREATE TABLE IF NOT EXISTS documents (
   doc_id TEXT PRIMARY KEY,
   source TEXT,
   file_path TEXT,
+  sha256 TEXT UNIQUE,
+  original_name TEXT,
+  mime_type TEXT,
+  file_size INTEGER,
+  page_count INTEGER,
+  parser_backend TEXT,
+  parse_status TEXT DEFAULT 'registered',
+  index_status TEXT DEFAULT 'not_started',
+  updated_at TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -10,8 +19,23 @@ CREATE TABLE IF NOT EXISTS evidence_blocks (
   doc_id TEXT NOT NULL,
   page_id INTEGER,
   block_type TEXT NOT NULL,
+  text TEXT,
+  table_html TEXT,
+  image_path TEXT,
+  bbox_json TEXT,
+  metadata_json TEXT,
   payload_json TEXT NOT NULL,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS document_indexes (
+  doc_id TEXT NOT NULL,
+  index_type TEXT NOT NULL,
+  model_id TEXT,
+  artifact_path TEXT,
+  metadata_json TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(doc_id, index_type, model_id)
 );
 
 CREATE TABLE IF NOT EXISTS qa_logs (

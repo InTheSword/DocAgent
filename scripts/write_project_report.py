@@ -82,6 +82,20 @@ def compact_workflow_summary(report: dict[str, Any] | None) -> dict[str, Any] | 
     }
 
 
+def compact_phase2_retrieval(report: dict[str, Any] | None) -> dict[str, Any] | None:
+    if report is None:
+        return None
+    modes = {}
+    for mode, payload in (report.get("modes") or {}).items():
+        modes[mode] = (payload or {}).get("summary", payload)
+    return {
+        "input": report.get("input"),
+        "num_blocks": report.get("num_blocks"),
+        "num_docs": report.get("num_docs"),
+        "modes": modes,
+    }
+
+
 def compact_reader_errors(report: dict[str, Any] | None) -> dict[str, Any] | None:
     if report is None:
         return None
@@ -339,6 +353,17 @@ def main() -> None:
             "base_10": compact_workflow_summary(load_json(root / "outputs/eval/workflow_phase1_base_10_summary.json")),
             "sft_50": compact_workflow_summary(load_json(root / "outputs/eval/workflow_phase1_sft_50_summary.json")),
             "grpo_50": compact_workflow_summary(load_json(root / "outputs/eval/workflow_phase1_grpo_50_summary.json")),
+        },
+        "phase2_mvp": {
+            "retrieval_ablation": compact_phase2_retrieval(
+                load_json(root / "outputs/eval/phase2_retrieval_ablation.json")
+            ),
+            "workflow_bm25": compact_workflow_summary(
+                load_json(root / "outputs/eval/phase2_workflow_bm25_summary.json")
+            ),
+            "workflow_hybrid_rerank": compact_workflow_summary(
+                load_json(root / "outputs/eval/phase2_workflow_hybrid_rerank_summary.json")
+            ),
         },
     }
 

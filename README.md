@@ -71,6 +71,56 @@ python scripts/eval_workflow_e2e.py \
   --max-new-tokens 1024
 ```
 
+## Phase 2 real-document MVP
+
+Phase 2 starts the real-document ingestion and hybrid retrieval chain. The
+local no-card path can validate registration, parse-existing MinerU output,
+SQLite persistence, BM25 retrieval, and heuristic answer policy. Real MinerU,
+BGE-M3, bge-reranker-v2-m3, and Qwen policy evaluation should run on AutoDL.
+
+No-card parse-existing smoke:
+
+```bash
+python scripts/ingest_document.py \
+  --file examples/sample.pdf \
+  --mineru-output-dir examples/sample_mineru \
+  --document-root data/documents \
+  --sqlite-path outputs/docagent.db
+
+python scripts/inspect_document.py \
+  --doc-id <doc_id> \
+  --show-blocks \
+  --show-index \
+  --sqlite-path outputs/docagent.db
+
+python scripts/query_document.py \
+  --doc-id <doc_id> \
+  --question "What is the invoice date?" \
+  --retriever bm25 \
+  --policy-mode heuristic \
+  --sqlite-path outputs/docagent.db
+```
+
+GPU hybrid retrieval query:
+
+```bash
+python scripts/query_document.py \
+  --doc-id <doc_id> \
+  --question "..." \
+  --retriever hybrid_rerank \
+  --policy-mode grpo \
+  --dense-model-path /root/autodl-tmp/models/bge-m3 \
+  --dense-device cuda:1 \
+  --dense-fp16 \
+  --reranker-model-path /root/autodl-tmp/models/bge-reranker-v2-m3 \
+  --reranker-device cuda:1 \
+  --reranker-fp16 \
+  --base-model-path /root/autodl-tmp/models/Qwen3-1.7B \
+  --adapter-path outputs/checkpoints/qwen3-docagent-trl-grpo-mpdocvqa-retrieved-grounded-100step-20260606_105535 \
+  --max-new-tokens 1024 \
+  --sqlite-path outputs/docagent.db
+```
+
 ## Planned server workflow
 
 Use local development with git/ssh, then run GPU jobs on the 2x RTX 3090
