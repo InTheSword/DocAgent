@@ -139,7 +139,7 @@ class HybridRetriever:
         num_blocks: int,
         final_top_k: int,
     ) -> dict[str, object]:
-        return {
+        metadata: dict[str, object] = {
             "retriever_mode": mode,
             "num_blocks": num_blocks,
             "bm25_top_n": self.bm25_top_n,
@@ -150,3 +150,7 @@ class HybridRetriever:
             "reranker_enabled": self.reranker is not None,
             "latency_ms": timings,
         }
+        reranker_metadata = getattr(self.reranker, "metadata", None)
+        if isinstance(reranker_metadata, dict):
+            metadata["reranker"] = reranker_metadata
+        return metadata
