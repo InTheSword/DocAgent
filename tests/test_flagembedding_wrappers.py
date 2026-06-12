@@ -70,6 +70,7 @@ def test_cross_encoder_reranker_uses_transformers_pair_scoring(monkeypatch, tmp_
 
     assert [candidate.rerank_score for candidate in candidates] == pytest.approx([0.1, 0.9, 0.4])
     assert [candidate.block.block_id for candidate in reranked] == ["b2", "b3", "b1"]
+    assert [candidate.ranks["reranker"] for candidate in reranked] == [1, 2, 3]
     reranker.score(query="query", candidates=[_candidate("b4", "another passage", rrf_rank=4)])
 
     assert len(state["tokenizer_calls"]) == 3

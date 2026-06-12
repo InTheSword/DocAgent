@@ -86,11 +86,12 @@ class DenseIndex:
             for rank, (idx, score) in enumerate(pairs, start=1)
         ]
 
-    def save(self, output_dir: str | Path) -> dict[str, object]:
+    def save(self, output_dir: str | Path, *, artifact_prefix: str | None = None) -> dict[str, object]:
         path = Path(output_dir)
         path.mkdir(parents=True, exist_ok=True)
-        embeddings_path = path / "dense_embeddings.npy"
-        metadata_path = path / "index_metadata.json"
+        suffix = f"_{_safe_artifact_prefix(artifact_prefix)}" if artifact_prefix else ""
+        embeddings_path = path / f"dense_embeddings{suffix}.npy"
+        metadata_path = path / f"index_metadata{suffix}.json"
         np.save(embeddings_path, self.embeddings)
         faiss_path: str | None = None
         if self._faiss_index is not None:
@@ -98,7 +99,7 @@ class DenseIndex:
                 import faiss
             except ImportError as exc:
                 raise RuntimeError("FAISS backend was selected but faiss is unavailable") from exc
-            faiss_file = path / "dense_index.faiss"
+            faiss_file = path / f"dense_index{suffix}.faiss"
             faiss.write_index(self._faiss_index, str(faiss_file))
             faiss_path = str(faiss_file)
         metadata = {
@@ -109,6 +110,7 @@ class DenseIndex:
             "block_ids": [block.block_id for block in self.blocks],
             "embeddings_path": str(embeddings_path),
             "faiss_path": faiss_path,
+            "metadata_path": str(metadata_path),
         }
         metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
         return metadata
@@ -131,3 +133,11 @@ def _faiss_available() -> bool:
     except ImportError:
         return False
     return True
+
+
+def _safe_artifact_prefix(prefix: str | None) -> str:
+    if not prefix:
+        return ""
+    if any(part in prefix for part in ("/", "\\", ":", "\0")):
+        raise ValueError(f"dense index artifact_prefix must be a filename stem, got: {prefix!r}")
+    return prefix

@@ -33,10 +33,10 @@ MinerU installation and real PDF parsing are not prerequisites for Phase 2A.
 | Phase 1 Qwen3 AnswerPolicy workflow | accepted / frozen | downstream reader |
 | Hash dense | mock_verified / frozen | CI only |
 | Keyword reranker | mock_verified / frozen | CI only |
-| BGE-M3 wrapper | implemented | requires server verification |
+| BGE-M3 wrapper | real_model_verified | server model API smoke passed |
 | FAISS index | implemented / mock_verified | requires real embeddings |
 | RRF | implemented / mock_verified | requires real candidates |
-| Real reranker wrapper | implemented | requires server verification |
+| Real reranker wrapper | real_model_verified | server model API smoke passed |
 | MinerU fixture | mock_verified | not real parser evidence |
 | Real MinerU output | not_started | next milestone |
 
@@ -45,31 +45,35 @@ MinerU installation and real PDF parsing are not prerequisites for Phase 2A.
 The current task is:
 
 ```text
-run and review Phase 2 preflight
+run real hybrid retrieval component smoke
 ```
 
-Preflight implementation commit:
+Recent verified checkpoints:
 
 ```text
-793eda3280e3efd586233a478be6c9023b6b25aa
+FlagEmbedding -> server_dependency_ready
+BGE-M3 -> real_model_verified
+bge-reranker-v2-m3 -> real_model_verified
 ```
 
-The preflight must inspect only:
+The current smoke must validate:
 
-- Git/runtime information;
-- required package availability;
-- expected model paths;
-- existing EvidenceBlock/benchmark artifacts;
-- existing dense index artifacts;
-- real vs synthetic MinerU artifacts.
+- existing EvidenceBlock input from `data/benchmark/smoke_eval.jsonl`;
+- real BGE-M3 embeddings;
+- a newly built and reloaded FAISS index with a non-mock model ID;
+- BM25 + Dense retrieval;
+- RRF candidate fusion;
+- real `bge-reranker-v2-m3` scoring through the Transformers sequence-classification backend;
+- compact JSON output at `outputs/smoke/phase2_real_retrieval.json`.
 
 It must not:
 
 - install;
 - download;
-- load full model weights;
-- build embeddings;
-- run real retrieval;
+- reuse `hash-dense-256`;
+- use keyword reranker fallback;
+- run Qwen3 AnswerPolicy or LangGraph;
+- run formal retrieval ablation;
 - invoke MinerU.
 
 ## 4. Required references for the current task
@@ -80,31 +84,33 @@ Read:
 AGENTS.md
 docs/PHASE2_ACTIVE_PLAN.md
 docs/SERVER_SETUP.md
-scripts/preflight_phase2.py
-tests/test_preflight_phase2.py
+docs/design/phase2/PHASE2_REAL_DOCUMENT_HYBRID_RETRIEVAL_MVP.zh-CN.md
+current retrieval/index/reranker/smoke code
 ```
 
-Do not read the full Phase 2 design documents or blueprint PDF unless the preflight code exposes an architecture ambiguity.
+Read only the retrieval/index/reranker/metadata sections of the design document.
 
 ## 5. Preflight acceptance
 
-Preflight is accepted when:
+Real retrieval component smoke is accepted when:
 
 - targeted tests pass;
 - regression tests pass;
-- the server generates `outputs/preflight/phase2.json`;
-- missing packages/models/artifacts are clearly identified;
-- no environment or model mutation occurs.
+- the server generates `outputs/smoke/phase2_real_retrieval.json`;
+- `dense_backend = bge_m3`;
+- `reranker_backend = transformers_sequence_classification`;
+- FAISS index save/reload is verified;
+- BM25, Dense, RRF, reranker score, and final top-k ranks are recorded;
+- no hash/keyword fallback occurs.
 
 After the server JSON is obtained:
 
 ```text
 stop
-review the actual missing items
-prepare one minimal dependency/model action
+review the real retrieval smoke result
 ```
 
-Do not install or download anything before review.
+Do not enter Qwen3 workflow smoke before review.
 
 ## 6. Phase 2A implementation after preflight
 
@@ -134,7 +140,7 @@ Phase 2A is accepted only when the server verifies:
 
 ```text
 dense_backend = bge_m3
-reranker_backend = bge_reranker_v2_m3
+reranker_backend = transformers_sequence_classification
 dense_model_loaded = true
 reranker_model_loaded = true
 ```
@@ -170,10 +176,10 @@ Do not start:
 
 ### Current stop condition
 
-After server preflight JSON is returned:
+After server real retrieval smoke JSON is returned:
 
 ```text
-stop and review it before any environment change
+stop and review it before Qwen3 workflow smoke
 ```
 
 ### Phase 2A stop condition

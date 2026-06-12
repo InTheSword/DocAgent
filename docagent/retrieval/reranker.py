@@ -83,10 +83,13 @@ class CrossEncoderReranker:
         scores = self._score_pairs(tokenizer=tokenizer, model=model, query=query, candidates=candidates)
         for candidate, score in zip(candidates, scores):
             candidate.rerank_score = float(score)
-        return sorted(
+        reranked = sorted(
             candidates,
             key=lambda item: (-(item.rerank_score or 0.0), item.ranks.get("rrf", 10**9), item.block.block_id),
         )
+        for rank, candidate in enumerate(reranked, start=1):
+            candidate.ranks["reranker"] = rank
+        return reranked
 
     def _resolve_device(self, torch: Any) -> str:
         device = self.config.device
