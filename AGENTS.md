@@ -1,292 +1,57 @@
-# DocAgent Codex Working Agreement
+# DocAgent Codex Instructions
 
-> Repository-level instructions for Codex.  
-> This file defines how Codex should reason, plan, modify code, request server validation, and report progress.  
-> It does not replace the project blueprint or the active milestone plan.
+> Repository-level rules for Codex.  
+> Keep this file concise. Project architecture and implementation details belong in `docs/`.
 
----
+## 1. Mandatory reading
 
-## 1. Project objective
-
-DocAgent is being developed as a complete and verifiable complex-document question-answering assistant:
-
-```text
-real document input
-→ structure-aware parsing
-→ EvidenceBlock construction
-→ BM25 + Dense Retrieval + RRF + Reranker
-→ Qwen3 Answer Policy
-→ format/location validation
-→ bounded repair
-→ SQLite trace
-```
-
-The current priority is to complete the real-component system loop.
-
-Prefer:
-
-```text
-real component integration
-→ one reproducible smoke test
-→ milestone acceptance
-```
-
-over:
-
-```text
-more mock backends
-→ more non-blocking tests
-→ repeated local patching
-```
-
-Model quality, large-scale parameter tuning, and broader feature expansion are secondary until the current active milestone is accepted.
-
----
-
-## 2. Required document reading order
-
-Before planning, reasoning about, or modifying the repository, read the following files in order:
+Before every task, read only:
 
 1. `AGENTS.md`
 2. `docs/PHASE2_ACTIVE_PLAN.md`
-3. `docs/IMPLEMENTATION_PLAN.md`
-4. `docs/SERVER_SETUP.md`
-5. `docs/DATASETS.md`
-6. `docs/DocAgent 技术文档 3.0.pdf` when architecture, module scope, data flow, training design, evaluation design, or long-term project intent is relevant
-7. `CURRENT_STATUS.md` if it exists
-8. `DECISIONS.md` if it exists
-9. Relevant source code, tests, generated reports, and recent Git history
+3. source code and tests directly related to the task
 
-The active task is always the milestone defined in:
+Do not scan every document by default.
 
-```text
-docs/PHASE2_ACTIVE_PLAN.md
-```
+## 2. Conditional document routing
 
-Do not choose another milestone unless the user explicitly changes or accepts the current milestone.
+Read additional documents only when the task requires them.
 
----
+| Document | Read when |
+|---|---|
+| `docs/IMPLEMENTATION_PLAN.md` | deciding project scope, changing milestones, or updating the roadmap |
+| `docs/SERVER_SETUP.md` | proposing server commands, checking environments, installing packages, downloading models, or running real models/tools |
+| `docs/DATASETS.md` | downloading, converting, splitting, rebuilding, or evaluating datasets |
+| `docs/design/phase2/PHASE2_REAL_DOCUMENT_HYBRID_RETRIEVAL_MVP.zh-CN.md` | implementing document registration, EvidenceBlock persistence, BGE-M3, FAISS, RRF, reranker, retrieval integration, SQLite document/index storage, or Phase 2 CLI/evaluation |
+| `docs/design/phase2/PHASE2_STRUCTURED_PDF_PARSING_SUPPLEMENT.zh-CN.md` | implementing MinerU conversion, heading hierarchy, section paths, boilerplate filtering, table/image structure, context expansion, cross-page relations, or parsing-quality checks |
+| `docs/DocAgent 技术文档 3.0.pdf` | architecture intent is unclear, a new phase is being designed, or implementation may diverge from the original blueprint |
+| `CURRENT_STATUS.md` | checking verified current capabilities or updating accepted status |
+| `DECISIONS.md` | revisiting a durable architecture, dependency, or scope decision |
 
-## 3. Document roles and when to read them
+The detailed design files explain **how** a Phase 2 module should work.  
+`docs/PHASE2_ACTIVE_PLAN.md` defines **what must be done now**.
 
-### `AGENTS.md`
+## 3. Source-of-truth priority
 
-Role:
-
-- repository-wide execution rules;
-- Codex behavior constraints;
-- task planning and server handoff protocol;
-- mock/real status definitions;
-- scope-control and stop conditions.
-
-Read:
-
-```text
-before every task
-before every implementation plan
-before every server command proposal
-```
-
-Update only when repository-wide governance rules change.
-
----
-
-### `docs/PHASE2_ACTIVE_PLAN.md`
-
-Role:
-
-- current unique milestone;
-- current status;
-- in-scope and out-of-scope work;
-- required deliverables;
-- server acceptance conditions;
-- stop condition.
-
-Read:
-
-```text
-before every Phase 2 task
-before selecting files to modify
-before claiming a milestone is complete
-```
-
-This is the most frequently updated planning document.
-
-Update only when:
-
-- the active milestone status changes;
-- preflight or real-component verification changes the next action;
-- the user explicitly accepts, replaces, or narrows the milestone.
-
-Do not rewrite it during unrelated bug fixes.
-
----
-
-### `docs/IMPLEMENTATION_PLAN.md`
-
-Role:
-
-- high-level project roadmap;
-- completed, frozen, active, and deferred phases;
-- long-term architecture and evaluation direction.
-
-Read when:
-
-- checking whether a proposed feature belongs to the project;
-- determining the next phase after the active milestone;
-- avoiding duplicate or conflicting implementations;
-- updating overall project status.
-
-Do not use it to override the narrower active plan.
-
-Update only after:
-
-- a milestone is accepted;
-- a roadmap-level architectural decision changes;
-- the user explicitly changes project priorities.
-
----
-
-### `docs/SERVER_SETUP.md`
-
-Role:
-
-- local/server execution boundary;
-- stable AutoDL paths;
-- Conda environment policy;
-- no-card/GPU-mode interpretation;
-- model and dataset path conventions;
-- installation and download restrictions;
-- server result-return protocol.
-
-Read before:
-
-- proposing any server command;
-- diagnosing CUDA/GPU behavior;
-- installing packages;
-- downloading models or datasets;
-- invoking MinerU;
-- running real BGE-M3, Reranker, Qwen3, or training jobs.
-
-Important:
-
-```text
-torch.cuda.is_available() == False
-```
-
-is expected in AutoDL no-card mode and is not sufficient evidence of an environment failure.
-
-Update only when stable server facts change.
-
-Do not store transient logs, API keys, access tokens, passwords, or signed URLs.
-
----
-
-### `docs/DATASETS.md`
-
-Role:
-
-- authoritative dataset sources;
-- current data roles;
-- frozen Phase 1 artifacts;
-- split/leakage policy;
-- deferred data work;
-- download restrictions.
-
-Read before:
-
-- downloading or converting datasets;
-- rebuilding SFT/GRPO data;
-- changing train/dev/test splits;
-- adding TAT-QA, InfographicVQA, or another source;
-- making claims about MinerU, official OCR, or image data.
-
-Update only when:
-
-- a dataset source or role changes;
-- a new dataset is formally accepted;
-- frozen artifacts or split policies change;
-- a new real-document ScenarioSet is accepted.
-
----
-
-### `docs/DocAgent 技术文档 3.0.pdf`
-
-Role:
-
-- original project blueprint;
-- target architecture;
-- intended data construction, parsing, retrieval, workflow, SFT, GRPO, reward, and evaluation design.
-
-Read when:
-
-- architecture intent is unclear;
-- a new module is being designed;
-- implementation decisions may diverge from the blueprint;
-- reviewing whether the project remains suitable for the intended resume positioning.
-
-Do not treat planned modules in this document as already implemented.
-
-Do not repeatedly reread the whole PDF for small local fixes when the active plan and current code are sufficient.
-
----
-
-### `CURRENT_STATUS.md`
-
-Role:
-
-- concise current implementation status and verified artifacts.
-
-Read when:
-
-- checking what is already implemented;
-- avoiding duplicate work;
-- preparing a milestone report.
-
-Update after real acceptance or a meaningful status change, not after every minor test.
-
----
-
-### `DECISIONS.md`
-
-Role:
-
-- durable architecture and implementation decisions;
-- rejected alternatives and reasons;
-- scope changes caused by real implementation constraints.
-
-Read before revisiting a previously decided issue.
-
-Update only for decisions with future implementation impact.
-
-Do not use it as a running terminal log.
-
----
-
-## 4. Source-of-truth priority
-
-When documents conflict, use this priority:
+When information conflicts, use:
 
 ```text
 1. explicit current user instruction
 2. AGENTS.md
 3. docs/PHASE2_ACTIVE_PLAN.md
-4. verified current code and tests
-5. CURRENT_STATUS.md / DECISIONS.md
-6. docs/IMPLEMENTATION_PLAN.md
-7. docs/DocAgent 技术文档 3.0.pdf
-8. historical reports and old conversation notes
+4. verified current code, tests, and server artifacts
+5. relevant detailed design document
+6. CURRENT_STATUS.md / DECISIONS.md
+7. docs/IMPLEMENTATION_PLAN.md
+8. docs/DocAgent 技术文档 3.0.pdf
+9. historical reports or old conversation notes
 ```
 
-The blueprint defines intended direction. Verified code and accepted milestones define current reality.
+A planned capability is not an implemented capability.
 
-Never report a planned capability as implemented solely because it appears in the blueprint.
+## 4. Status vocabulary
 
----
-
-## 5. Status vocabulary
-
-Every major module or milestone must use one of the following states:
+Use only:
 
 ```text
 not_started
@@ -300,134 +65,72 @@ frozen
 blocked
 ```
 
-Definitions:
-
-- `not_started`: implementation has not begun.
-- `implemented`: code exists but has not completed required validation.
-- `mock_verified`: mock/fixture wiring works; no real model/tool claim is allowed.
-- `server_dependency_ready`: required packages, models, and artifacts exist on the server.
-- `real_model_verified`: the real model, parser, or external tool passed a server smoke test.
-- `benchmark_evaluated`: a reproducible benchmark report exists.
-- `accepted`: all milestone acceptance criteria are satisfied.
-- `frozen`: do not modify unless explicitly requested.
-- `blocked`: an external dependency or explicit decision prevents progress.
-
-Mock verification must never be presented as real-component completion.
-
 Examples:
 
 ```text
 hash dense backend → mock_verified
 keyword reranker → mock_verified
-synthetic MinerU content_list → mock_verified
-BGE-M3 server smoke → real_model_verified
-real MinerU output conversion → real_model_verified
-formal retrieval ablation → benchmark_evaluated
+synthetic MinerU fixture → mock_verified
+real BGE-M3 server smoke → real_model_verified
+formal real-model ablation → benchmark_evaluated
 ```
 
----
+Mock verification must never be reported as real-component completion.
 
-## 6. Current execution principle
+## 5. Single-milestone rule
 
-Only one active milestone may be implemented at a time.
+Only implement the milestone in:
 
-Before modifying code for a non-trivial task, provide a concise implementation plan containing:
+```text
+docs/PHASE2_ACTIVE_PLAN.md
+```
+
+Before a non-trivial change, briefly state:
 
 1. current gap;
-2. relevant files already present;
-3. files to modify or add;
-4. dependencies and server resources;
-5. exact deliverables;
-6. local test commands;
-7. server acceptance command;
-8. explicit out-of-scope items;
-9. stop condition.
+2. relevant existing code;
+3. files to modify;
+4. dependencies;
+5. acceptance test;
+6. out-of-scope work;
+7. stop condition.
 
-Do not begin broad implementation before the task boundary is clear.
+Do not enter another milestone without explicit user approval.
 
-For a small, isolated fix, a shorter plan is acceptable, but it must still remain within the active milestone.
+## 6. Scope-control rules
 
----
+Required:
 
-## 7. Scope-control rules
-
-### Required behavior
-
-- implement only the current active milestone;
 - reuse existing abstractions before adding new ones;
 - prefer the smallest change that enables real-component verification;
-- stop after the milestone's stated stop condition;
-- wait for server results when the next action depends on server state;
-- clearly distinguish implementation from verification and acceptance.
-
-### Prohibited behavior
+- stop when the active plan says to stop;
+- wait for server output when the next action depends on server state.
 
 Do not:
 
-1. start TAT-QA, InfographicVQA, VLM, Demo, or new training during the current real-retrieval milestone;
-2. modify SFT/GRPO checkpoints, reward, training split, or Phase 1 AnswerPolicy unless explicitly requested;
-3. add another fallback backend after the current mock wiring has passed;
-4. optimize hash dense or keyword reranker quality;
-5. run formal Recall/MRR or answer metrics using mock backends;
-6. treat synthetic MinerU fixtures as real PDF parsing;
-7. silently broaden the task because a future module appears useful;
-8. fix unrelated style, formatting, or refactoring issues in the same commit;
-9. repeatedly patch non-blocking edge cases before real-component smoke;
-10. continue into the next milestone without explicit user approval.
+- optimize hash dense or keyword reranker after wiring smoke passes;
+- add another fallback backend without explicit approval;
+- run formal Recall/MRR or answer metrics with mock backends;
+- treat synthetic MinerU output as real PDF parsing;
+- modify SFT/GRPO checkpoints, reward, training split, or Phase 1 AnswerPolicy unless explicitly requested;
+- start TAT-QA, VLM, Demo, or a new training phase while the active milestone is incomplete;
+- mix unrelated refactors or style changes into the milestone commit.
 
----
+## 7. Testing policy
 
-## 8. Mock backend policy
-
-Mock backends exist only for:
+Use the minimum sufficient validation:
 
 ```text
-unit tests
-CI
-interface wiring
-one local smoke test
+targeted unit tests
++ existing regression tests
++ one mock/fixture smoke if needed
++ one real server smoke
++ formal evaluation only after real smoke
 ```
-
-After mock wiring passes:
-
-```text
-freeze the mock backend
-move to the real component
-```
-
-Mock backends must not be used to support resume claims, formal reports, or benchmark conclusions.
-
-The following substitutions are prohibited:
-
-```text
-hash encoder ≠ BGE-M3
-keyword overlap ≠ cross-encoder reranker
-synthetic content_list ≠ real MinerU output
-heuristic answer ≠ Qwen3 AnswerPolicy
-```
-
-If a real component is unavailable, mark the milestone `blocked` or `implemented`, not `accepted`.
-
----
-
-## 9. Testing policy
-
-Each milestone should use the minimum sufficient validation stack:
-
-1. targeted unit tests;
-2. existing regression tests;
-3. one local mock/fixture smoke if needed;
-4. one server real-component smoke;
-5. formal benchmark only after real-component smoke;
-6. milestone acceptance.
 
 Do not increase test count as a goal by itself.
 
-Do not create repeated tests that validate the same behavior without addressing a known risk.
-
-Do not continue improving mock output after it has proven interface connectivity.
-
-When a failure occurs, first classify it as:
+When a failure occurs, classify it first:
 
 ```text
 code defect
@@ -435,319 +138,117 @@ missing dependency
 missing model/artifact
 server configuration
 incorrect command
-expected unsupported case
+unsupported case
 non-blocking quality issue
 ```
 
-Fix only defects that block the active milestone.
+Fix only issues that block the active milestone.
 
----
+## 8. Server boundary
 
-## 10. Server execution boundary
+Codex works locally and cannot assume AutoDL resources exist.
 
-Codex works in the local repository and cannot directly operate AutoDL.
+Before proposing server commands, read:
 
-Never assume the server has:
-
-- the latest Git commit;
-- the expected Conda environment;
-- GPU mode enabled;
-- BGE-M3;
-- Reranker;
-- MinerU;
-- benchmark artifacts;
-- built FAISS indexes;
-- example documents.
-
-Use the preflight script before real-component execution.
-
-No code or command may silently:
-
-- download a large model;
-- download a large dataset;
-- install CUDA/Torch;
-- install MinerU;
-- mutate the stable `docagent` environment.
-
-Any large download or environment mutation requires explicit user approval.
-
----
-
-## 11. Server command requirements
-
-Every server command group must begin with:
-
-```bash
-cd /root/autodl-tmp/docagent
-conda activate docagent
+```text
+docs/SERVER_SETUP.md
 ```
 
-Unless the task explicitly targets an isolated environment such as MinerU.
+Do not silently:
 
-Requirements:
+- install or replace Torch/CUDA;
+- install MinerU;
+- download large models or datasets;
+- modify the stable `docagent` environment.
 
-1. provide at most one command group per round;
-2. include all required path checks;
-3. include all required package/model prechecks;
-4. do not use unresolved placeholders such as:
-   - `<sample>`
-   - `<doc_id>`
-   - `<model_path>`
-5. do not ask the user to manually infer missing command arguments;
-6. write long output to a log or JSON artifact;
-7. request only the minimum result needed for the next decision.
+Large installation or download requires explicit user approval.
 
-If an identifier must be produced by an earlier command, capture it programmatically in the same command group or stop after the first command.
+AutoDL no-card mode may produce:
 
----
+```text
+torch.cuda.is_available() == False
+```
 
-## 12. Server result-return protocol
+This is not, by itself, an environment error.
 
-For success, request only a compact summary such as:
+## 9. Server command and result protocol
+
+Provide at most one executable server command group per round.
+
+Commands must:
+
+- use the correct project directory and Conda environment;
+- contain no unresolved placeholders;
+- check required paths and packages first;
+- write long output to files;
+- request only the minimum result needed.
+
+Success response:
 
 ```json
 {
-  "command": "phase2_real_retrieval_smoke",
+  "command": "...",
   "status": "success",
-  "backend": {
-    "dense": "bge_m3",
-    "reranker": "bge_reranker_v2_m3"
-  },
   "artifact_paths": [],
   "metrics": {}
 }
 ```
 
-For failure, request only:
+Failure response:
 
 ```json
 {
-  "command": "phase2_real_retrieval_smoke",
+  "command": "...",
   "status": "failed",
   "exit_code": 1,
-  "exception": "ExceptionType: message",
+  "exception": "...",
   "log_tail": "last 60 lines"
 }
 ```
 
-Do not routinely request:
+Do not routinely request full terminal logs, prompts, EvidenceBlocks, traces, or generations.
 
-- full terminal output;
-- complete EvidenceBlock objects;
-- full prompts;
-- full traces;
-- complete model generations;
-- every environment package;
-- large JSON files.
+## 10. Completion rule
 
-Request a specific field only when it is required to diagnose a named issue.
-
----
-
-## 13. Preflight rule
-
-Before any real BGE-M3, Reranker, MinerU, Qwen, or benchmark task, use the appropriate consolidated preflight.
-
-The current Phase 2 preflight must:
-
-- inspect only;
-- not install;
-- not download;
-- not load full model weights;
-- emit compact JSON;
-- record optional missing resources without a long traceback.
-
-After implementing the preflight script:
+A real component may be marked `accepted` only after:
 
 ```text
-stop
-wait for the user's server preflight JSON
-```
-
-Do not proceed directly to installation or real-model smoke.
-
----
-
-## 14. MinerU-specific rules
-
-MinerU must not be installed into the stable `docagent` environment.
-
-Current accepted roles:
-
-```text
-parse_existing fixture → mock verification only
-real MinerU output → required for real parser verification
-local MinerU CLI → optional deployment mechanism
-```
-
-MinerU installation is not part of the current real-retrieval milestone.
-
-Do not let MinerU installation block BGE-M3/Reranker verification.
-
-When MinerU becomes active:
-
-- use a separate environment;
-- prefer real structured output over Markdown-only chunking;
-- preserve page, bbox, reading order, block type, table structure, image/caption relations, and hierarchy;
-- do not call Markdown fixed-length chunking "layout-aware parsing".
-
----
-
-## 15. Data and training constraints
-
-During the current Phase 2 milestone:
-
-- reuse accepted EvidenceBlock and benchmark artifacts;
-- do not rebuild SFT/GRPO datasets;
-- do not change document-level split;
-- do not mine new hard subsets;
-- do not restart GRPO sweeps;
-- do not add a new dataset.
-
-Inference and repair must never receive:
-
-- gold answer;
-- gold location;
-- assistant target.
-
-Any future dataset work must follow `docs/DATASETS.md`.
-
----
-
-## 16. Git policy
-
-- use one focused branch or commit series per milestone;
-- one commit should have one clear purpose;
-- do not mix unrelated refactors with milestone implementation;
-- preserve stable checkpoints and generated benchmark artifacts;
-- do not mark an implementation complete before real server smoke;
-- include local test commands in the commit summary or task report;
-- do not automatically enter the next milestone after pushing.
-
-Before requesting server validation, report:
-
-```text
-commit hash
-changed files
-tests passed
-expected server artifact
-single server command group
-```
-
----
-
-## 17. Documentation update policy
-
-Do not update every document after every minor edit.
-
-### Update `docs/PHASE2_ACTIVE_PLAN.md` when:
-
-- milestone state changes;
-- preflight changes the next action;
-- real smoke succeeds or fails in a way that changes the plan;
-- the user changes scope.
-
-### Update `CURRENT_STATUS.md` when:
-
-- a real component is verified;
-- a benchmark is completed;
-- a milestone is accepted;
-- a previously reported capability is invalidated.
-
-### Update `DECISIONS.md` when:
-
-- an architectural decision has future impact;
-- a dependency/backend is selected or rejected;
-- scope is intentionally changed.
-
-### Update `docs/IMPLEMENTATION_PLAN.md` when:
-
-- a milestone is accepted;
-- the roadmap changes.
-
-### Update `docs/SERVER_SETUP.md` when:
-
-- stable environment facts or path policies change.
-
-### Update `docs/DATASETS.md` when:
-
-- dataset source, role, split, or accepted artifact changes.
-
-### Update `AGENTS.md` only when:
-
-- repository-wide execution rules change.
-
-Do not place terminal logs or temporary debugging details in these documents.
-
----
-
-## 18. Completion rule
-
-A real component or milestone may be marked `accepted` only when all required conditions are satisfied:
-
-```text
-code implemented
-+ targeted tests passed
-+ regression tests passed
+implementation
++ targeted tests
++ regression tests
 + server dependency available
-+ real component smoke passed
-+ required artifacts saved
-+ status document updated
++ real component smoke
++ required artifact saved
++ status updated
 ```
 
-If only local mocks pass:
+If only mocks pass, use `mock_verified`.  
+If code exists but the real dependency is unavailable, use `implemented`.  
+If an external dependency prevents progress, use `blocked`.
 
-```text
-status = mock_verified
-```
+## 11. Documentation updates
 
-If code exists but the model/tool is unavailable:
+Update only when relevant:
 
-```text
-status = implemented
-```
+- `PHASE2_ACTIVE_PLAN.md`: active milestone state or next action changes;
+- `CURRENT_STATUS.md`: a real component is verified or a milestone is accepted;
+- `DECISIONS.md`: a durable architecture or dependency decision changes;
+- `IMPLEMENTATION_PLAN.md`: roadmap or phase status changes;
+- `SERVER_SETUP.md`: stable server facts change;
+- `DATASETS.md`: dataset source, split, or role changes;
+- `AGENTS.md`: repository-wide rules change.
 
-If an external dependency prevents progress:
+Do not store temporary logs in planning documents.
 
-```text
-status = blocked
-```
+## 12. Communication style
 
-Do not use phrases such as "Phase 2 complete" or "real hybrid retrieval completed" before these conditions are met.
+Report:
 
----
-
-## 19. Communication style
-
-Responses should prioritize:
-
-1. current conclusion;
-2. current milestone status;
-3. files changed;
+1. conclusion;
+2. milestone status;
+3. changed files;
 4. tests performed;
 5. one next action;
-6. exact stop condition.
+6. stop condition.
 
-Avoid:
-
-- repeating the whole project history;
-- producing long speculative roadmaps during a narrow task;
-- asking for large, unfiltered logs;
-- suggesting unrelated feature expansion;
-- describing mock output as a project result;
-- requesting multiple server test rounds at once.
-
----
-
-## 20. Current mandatory stop behavior
-
-For the current Phase 2 active plan:
-
-1. read `docs/PHASE2_ACTIVE_PLAN.md`;
-2. implement only the preflight task if it is still pending;
-3. run local targeted and regression tests;
-4. commit and push;
-5. provide one compact server command group;
-6. stop and wait for the server preflight JSON.
-
-Do not install models, run real retrieval, start MinerU, or enter another phase before the preflight result is reviewed.
+Avoid repeating the full project history or suggesting unrelated expansion.
