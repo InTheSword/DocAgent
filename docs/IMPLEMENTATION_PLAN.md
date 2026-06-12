@@ -1,450 +1,308 @@
 # DocAgent Implementation Plan
 
-This plan converts DocAgent 3.0 into staged engineering milestones. Each stage
-has a concrete verification target before the next stage starts.
+> Role: high-level project roadmap and milestone status.  
+> The current executable task is defined in `docs/PHASE2_ACTIVE_PLAN.md`.  
+> Historical training commands and experiment details should remain in experiment reports or Git history, not in this roadmap.
 
-## Assumptions
+---
 
-- Local code lives in `D:\Projects\docagent`.
-- GPU experiments will run on the lab server through git/ssh.
-- Model and raw dataset files are downloaded manually on AutoDL. Scripts read
-  local paths by default and should not silently fetch full model/data files.
-- The first training target is local Qwen3-1.7B at
-  `/root/autodl-tmp/models/Qwen3-1.7B`.
-- `Qwen3-4B` is an optional SFT comparison, not the first GRPO target.
-- `Qwen2.5-VL` is only used as a visual review branch.
-- MP-DocVQA is a multi-page document image QA dataset, not a PDF dataset. It
-  remains the primary document-image source because it has page-level answers
-  and real page images.
-- MinerU is required for real uploaded documents and may also be used for image
-  documents when practical. PaddleOCR is the current lightweight parser for
-  MP-DocVQA image pages.
+## 1. Source of truth
 
-## Stage 0: MVP scaffold
+Read project documents in this order:
 
-Status: done.
+1. `AGENTS.md`
+2. `docs/PHASE2_ACTIVE_PLAN.md`
+3. `docs/IMPLEMENTATION_PLAN.md`
+4. `docs/SERVER_SETUP.md`
+5. `docs/DATASETS.md`
+6. `CURRENT_STATUS.md`
+7. `DECISIONS.md`
+8. Current code, tests, and generated reports
 
-Verification:
+`DocAgent 技术文档 3.0` is the overall blueprint. It does not mean every planned module has already been implemented.
 
-```bash
-python scripts/smoke_test.py
+---
+
+## 2. Project objective
+
+DocAgent is a complex-document QA and post-training project that aims to provide:
+
+```text
+real document input
+→ structured parsing
+→ EvidenceBlock construction
+→ BM25 + Dense Retrieval + RRF + Reranker
+→ Qwen3 Answer Policy
+→ format/location validation
+→ bounded repair
+→ SQLite trace
 ```
 
-Expected:
+The project prioritizes a complete, verifiable system loop. Model quality and large-scale training optimization are secondary until the real-component workflow is complete.
 
-- BM25 retrieves the gold evidence.
-- Workflow returns structured JSON.
-- Location check passes.
-- Combined reward is greater than 0.5.
-- SQLite trace is written to `outputs/traces/smoke.sqlite`.
+---
 
-## Stage 1: Dataset schema conversion
+## 3. Status vocabulary
 
-Goal:
+Every module must use one of the following states:
 
-- Convert small subsets from MP-DocVQA and TAT-QA.
-- Normalize them into `DocAgentSample`.
-- Create document-level train/dev/test splits.
-
-Initial target:
-
-- 50-100 samples per dataset.
-- `data/benchmark/train_sft.jsonl`
-- `data/benchmark/dev_sft.jsonl`
-- `data/benchmark/test_eval.jsonl`
-
-Verification:
-
-- Every sample has `qid`, `source`, `doc_id`, `question`, `answer`,
-  `answer_type`, `evidence`, `verifiable`, and `split`.
-- Every evidence block has `doc_id`, `block_id`, `block_type`, and `location`.
-
-Smoke commands:
-
-```bash
-python scripts/build_smoke_benchmark.py
-python scripts/eval_retrieval.py --input data/benchmark/smoke_eval.jsonl
+```text
+not_started
+implemented
+mock_verified
+server_dependency_ready
+real_model_verified
+benchmark_evaluated
+accepted
+frozen
 ```
 
-## Stage 2: Retrieval evaluation
+Definitions:
 
-Status: in progress for Phase 2 hybrid retrieval MVP.
+- `implemented`: code exists.
+- `mock_verified`: unit/mock wiring works, but no real model/tool has been verified.
+- `server_dependency_ready`: required package/model/artifact exists on the server.
+- `real_model_verified`: the real model or parser completed a server smoke test.
+- `benchmark_evaluated`: reproducible evaluation output exists.
+- `accepted`: milestone acceptance criteria are satisfied.
+- `frozen`: do not modify unless explicitly requested.
 
-Goal:
+Mock verification must never be reported as real-component completion.
 
-- Implement retrieval ablations:
-  - BM25-only
-  - Query Rewrite + BM25
-  - BM25 + Dense
-  - BM25 + Dense + Reranker
+---
 
-Initial target:
+## 4. Current status snapshot
 
-- Use BM25-only first.
-- Add dense/reranker only after schema is stable.
+| Component | Status | Notes |
+|---|---|---|
+| Unified schema / EvidenceBlock | accepted | Used by Phase 1 and current Phase 2 code |
+| MP-DocVQA official OCR pipeline | accepted | Main text-reader training source |
+| Query Rewrite + BM25 baseline | accepted | Same-document retrieval baseline |
+| Qwen3 LoRA-SFT | accepted / frozen | Selected checkpoint exists |
+| Grounded GRPO | accepted / frozen | Selected checkpoint exists |
+| LangGraph AnswerPolicy workflow | accepted / frozen | Base/SFT/GRPO switch, validation, repair, trace |
+| SQLite QA trace | accepted | Phase 1 workflow replay verified |
+| MinerU `parse_existing` fixture | mock_verified | Synthetic/fixture output only |
+| Document registry / SHA256 cache | implemented / mock_verified | Awaiting real-document acceptance |
+| Hash dense backend | mock_verified / frozen | CI only; not a project result |
+| Keyword reranker | mock_verified / frozen | CI only; not a project result |
+| BGE-M3 dense retrieval | implemented, not real_model_verified | Current active milestone |
+| Real cross-encoder reranker | implemented, not real_model_verified | Current active milestone |
+| Real MinerU output | not_started or not real_model_verified | Next milestone after real retrieval |
+| Real PDF end-to-end QA | not_started | Depends on real MinerU + real retrieval |
+| TAT-QA numeric branch | deferred | Later phase |
+| Infographic/VLM branch | deferred | Later phase |
+| Gradio/FastAPI demo | deferred | After the core loop is accepted |
 
-Metrics:
+---
 
-- Recall@5
-- MRR@5
+## 5. Data and parser policy
 
-Verification:
+### MP-DocVQA
 
-- Evaluation script produces a JSON or CSV report under `outputs/eval/`.
+Current Phase 1 training and evaluation use MP-DocVQA official QA/OCR-derived artifacts.
 
-Current Phase 2 implementation:
+Do not describe the current training data as full MinerU-parsed MP-DocVQA.
 
-- `scripts/eval_retrieval_phase2.py` evaluates BM25/Dense/Hybrid/Hybrid+Rerank
-  modes and writes `outputs/eval/phase2_retrieval_ablation.json`.
-- Dense mode uses `DenseEncoder` with BGE-M3 and `DenseIndex`.
-- Hybrid mode fuses BM25 and Dense with RRF.
-- Hybrid+Rerank requires an enabled cross-encoder reranker and errors if it
-  cannot load.
+### Real uploaded documents
 
-## Stage 3: Traceable QA workflow
+MinerU is the target parser for real PDF/image ingestion.
 
-Status: done for Phase 1 Qwen Answer Policy integration.
+The active parser roles are:
 
-Goal:
-
-- Replace the current heuristic answer policy with a Qwen3 inference adapter.
-- Keep the local heuristic fallback for tests.
-- Store workflow trace in SQLite.
-
-Nodes:
-
-- query_rewrite
-- retrieve_evidence
-- table_parse_and_calculate
-- visual_review
-- generate_answer
-- check_format
-- check_location
-- repair_answer
-
-Verification:
-
-- A single sample can replay its full trace.
-- Error cases can be categorized by retrieval, table, visual, generation,
-  location, or format failure.
-
-Observed Phase 1 workflow validation:
-
-- Base/SFT/GRPO modes are selectable through `scripts/eval_workflow_e2e.py`.
-- SFT 50-sample workflow eval: workflow success 1.0, raw JSON 1.0,
-  schema pass 1.0, Answer F1 0.6715, Location Accuracy 0.92,
-  trace persist 1.0.
-- GRPO 50-sample workflow eval: workflow success 1.0, raw JSON 1.0,
-  schema pass 1.0, Answer F1 0.6769, Location Accuracy 0.94,
-  trace persist 1.0.
-- SQLite trace replay was validated with `scripts/inspect_workflow_trace.py`.
-
-Remaining low-answer failures are reader extraction errors inside the correct
-OCR block, not workflow format or trace failures.
-
-## Stage 4: MinerU integration
-
-Status: in progress for Phase 2 real-document MVP.
-
-Goal:
-
-- Parse real uploaded documents with MinerU.
-- Parse MP-DocVQA image pages with PaddleOCR first, then optionally compare
-  MinerU image parsing if installation and output quality are practical.
-- Convert `content_list.json` or equivalent output into EvidenceBlock.
-
-Verification:
-
-- Parsed evidence blocks include text/table/image types.
-- At least 20-30 real documents can pass the parse -> index -> QA flow.
-
-Current Phase 2 implementation:
-
-- `scripts/ingest_document.py` registers PDF/PNG/JPG files, computes SHA256,
-  caches the source under `data/documents/<doc_id>/`, parses MinerU
-  `content_list` output, and persists document/block metadata to SQLite.
-- `scripts/inspect_document.py` inspects persisted documents, blocks, and index
-  metadata.
-- `scripts/query_document.py` queries one registered document through BM25,
-  Dense, Hybrid, or Hybrid+Rerank and then calls the Phase 1 answer workflow.
-- Local no-card validation uses MinerU `parse_existing` fixtures. Real MinerU
-  CLI validation remains a server task.
-
-## Stage 5: Qwen3 LoRA-SFT
-
-Goal:
-
-- Train the answer policy to use retrieved evidence and output structured JSON.
-
-First run:
-
-- Model: `/root/autodl-tmp/models/Qwen3-1.7B`
-- Precision: `fp16` on RTX 3090 unless bf16 support is confirmed.
-- Dataset: 200-500 examples for smoke test.
-
-Metrics:
-
-- JSON Pass Rate
-- EM/F1
-- Numeric Accuracy
-- Location Accuracy
-- Refusal Accuracy
-
-Verification:
-
-- Training logs and checkpoint exist.
-- RAG-only vs SFT comparison is available.
-
-Dataset construction smoke:
-
-```bash
-python scripts/build_sft_dataset.py \
-  --input data/benchmark/tatqa_dev_subset.jsonl \
-  --output data/benchmark/tatqa_sft_smoke.jsonl
-
-python scripts/inspect_jsonl.py --input data/benchmark/tatqa_sft_smoke.jsonl --head 1
+```text
+MP-DocVQA training/eval: official OCR
+real PDF/image ingestion: MinerU
+PaddleOCR: optional fallback or comparison only
 ```
 
-Before launching GPU training, inspect the installed ms-swift CLI in no-card
-mode:
+PaddleOCR is not the default active parser and must not be introduced without an explicit task.
 
-```bash
-python scripts/inspect_swift_cli.py
-python scripts/check_local_model.py --model /root/autodl-tmp/models/Qwen3-1.7B
+---
+
+## 6. Completed milestones
+
+### Milestone 0: MVP scaffold
+
+Status: `accepted`
+
+Delivered:
+
+- basic schema;
+- BM25 smoke;
+- structured answer;
+- location validation;
+- SQLite trace.
+
+### Milestone 1: MP-DocVQA reader data and training
+
+Status: `accepted / frozen`
+
+Delivered:
+
+- document-level split;
+- retrieved-reader SFT data;
+- Qwen3-1.7B LoRA-SFT;
+- grounded GRPO;
+- answer/location/format evaluation;
+- experiment and error-analysis reports.
+
+Do not continue GRPO scaling or reward sweeps during Phase 2.
+
+### Milestone 2: Phase 1 real AnswerPolicy workflow
+
+Status: `accepted / frozen`
+
+Delivered:
+
+```text
+Query Rewrite
+→ BM25
+→ Base/SFT/GRPO AnswerPolicy
+→ JSON parse
+→ format check
+→ location check
+→ bounded repair
+→ SQLite trace
 ```
 
-First GPU smoke:
+---
 
-```bash
-# Single GPU
-CUDA_VISIBLE_DEVICES=0 bash scripts/train_sft_smoke.sh 2>&1 | tee outputs/logs/sft_smoke.log
+## 7. Active Phase 2 milestone
 
-# Two GPUs
-CUDA_VISIBLE_DEVICES=0,1 bash scripts/train_sft_smoke.sh 2>&1 | tee outputs/logs/sft_smoke.log
+The only active milestone is defined in:
+
+```text
+docs/PHASE2_ACTIVE_PLAN.md
 ```
 
-The smoke script expects `config.json` under
-`/root/autodl-tmp/models/Qwen3-1.7B` and runs transformers in offline mode.
-Training scripts derive `NPROC_PER_NODE` from `CUDA_VISIBLE_DEVICES`, so
-`0` means one process and `0,1` means two distributed processes.
+Current target:
 
-## Stage 6: GRPO post-training
-
-Goal:
-
-- Optimize answer correctness, location correctness, and format compliance under
-  the same retrieved evidence setting.
-
-Rewards:
-
-- `format_reward`
-- `answer_reward`
-- `location_reward`
-- For samples with a gold evidence location, answer reward is gated by
-  `location_reward`: a correct answer with the wrong cited evidence does not
-  receive answer credit.
-
-First run:
-
-- 20-step smoke on 200 verifiable examples first.
-- 100-step candidate run after reward variance and completion clipping are
-  confirmed acceptable.
-- Expand to 800+ only after reward code and ms-swift integration are stable.
-
-Verification:
-
-- SFT vs SFT+GRPO comparison is available.
-- Reward hacking cases are logged.
-
-Current MP-DocVQA retrieved-reader smoke:
-
-```bash
-python scripts/build_grpo_from_sft_dataset.py \
-  --input data/benchmark/mp_docvqa_train_sft_retrieved_clean.jsonl \
-  --output data/benchmark/mp_docvqa_train_grpo_retrieved_clean.jsonl
-
-python scripts/audit_training_data.py \
-  --input data/benchmark/mp_docvqa_train_grpo_retrieved_clean.jsonl \
-  --output outputs/eval/mp_docvqa_train_grpo_retrieved_audit.json \
-  --print-mode summary
-
-python scripts/profile_sft_lengths.py \
-  --input data/benchmark/mp_docvqa_train_grpo_retrieved_clean.jsonl \
-  --thresholds 1024,2048,3072,4096
-
-ADAPTER="outputs/checkpoints/qwen3-docagent-sft-mpdocvqa-retrieved-20260605_180454/v0-20260605-180519/checkpoint-155" \
-DATASET="data/benchmark/mp_docvqa_train_grpo_retrieved_clean.jsonl" \
-LIMIT=200 \
-MAX_STEPS=20 \
-MAX_PROMPT_TOKENS=4096 \
-MAX_COMPLETION_LENGTH=256 \
-bash scripts/train_trl_grpo_dual.sh
+```text
+existing EvidenceBlock
+→ real BGE-M3
+→ FAISS
+→ BM25 + Dense + RRF
+→ real bge-reranker-v2-m3
+→ existing Qwen3 workflow
 ```
 
-Current 100-step candidate:
+Do not start real MinerU installation, TAT-QA, VLM, demo, or new training until this milestone is accepted.
 
-```bash
-ADAPTER="outputs/checkpoints/qwen3-docagent-sft-mpdocvqa-retrieved-20260605_180454/v0-20260605-180519/checkpoint-155" \
-DATASET="data/benchmark/mp_docvqa_train_grpo_retrieved_clean.jsonl" \
-LIMIT=200 \
-MAX_STEPS=100 \
-MAX_PROMPT_TOKENS=4096 \
-MAX_COMPLETION_LENGTH=384 \
-RUN_NAME="qwen3-docagent-trl-grpo-mpdocvqa-retrieved-100step-$(date +%Y%m%d_%H%M%S)" \
-bash scripts/train_trl_grpo_dual.sh
+---
 
-ADAPTER="outputs/checkpoints/qwen3-docagent-trl-grpo-mpdocvqa-retrieved-100step-20260606_100045" \
-INPUT="data/benchmark/mp_docvqa_dev_sft_retrieved_clean.jsonl" \
-OUTPUT="outputs/eval/sft_mpdocvqa_retrieved_grpo100_eval_1024.jsonl" \
-SUMMARY_OUTPUT="outputs/eval/sft_mpdocvqa_retrieved_grpo100_eval_1024_summary.json" \
-LIMIT=393 \
-MAX_NEW_TOKENS=1024 \
-bash scripts/eval_checkpoint_parallel.sh
+## 8. Next milestones
+
+### Phase 2B: real MinerU and real-document end-to-end
+
+Start only after Phase 2A real hybrid retrieval is accepted.
+
+Target:
+
+```text
+real PDF/image
+→ real MinerU structured output
+→ heading/text/table/image EvidenceBlock
+→ real hybrid retrieval
+→ Qwen3 workflow
+→ page/block citation
+→ SQLite trace
 ```
 
-Observed dev result for the 100-step candidate before the grounding gate:
+Acceptance requires at least one real MinerU output and one real PDF end-to-end query.
 
-- JSON/schema pass rate: 1.0 / 1.0
-- Answer EM/F1: 0.5344 / 0.6127
-- Location accuracy: 0.8906
-- Mean reward under the pre-gated reward: 0.7458
+### Phase 3A: table/numeric branch
 
-After reward semantics change, recompute existing eval metrics before comparing
-reward deltas:
+Preferred next depth extension:
 
-```bash
-python scripts/recompute_sft_eval_metrics.py \
-  --input outputs/eval/sft_mpdocvqa_retrieved_full_eval_1024.jsonl \
-  --output outputs/eval/sft_mpdocvqa_retrieved_full_eval_1024_grounded_reward.jsonl \
-  --summary-output outputs/eval/sft_mpdocvqa_retrieved_full_eval_1024_grounded_reward_summary.json \
-  --summary-template outputs/eval/sft_mpdocvqa_retrieved_full_eval_1024_summary.json
+- TAT-QA or equivalent structured table QA;
+- table parser;
+- calculator;
+- numeric normalization;
+- Numeric Accuracy;
+- type-aware reward if new training is needed.
+
+### Phase 3B: visual review branch
+
+Optional after the table branch:
+
+- image region extraction;
+- Qwen2.5-VL review;
+- OCR-only vs OCR+VLM comparison;
+- no claim of visual understanding before real VLM verification.
+
+### Final phase: demo and materials
+
+- FastAPI or Gradio;
+- document upload;
+- evidence display;
+- trace replay;
+- README;
+- final evaluation report;
+- resume and interview materials.
+
+---
+
+## 9. Evaluation policy
+
+### Retrieval
+
+Use:
+
+```text
+Recall@1
+Recall@3
+Recall@5
+MRR@5
+mean/p95 latency
 ```
 
-Current grounded 100-step candidate:
+Required ablations:
 
-- Checkpoint:
-  `outputs/checkpoints/qwen3-docagent-trl-grpo-mpdocvqa-retrieved-grounded-100step-20260606_105535`
-- JSON/schema pass rate: 1.0 / 1.0
-- Answer EM/F1: 0.5369 / 0.6122
-- Location accuracy: 0.9033
-- Mean reward under the grounded reward: 0.7221
-- Compared with SFT under the grounded reward: reward delta +4.23,
-  17 improved, 9 regressed, 38 changed answers.
-
-This candidate passes the current acceptance gate: location accuracy is above
-the SFT retrieved-reader baseline while answer F1 and grounded mean reward also
-improve.
-
-Full-500 confirmation run:
-
-- Checkpoint:
-  `outputs/checkpoints/qwen3-docagent-trl-grpo-mpdocvqa-retrieved-grounded-full500-100step-20260606_113406`
-- Training used all 500 cleaned retrieved GRPO records with 100 steps.
-- JSON/schema pass rate: 1.0 / 1.0
-- Answer EM/F1: 0.5242 / 0.5999
-- Location accuracy: 0.8957
-- Mean reward under the grounded reward: 0.7114
-- Compared with SFT under the grounded reward: reward delta +0.05,
-  10 improved, 13 regressed, 40 changed answers.
-
-This run does not replace the current grounded 100-step candidate because its
-location accuracy is below the SFT baseline and below the selected 200-record
-grounded GRPO run. Do not continue scaling or sweeping GRPO until the next stage
-requires broader robustness experiments.
-
-Full-500 matched-exposure low-LR run:
-
-- Checkpoint:
-  `outputs/checkpoints/qwen3-docagent-trl-grpo-mpdocvqa-retrieved-grounded-full500-250step-lr2e6-20260606_143014`
-- Training used all 500 cleaned retrieved GRPO records with 250 steps and
-  learning rate `2e-6`.
-- JSON/schema pass rate: 1.0 / 1.0
-- Answer EM/F1: 0.5369 / 0.6113
-- Location accuracy: 0.8957
-- Mean reward under the grounded reward: 0.7198
-- Compared with SFT under the grounded reward: reward delta +3.33,
-  13 improved, 8 regressed, 25 changed answers.
-- Compared with the selected 200-record grounded candidate: reward delta -0.90,
-  7 improved, 11 regressed, 33 changed answers.
-
-This matched-exposure run also does not replace the selected 200-record
-grounded candidate. Although answer EM is similar, location accuracy remains
-below the SFT baseline and below the selected candidate. The next improvement
-path should focus on answer hard-case mining and reader data/reward refinement,
-not additional full-500 GRPO scaling.
-
-Answer-hard GRPO path:
-
-Use this path only after the full-500 scaling checks above. The goal is to
-target reader extraction failures where the model cites the correct evidence
-location but extracts the wrong answer.
-
-```bash
-ADAPTER="outputs/checkpoints/qwen3-docagent-sft-mpdocvqa-retrieved-20260605_180454/v0-20260605-180519/checkpoint-155" \
-INPUT="data/benchmark/mp_docvqa_train_sft_retrieved_clean.jsonl" \
-OUTPUT="outputs/eval/sft_mpdocvqa_train_retrieved_first500_eval_1024.jsonl" \
-SUMMARY_OUTPUT="outputs/eval/sft_mpdocvqa_train_retrieved_first500_eval_1024_summary.json" \
-LIMIT=500 \
-MAX_NEW_TOKENS=1024 \
-bash scripts/eval_checkpoint_parallel.sh
-
-python scripts/build_answer_hard_grpo_subset.py \
-  --eval outputs/eval/sft_mpdocvqa_train_retrieved_first500_eval_1024.jsonl \
-  --grpo data/benchmark/mp_docvqa_train_grpo_retrieved_clean.jsonl \
-  --sft data/benchmark/mp_docvqa_train_sft_retrieved_clean.jsonl \
-  --output data/benchmark/mp_docvqa_train_grpo_retrieved_answer_hard.jsonl \
-  --report-output outputs/eval/mp_docvqa_train_grpo_retrieved_answer_hard_report.json \
-  --limit 300 \
-  --max-per-question-type 80
-
-python scripts/audit_training_data.py \
-  --input data/benchmark/mp_docvqa_train_grpo_retrieved_answer_hard.jsonl \
-  --output outputs/eval/mp_docvqa_train_grpo_retrieved_answer_hard_audit.json \
-  --print-mode summary
-
-python scripts/profile_sft_lengths.py \
-  --input data/benchmark/mp_docvqa_train_grpo_retrieved_answer_hard.jsonl \
-  --thresholds 1024,2048,3072,4096
+```text
+BM25
+Dense
+BM25 + Dense + RRF
+BM25 + Dense + RRF + real Reranker
 ```
 
-The `--sft` fallback is intentional: the existing 500-record GRPO file may not
-contain the same IDs as the evaluated SFT slice, so answer-hard records missing
-from the GRPO file are converted directly from the SFT target.
+Mock/hash/keyword results are not formal metrics.
 
-Do not run hard-case GRPO if this subset is tiny, dominated by one question
-type, or contains audit issues. If it is clean and sufficiently diverse, run a
-small low-LR continuation from the selected grounded GRPO candidate and validate
-against the same dev acceptance gate.
+### Answer workflow
 
-Answer-hard 50-step trial:
+Use:
 
-- Training subset: 192 clean answer-hard records mined from the first 500
-  retrieved SFT training records.
-- Checkpoint:
-  `outputs/checkpoints/qwen3-docagent-trl-grpo-mpdocvqa-answer-hard-50step-lr1e6-20260607_133500`
-- JSON/schema pass rate: 1.0 / 1.0
-- Answer EM/F1: 0.5344 / 0.6097
-- Location accuracy: 0.9033
-- Mean reward under the grounded reward: 0.7206
-- Compared with the selected grounded GRPO100 candidate: reward delta -0.59,
-  4 improved, 6 regressed, 20 changed answers.
-- Compared with SFT under the grounded reward: reward delta +3.64,
-  17 improved, 11 regressed, 39 changed answers.
+```text
+Answer EM/F1
+Location Accuracy
+raw JSON rate
+schema pass rate
+workflow success
+trace persist rate
+```
 
-This hard-case GRPO trial improves over SFT but does not replace the selected
-grounded GRPO100 candidate. Location is preserved, but answer F1 and grounded
-mean reward are lower. Do not increase hard-case GRPO steps under the current
-reward; the next improvement should refine answer-specific supervision or
-reward shaping before another RL run.
+### Real-document smoke
 
-## Stage 7: VLM visual review ablation
+Each accepted real-document run must save:
 
-Goal:
+- source document hash;
+- parser backend;
+- parser artifact path;
+- retriever backend;
+- model IDs;
+- top-k block IDs;
+- final answer and location;
+- SQLite run ID.
 
-- Compare OCR-only vs OCR + VLM visual review on MP-DocVQA image pages first.
-- Add TAT-DQA or M3DocVQA after the MP-DocVQA flow is complete.
+---
 
-Verification:
+## 10. Global constraints
 
-- Report Answer EM/F1 and visual subset accuracy.
-- Keep failure cases for interview discussion.
+1. Do not auto-download large models or datasets.
+2. Do not modify the stable `docagent` environment to install MinerU.
+3. Do not treat no-card CUDA unavailability as an environment failure.
+4. Do not optimize mock backends after wiring smoke passes.
+5. Do not report a module as complete before real server verification.
+6. Do not pass gold answers or gold locations into inference or repair.
+7. Do not change frozen SFT/GRPO checkpoints during Phase 2.
+8. Do not add a new phase while the active milestone remains unaccepted.

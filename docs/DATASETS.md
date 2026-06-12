@@ -1,168 +1,249 @@
-# Dataset Notes
+# DocAgent Dataset Notes
 
-Large datasets should be downloaded manually on AutoDL, not on the local
-Windows machine. Scripts should read from local dataset paths by default.
+> This document records current dataset sources, authoritative fields, frozen Phase 1 artifacts, and deferred data work.  
+> During the active Phase 2 retrieval milestone, do not rebuild or expand training datasets.
 
-## Primary datasets
+---
 
-### TAT-QA
+## 1. Current dataset policy
 
-Preferred source:
+Current priority:
 
-- Hugging Face: `next-tat/TAT-QA`
+```text
+reuse accepted MP-DocVQA Phase 1 artifacts
+→ complete real hybrid retrieval
+→ complete real MinerU/PDF loop
+→ only then add table or visual datasets
+```
 
-Role:
+Large datasets are downloaded manually on AutoDL. Scripts must not silently download full datasets or models.
 
-- Table-text QA
-- Numerical reasoning
-- Calculator and numeric reward
+Raw data stays outside the repository:
 
-### MP-DocVQA
+```text
+/root/autodl-tmp/datasets/
+```
 
-Preferred source:
+Small processed JSONL files, indexes, and reports may remain under the project directory.
 
-- Official DocVQA / RRC portal download when available.
-- If official access is slow, use a public retrieval subset first for the
-  retrieval MVP, then replace it with the official dataset.
+---
 
-Role:
+## 2. MP-DocVQA
 
-- Multi-page evidence retrieval
-- Page-level location accuracy
-- Evidence-grounded answer policy training
-- OCR/VLM parsing source for multi-page document images
+### 2.1 Current role
 
-### Deferred datasets
+MP-DocVQA is the accepted Phase 1 source for:
 
-InfographicVQA is temporarily deferred. The public HF mirrors inspected during
-implementation were schema-compatible with MP-DocVQA or unreliable for the
-current pipeline, and the project now prioritizes MP-DocVQA first. After the
-MP-DocVQA flow is complete, consider adding:
+- multi-page document QA;
+- page/evidence retrieval;
+- retrieved-reader SFT;
+- grounded GRPO;
+- Answer EM/F1 and Location Accuracy evaluation.
 
-- TAT-DQA for table/numeric document QA expansion.
-- M3DocVQA for broader multimodal document VQA.
-- InfographicVQA only if a reliable official/local copy is available.
+### 2.2 Authoritative sources
 
-## First remote subset target
+Current preferred source combination:
 
-Do not download or process the full datasets first.
+```text
+RRC imdb_val.npy:
+  question/answer metadata
+  official OCR tokens
+  OCR boxes
+  answer page information
+
+lmms-lab/MP-DocVQA val Parquet:
+  page images when a selected image subset is required
+```
+
+Do not download the RRC 22GB+ full image archive for the active milestone unless explicitly approved.
+
+Do not scrape temporary Hugging Face Dataset Viewer image URLs. Use the dataset/Parquet interface if image extraction is required.
+
+### 2.3 Current parser statement
+
+Current Phase 1 training/evaluation data are based mainly on official OCR-derived evidence.
+
+They are not full MinerU-parsed MP-DocVQA data.
+
+Parser roles:
+
+```text
+official OCR: current MP-DocVQA training/eval source
+MinerU: real uploaded PDF/image parsing
+PaddleOCR: optional fallback/comparison only
+```
+
+### 2.4 Frozen Phase 1 artifacts
+
+Representative accepted artifacts include:
+
+```text
+data/benchmark/mp_docvqa_train_sft_retrieved_clean.jsonl
+data/benchmark/mp_docvqa_dev_sft_retrieved_clean.jsonl
+data/benchmark/mp_docvqa_train_grpo_retrieved_clean.jsonl
+```
+
+Exact file existence must be checked in the repository/server before use.
+
+During Phase 2:
+
+- do not change document split;
+- do not rebuild SFT/GRPO data;
+- do not alter gold answer/location fields;
+- do not mine new hard subsets;
+- do not resume GRPO sweeps.
+
+---
+
+## 3. Phase 2 real-document smoke set
+
+Phase 2 should use a small public ScenarioSet for real-document validation.
 
 Initial target:
 
-- 50-100 MP-DocVQA-style image samples.
-- 50-100 TAT-QA text/table samples.
+```text
+3-5 public documents
+```
 
-Expected generated files:
+Cover:
+
+1. text-heavy PDF;
+2. scanned/image PDF;
+3. PDF containing a standard table and one or more figures.
+
+Each document needs only 3-5 manually checked questions.
+
+Store source documents outside Git when licensing or file size requires it. Store only manifests, hashes, expected page/block evidence, and reports in the repository.
+
+Suggested metadata:
+
+```json
+{
+  "doc_id": "...",
+  "source_url_or_reference": "...",
+  "license_note": "...",
+  "sha256": "...",
+  "question": "...",
+  "expected_answer": "...",
+  "expected_page": 3
+}
+```
+
+The ScenarioSet is a functional smoke set, not a training dataset.
+
+---
+
+## 4. TAT-QA
+
+Status:
 
 ```text
-data/benchmark/train_sft.jsonl
-data/benchmark/dev_sft.jsonl
-data/benchmark/test_eval.jsonl
-data/benchmark/grpo_train.jsonl
+deferred until real hybrid retrieval and real PDF ingestion are accepted
 ```
 
-The first dataset milestone is schema correctness, not volume.
+Future role:
 
-## MP-DocVQA local subset conversion
+- table + paragraph QA;
+- numeric normalization;
+- calculator;
+- Numeric Accuracy;
+- type-aware answer reward.
 
-Download only annotation files and small image/OCR subsets first. Keep raw files
-outside the repository, for example:
+Preferred source:
 
 ```text
-/root/autodl-tmp/datasets/mp_docvqa/
+official/local TAT-QA release
 ```
 
-Convert local annotations into DocAgent samples:
+No TAT-QA expansion is part of the current Phase 2 milestone.
 
-```bash
-python scripts/build_vqa_subset.py \
-  --source mp_docvqa \
-  --input /root/autodl-tmp/datasets/mp_docvqa/train.json \
-  --output data/benchmark/mp_docvqa_train_subset.jsonl \
-  --split train \
-  --limit 100
+---
 
-```
+## 5. InfographicVQA and other visual datasets
 
-Image-only samples are marked with `metadata.needs_ocr=true` and should go
-through OCR/VLM parsing plus LLM audit before being used for SFT/GRPO. For
-the current implementation, exported MP-DocVQA images live under
-`/root/autodl-tmp/datasets/mp_docvqa/`, while lightweight JSONL indexes live
-under `data/benchmark/`.
-
-Then mix dataset shards for schema-level experiments:
-
-```bash
-python scripts/build_mixed_dataset.py \
-  --input data/benchmark/tatqa_train_subset_1000.jsonl:300 \
-  --input data/benchmark/mp_docvqa_train_subset.jsonl:100 \
-  --output data/benchmark/mixed_docagent_train_subset.jsonl
-```
-
-## LLM-assisted sample audit
-
-Rule-based checks catch schema and simple evidence errors. Complex cross-source
-samples should go through an LLM audit queue before SFT/GRPO construction.
-
-Export audit tasks without calling any API:
-
-```bash
-python scripts/llm_audit_samples.py \
-  --input data/benchmark/mixed_docagent_train_subset.jsonl \
-  --tasks-output outputs/audit/mixed_docagent_audit_tasks.jsonl \
-  --mode export \
-  --limit 20
-```
-
-If an OpenAI-compatible endpoint is configured, run automatic audit:
-
-```bash
-OPENAI_API_KEY=... \
-OPENAI_MODEL=gpt-4.1-mini \
-python scripts/llm_audit_samples.py \
-  --input data/benchmark/mixed_docagent_train_subset.jsonl \
-  --tasks-output outputs/audit/mixed_docagent_audit_tasks.jsonl \
-  --decisions-output outputs/audit/mixed_docagent_audit_decisions.jsonl \
-  --audited-output data/benchmark/mixed_docagent_train_audited.jsonl \
-  --report-output outputs/audit/mixed_docagent_audit_report.json \
-  --mode api
-```
-
-The LLM decision schema is `keep | repair | drop`. Repaired samples preserve
-the original record and add `metadata.llm_audit` for traceability.
-
-## TAT-QA subset smoke
-
-This can run in no-card mode:
-
-```bash
-python scripts/build_tatqa_subset.py \
-  --split dev \
-  --limit 100 \
-  --raw-dir /root/autodl-tmp/datasets/tatqa
-
-python scripts/eval_retrieval.py --input data/benchmark/tatqa_dev_subset.jsonl
-```
-
-The script expects a local file such as
-`/root/autodl-tmp/datasets/tatqa/tatqa_dataset_dev.json`. It only downloads
-from Hugging Face when `--allow-download` is passed explicitly.
-
-Keep raw datasets outside the repository:
-
-```bash
-mkdir -p /root/autodl-tmp/datasets/tatqa
-python scripts/build_tatqa_subset.py \
-  --split dev \
-  --limit 100 \
-  --raw-dir ../datasets/tatqa \
-  --output data/benchmark/tatqa_dev_subset.jsonl
-```
-
-Recommended AutoDL layout:
+Status:
 
 ```text
-/root/autodl-tmp/docagent   # code and small processed artifacts
-/root/autodl-tmp/datasets   # raw datasets
-/root/autodl-tmp/models     # model weights
+deferred
 ```
+
+Potential later role:
+
+- OCR + visual review;
+- image-region evidence;
+- OCR-only vs OCR+VLM ablation.
+
+Do not add InfographicVQA, TAT-DQA, M3DocVQA, or another visual dataset until the active Phase 2 milestone is accepted and a reliable local source is confirmed.
+
+---
+
+## 6. Data split and leakage policy
+
+All benchmark splits must remain document-level.
+
+Do not allow the same `doc_id` to appear across train/dev/test.
+
+Inference and repair must never receive:
+
+- gold answer;
+- gold location;
+- assistant target.
+
+Retrieved-reader evaluation must distinguish:
+
+```text
+retrieval success
+reader success conditioned on retrieved evidence
+end-to-end success
+```
+
+---
+
+## 7. Data quality policy
+
+For any future dataset addition, record:
+
+- source and version;
+- raw field mapping;
+- answer normalization;
+- evidence/location mapping;
+- document-level split;
+- schema validation;
+- answer coverage;
+- audit report;
+- accepted/deferred/drop count.
+
+`clean_rate = 1.0` should be described as schema/rule validation pass rate unless manually reviewed.
+
+---
+
+## 8. Download policy
+
+Scripts must use explicit flags for network access, for example:
+
+```text
+--allow-download
+```
+
+Default behavior:
+
+```text
+offline/local-only
+```
+
+Any download of:
+
+- large image archives;
+- full dataset shards;
+- model weights;
+- signed URLs;
+
+requires explicit user confirmation.
+
+---
+
+## 9. Current Phase 2 rule
+
+The active milestone uses existing EvidenceBlock artifacts to verify real BGE-M3 and real reranker integration.
+
+Therefore, no new dataset download or conversion is required before the Phase 2 preflight and real-model smoke.
