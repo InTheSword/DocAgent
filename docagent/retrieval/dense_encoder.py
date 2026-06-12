@@ -39,7 +39,7 @@ class DenseEncoder:
         self._model = BGEM3FlagModel(
             self.config.model_path,
             use_fp16=self.config.use_fp16,
-            device=self.config.device,
+            devices=self.config.device,
         )
         return self._model
 
