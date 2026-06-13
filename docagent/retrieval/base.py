@@ -25,6 +25,7 @@ class RetrievalCandidate:
     def to_trace_dict(self, final_rank: int | None = None) -> dict[str, object]:
         payload: dict[str, object] = {
             "block_id": self.block.block_id,
+            "doc_id": self.block.doc_id,
             "page": self.block.page_id,
             "block_type": self.block.block_type,
             "bm25_score": self.bm25_score,
@@ -56,4 +57,3 @@ class Retriever(Protocol):
         answer_type_hint: str | None = None,
     ) -> RetrievalResult:
         ...
-

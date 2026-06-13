@@ -74,6 +74,7 @@ class HybridRetriever:
         rewrite = rewrite_query(question, answer_type_hint=answer_type_hint)
         query = f"{question} {rewrite.rewritten_query}".strip()
         candidate_blocks = [block for block in self.blocks if doc_id is None or block.doc_id == doc_id]
+        candidate_block_ids = {block.block_id for block in candidate_blocks}
         bm25 = BM25Index(candidate_blocks)
         timings: dict[str, float] = {}
 
@@ -98,11 +99,17 @@ class HybridRetriever:
             raise RuntimeError("hybrid_rerank retrieval requires an enabled reranker")
 
         dense_hits: list[tuple[EvidenceBlock, float]] = []
-        if active_mode in {"dense", "hybrid", "hybrid_rerank"}:
+        if active_mode in {"dense", "hybrid", "hybrid_rerank"} and candidate_blocks:
             if query_embedding is None:
                 raise RuntimeError("dense retrieval requires query_embedding unless a caller supplies an encoder")
             dense_start = time.perf_counter()
-            dense_results = self.dense_index.search(query_embedding, top_k=min(self.dense_top_n, len(candidate_blocks)))
+            dense_search_top_k = len(self.dense_index.blocks) if doc_id is not None else min(self.dense_top_n, len(candidate_blocks))
+            dense_results = self.dense_index.search(query_embedding, top_k=dense_search_top_k)
+            dense_results = [
+                item
+                for item in dense_results
+                if not candidate_block_ids or item.block.block_id in candidate_block_ids
+            ][: self.dense_top_n]
             dense_hits = [(item.block, item.score) for item in dense_results]
             timings["dense"] = (time.perf_counter() - dense_start) * 1000
 

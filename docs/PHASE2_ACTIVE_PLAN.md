@@ -34,9 +34,10 @@ MinerU installation and real PDF parsing are not prerequisites for Phase 2A.
 | Hash dense | mock_verified / frozen | CI only |
 | Keyword reranker | mock_verified / frozen | CI only |
 | BGE-M3 wrapper | real_model_verified | server model API smoke passed |
-| FAISS index | implemented / mock_verified | requires real embeddings |
-| RRF | implemented / mock_verified | requires real candidates |
+| FAISS index save/reload | real_model_verified | server real retrieval smoke passed |
+| BM25 + Dense + RRF | real_model_verified | server real retrieval smoke passed |
 | Real reranker wrapper | real_model_verified | server model API smoke passed |
+| Real hybrid retrieval component | real_model_verified | server real retrieval smoke passed |
 | MinerU fixture | mock_verified | not real parser evidence |
 | Real MinerU output | not_started | next milestone |
 
@@ -45,7 +46,7 @@ MinerU installation and real PDF parsing are not prerequisites for Phase 2A.
 The current task is:
 
 ```text
-run real hybrid retrieval component smoke
+run real workflow smoke with real hybrid retrieval and Qwen3 GRPO AnswerPolicy
 ```
 
 Recent verified checkpoints:
@@ -54,17 +55,18 @@ Recent verified checkpoints:
 FlagEmbedding -> server_dependency_ready
 BGE-M3 -> real_model_verified
 bge-reranker-v2-m3 -> real_model_verified
+real hybrid retrieval component -> real_model_verified
 ```
 
-The current smoke must validate:
+The current workflow smoke must validate:
 
 - existing EvidenceBlock input from `data/benchmark/smoke_eval.jsonl`;
-- real BGE-M3 embeddings;
-- a newly built and reloaded FAISS index with a non-mock model ID;
-- BM25 + Dense retrieval;
-- RRF candidate fusion;
-- real `bge-reranker-v2-m3` scoring through the Transformers sequence-classification backend;
-- compact JSON output at `outputs/smoke/phase2_real_retrieval.json`.
+- selected document scope `doc_id = smoke_invoice`;
+- real hybrid retrieval top-k EvidenceBlock;
+- Qwen3 GRPO AnswerPolicy generation;
+- JSON parse, format validation, location validation, and bounded repair when required;
+- SQLite run and ordered node traces;
+- compact JSON output at `outputs/smoke/phase2_real_workflow.json`.
 
 It must not:
 
@@ -72,8 +74,9 @@ It must not:
 - download;
 - reuse `hash-dense-256`;
 - use keyword reranker fallback;
-- run Qwen3 AnswerPolicy or LangGraph;
+- use heuristic AnswerPolicy fallback;
 - run formal retrieval ablation;
+- run batch answer evaluation;
 - invoke MinerU.
 
 ## 4. Required references for the current task
@@ -85,32 +88,35 @@ AGENTS.md
 docs/PHASE2_ACTIVE_PLAN.md
 docs/SERVER_SETUP.md
 docs/design/phase2/PHASE2_REAL_DOCUMENT_HYBRID_RETRIEVAL_MVP.zh-CN.md
-current retrieval/index/reranker/smoke code
+current retrieval/index/reranker/workflow/trace/smoke code
 ```
 
-Read only the retrieval/index/reranker/metadata sections of the design document.
+Read only the retrieval/workflow/AnswerPolicy/trace sections of the design document.
 
 ## 5. Preflight acceptance
 
-Real retrieval component smoke is accepted when:
+Real workflow smoke is accepted when:
 
 - targeted tests pass;
 - regression tests pass;
-- the server generates `outputs/smoke/phase2_real_retrieval.json`;
+- the server generates `outputs/smoke/phase2_real_workflow.json`;
 - `dense_backend = bge_m3`;
 - `reranker_backend = transformers_sequence_classification`;
-- FAISS index save/reload is verified;
-- BM25, Dense, RRF, reranker score, and final top-k ranks are recorded;
-- no hash/keyword fallback occurs.
+- `answer_policy.mode = grpo`;
+- all retrieval candidates belong to `smoke_invoice`;
+- `smoke_invoice_p1_b1` is in top-k and final location;
+- JSON parse, format check, and location check succeed after bounded repair if required;
+- SQLite trace can be queried by `run_id`;
+- no hash/keyword/heuristic fallback occurs.
 
 After the server JSON is obtained:
 
 ```text
 stop
-review the real retrieval smoke result
+review the real workflow smoke result
 ```
 
-Do not enter Qwen3 workflow smoke before review.
+Do not mark Phase 2A accepted before reviewing the server workflow JSON.
 
 ## 6. Phase 2A implementation after preflight
 
@@ -143,15 +149,17 @@ dense_backend = bge_m3
 reranker_backend = transformers_sequence_classification
 dense_model_loaded = true
 reranker_model_loaded = true
+answer_policy = grpo
 ```
 
 Also required:
 
-- no hash/keyword fallback;
+- no hash/keyword/heuristic fallback;
 - FAISS index save/reload works;
 - one real query completes;
 - candidate scores/ranks are persisted;
 - final location belongs to returned top-k;
+- final location block_id is `smoke_invoice_p1_b1` for the current workflow smoke;
 - SQLite trace exists;
 - model/backend IDs are recorded.
 
@@ -176,15 +184,15 @@ Do not start:
 
 ### Current stop condition
 
-After server real retrieval smoke JSON is returned:
+After server real workflow smoke JSON is returned:
 
 ```text
-stop and review it before Qwen3 workflow smoke
+stop and review it before marking Phase 2A accepted
 ```
 
 ### Phase 2A stop condition
 
-After one real retrieval smoke and saved report:
+After one real workflow smoke and saved report:
 
 ```text
 stop and request explicit milestone acceptance
