@@ -1,6 +1,6 @@
 # Current Status
 
-Updated: 2026-06-11
+Updated: 2026-06-13
 
 ## Phase 1 Complete
 
@@ -39,13 +39,49 @@ Known limitation:
 
 - Remaining low-answer examples are mostly reader extraction errors inside the correct OCR block, such as neighboring entities, abbreviation expansion ambiguity, or numeric row selection. This matches the earlier SFT/GRPO reader error analysis and is not a workflow integration failure.
 
-## Phase 2 Started
+## Phase 2A Accepted
+
+Phase 2A real hybrid retrieval and workflow integration is accepted.
+
+Server validation:
+
+- BGE-M3 model API smoke passed with dense embeddings on `cuda:1`.
+- bge-reranker-v2-m3 smoke passed through the Transformers sequence-classification backend on `cuda:1`.
+- Real hybrid retrieval smoke passed:
+  `BGE-M3 -> FAISS save/reload -> BM25 + Dense + RRF -> Transformers reranker`.
+- Real Qwen3 GRPO workflow smoke passed:
+  `hybrid_rerank -> top-k EvidenceBlock -> GRPO AnswerPolicy -> JSON parse -> format/location validation -> SQLite trace`.
+- The accepted workflow smoke used `doc_id=smoke_invoice`, retrieved `smoke_invoice_p1_b1`, generated answer `March 12, 2020`, and persisted run
+  `1d88ec99-1f62-4746-9ae2-c0616fa924e7`.
+
+Status:
+
+```text
+BGE-M3 -> real_model_verified
+FAISS index save/reload -> real_model_verified
+BM25 + Dense + RRF -> real_model_verified
+Transformers Reranker -> real_model_verified
+real hybrid retrieval -> accepted
+real Qwen3 workflow integration -> accepted
+Phase 2A -> accepted
+```
+
+Boundary:
+
+```text
+Phase 2A implementation/integration -> accepted
+formal retrieval and QA benchmark -> not benchmark_evaluated
+```
+
+The single successful smoke is integration evidence, not a performance metric.
+
+## Phase 2B Active
 
 The current implementation stage starts the real-document ingestion and hybrid
 retrieval MVP. It preserves Phase 1 AnswerPolicy and trace behavior while
 adding a new optional retriever injection point.
 
-Completed locally in this step:
+Completed before Phase 2B:
 
 - Added document registration with SHA256-based `doc_id`, source caching, and
   supported PDF/PNG/JPG input checks.
@@ -59,6 +95,8 @@ Completed locally in this step:
   fields.
 - Added BGE-M3 dense encoder wrapper, DenseIndex save/load, RRF fusion, and a
   real bge-reranker-v2-m3 wrapper with explicit errors when models are missing.
+- Switched the default real reranker path to Transformers
+  `AutoModelForSequenceClassification` for Transformers 5.x compatibility.
 - Added `IndexedDocumentRetriever` and injected it into `run_qa_workflow`
   without changing the default Phase 1 path.
 - Added CLI entry points:
@@ -82,11 +120,9 @@ Local no-card validation:
   register dummy PDF -> parse mock MinerU content list -> save blocks ->
   inspect document -> query with BM25 + heuristic answer policy.
 
-Still requires AutoDL validation:
+Phase 2B first milestone:
 
-- Real MinerU CLI parsing on at least one PDF and one page image.
-- BGE-M3 dense index build with `/root/autodl-tmp/models/bge-m3`.
-- bge-reranker-v2-m3 scoring with
-  `/root/autodl-tmp/models/bge-reranker-v2-m3`.
-- MP-DocVQA retrieval ablation for BM25, Dense, Hybrid, and Hybrid+Reranker.
-- 3 real public document smoke runs.
+- one real public PDF;
+- one real MinerU structured output produced outside the stable `docagent` environment;
+- conversion into structure-aware `EvidenceBlock` records;
+- compact structure-quality report.

@@ -92,13 +92,13 @@ Query Rewrite
 → SQLite trace
 ```
 
-## 5. Active phase
+## 5. Accepted Phase 2A
 
 ### Phase 2A: real hybrid retrieval
 
-Status: defined in `docs/PHASE2_ACTIVE_PLAN.md`
+Status: `accepted`
 
-Target:
+Delivered:
 
 ```text
 existing EvidenceBlock
@@ -107,13 +107,22 @@ existing EvidenceBlock
 → BM25 + Dense + RRF
 → real reranker
 → existing Qwen3 workflow
+→ JSON parse and validation
+→ SQLite trace
 ```
 
-## 6. Planned phases
+Boundary:
+
+```text
+implementation/integration -> accepted
+formal retrieval and QA benchmark -> not benchmark_evaluated
+```
+
+## 6. Active phase
 
 ### Phase 2B: real MinerU and real-document QA
 
-Start only after Phase 2A acceptance.
+Status: `active`
 
 Target:
 
@@ -127,12 +136,23 @@ real PDF/image
 → trace
 ```
 
+First milestone:
+
+```text
+one real public PDF
+→ one real MinerU structured output
+→ EvidenceBlock conversion
+→ structure quality acceptance
+```
+
 Detailed references:
 
 ```text
 docs/design/phase2/PHASE2_REAL_DOCUMENT_HYBRID_RETRIEVAL_MVP.zh-CN.md
 docs/design/phase2/PHASE2_STRUCTURED_PDF_PARSING_SUPPLEMENT.zh-CN.md
 ```
+
+## 7. Planned phases
 
 ### Phase 3: table and numeric branch
 
@@ -162,7 +182,7 @@ Optional after the table branch:
 - final benchmark and real-document report;
 - README, resume bullets, and interview material.
 
-## 7. Global roadmap constraints
+## 8. Global roadmap constraints
 
 1. Complete one real-component milestone before expanding scope.
 2. Mock backends are not project results.

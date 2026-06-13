@@ -3,29 +3,91 @@
 > This file defines the only active Codex milestone.  
 > It is intentionally short and operational.
 
-## 1. Active milestone
+## 1. Accepted checkpoint
 
 ```text
-Phase 2A: verify real BGE-M3 and real cross-encoder reranker
+Phase 2A: accepted
 ```
 
-Target flow:
+Accepted implementation/integration scope:
 
 ```text
 existing EvidenceBlock
 → real BGE-M3 embeddings
-→ FAISS index
-→ BM25 + Dense
-→ RRF
-→ real bge-reranker-v2-m3
-→ existing Qwen3 workflow
-→ location validation
+→ FAISS index save/reload
+→ BM25 + Dense + RRF
+→ real bge-reranker-v2-m3 reranking
+→ Qwen3 GRPO AnswerPolicy workflow
+→ JSON parse
+→ format/location validation
 → SQLite trace
 ```
 
-MinerU installation and real PDF parsing are not prerequisites for Phase 2A.
+Server evidence:
 
-## 2. Current status
+```text
+BGE-M3 -> real_model_verified
+FAISS index save/reload -> real_model_verified
+BM25 + Dense + RRF -> real_model_verified
+Transformers Reranker -> real_model_verified
+real hybrid retrieval -> accepted
+real Qwen3 workflow integration -> accepted
+```
+
+Workflow smoke artifact:
+
+```text
+outputs/smoke/phase2_real_workflow.json
+run_id = 1d88ec99-1f62-4746-9ae2-c0616fa924e7
+dense_backend = bge_m3
+reranker_backend = transformers_sequence_classification
+answer_policy = grpo
+doc_id = smoke_invoice
+top_k = ["smoke_invoice_p1_b1"]
+final_location.block_id = smoke_invoice_p1_b1
+```
+
+Important boundary:
+
+```text
+Phase 2A implementation/integration -> accepted
+formal retrieval and QA benchmark -> not benchmark_evaluated
+```
+
+The single successful smoke validates the real-component integration path. It is
+not a Recall/MRR, answer-quality, latency, or benchmark-performance conclusion.
+
+## 2. Active milestone
+
+```text
+Phase 2B: real structured PDF parsing entry milestone
+```
+
+Phase 2B target flow:
+
+```text
+real PDF
+→ real MinerU structured output
+→ structure-aware EvidenceBlock
+→ real BGE-M3 + RRF + Reranker
+→ Qwen3 GRPO AnswerPolicy
+→ page/block citation
+→ SQLite trace
+```
+
+Current Phase 2B first milestone:
+
+```text
+one real public PDF
+→ one real MinerU output
+→ EvidenceBlock conversion
+→ structure quality acceptance
+```
+
+Do not start the full end-to-end Phase 2B loop until this first milestone is
+reviewed and accepted.
+
+## 3. Current status
 
 | Component | Status | Role |
 |---|---|---|
@@ -36,183 +98,74 @@ MinerU installation and real PDF parsing are not prerequisites for Phase 2A.
 | BGE-M3 wrapper | real_model_verified | server model API smoke passed |
 | FAISS index save/reload | real_model_verified | server real retrieval smoke passed |
 | BM25 + Dense + RRF | real_model_verified | server real retrieval smoke passed |
-| Real reranker wrapper | real_model_verified | server model API smoke passed |
-| Real hybrid retrieval component | real_model_verified | server real retrieval smoke passed |
-| MinerU fixture | mock_verified | not real parser evidence |
-| Real MinerU output | not_started | next milestone |
+| Real reranker wrapper | real_model_verified | Transformers sequence-classification backend |
+| Real hybrid retrieval | accepted | server real workflow smoke passed |
+| Real Qwen3 workflow integration | accepted | GRPO workflow smoke passed |
+| Phase 2A | accepted | integration accepted, benchmark not evaluated |
+| MinerU fixture | mock_verified | synthetic fixture only |
+| Real MinerU output | not_started | Phase 2B first milestone |
 
-## 3. Immediate task
+## 4. Immediate task
 
-The current task is:
-
-```text
-run real workflow smoke with real hybrid retrieval and Qwen3 GRPO AnswerPolicy
-```
-
-Recent verified checkpoints:
+The next implementation task is:
 
 ```text
-FlagEmbedding -> server_dependency_ready
-BGE-M3 -> real_model_verified
-bge-reranker-v2-m3 -> real_model_verified
-real hybrid retrieval component -> real_model_verified
+prepare and validate one real MinerU structured output for one real public PDF
 ```
 
-The current workflow smoke must validate:
+The task must validate:
 
-- existing EvidenceBlock input from `data/benchmark/smoke_eval.jsonl`;
-- selected document scope `doc_id = smoke_invoice`;
-- real hybrid retrieval top-k EvidenceBlock;
-- Qwen3 GRPO AnswerPolicy generation;
-- JSON parse, format validation, location validation, and bounded repair when required;
-- SQLite run and ordered node traces;
-- compact JSON output at `outputs/smoke/phase2_real_workflow.json`.
+- the selected PDF source and local file identity;
+- real MinerU output produced outside the stable `docagent` environment;
+- structured output availability, preferably `content_list` or middle JSON;
+- conversion to DocAgent `EvidenceBlock`;
+- page, block_id, block_type, text/table/image fields where available;
+- location metadata such as page and bbox when present;
+- reading order and section/context metadata when available;
+- one compact structure-quality JSON report.
 
 It must not:
 
-- install;
-- download;
-- reuse `hash-dense-256`;
-- use keyword reranker fallback;
-- use heuristic AnswerPolicy fallback;
-- run formal retrieval ablation;
-- run batch answer evaluation;
-- invoke MinerU.
+- install MinerU into the stable `docagent` environment;
+- start real hybrid retrieval over the new PDF;
+- run Qwen3 AnswerPolicy;
+- run formal retrieval or QA benchmark;
+- modify SFT, GRPO, reward, prompts, or checkpoints;
+- add TAT-QA, VLM, Demo, or Phase 3 work.
 
-## 4. Required references for the current task
+## 5. Required references for Phase 2B work
 
-Read:
+Read before planning or implementing Phase 2B work:
 
 ```text
 AGENTS.md
 docs/PHASE2_ACTIVE_PLAN.md
 docs/SERVER_SETUP.md
 docs/design/phase2/PHASE2_REAL_DOCUMENT_HYBRID_RETRIEVAL_MVP.zh-CN.md
-current retrieval/index/reranker/workflow/trace/smoke code
-```
-
-Read only the retrieval/workflow/AnswerPolicy/trace sections of the design document.
-
-## 5. Preflight acceptance
-
-Real workflow smoke is accepted when:
-
-- targeted tests pass;
-- regression tests pass;
-- the server generates `outputs/smoke/phase2_real_workflow.json`;
-- `dense_backend = bge_m3`;
-- `reranker_backend = transformers_sequence_classification`;
-- `answer_policy.mode = grpo`;
-- all retrieval candidates belong to `smoke_invoice`;
-- `smoke_invoice_p1_b1` is in top-k and final location;
-- JSON parse, format check, and location check succeed after bounded repair if required;
-- SQLite trace can be queried by `run_id`;
-- no hash/keyword/heuristic fallback occurs.
-
-After the server JSON is obtained:
-
-```text
-stop
-review the real workflow smoke result
-```
-
-Do not mark Phase 2A accepted before reviewing the server workflow JSON.
-
-## 6. Phase 2A implementation after preflight
-
-Only after explicit approval:
-
-1. prepare missing real BGE-M3/Reranker dependencies;
-2. load real BGE-M3;
-3. build and reload FAISS index;
-4. run BM25 and Dense retrieval;
-5. fuse with RRF;
-6. run real cross-encoder reranking;
-7. pass top-k into the existing Qwen3 workflow;
-8. persist backend/model IDs, scores, ranks, answer, location, and trace;
-9. save one compact server smoke report.
-
-Detailed implementation reference:
-
-```text
-docs/design/phase2/PHASE2_REAL_DOCUMENT_HYBRID_RETRIEVAL_MVP.zh-CN.md
-```
-
-Read only relevant retrieval/index/workflow sections.
-
-## 7. Phase 2A acceptance
-
-Phase 2A is accepted only when the server verifies:
-
-```text
-dense_backend = bge_m3
-reranker_backend = transformers_sequence_classification
-dense_model_loaded = true
-reranker_model_loaded = true
-answer_policy = grpo
-```
-
-Also required:
-
-- no hash/keyword/heuristic fallback;
-- FAISS index save/reload works;
-- one real query completes;
-- candidate scores/ranks are persisted;
-- final location belongs to returned top-k;
-- final location block_id is `smoke_invoice_p1_b1` for the current workflow smoke;
-- SQLite trace exists;
-- model/backend IDs are recorded.
-
-Mock success alone cannot mark the milestone accepted.
-
-## 8. Out of scope
-
-Do not start:
-
-- MinerU installation or real MinerU CLI;
-- real PDF ingestion;
-- TAT-QA;
-- InfographicVQA or VLM;
-- new SFT/GRPO;
-- reward changes;
-- AnswerPolicy prompt changes;
-- dataset rebuilding;
-- Gradio/FastAPI;
-- mock-backend optimization.
-
-## 9. Stop conditions
-
-### Current stop condition
-
-After server real workflow smoke JSON is returned:
-
-```text
-stop and review it before marking Phase 2A accepted
-```
-
-### Phase 2A stop condition
-
-After one real workflow smoke and saved report:
-
-```text
-stop and request explicit milestone acceptance
-```
-
-## 10. Next milestone
-
-Only after Phase 2A is accepted:
-
-```text
-Phase 2B:
-real MinerU output
-→ structure-aware EvidenceBlock
-→ real hybrid retrieval
-→ real PDF end-to-end QA
-```
-
-Phase 2B must use:
-
-```text
-docs/design/phase2/PHASE2_REAL_DOCUMENT_HYBRID_RETRIEVAL_MVP.zh-CN.md
 docs/design/phase2/PHASE2_STRUCTURED_PDF_PARSING_SUPPLEMENT.zh-CN.md
+current parser, ingestion, storage, retrieval, workflow, scripts, and tests as needed
 ```
+
+Read only the sections relevant to the active Phase 2B first milestone.
+
+## 6. Acceptance for Phase 2B first milestone
+
+The first Phase 2B milestone is accepted only when:
+
+- a real public PDF is identified and its local path is recorded;
+- one real MinerU structured output exists outside Git-managed source files;
+- the output is converted into `EvidenceBlock` records;
+- structure fields are checked and summarized;
+- synthetic MinerU fixtures are not reported as real parser evidence;
+- no Qwen, retrieval benchmark, or full E2E claim is made;
+- a compact server JSON/report path is returned.
+
+## 7. Stop condition
+
+After one real MinerU output is converted and the structure-quality report is
+saved:
+
+```text
+stop and review the parser/EvidenceBlock quality before starting full Phase 2B E2E
+```
+

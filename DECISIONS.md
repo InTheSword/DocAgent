@@ -60,3 +60,28 @@ Constraints:
   opt-in through `run_qa_workflow(..., retriever=...)`.
 - Local tests use mock/parse-existing fixtures. Real MinerU, BGE-M3, and
   reranker validation must run on AutoDL.
+
+## 2026-06-13: Phase 2A Reranker Backend
+
+Decision: in the current Transformers 5.x server environment, the real
+`bge-reranker-v2-m3` path uses `AutoTokenizer` plus
+`AutoModelForSequenceClassification` and raw logits for ranking. It does not
+default to `FlagReranker.compute_score()`.
+
+Rationale:
+
+- `FlagEmbedding==1.4.0` reranker scoring calls tokenizer APIs that are not
+  compatible with the installed `Transformers==5.8.1` tokenizer behavior.
+- The sequence-classification path loads the local reranker model with
+  `local_files_only=True`, supports explicit devices such as `cuda:1`, and
+  records backend, model path, device, dtype, and max length in trace metadata.
+- The server real model API smoke and real workflow smoke passed with backend
+  `transformers_sequence_classification`.
+
+Constraints:
+
+- Do not silently fall back to keyword reranking for real-model runs.
+- Do not downgrade Transformers or patch site-packages to make
+  `FlagReranker.compute_score()` work.
+- `FlagReranker` may only be revisited as an explicit optional backend after
+  compatibility is proven.
