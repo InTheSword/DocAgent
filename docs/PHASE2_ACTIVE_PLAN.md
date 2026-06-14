@@ -60,7 +60,7 @@ not a Recall/MRR, answer-quality, latency, or benchmark-performance conclusion.
 ## 2. Active milestone
 
 ```text
-Phase 2B: real structured PDF parsing entry milestone
+Phase 2B-2: real-document end-to-end scenario acceptance
 ```
 
 Phase 2B target flow:
@@ -87,6 +87,22 @@ one real public PDF
 Do not start the full end-to-end Phase 2B loop until this first milestone is
 reviewed and accepted.
 
+Current Phase 2B-2 milestone:
+
+```text
+GLOBOCAN source PDF
+-> mineru_existing ingestion
+-> retrieval-eligible EvidenceBlocks
+-> real BGE-M3 + FAISS + BM25 + RRF + reranker
+-> Qwen3 GRPO AnswerPolicy workflow
+-> JSON/format/location validation
+-> SQLite trace
+-> scenario acceptance report
+```
+
+This is a real-document scenario acceptance flow, not a formal DocVQA,
+MP-DocVQA, or general PDF-QA benchmark.
+
 ## 3. Current status
 
 | Component | Status | Role |
@@ -104,13 +120,14 @@ reviewed and accepted.
 | Phase 2A | accepted | integration accepted, benchmark not evaluated |
 | MinerU fixture | mock_verified | synthetic fixture only |
 | Real MinerU output | accepted | GLOBOCAN API output converted and quality-checked |
+| Phase 2B-2 E2E verifier | implemented | local code/tests passed; server real-model run pending |
 
 ## 4. Immediate task
 
-The completed merge-prep task is:
+The current implementation task is:
 
 ```text
-review GLOBOCAN parser/EvidenceBlock quality before starting full Phase 2B E2E
+run fixed GLOBOCAN real-document E2E verifier on AutoDL
 ```
 
 The task must validate:
@@ -148,11 +165,22 @@ verifier = scripts/verify_phase2b_real_pdf.py
 verification_report = outputs/verification/phase2b_globocan/verification_report.json
 ```
 
+Current implemented Phase 2B-2 local artifact contract:
+
+```text
+scenario_qa = data/real_documents/globocan_africa_2022/qa/scenario_qa.jsonl
+verifier = scripts/verify_phase2b_real_e2e.py
+target_report = outputs/verification/phase2b_real_e2e/verification_report.json
+local_status = implemented
+server_real_model_status = pending
+```
+
 It must not:
 
 - install MinerU into the stable `docagent` environment;
-- start real hybrid retrieval over the new PDF;
-- run Qwen3 AnswerPolicy;
+- call MinerU API again;
+- process CDC PDF;
+- claim accepted before the server real-model verifier succeeds;
 - run formal retrieval or QA benchmark;
 - modify SFT, GRPO, reward, prompts, or checkpoints;
 - add TAT-QA, VLM, Demo, or Phase 3 work.
@@ -189,13 +217,15 @@ Status:
 ```text
 Phase 2B first milestone: accepted
 Phase 2B first milestone merge-prep quality hardening: accepted
+Phase 2B-2 real-document E2E verifier: implemented
+Phase 2B-2 server scenario acceptance: not_started
 ```
 
 ## 7. Stop condition
 
-After one real MinerU output is converted and the structure-quality report is
-saved:
+After the fixed GLOBOCAN E2E verifier is implemented, locally tested, committed,
+and pushed:
 
 ```text
-stop and review the parser/EvidenceBlock quality before starting full Phase 2B E2E
+stop and wait for one AutoDL real-model verifier run
 ```

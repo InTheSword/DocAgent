@@ -170,3 +170,38 @@ Status:
 Real MinerU output -> accepted
 Phase 2B first milestone -> accepted
 ```
+
+## Phase 2B-2 Implemented Locally
+
+Phase 2B-2 now has a fixed verifier for the GLOBOCAN real-document E2E
+scenario. It connects the accepted parsing path and accepted real retrieval /
+workflow interfaces without retraining or changing Phase 2A behavior.
+
+Implemented:
+
+- Added ignored Scenario QA contract for
+  `data/real_documents/globocan_africa_2022/qa/scenario_qa.jsonl`.
+- Added `scripts/verify_phase2b_real_e2e.py`.
+- The verifier performs:
+  `mineru_existing ingestion -> retrieval-eligible block filtering -> real
+  BGE-M3/FAISS/BM25/RRF/reranker retrieval -> cached top-k workflow injection
+  -> Qwen3 GRPO AnswerPolicy -> JSON/format/location validation -> SQLite
+  trace -> scenario acceptance report`.
+- Local tests use fake policies/retrieval results only to validate contracts and
+  metrics; they are not reported as real E2E acceptance.
+
+Local validation:
+
+- `python -m py_compile scripts/verify_phase2b_real_e2e.py tests/test_phase2b_real_e2e_verifier.py`: passed.
+- Targeted tests:
+  `python -m pytest -q tests/test_phase2b_real_e2e_verifier.py tests/test_phase2b_verifier.py tests/test_phase2b_portability.py tests/test_phase2_real_retrieval_smoke.py tests/test_phase2_real_workflow_smoke.py tests/test_document_ingestion.py tests/test_ingestion_quality_report.py tests/test_mineru_converter.py`:
+  24 passed.
+- `python -m pytest -q`: 81 passed.
+
+Status:
+
+```text
+Phase 2B-2 verifier -> implemented
+Phase 2B-2 real server scenario acceptance -> not_started
+Phase 2B-2 benchmark -> not benchmark_evaluated
+```
