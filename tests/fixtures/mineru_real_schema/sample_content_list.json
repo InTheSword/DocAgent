@@ -1,0 +1,46 @@
+[
+  {
+    "type": "text",
+    "text": "AFRICA",
+    "text_level": 1,
+    "bbox": [32, 101, 295, 140],
+    "page_idx": 0
+  },
+  {
+    "type": "table",
+    "img_path": "images/table.jpg",
+    "table_caption": ["Table 1 Sample"],
+    "table_footnote": ["Values are illustrative."],
+    "table_body": "<table><tr><th>Country</th><th>Value</th></tr><tr><td>A</td><td>1</td></tr></table>",
+    "bbox": [7, 300, 486, 616],
+    "page_idx": 0
+  },
+  {
+    "type": "chart",
+    "img_path": "images/chart.jpg",
+    "content": "| Country | Value |\n| A | 1 |",
+    "chart_caption": ["Figure 1 Sample"],
+    "chart_footnote": [],
+    "sub_type": "bar",
+    "bbox": [510, 374, 970, 600],
+    "page_idx": 0
+  },
+  {
+    "type": "header",
+    "text": "Sample Header",
+    "bbox": [20, 10, 200, 40],
+    "page_idx": 1
+  },
+  {
+    "type": "footer",
+    "text": "Sample Footer",
+    "bbox": [20, 720, 200, 750],
+    "page_idx": 1
+  },
+  {
+    "type": "page_number",
+    "text": "2",
+    "bbox": [480, 760, 500, 780],
+    "page_idx": 1
+  }
+]

@@ -103,14 +103,14 @@ reviewed and accepted.
 | Real Qwen3 workflow integration | accepted | GRPO workflow smoke passed |
 | Phase 2A | accepted | integration accepted, benchmark not evaluated |
 | MinerU fixture | mock_verified | synthetic fixture only |
-| Real MinerU output | not_started | Phase 2B first milestone |
+| Real MinerU output | accepted | GLOBOCAN API output converted and quality-checked |
 
 ## 4. Immediate task
 
 The next implementation task is:
 
 ```text
-prepare and validate one real MinerU structured output for one real public PDF
+review GLOBOCAN parser/EvidenceBlock quality before starting full Phase 2B E2E
 ```
 
 The task must validate:
@@ -123,6 +123,25 @@ The task must validate:
 - location metadata such as page and bbox when present;
 - reading order and section/context metadata when available;
 - one compact structure-quality JSON report.
+
+Current accepted artifact:
+
+```text
+source = data/real_documents/globocan_africa_2022/source/original.pdf
+doc_id = fe3465edd3da60d2
+source_sha256 = fe3465edd3da60d26b2020ab751d75bfba26a465a9d66c43eff5dce12f4db37a
+mineru_batch_id = 56a4776f-aa1c-47d0-8901-99038de6a851
+raw_block_count = 57
+converted_block_count = 57
+page_count = 2
+table_count = 5
+chart_count = 6
+boilerplate_count = 22
+image_reference_count = 11
+missing_image_reference_count = 0
+structure_quality = passed_with_warnings
+warning = mineru_origin_pdf_sha256_differs_from_source_pdf
+```
 
 It must not:
 
@@ -160,6 +179,12 @@ The first Phase 2B milestone is accepted only when:
 - no Qwen, retrieval benchmark, or full E2E claim is made;
 - a compact server JSON/report path is returned.
 
+Status:
+
+```text
+Phase 2B first milestone: accepted
+```
+
 ## 7. Stop condition
 
 After one real MinerU output is converted and the structure-quality report is
@@ -168,4 +193,3 @@ saved:
 ```text
 stop and review the parser/EvidenceBlock quality before starting full Phase 2B E2E
 ```
-

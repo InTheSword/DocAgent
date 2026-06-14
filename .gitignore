@@ -9,10 +9,14 @@ venv/
 data/raw/
 data/processed/
 data/benchmark/*.jsonl
+data/real_documents/
 outputs/
+outputs/mineru_api/
+outputs/reports/
 models/
 
 *.sqlite
 *.db
 *.log
-
+*.zip
+.env

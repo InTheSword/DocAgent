@@ -81,6 +81,8 @@ class EvidenceBlock:
 
     @property
     def retrieval_text(self) -> str:
+        if self.metadata.get("exclude_from_retrieval"):
+            return ""
         parts = [self.text or "", self.table_html or "", self.visual_summary or ""]
         section = self.metadata.get("section_title")
         if section:

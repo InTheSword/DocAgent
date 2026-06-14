@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from docagent.ingestion.document_registry import DocumentRecord, DocumentRegistry
+from docagent.ingestion.quality import build_structure_quality_report
 from docagent.parser.base import ParserBackend
 from docagent.parser.mineru_converter import build_page_blocks
 from docagent.retrieval.dense_encoder import DenseEncoder
@@ -21,6 +22,7 @@ class IngestionResult:
     blocks: list[EvidenceBlock]
     page_blocks: list[EvidenceBlock]
     dense_index_metadata: dict[str, object] | None = None
+    structure_quality: dict[str, object] | None = None
 
     def to_dict(self) -> dict[str, object]:
         block_type_counts = Counter(block.block_type for block in self.blocks)
@@ -32,6 +34,12 @@ class IngestionResult:
             "block_count": len(self.blocks),
             "block_type_counts": dict(sorted(block_type_counts.items())),
             "dense_index": self.dense_index_metadata,
+            "structure_quality": {
+                "overall_status": self.structure_quality.get("overall_status"),
+                "path": self.structure_quality.get("path"),
+            }
+            if self.structure_quality
+            else None,
         }
 
 
@@ -122,6 +130,24 @@ class DocumentIngestionService:
         else:
             record.index_status = "not_started"
 
+        quality_report = None
+        try:
+            quality_report = build_structure_quality_report(
+                doc_id=record.doc_id,
+                source_pdf=record.file_path,
+                mineru_output_dir=mineru_dir,
+                document_dir=document_dir,
+                blocks=blocks,
+                page_blocks=page_blocks,
+            )
+            quality_path = document_dir / "structure_quality.json"
+            quality_report["path"] = str(quality_path)
+            quality_path.write_text(json.dumps(quality_report, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception as exc:
+            quality_path = document_dir / "structure_quality.json"
+            quality_report = {"overall_status": "failed", "error": str(exc), "path": str(quality_path)}
+            quality_path.write_text(json.dumps(quality_report, ensure_ascii=False, indent=2), encoding="utf-8")
+
         self._save_document(record)
         if self.repository is not None:
             self.repository.save_evidence_blocks([*blocks, *page_blocks])
@@ -133,7 +159,13 @@ class DocumentIngestionService:
                     artifact_path=str(document_dir),
                     metadata=dense_metadata,
                 )
-        report = IngestionResult(document=record, blocks=blocks, page_blocks=page_blocks, dense_index_metadata=dense_metadata)
+        report = IngestionResult(
+            document=record,
+            blocks=blocks,
+            page_blocks=page_blocks,
+            dense_index_metadata=dense_metadata,
+            structure_quality=quality_report,
+        )
         (document_dir / "ingestion_report.json").write_text(
             json.dumps(report.to_dict(), ensure_ascii=False, indent=2),
             encoding="utf-8",

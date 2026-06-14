@@ -75,11 +75,11 @@ formal retrieval and QA benchmark -> not benchmark_evaluated
 
 The single successful smoke is integration evidence, not a performance metric.
 
-## Phase 2B Active
+## Phase 2B First Milestone Accepted
 
-The current implementation stage starts the real-document ingestion and hybrid
-retrieval MVP. It preserves Phase 1 AnswerPolicy and trace behavior while
-adding a new optional retriever injection point.
+The current implementation stage has accepted the first real structured PDF
+parsing milestone. It preserves Phase 1 AnswerPolicy and trace behavior while
+adding a real MinerU output conversion path.
 
 Completed before Phase 2B:
 
@@ -122,7 +122,30 @@ Local no-card validation:
 
 Phase 2B first milestone:
 
-- one real public PDF;
-- one real MinerU structured output produced outside the stable `docagent` environment;
-- conversion into structure-aware `EvidenceBlock` records;
-- compact structure-quality report.
+- one real public PDF: `903-africa-fact-sheet.pdf`;
+- data directory: `data/real_documents/globocan_africa_2022/`;
+- `doc_id=fe3465edd3da60d2`;
+- source SHA256:
+  `fe3465edd3da60d26b2020ab751d75bfba26a465a9d66c43eff5dce12f4db37a`;
+- MinerU API batch:
+  `56a4776f-aa1c-47d0-8901-99038de6a851`;
+- real MinerU `parse_existing` converted 57 raw content-list records into
+  57 `EvidenceBlock` records;
+- structure-quality status: `passed_with_warnings`;
+- only warning: MinerU `_origin.pdf` SHA256 differs from the submitted source
+  PDF, so the submitted PDF remains the document identity source.
+
+Validation:
+
+- `python -m pytest -q`: 72 passed.
+- Real GLOBOCAN `mineru_existing` smoke persisted SQLite document/block records.
+- Existing-batch MinerU API read-only smoke returned `state=done`, downloaded a
+  ZIP under `outputs/mineru_api/live_smoke/`, and safely extracted an ordinary
+  `*_content_list.json`.
+
+Status:
+
+```text
+Real MinerU output -> accepted
+Phase 2B first milestone -> accepted
+```
