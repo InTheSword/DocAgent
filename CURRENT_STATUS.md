@@ -1,6 +1,6 @@
 # Current Status
 
-Updated: 2026-06-14
+Updated: 2026-06-15
 
 ## Phase 1 Complete
 
@@ -171,37 +171,48 @@ Real MinerU output -> accepted
 Phase 2B first milestone -> accepted
 ```
 
-## Phase 2B-2 Implemented Locally
+## Phase 2B-2 Accepted
 
-Phase 2B-2 now has a fixed verifier for the GLOBOCAN real-document E2E
-scenario. It connects the accepted parsing path and accepted real retrieval /
-workflow interfaces without retraining or changing Phase 2A behavior.
+Phase 2B-2 real-document scenario acceptance is complete. This is a
+real-document scenario acceptance result, not a formal benchmark.
 
-Implemented:
+Accepted integration:
 
-- Added ignored Scenario QA contract for
-  `data/real_documents/globocan_africa_2022/qa/scenario_qa.jsonl`.
-- Added `scripts/verify_phase2b_real_e2e.py`.
-- The verifier performs:
-  `mineru_existing ingestion -> retrieval-eligible block filtering -> real
-  BGE-M3/FAISS/BM25/RRF/reranker retrieval -> cached top-k workflow injection
-  -> Qwen3 GRPO AnswerPolicy -> JSON/format/location validation -> SQLite
-  trace -> scenario acceptance report`.
-- Local tests use fake policies/retrieval results only to validate contracts and
-  metrics; they are not reported as real E2E acceptance.
+- Real GLOBOCAN PDF and existing MinerU output were ingested through
+  `mineru_existing`.
+- 57 raw records converted to 57 EvidenceBlocks; 22 boilerplate blocks were
+  excluded, leaving 35 retrieval blocks.
+- Real BGE-M3, FAISS, BM25, RRF, Transformers sequence-classification reranker,
+  and Qwen3 GRPO AnswerPolicy ran end to end.
+- JSON, format, and location validation completed through the existing workflow.
+- SQLite trace persisted 8 `qa_runs` and 49 `tool_traces`.
+- `no_gold_leakage=true`, `no_mock_fallback=true`, and
+  `persisted_absolute_path_count=0`.
 
-Local validation:
+Scenario metrics:
 
-- `python -m py_compile scripts/verify_phase2b_real_e2e.py tests/test_phase2b_real_e2e_verifier.py`: passed.
-- Targeted tests:
-  `python -m pytest -q tests/test_phase2b_real_e2e_verifier.py tests/test_phase2b_verifier.py tests/test_phase2b_portability.py tests/test_phase2_real_retrieval_smoke.py tests/test_phase2_real_workflow_smoke.py tests/test_document_ingestion.py tests/test_ingestion_quality_report.py tests/test_mineru_converter.py`:
-  24 passed.
-- `python -m pytest -q`: 81 passed.
+- Scenario samples: 8/8 completed.
+- Retrieval: `Recall@1=0.875`, `Recall@3=0.875`, `Recall@5=0.875`,
+  `MRR=0.875`, `gold_page_hit_rate=1.0`.
+- Answer: `normalized_exact_match=0.625`, `token_f1=0.675`,
+  `character_f1=0.7842548076923077`, `answer_hit=0.625`,
+  `valid_json_rate=1.0`, `format_valid_rate=1.0`.
+- Location: `block_location_hit=0.875`, `page_location_hit=1.0`,
+  `final_location_in_retrieved_top_k=1.0`, `location_valid_rate=1.0`.
+
+Failure taxonomy:
+
+- 2 reader table-column selection errors: q001 and q002 selected the Males
+  column instead of Both sexes while retrieval and location were correct.
+- 1 retrieval / partial-answer / location error: q008 missed the large table
+  gold block, returned a partial liver cases answer, and cited the wrong block.
 
 Status:
 
 ```text
-Phase 2B-2 verifier -> implemented
-Phase 2B-2 real server scenario acceptance -> not_started
-Phase 2B-2 benchmark -> not benchmark_evaluated
+Phase 2B-2 -> accepted
+implementation/integration -> accepted
+scenario quality -> measured
+formal benchmark -> not benchmark_evaluated
+quality optimization -> deferred
 ```

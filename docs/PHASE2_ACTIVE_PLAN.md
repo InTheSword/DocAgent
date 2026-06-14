@@ -120,11 +120,11 @@ MP-DocVQA, or general PDF-QA benchmark.
 | Phase 2A | accepted | integration accepted, benchmark not evaluated |
 | MinerU fixture | mock_verified | synthetic fixture only |
 | Real MinerU output | accepted | GLOBOCAN API output converted and quality-checked |
-| Phase 2B-2 E2E verifier | implemented | local code/tests passed; server real-model run pending |
+| Phase 2B-2 E2E verifier | accepted | real GLOBOCAN server scenario acceptance passed |
 
 ## 4. Immediate task
 
-The current implementation task is:
+The completed implementation task is:
 
 ```text
 run fixed GLOBOCAN real-document E2E verifier on AutoDL
@@ -172,15 +172,55 @@ scenario_qa = data/real_documents/globocan_africa_2022/qa/scenario_qa.jsonl
 verifier = scripts/verify_phase2b_real_e2e.py
 target_report = outputs/verification/phase2b_real_e2e/verification_report.json
 local_status = implemented
-server_real_model_status = pending
+server_real_model_status = accepted
 ```
+
+Current Phase 2B-2 server result:
+
+```text
+result_type = real-document scenario acceptance
+status = success
+sample_count = 8
+completed_count = 8
+retrieval_block_count = 35
+sqlite_qa_runs = 8
+sqlite_tool_traces = 49
+no_gold_leakage = true
+no_mock_fallback = true
+
+Retrieval:
+Recall@1 = 0.875
+Recall@3 = 0.875
+Recall@5 = 0.875
+MRR = 0.875
+gold_page_hit_rate = 1.0
+
+Answer:
+normalized_exact_match = 0.625
+token_f1 = 0.675
+character_f1 = 0.7842548076923077
+answer_hit = 0.625
+valid_json_rate = 1.0
+format_valid_rate = 1.0
+
+Location:
+block_location_hit = 0.875
+page_location_hit = 1.0
+final_location_in_retrieved_top_k = 1.0
+location_valid_rate = 1.0
+
+Failure cases:
+reader_table_column_selection_error = 2
+retrieval_miss_partial_answer_location_miss = 1
+```
+
+This is a real-document scenario acceptance result, not a formal benchmark.
 
 It must not:
 
 - install MinerU into the stable `docagent` environment;
 - call MinerU API again;
 - process CDC PDF;
-- claim accepted before the server real-model verifier succeeds;
 - run formal retrieval or QA benchmark;
 - modify SFT, GRPO, reward, prompts, or checkpoints;
 - add TAT-QA, VLM, Demo, or Phase 3 work.
@@ -217,15 +257,16 @@ Status:
 ```text
 Phase 2B first milestone: accepted
 Phase 2B first milestone merge-prep quality hardening: accepted
-Phase 2B-2 real-document E2E verifier: implemented
-Phase 2B-2 server scenario acceptance: not_started
+Phase 2B-2 real-document E2E verifier: accepted
+Phase 2B-2 implementation/integration: accepted
+Phase 2B-2 scenario quality: measured
+formal benchmark: not benchmark_evaluated
 ```
 
 ## 7. Stop condition
 
-After the fixed GLOBOCAN E2E verifier is implemented, locally tested, committed,
-and pushed:
+After Phase 2B-2 server scenario acceptance is recorded:
 
 ```text
-stop and wait for one AutoDL real-model verifier run
+stop before quality optimization, CDC, demo, formal benchmark, or training changes
 ```

@@ -85,3 +85,33 @@ Constraints:
   `FlagReranker.compute_score()` work.
 - `FlagReranker` may only be revisited as an explicit optional backend after
   compatibility is proven.
+
+## 2026-06-15: Phase 2B-2 Real Document E2E Acceptance
+
+Decision: accept Phase 2B-2 as a real-document scenario integration milestone,
+with scenario quality measured and formal benchmark evaluation still deferred.
+
+Evidence:
+
+- The fixed verifier `scripts/verify_phase2b_real_e2e.py` completed on the
+  GLOBOCAN Africa 2022 PDF with real MinerU output, BGE-M3, FAISS, BM25, RRF,
+  Transformers sequence-classification reranker, Qwen3 GRPO AnswerPolicy, JSON
+  validation, location validation, and SQLite trace.
+- `sample_count=8`, `completed_count=8`, `no_gold_leakage=true`,
+  `no_mock_fallback=true`, `qa_runs=8`, and `tool_traces=49`.
+- Retrieval metrics were `Recall@1=0.875`, `Recall@3=0.875`,
+  `Recall@5=0.875`, and `MRR=0.875`.
+- Answer metrics were `normalized_exact_match=0.625`, `token_f1=0.675`,
+  `character_f1=0.7842548076923077`, and `answer_hit=0.625`.
+- Location metrics were `block_location_hit=0.875`, `page_location_hit=1.0`,
+  `final_location_in_retrieved_top_k=1.0`, and `location_valid_rate=1.0`.
+
+Boundary:
+
+- This is a real-document scenario acceptance result, not a formal DocVQA,
+  MP-DocVQA, or general PDF-QA benchmark.
+- Do not describe the current metrics as benchmark performance or model-quality
+  sufficiency.
+- Defer quality optimization. Current known failures are two reader table-column
+  selection errors and one large-table retrieval / partial-answer / location
+  error.
