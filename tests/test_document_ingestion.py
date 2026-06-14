@@ -44,7 +44,7 @@ def test_document_ingestion_parse_existing_is_idempotent_and_writes_quality(tmp_
     (mineru_dir / "sample_content_list.json").write_text(
         json.dumps(
             [
-                {"type": "header", "page_idx": 0, "text": "Header", "bbox": [0, 0, 10, 10]},
+                {"type": "header", "page_idx": 0, "text": "", "bbox": [0, 0, 10, 10]},
                 {"type": "text", "page_idx": 0, "text": "Body", "bbox": [0, 20, 10, 30]},
             ]
         ),
@@ -64,4 +64,8 @@ def test_document_ingestion_parse_existing_is_idempotent_and_writes_quality(tmp_
     assert len(stored_blocks) == 2
     assert stored_blocks[0].metadata["is_boilerplate"] is True
     assert quality["boilerplate_count"] == 1
+    assert quality["empty_boilerplate_count"] == 1
+    assert quality["empty_boilerplate_block_ids"] == [stored_blocks[0].block_id]
+    assert quality["missing_main_content_count"] == 1
+    assert quality["missing_retrieval_content_count"] == 0
     assert quality["overall_status"] == "passed"

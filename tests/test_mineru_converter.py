@@ -30,7 +30,9 @@ def test_mineru_content_list_to_blocks_handles_text_table_image(tmp_path: Path) 
     assert blocks[0].location.bbox == [1.0, 2.0, 3.0, 4.0]
     assert blocks[1].table_html == "<table></table>"
     assert blocks[2].metadata["img_path"] == "figures/chart.png"
-    assert blocks[2].image_path.endswith("figures\\chart.png") or blocks[2].image_path.endswith("figures/chart.png")
+    assert blocks[2].image_path == "figures/chart.png"
+    assert "normalized_resource_path" not in blocks[2].metadata
+    assert "source_content_list" not in blocks[2].metadata
     assert blocks[3].metadata["unknown_raw_type"] is True
     assert blocks[0].metadata["next_block_id"] == blocks[1].block_id
     assert blocks[1].metadata["previous_block_id"] == blocks[0].block_id
@@ -53,14 +55,18 @@ def test_mineru_real_schema_preserves_boilerplate_chart_and_resources(tmp_path: 
     assert table.block_type == "table"
     assert table.table_html.startswith("<table>")
     assert table.metadata["table_caption"] == ["Table 1 Sample"]
+    assert table.image_path == "mineru/images/table.jpg"
     assert table.metadata["resource_exists"] is True
     assert chart.block_type == "image"
+    assert chart.image_path == "mineru/images/chart.jpg"
     assert chart.metadata["raw_mineru_type"] == "chart"
     assert chart.metadata["sub_type"] == "bar"
     assert chart.metadata["resource_exists"] is True
     assert [block.metadata["is_boilerplate"] for block in blocks[3:]] == [True, True, True]
     assert all(block.metadata["exclude_from_retrieval"] for block in blocks[3:])
     assert all(block.retrieval_text == "" for block in blocks[3:])
+    assert all("normalized_resource_path" not in block.metadata for block in blocks)
+    assert all("source_content_list" not in block.metadata for block in blocks)
     assert blocks[-1].metadata["previous_block_id"] == blocks[-2].block_id
 
 

@@ -1,6 +1,6 @@
 # Current Status
 
-Updated: 2026-06-13
+Updated: 2026-06-14
 
 ## Phase 1 Complete
 
@@ -137,11 +137,32 @@ Phase 2B first milestone:
 
 Validation:
 
-- `python -m pytest -q`: 72 passed.
+- `python -m pytest -q`: 72 passed before merge-prep hardening.
 - Real GLOBOCAN `mineru_existing` smoke persisted SQLite document/block records.
 - Existing-batch MinerU API read-only smoke returned `state=done`, downloaded a
   ZIP under `outputs/mineru_api/live_smoke/`, and safely extracted an ordinary
   `*_content_list.json`.
+
+Merge-prep hardening:
+
+- Persisted MinerU artifact paths are document-directory-relative POSIX paths
+  in EvidenceBlocks, page documents, ingestion report, structure-quality report,
+  source manifest, and SQLite `payload_json`.
+- `image_path` is the EvidenceBlock resource reference; duplicate
+  `metadata.normalized_resource_path` and `metadata.source_content_list` are no
+  longer written.
+- Structure quality now reports `missing_retrieval_content_count`,
+  `empty_boilerplate_count`, and `empty_boilerplate_block_ids` separately, so
+  retained empty boilerplate does not fail quality status.
+- Added fixed verifier `scripts/verify_phase2b_real_pdf.py`.
+- Local validation after hardening:
+  `python -m pytest -q`: 74 passed.
+- Real GLOBOCAN verifier:
+  `outputs/verification/phase2b_globocan/verification_report.json`;
+  `raw_block_count=57`, `converted_block_count=57`, `page_document_count=2`,
+  `table_count=5`, `chart_count=6`, `empty_boilerplate_count=2`,
+  `missing_retrieval_content_count=0`, `persisted_absolute_path_count=0`,
+  `overall_status=passed_with_warnings`.
 
 Status:
 

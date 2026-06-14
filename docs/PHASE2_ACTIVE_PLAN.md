@@ -107,7 +107,7 @@ reviewed and accepted.
 
 ## 4. Immediate task
 
-The next implementation task is:
+The completed merge-prep task is:
 
 ```text
 review GLOBOCAN parser/EvidenceBlock quality before starting full Phase 2B E2E
@@ -137,10 +137,15 @@ page_count = 2
 table_count = 5
 chart_count = 6
 boilerplate_count = 22
+empty_boilerplate_count = 2
+missing_retrieval_content_count = 0
 image_reference_count = 11
 missing_image_reference_count = 0
+persisted_absolute_path_count = 0
 structure_quality = passed_with_warnings
 warning = mineru_origin_pdf_sha256_differs_from_source_pdf
+verifier = scripts/verify_phase2b_real_pdf.py
+verification_report = outputs/verification/phase2b_globocan/verification_report.json
 ```
 
 It must not:
@@ -183,6 +188,7 @@ Status:
 
 ```text
 Phase 2B first milestone: accepted
+Phase 2B first milestone merge-prep quality hardening: accepted
 ```
 
 ## 7. Stop condition

@@ -141,11 +141,11 @@ class DocumentIngestionService:
                 page_blocks=page_blocks,
             )
             quality_path = document_dir / "structure_quality.json"
-            quality_report["path"] = str(quality_path)
+            quality_report["path"] = "structure_quality.json"
             quality_path.write_text(json.dumps(quality_report, ensure_ascii=False, indent=2), encoding="utf-8")
         except Exception as exc:
             quality_path = document_dir / "structure_quality.json"
-            quality_report = {"overall_status": "failed", "error": str(exc), "path": str(quality_path)}
+            quality_report = {"overall_status": "failed", "error": str(exc), "path": "structure_quality.json"}
             quality_path.write_text(json.dumps(quality_report, ensure_ascii=False, indent=2), encoding="utf-8")
 
         self._save_document(record)

@@ -17,6 +17,24 @@ from docagent.storage.db import connect
 from docagent.storage.repositories import DocumentRepository
 
 
+def _looks_like_local_absolute_path(value: str) -> bool:
+    return (
+        (len(value) >= 3 and value[1] == ":" and value[2] in {"\\", "/"})
+        or value.startswith("\\\\")
+        or (value.startswith("/") and "://" not in value)
+    )
+
+
+def _sanitize_manifest_paths(value):
+    if isinstance(value, dict):
+        return {key: _sanitize_manifest_paths(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_manifest_paths(item) for item in value]
+    if isinstance(value, str) and _looks_like_local_absolute_path(value):
+        return Path(value).name
+    return value
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--file")
@@ -81,7 +99,13 @@ def main() -> None:
             shutil.copytree(source_output, target)
             manifest = source_output.parent / "source_manifest.json"
             if manifest.exists():
-                shutil.copy2(manifest, Path(preview_record.document_dir) / "mineru_source_manifest.json")
+                manifest_payload = json.loads(manifest.read_text(encoding="utf-8-sig"))
+                manifest_payload = _sanitize_manifest_paths(manifest_payload)
+                manifest_payload["source_file"] = "source/original.pdf"
+                (Path(preview_record.document_dir) / "mineru_source_manifest.json").write_text(
+                    json.dumps(manifest_payload, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
     elif args.parser == "mineru_api":
         from docagent.ingestion.document_registry import DocumentRegistry
 

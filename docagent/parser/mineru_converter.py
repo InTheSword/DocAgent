@@ -117,25 +117,36 @@ def _image_path(item: dict[str, Any]) -> str | None:
     return str(value) if value else None
 
 
-def _normalize_resource_path(raw_path: str | None, root: Path) -> tuple[str | None, bool | None]:
+def _default_document_dir(content_list_path: Path) -> Path:
+    return content_list_path.parent.parent if content_list_path.parent.name == "mineru" else content_list_path.parent
+
+
+def _relative_posix(path: Path, document_dir: Path) -> str:
+    try:
+        return path.resolve().relative_to(document_dir.resolve()).as_posix()
+    except ValueError:
+        return path.name if path.is_absolute() else path.as_posix()
+
+
+def _resolve_resource_path(raw_path: str | None, root: Path, document_dir: Path) -> tuple[str | None, bool | None]:
     if not raw_path:
         return None, None
     path = Path(raw_path)
     if not path.is_absolute():
         path = root / path
-    return str(path), path.is_file()
+    return _relative_posix(path, document_dir), path.is_file()
 
 
-def _layout_metadata(content_list_path: Path) -> dict[str, Any]:
+def _layout_metadata(content_list_path: Path, document_dir: Path) -> dict[str, Any]:
     layout_path = content_list_path.parent / "layout.json"
     if not layout_path.exists():
         return {}
     try:
         data = json.loads(layout_path.read_text(encoding="utf-8-sig"))
     except Exception:
-        return {"layout_path": str(layout_path), "layout_readable": False}
+        return {"layout_path": _relative_posix(layout_path, document_dir), "layout_readable": False}
     return {
-        "layout_path": str(layout_path),
+        "layout_path": _relative_posix(layout_path, document_dir),
         "layout_readable": True,
         "mineru_backend": data.get("_backend"),
         "mineru_version": data.get("_version_name"),
@@ -152,6 +163,7 @@ def _make_block(
     index: int,
     content_list_path: Path,
     resource_root: Path,
+    document_dir: Path,
     provenance: dict[str, Any],
 ) -> EvidenceBlock | None:
     raw_type = _raw_type(item)
@@ -162,10 +174,10 @@ def _make_block(
     text = _item_text(item, raw_type, block_type)
     table_html = _table_html(item) if block_type == "table" else None
     raw_image_path = _image_path(item)
-    normalized_path, resource_exists = _normalize_resource_path(raw_image_path, resource_root)
-    image_path = normalized_path if block_type == "image" else None
+    resource_path, resource_exists = _resolve_resource_path(raw_image_path, resource_root, document_dir)
+    image_path = resource_path if block_type == "image" else None
     if block_type == "table" and raw_image_path:
-        image_path = normalized_path
+        image_path = resource_path
     if not text and not table_html and not image_path and not boilerplate:
         return None
 
@@ -176,7 +188,6 @@ def _make_block(
         "reading_order": index,
         "raw_item_index": index,
         "raw_mineru_type": raw_type,
-        "source_content_list": str(content_list_path),
         "is_boilerplate": boilerplate,
         "exclude_from_retrieval": boilerplate,
         "mineru_provenance": provenance,
@@ -194,7 +205,6 @@ def _make_block(
         metadata["table_body"] = table_html
     if raw_image_path is not None:
         metadata["img_path"] = raw_image_path
-        metadata["normalized_resource_path"] = normalized_path
         metadata["resource_exists"] = bool(resource_exists)
 
     return EvidenceBlock(
@@ -349,6 +359,7 @@ def content_list_to_blocks(
     content_list_path: str | Path,
     normalize: bool = False,
     resource_root: str | Path | None = None,
+    document_dir: str | Path | None = None,
 ) -> list[EvidenceBlock]:
     path = Path(content_list_path)
     data = json.loads(path.read_text(encoding="utf-8-sig"))
@@ -357,8 +368,9 @@ def content_list_to_blocks(
     if not isinstance(data, list):
         raise ValueError("MinerU content list must be a list or a dict with content_list/blocks")
     resource_base = Path(resource_root) if resource_root is not None else path.parent
-    provenance = _layout_metadata(path)
-    provenance["content_list_file"] = str(path)
+    document_base = Path(document_dir) if document_dir is not None else _default_document_dir(path)
+    provenance = _layout_metadata(path, document_base)
+    provenance["content_list_file"] = _relative_posix(path, document_base)
     blocks = [
         _make_block(
             doc_id=doc_id,
@@ -366,6 +378,7 @@ def content_list_to_blocks(
             index=index,
             content_list_path=path,
             resource_root=resource_base,
+            document_dir=document_base,
             provenance=provenance,
         )
         for index, item in enumerate(data, start=1)

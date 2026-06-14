@@ -11,11 +11,18 @@ from docagent.parser.mineru_converter import find_content_list, raw_content_list
 from docagent.schemas import EvidenceBlock
 
 
-def _file_info(path: Path | None) -> dict[str, Any] | None:
+def _relative_posix(path: Path, document_dir: Path) -> str:
+    try:
+        return path.resolve().relative_to(document_dir.resolve()).as_posix()
+    except ValueError:
+        return path.name if path.is_absolute() else path.as_posix()
+
+
+def _file_info(path: Path | None, document_dir: Path) -> dict[str, Any] | None:
     if path is None or not path.exists():
         return None
     return {
-        "path": str(path),
+        "path": _relative_posix(path, document_dir),
         "size": path.stat().st_size,
         "sha256": sha256_file(path),
     }
@@ -40,12 +47,12 @@ def _read_json(path: Path) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
-def _layout_info(mineru_output_dir: Path) -> dict[str, Any]:
+def _layout_info(mineru_output_dir: Path, document_dir: Path) -> dict[str, Any]:
     layout_path = mineru_output_dir / "layout.json"
     data = _read_json(layout_path)
     if data is None:
         return {
-            "layout_path": str(layout_path),
+            "layout_path": _relative_posix(layout_path, document_dir),
             "layout_readable": False,
             "layout_page_count": None,
             "mineru_backend": None,
@@ -54,7 +61,7 @@ def _layout_info(mineru_output_dir: Path) -> dict[str, Any]:
             "mineru_vlm_ocr_enable": None,
         }
     return {
-        "layout_path": str(layout_path),
+        "layout_path": _relative_posix(layout_path, document_dir),
         "layout_readable": True,
         "layout_page_count": len(data.get("pdf_info") or []),
         "mineru_backend": data.get("_backend"),
@@ -73,7 +80,7 @@ def _source_manifest(document_dir: Path, mineru_output_dir: Path) -> dict[str, A
         data = _read_json(path)
         if data is not None:
             data = dict(data)
-            data["manifest_path"] = str(path)
+            data["manifest_path"] = _relative_posix(path, document_dir)
             return data
     return {}
 
@@ -131,6 +138,18 @@ def _missing_main_content_count(blocks: list[EvidenceBlock]) -> int:
     return count
 
 
+def _missing_retrieval_content_count(blocks: list[EvidenceBlock]) -> int:
+    return _missing_main_content_count([block for block in blocks if not block.metadata.get("exclude_from_retrieval")])
+
+
+def _empty_boilerplate_block_ids(blocks: list[EvidenceBlock]) -> list[str]:
+    return [
+        block.block_id
+        for block in blocks
+        if block.metadata.get("is_boilerplate") and not (block.text or block.table_html or block.image_path)
+    ]
+
+
 def _raw_keys(content_list_path: Path) -> set[str]:
     try:
         data = json.loads(content_list_path.read_text(encoding="utf-8-sig"))
@@ -160,11 +179,11 @@ def build_structure_quality_report(
     doc_dir = Path(document_dir)
     content_list = find_content_list(mineru_dir)
     raw_stats = raw_content_list_stats(content_list)
-    layout = _layout_info(mineru_dir)
+    layout = _layout_info(mineru_dir, doc_dir)
     manifest = _source_manifest(doc_dir, mineru_dir)
     origin_pdf = _origin_pdf(mineru_dir)
-    source_info = _file_info(source_path)
-    origin_info = _file_info(origin_pdf)
+    source_info = _file_info(source_path, doc_dir)
+    origin_info = _file_info(origin_pdf, doc_dir)
     warnings: list[str] = []
 
     same_binary = None
@@ -176,7 +195,7 @@ def build_structure_quality_report(
     missing_image_blocks = [
         block.block_id
         for block in blocks
-        if block.metadata.get("normalized_resource_path") and not block.metadata.get("resource_exists")
+        if block.image_path and not block.metadata.get("resource_exists")
     ]
     if missing_image_blocks:
         warnings.append("missing_image_references")
@@ -197,13 +216,15 @@ def build_structure_quality_report(
     if not reading_order_contiguous:
         warnings.append("non_contiguous_reading_order")
 
-    image_ref_count = sum(1 for block in blocks if block.metadata.get("normalized_resource_path"))
+    image_ref_count = sum(1 for block in blocks if block.image_path)
     table_count = sum(1 for block in blocks if block.block_type == "table")
     chart_count = sum(1 for block in blocks if block.metadata.get("raw_mineru_type") == "chart")
     boilerplate_count = sum(1 for block in blocks if block.metadata.get("is_boilerplate"))
     table_html_count = sum(1 for block in blocks if block.table_html)
     missing_bbox_count = sum(1 for block in blocks if block.location.bbox is None)
     missing_content_count = _missing_main_content_count(blocks)
+    missing_retrieval_content_count = _missing_retrieval_content_count(blocks)
+    empty_boilerplate_block_ids = _empty_boilerplate_block_ids(blocks)
 
     failed = not blocks or not block_id_unique or not adjacency_valid or bool(missing_image_blocks)
     status = "failed" if failed else "passed_with_warnings" if warnings else "passed"
@@ -246,7 +267,7 @@ def build_structure_quality_report(
         "source_pdf_page_count": _pdf_page_count(source_path),
         "layout_page_count": layout["layout_page_count"],
         "content_list_page_count": raw_stats["content_list_pages"],
-        "content_list_file": str(content_list),
+        "content_list_file": _relative_posix(content_list, doc_dir),
         "raw_block_count": raw_stats["raw_block_count"],
         "converted_block_count": len(blocks),
         "page_document_count": len(page_blocks),
@@ -256,10 +277,14 @@ def build_structure_quality_report(
         "missing_or_invalid_bbox_count": raw_stats["missing_or_invalid_bbox_count"],
         "missing_converted_bbox_count": missing_bbox_count,
         "missing_main_content_count": missing_content_count,
+        "missing_main_content_includes_boilerplate": True,
+        "missing_retrieval_content_count": missing_retrieval_content_count,
         "block_id_unique": block_id_unique,
         "reading_order_contiguous": reading_order_contiguous,
         "adjacency_valid": adjacency_valid,
         "boilerplate_count": boilerplate_count,
+        "empty_boilerplate_count": len(empty_boilerplate_block_ids),
+        "empty_boilerplate_block_ids": empty_boilerplate_block_ids,
         "table_count": table_count,
         "table_html_count": table_html_count,
         "chart_count": chart_count,

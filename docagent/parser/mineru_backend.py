@@ -24,7 +24,7 @@ class MinerUParserBackend:
         elif self.mode != "parse_existing":
             raise ValueError(f"unsupported MinerU parser mode: {self.mode}")
         content_list = find_content_list(output_dir)
-        return content_list_to_blocks(doc_id=doc_id, content_list_path=content_list)
+        return content_list_to_blocks(doc_id=doc_id, content_list_path=content_list, document_dir=output_dir.parent)
 
     def _run_local_cli(self, *, file_path: Path, output_dir: Path) -> None:
         if shutil.which(self.command) is None:
