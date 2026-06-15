@@ -143,3 +143,30 @@ Constraints:
   remains `not_started` until AutoDL runs real BGE-M3, reranker, SFT, and GRPO.
 - The result is a fixed-subset evaluation unless an official complete split and
   official scoring protocol are used.
+
+## 2026-06-15: Phase 3A Retrieval Corpus Contract
+
+Decision: do not treat per-QA MP-DocVQA evidence arrays as a legal retrieval
+benchmark corpus.
+
+Rationale:
+
+- `scripts/build_mpdocvqa_imdb_subset.py` builds each QA record from IMDb
+  `image_name` and `ocr_tokens`, then stores those pages as that record's
+  `evidence`.
+- `metadata.imdb_doc_pages` and `metadata.total_doc_pages` are retained as
+  metadata; the script does not emit a separate canonical per-document OCR
+  corpus.
+- Server audit found repeated `doc_id` values with multiple evidence
+  signatures and partial page coverage, so simply unioning per-QA evidence
+  would not be a proven query-independent corpus.
+
+Constraints:
+
+- BM25 vs Hybrid Recall/MRR requires an explicit `--corpus-input` containing
+  stable query-independent `EvidenceBlock` records.
+- Without that corpus, retrieval evaluation is `blocked` and must fail
+  validation with a non-zero exit code.
+- Valid reader artifacts may still be used for SFT vs GRPO through
+  `--answer-only`, but that path is an AnswerPolicy comparison only and must
+  not report retrieval metrics.

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from argparse import Namespace
 from pathlib import Path
 
@@ -9,10 +11,13 @@ import pytest
 from docagent.eval.phase3_focused import (
     DEFAULT_SEED,
     fixed_evidence_hash,
+    load_corpus_blocks,
+    qid_hash,
     run_focused_evaluation,
     select_stable_subset,
     stable_sample_key,
     validate_benchmark_contract,
+    validate_reader_artifact_contract,
     validate_no_forbidden_paths,
 )
 from docagent.schemas import DocAgentSample, EvidenceBlock, EvidenceLocation
@@ -61,12 +66,31 @@ def _sample_records() -> list[dict]:
     ]
 
 
-def _args(tmp_path: Path, input_path: Path) -> Namespace:
+def _qa_records_without_reader_evidence() -> list[dict]:
+    records = _sample_records()
+    for record in records:
+        record["evidence"] = []
+    return records
+
+
+def _corpus_records() -> list[dict]:
+    return [
+        _block("doc_invoice", "invoice_date_block", "Invoice Date: March 12, 2020"),
+        _block("doc_invoice", "invoice_total_block", "Total: $42.00"),
+        _block("doc_invoice", "invoice_vendor_block", "Vendor: Example Co."),
+    ]
+
+
+def _args(tmp_path: Path, input_path: Path, corpus_path: Path | None = None) -> Namespace:
     return Namespace(
         benchmark_input=input_path.relative_to(tmp_path).as_posix(),
+        qa_input=None,
+        corpus_input=corpus_path.relative_to(tmp_path).as_posix() if corpus_path else None,
         output_root="outputs/evaluation/phase3_focused_eval",
         run_id="fixture-run",
         force=True,
+        validate_only=False,
+        answer_only=False,
         seed=DEFAULT_SEED,
         retrieval_limit=2,
         answer_limit=2,
@@ -116,6 +140,18 @@ def test_benchmark_contract_rejects_pre_retrieved_and_missing_gold(tmp_path: Pat
     assert any("missing metadata.gold_block_ids" in error for error in contract.errors)
 
 
+def test_cli_help_subprocess_starts() -> None:
+    result = subprocess.run(
+        [sys.executable, "scripts/run_phase3_focused_eval.py", "--help"],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "--corpus-input" in result.stdout
+    assert "--answer-only" in result.stdout
+
+
 def test_stable_subset_uses_qid_hash_not_file_prefix() -> None:
     samples = [
         DocAgentSample.from_dict(
@@ -138,11 +174,101 @@ def test_stable_subset_uses_qid_hash_not_file_prefix() -> None:
     assert [sample.qid for sample in selected] != ["q0", "q1", "q2"]
 
 
-def test_run_focused_evaluation_fixture_outputs_contracts(tmp_path: Path) -> None:
+def test_query_conditioned_evidence_is_not_retrieval_corpus(tmp_path: Path) -> None:
     input_path = tmp_path / "phase3_candidate.jsonl"
     write_jsonl(input_path, _sample_records())
+    samples = [DocAgentSample.from_dict(record) for record in read_jsonl(input_path)]
 
-    summary = run_focused_evaluation(_args(tmp_path, input_path), root=tmp_path)
+    contract = validate_benchmark_contract(samples, input_path=input_path)
+
+    assert contract.status == "invalid"
+    assert contract.corpus_source == "embedded_query_evidence"
+    assert contract.corpus_is_query_independent is False
+    assert any("--corpus-input" in error for error in contract.errors)
+
+
+def test_same_doc_multiple_evidence_signatures_are_reported(tmp_path: Path) -> None:
+    records = _sample_records()
+    records[1]["evidence"] = [
+        _block("doc_invoice", "invoice_total_block", "Total: $42.00"),
+        _block("doc_invoice", "invoice_vendor_block", "Vendor: Example Co."),
+    ]
+    input_path = tmp_path / "phase3_candidate.jsonl"
+    write_jsonl(input_path, records)
+    samples = [DocAgentSample.from_dict(record) for record in read_jsonl(input_path)]
+
+    contract = validate_benchmark_contract(samples, input_path=input_path)
+
+    assert contract.status == "invalid"
+    assert contract.repeated_doc_audit
+    assert contract.repeated_doc_audit["inconsistent_repeated_doc_count"] == 1
+    assert contract.repeated_doc_audit["inconsistent_doc_ids"] == ["doc_invoice"]
+
+
+def test_independent_qa_and_corpus_contract_passes(tmp_path: Path) -> None:
+    qa_path = tmp_path / "phase3_qa.jsonl"
+    corpus_path = tmp_path / "phase3_corpus.jsonl"
+    write_jsonl(qa_path, _qa_records_without_reader_evidence())
+    write_jsonl(corpus_path, _corpus_records())
+    samples = [DocAgentSample.from_dict(record) for record in read_jsonl(qa_path)]
+    blocks = load_corpus_blocks(corpus_path)
+
+    contract = validate_benchmark_contract(samples, input_path=qa_path, corpus_blocks=blocks, corpus_input_path=corpus_path)
+    second_contract = validate_benchmark_contract(
+        samples,
+        input_path=qa_path,
+        corpus_blocks=load_corpus_blocks(corpus_path),
+        corpus_input_path=corpus_path,
+    )
+
+    assert contract.status == "ready"
+    assert contract.corpus_source == "independent_corpus_input"
+    assert contract.corpus_is_query_independent is True
+    assert contract.gold_block_coverage["coverage_rate"] == 1.0
+    assert contract.corpus_hash == second_contract.corpus_hash
+    assert contract.qid_hash == qid_hash(["q_date", "q_total"])
+
+
+def test_gold_block_missing_from_independent_corpus_fails(tmp_path: Path) -> None:
+    qa_path = tmp_path / "phase3_qa.jsonl"
+    corpus_path = tmp_path / "phase3_corpus.jsonl"
+    write_jsonl(qa_path, _qa_records_without_reader_evidence())
+    write_jsonl(corpus_path, [_block("doc_invoice", "invoice_date_block", "Invoice Date: March 12, 2020")])
+    samples = [DocAgentSample.from_dict(record) for record in read_jsonl(qa_path)]
+
+    contract = validate_benchmark_contract(
+        samples,
+        input_path=qa_path,
+        corpus_blocks=load_corpus_blocks(corpus_path),
+        corpus_input_path=corpus_path,
+    )
+
+    assert contract.status == "invalid"
+    assert contract.gold_block_coverage["coverage_rate"] == 0.5
+    assert any("invoice_total_block" in error for error in contract.errors)
+
+
+def test_reader_artifact_is_ready_but_not_retrieval_benchmark(tmp_path: Path) -> None:
+    path = tmp_path / "mp_docvqa_dev_sft_retrieved_clean.jsonl"
+    write_jsonl(path, _sample_records())
+    samples = [DocAgentSample.from_dict(record) for record in read_jsonl(path)]
+
+    retrieval_contract = validate_benchmark_contract(samples, input_path=path)
+    reader_contract = validate_reader_artifact_contract(samples, input_path=path)
+
+    assert retrieval_contract.status == "invalid"
+    assert retrieval_contract.role == "pre_retrieved_reader_data"
+    assert reader_contract.status == "ready"
+    assert reader_contract.corpus_source == "provided_reader_evidence"
+
+
+def test_run_focused_evaluation_fixture_outputs_contracts(tmp_path: Path) -> None:
+    input_path = tmp_path / "phase3_qa.jsonl"
+    corpus_path = tmp_path / "phase3_corpus.jsonl"
+    write_jsonl(input_path, _qa_records_without_reader_evidence())
+    write_jsonl(corpus_path, _corpus_records())
+
+    summary = run_focused_evaluation(_args(tmp_path, input_path, corpus_path), root=tmp_path)
 
     run_dir = tmp_path / "outputs" / "evaluation" / "phase3_focused_eval" / "fixture-run"
     fixed_path = run_dir / "answer_policy" / "fixed_evidence.jsonl"
@@ -162,13 +288,54 @@ def test_run_focused_evaluation_fixture_outputs_contracts(tmp_path: Path) -> Non
     benchmark_manifest = json.loads((run_dir / "benchmark_manifest.json").read_text(encoding="utf-8"))
     assert not validate_no_forbidden_paths(run_manifest)
     assert not validate_no_forbidden_paths(benchmark_manifest)
+    assert benchmark_manifest["retrieval_contract"]["corpus_is_query_independent"] is True
 
 
 def test_real_backends_are_required_unless_mock_flag(tmp_path: Path) -> None:
     input_path = tmp_path / "phase3_candidate.jsonl"
-    write_jsonl(input_path, _sample_records())
-    args = _args(tmp_path, input_path)
+    corpus_path = tmp_path / "phase3_corpus.jsonl"
+    write_jsonl(input_path, _qa_records_without_reader_evidence())
+    write_jsonl(corpus_path, _corpus_records())
+    args = _args(tmp_path, input_path, corpus_path)
     args.allow_mock_backends = False
 
     with pytest.raises(RuntimeError, match="hash dense backend"):
         run_focused_evaluation(args, root=tmp_path)
+
+
+def test_contract_failure_returns_nonzero_exit_code(tmp_path: Path) -> None:
+    input_path = tmp_path / "phase3_candidate.jsonl"
+    write_jsonl(input_path, _sample_records())
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_phase3_focused_eval.py",
+            "--benchmark-input",
+            str(input_path),
+            "--validate-only",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "failed"
+    assert payload["retrieval_evaluation"] == "blocked"
+
+
+def test_answer_only_runs_when_retrieval_is_blocked(tmp_path: Path) -> None:
+    input_path = tmp_path / "phase3_reader.jsonl"
+    write_jsonl(input_path, _sample_records())
+    args = _args(tmp_path, input_path)
+    args.answer_only = True
+
+    summary = run_focused_evaluation(args, root=tmp_path)
+
+    assert summary["retrieval_evaluation"] == "blocked"
+    assert summary["answer_policy_evaluation"] == "ready"
+    run_dir = tmp_path / "outputs" / "evaluation" / "phase3_focused_eval" / "fixture-run"
+    fixed_records = read_jsonl(run_dir / "answer_policy" / "fixed_evidence.jsonl")
+    assert all(record["metadata"]["reader_evidence_source"] == "provided_reader_evidence" for record in fixed_records)

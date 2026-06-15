@@ -42,12 +42,19 @@ SFT_DEFAULT_ADAPTER_PATH = (
 GRPO_DEFAULT_ADAPTER_PATH = (
     "outputs/checkpoints/qwen3-docagent-trl-grpo-mpdocvqa-retrieved-grounded-100step-20260606_105535"
 )
+DEFAULT_GRPO_ADAPTER_PATH = GRPO_DEFAULT_ADAPTER_PATH
 DEFAULT_BGE_MODEL_PATH = "/root/autodl-tmp/models/bge-m3"
 DEFAULT_RERANKER_MODEL_PATH = "/root/autodl-tmp/models/bge-reranker-v2-m3"
 DEFAULT_QWEN_MODEL_PATH = "/root/autodl-tmp/models/Qwen3-1.7B"
 DEFAULT_SEED = "phase3a-focused-eval-v1"
 WINDOWS_ABSOLUTE_RE = re.compile(r"(^|[^A-Za-z0-9])([A-Za-z]:[\\/]|\\\\)")
 SIGNED_URL_RE = re.compile(r"(X-Amz-Signature=|[?&](?:token|signature|sig)=)", re.IGNORECASE)
+
+
+class ContractValidationError(RuntimeError):
+    def __init__(self, payload: dict[str, Any]) -> None:
+        super().__init__(str(payload.get("exception") or "contract validation failed"))
+        self.payload = payload
 
 
 @dataclass(frozen=True)
@@ -62,18 +69,34 @@ class BenchmarkContract:
     block_count: int
     qid_hash: str
     errors: list[str]
+    corpus_source: str = "embedded_query_evidence"
+    corpus_is_query_independent: bool = False
+    one_corpus_signature_per_doc: bool = False
+    corpus_hash: str = ""
+    page_coverage: dict[str, Any] | None = None
+    gold_block_coverage: dict[str, Any] | None = None
+    repeated_doc_audit: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "artifact_role": self.role,
             "input_path": self.input_path,
             "role": self.role,
             "status": self.status,
             "total_records": self.total_records,
             "valid_records": self.valid_records,
             "invalid_records": self.invalid_records,
+            "document_count": self.doc_count,
             "doc_count": self.doc_count,
             "block_count": self.block_count,
+            "corpus_source": self.corpus_source,
+            "corpus_is_query_independent": self.corpus_is_query_independent,
+            "one_corpus_signature_per_doc": self.one_corpus_signature_per_doc,
+            "page_coverage": self.page_coverage or {},
+            "gold_block_coverage": self.gold_block_coverage or {},
             "qid_hash": self.qid_hash,
+            "corpus_hash": self.corpus_hash,
+            "repeated_doc_audit": self.repeated_doc_audit or {},
             "errors": self.errors,
         }
 
@@ -141,6 +164,16 @@ def load_samples(path: Path) -> list[DocAgentSample]:
     return [DocAgentSample.from_dict(record) for record in read_jsonl(path)]
 
 
+def load_corpus_blocks(path: Path) -> list[EvidenceBlock]:
+    blocks: list[EvidenceBlock] = []
+    for record in read_jsonl(path):
+        if all(key in record for key in ("doc_id", "block_id", "block_type")):
+            blocks.append(EvidenceBlock.from_dict(record))
+        else:
+            raise ValueError(f"corpus records must be EvidenceBlock JSON objects, got keys={sorted(record)[:8]}")
+    return blocks
+
+
 def classify_benchmark_path(path: str | Path) -> str:
     normalized = str(path).replace("\\", "/").lower()
     if "smoke_eval" in normalized:
@@ -158,6 +191,28 @@ def _block_page(block: EvidenceBlock) -> int | None:
     return block.page_id if block.page_id is not None else block.location.page
 
 
+def _block_signature_payload(block: EvidenceBlock) -> dict[str, Any]:
+    return {
+        "doc_id": block.doc_id,
+        "block_id": block.block_id,
+        "block_type": block.block_type,
+        "page": _block_page(block),
+        "text_hash": sha256_text(block.retrieval_text),
+    }
+
+
+def corpus_hash(blocks: list[EvidenceBlock]) -> str:
+    payload = [_block_signature_payload(block) for block in blocks]
+    payload.sort(key=lambda item: (str(item["doc_id"]), str(item["block_id"])))
+    return sha256_text(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+
+
+def evidence_signature(blocks: list[EvidenceBlock]) -> str:
+    payload = [_block_signature_payload(block) for block in blocks]
+    payload.sort(key=lambda item: (str(item["block_id"]), str(item["page"])))
+    return sha256_text(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+
+
 def blocks_by_doc(samples: list[DocAgentSample]) -> dict[str, list[EvidenceBlock]]:
     grouped: dict[str, dict[str, EvidenceBlock]] = {}
     for block in collect_evidence_blocks(samples):
@@ -165,30 +220,133 @@ def blocks_by_doc(samples: list[DocAgentSample]) -> dict[str, list[EvidenceBlock
     return {doc_id: list(blocks.values()) for doc_id, blocks in grouped.items()}
 
 
-def validate_benchmark_contract(samples: list[DocAgentSample], *, input_path: str | Path) -> BenchmarkContract:
+def corpus_blocks_by_doc(blocks: list[EvidenceBlock]) -> dict[str, list[EvidenceBlock]]:
+    grouped: dict[str, dict[str, EvidenceBlock]] = {}
+    for block in blocks:
+        grouped.setdefault(block.doc_id, {})[block.block_id] = block
+    return {doc_id: list(values.values()) for doc_id, values in grouped.items()}
+
+
+def page_coverage_report(samples: list[DocAgentSample], corpus_by_doc: dict[str, list[EvidenceBlock]]) -> dict[str, Any]:
+    values: list[float] = []
+    full = 0
+    missing_total = 0
+    for sample in samples:
+        total_pages = sample.metadata.get("total_doc_pages")
+        try:
+            total = int(total_pages) if total_pages is not None else None
+        except (TypeError, ValueError):
+            total = None
+        if not total:
+            missing_total += 1
+            continue
+        pages = {
+            page
+            for page in (_block_page(block) for block in corpus_by_doc.get(sample.doc_id, []))
+            if page is not None
+        }
+        value = min(len(pages) / total, 1.0) if total > 0 else 0.0
+        values.append(value)
+        if value >= 1.0:
+            full += 1
+    return {
+        "sample_count_with_total_pages": len(values),
+        "sample_count_missing_total_pages": missing_total,
+        "mean": statistics.mean(values) if values else None,
+        "full_page_coverage_count": full,
+        "full_page_coverage_denominator": len(values),
+    }
+
+
+def repeated_doc_signature_audit(samples: list[DocAgentSample]) -> dict[str, Any]:
+    signatures_by_doc: dict[str, set[str]] = {}
+    for sample in samples:
+        signatures_by_doc.setdefault(sample.doc_id, set()).add(evidence_signature(sample.evidence))
+    repeated = {doc_id: sigs for doc_id, sigs in signatures_by_doc.items() if len([s for s in samples if s.doc_id == doc_id]) > 1}
+    inconsistent = {doc_id: sorted(sigs) for doc_id, sigs in repeated.items() if len(sigs) > 1}
+    return {
+        "repeated_doc_count": len(repeated),
+        "consistent_repeated_doc_count": sum(1 for sigs in repeated.values() if len(sigs) == 1),
+        "inconsistent_repeated_doc_count": len(inconsistent),
+        "evidence_signature_count_total": sum(len(sigs) for sigs in signatures_by_doc.values()),
+        "inconsistent_doc_ids": sorted(inconsistent),
+    }
+
+
+def gold_coverage_report(samples: list[DocAgentSample], corpus_by_doc: dict[str, list[EvidenceBlock]]) -> dict[str, Any]:
+    missing: list[str] = []
+    covered = 0
+    for sample in samples:
+        doc_block_ids = {block.block_id for block in corpus_by_doc.get(sample.doc_id, [])}
+        gold_ids = set(str(item) for item in sample.metadata.get("gold_block_ids") or [])
+        if gold_ids and gold_ids.issubset(doc_block_ids):
+            covered += 1
+        else:
+            missing.append(sample.qid)
+    return {
+        "covered_count": covered,
+        "total_count": len(samples),
+        "coverage_rate": covered / len(samples) if samples else 0.0,
+        "missing_qids": missing[:50],
+    }
+
+
+def validate_benchmark_contract(
+    samples: list[DocAgentSample],
+    *,
+    input_path: str | Path,
+    corpus_blocks: list[EvidenceBlock] | None = None,
+    corpus_input_path: str | Path | None = None,
+) -> BenchmarkContract:
     errors: list[str] = []
     role = classify_benchmark_path(input_path)
     if role in {"smoke_fixture", "globocan_scenario_acceptance", "pre_retrieved_reader_data"}:
         errors.append(f"forbidden primary benchmark role: {role}")
+    using_independent_corpus = corpus_blocks is not None
+    if using_independent_corpus:
+        corpus_source = "independent_corpus_input"
+        active_corpus_blocks = list(corpus_blocks or [])
+        repeated_audit = {
+            "repeated_doc_count": 0,
+            "consistent_repeated_doc_count": 0,
+            "inconsistent_repeated_doc_count": 0,
+            "evidence_signature_count_total": 0,
+            "inconsistent_doc_ids": [],
+        }
+    else:
+        corpus_source = "embedded_query_evidence"
+        active_corpus_blocks = collect_evidence_blocks(samples)
+        repeated_audit = repeated_doc_signature_audit(samples)
+        errors.append("retrieval benchmark requires --corpus-input with a query-independent document corpus")
+        if repeated_audit["inconsistent_repeated_doc_count"]:
+            errors.append(
+                "same doc_id has multiple evidence signatures: "
+                + ", ".join(repeated_audit["inconsistent_doc_ids"][:10])
+            )
 
+    corpus_by_doc = corpus_blocks_by_doc(active_corpus_blocks)
+    block_count = sum(len(blocks) for blocks in corpus_by_doc.values())
+    one_signature_per_doc = bool(using_independent_corpus) and all(
+        len({evidence_signature(blocks)}) == 1 for blocks in corpus_by_doc.values()
+    )
     seen_qids: set[str] = set()
-    by_doc = blocks_by_doc(samples)
-    block_count = sum(len(blocks) for blocks in by_doc.values())
     invalid_qids: set[str] = set()
     for sample in samples:
         sample_errors: list[str] = []
         if sample.qid in seen_qids:
             sample_errors.append("duplicate qid")
         seen_qids.add(sample.qid)
-        if not sample.evidence:
-            sample_errors.append("missing evidence corpus blocks")
+        if not sample.question:
+            sample_errors.append("missing question")
         gold_ids = [str(item) for item in sample.metadata.get("gold_block_ids") or []]
         if not gold_ids:
             sample_errors.append("missing metadata.gold_block_ids")
-        doc_blocks = {block.block_id: block for block in by_doc.get(sample.doc_id, [])}
+        doc_blocks = {block.block_id: block for block in corpus_by_doc.get(sample.doc_id, [])}
+        if not doc_blocks:
+            sample_errors.append(f"doc_id missing from corpus: {sample.doc_id}")
         for block_id in gold_ids:
             if block_id not in doc_blocks:
-                sample_errors.append(f"gold block not in same-doc corpus: {block_id}")
+                sample_errors.append(f"gold block not in query-independent corpus: {block_id}")
             if block_id and block_id.lower() in sample.question.lower():
                 sample_errors.append(f"question contains gold block id: {block_id}")
         if sample_errors:
@@ -198,22 +356,96 @@ def validate_benchmark_contract(samples: list[DocAgentSample], *, input_path: st
     valid_records = len(samples) - len(invalid_qids)
     status = "ready" if samples and not errors else "invalid"
     return BenchmarkContract(
-        input_path=str(input_path),
+        input_path=str(corpus_input_path or input_path),
         role=role,
         status=status,
         total_records=len(samples),
         valid_records=valid_records,
         invalid_records=len(invalid_qids),
-        doc_count=len(by_doc),
+        doc_count=len(corpus_by_doc),
         block_count=block_count,
         qid_hash=qid_hash([sample.qid for sample in samples]),
         errors=errors[:50],
+        corpus_source=corpus_source,
+        corpus_is_query_independent=using_independent_corpus,
+        one_corpus_signature_per_doc=one_signature_per_doc,
+        corpus_hash=corpus_hash(active_corpus_blocks),
+        page_coverage=page_coverage_report(samples, corpus_by_doc),
+        gold_block_coverage=gold_coverage_report(samples, corpus_by_doc),
+        repeated_doc_audit=repeated_audit,
     )
 
 
 def require_ready_contract(contract: BenchmarkContract) -> None:
     if contract.status != "ready":
         raise RuntimeError("invalid benchmark contract: " + "; ".join(contract.errors))
+
+
+def validate_reader_artifact_contract(samples: list[DocAgentSample], *, input_path: str | Path) -> BenchmarkContract:
+    errors: list[str] = []
+    invalid_qids: set[str] = set()
+    seen_qids: set[str] = set()
+    active_blocks = collect_evidence_blocks(samples)
+    corpus_by_doc = corpus_blocks_by_doc(active_blocks)
+    for sample in samples:
+        sample_errors: list[str] = []
+        if sample.qid in seen_qids:
+            sample_errors.append("duplicate qid")
+        seen_qids.add(sample.qid)
+        if not sample.evidence:
+            sample_errors.append("missing reader evidence")
+        gold_ids = [str(item) for item in sample.metadata.get("gold_block_ids") or []]
+        if not gold_ids:
+            sample_errors.append("missing metadata.gold_block_ids")
+        evidence_ids = {block.block_id for block in sample.evidence}
+        for block_id in gold_ids:
+            if block_id not in evidence_ids:
+                sample_errors.append(f"gold block not in reader evidence: {block_id}")
+        if sample_errors:
+            invalid_qids.add(sample.qid)
+            errors.extend(f"{sample.qid}: {item}" for item in sample_errors)
+    return BenchmarkContract(
+        input_path=str(input_path),
+        role=classify_benchmark_path(input_path),
+        status="ready" if samples and not errors else "invalid",
+        total_records=len(samples),
+        valid_records=len(samples) - len(invalid_qids),
+        invalid_records=len(invalid_qids),
+        doc_count=len(corpus_by_doc),
+        block_count=sum(len(blocks) for blocks in corpus_by_doc.values()),
+        qid_hash=qid_hash([sample.qid for sample in samples]),
+        errors=errors[:50],
+        corpus_source="provided_reader_evidence",
+        corpus_is_query_independent=False,
+        one_corpus_signature_per_doc=False,
+        corpus_hash=corpus_hash(active_blocks),
+        page_coverage=page_coverage_report(samples, corpus_by_doc),
+        gold_block_coverage=gold_coverage_report(samples, corpus_by_doc),
+        repeated_doc_audit=repeated_doc_signature_audit(samples),
+    )
+
+
+def contract_payload(
+    *,
+    retrieval_contract: BenchmarkContract,
+    reader_contract: BenchmarkContract | None,
+    status: str,
+    exception: str | None = None,
+) -> dict[str, Any]:
+    retrieval_ready = retrieval_contract.status == "ready"
+    reader_ready = reader_contract is not None and reader_contract.status == "ready"
+    payload: dict[str, Any] = {
+        "command": "phase3_focused_eval_contract",
+        "status": status,
+        "retrieval_evaluation": "ready" if retrieval_ready else "blocked",
+        "answer_policy_evaluation": "ready" if reader_ready or retrieval_ready else "blocked",
+        "retrieval_contract": retrieval_contract.to_dict(),
+    }
+    if reader_contract is not None:
+        payload["reader_contract"] = reader_contract.to_dict()
+    if exception:
+        payload["exception"] = exception
+    return payload
 
 
 def validate_no_forbidden_paths(value: Any, *, where: str = "payload") -> list[dict[str, str]]:
@@ -419,6 +651,30 @@ def build_fixed_evidence_records(
         record["metadata"] = metadata
         fixed_records.append(record)
     return fixed_records
+
+
+def build_fixed_reader_evidence_records(
+    *,
+    samples: list[DocAgentSample],
+    top_k: int,
+    seed: str,
+) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for sample in samples:
+        record = sample.to_dict()
+        record["evidence"] = [block.to_dict() for block in sample.evidence[:top_k]]
+        metadata = dict(record.get("metadata") or {})
+        metadata.update(
+            {
+                "reader_evidence_source": "provided_reader_evidence",
+                "reader_top_k": top_k,
+                "fixed_evidence_qid_hash": stable_sample_key(sample.qid, seed),
+                "retrieval_metrics_allowed": False,
+            }
+        )
+        record["metadata"] = metadata
+        records.append(record)
+    return records
 
 
 def fixed_evidence_hash(records: list[dict[str, Any]]) -> str:
@@ -818,17 +1074,61 @@ def collect_failure_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
 
 
 def run_focused_evaluation(args: Any, *, root: Path) -> dict[str, Any]:
-    benchmark_input = repo_path(root, args.benchmark_input)
-    samples = load_samples(benchmark_input)
-    contract = validate_benchmark_contract(samples, input_path=args.benchmark_input)
-    require_ready_contract(contract)
+    if getattr(args, "validate_only", False) and getattr(args, "answer_only", False):
+        raise RuntimeError("--validate-only and --answer-only cannot be combined")
+    qa_input_arg = getattr(args, "qa_input", None) or args.benchmark_input
+    qa_input = repo_path(root, qa_input_arg)
+    samples = load_samples(qa_input)
+    corpus_input_arg = getattr(args, "corpus_input", None)
+    corpus_blocks = load_corpus_blocks(repo_path(root, corpus_input_arg)) if corpus_input_arg else None
+    retrieval_contract = validate_benchmark_contract(
+        samples,
+        input_path=qa_input_arg,
+        corpus_blocks=corpus_blocks,
+        corpus_input_path=corpus_input_arg,
+    )
+    reader_contract = validate_reader_artifact_contract(samples, input_path=qa_input_arg)
+    if getattr(args, "validate_only", False):
+        payload = contract_payload(
+            retrieval_contract=retrieval_contract,
+            reader_contract=reader_contract,
+            status="success" if retrieval_contract.status == "ready" else "failed",
+            exception=None
+            if retrieval_contract.status == "ready"
+            else "retrieval evaluation blocked: query-independent --corpus-input is required",
+        )
+        if payload["status"] != "success":
+            raise ContractValidationError(payload)
+        return payload
+    answer_only = bool(getattr(args, "answer_only", False))
+    if not answer_only and retrieval_contract.status != "ready":
+        raise ContractValidationError(
+            contract_payload(
+                retrieval_contract=retrieval_contract,
+                reader_contract=reader_contract,
+                status="failed",
+                exception="retrieval evaluation blocked: query-independent --corpus-input is required",
+            )
+        )
+    if answer_only and reader_contract.status != "ready":
+        raise ContractValidationError(
+            contract_payload(
+                retrieval_contract=retrieval_contract,
+                reader_contract=reader_contract,
+                status="failed",
+                exception="answer policy evaluation blocked: reader evidence artifact is invalid",
+            )
+        )
 
+    active_corpus_blocks = list(corpus_blocks or [])
     retrieval_samples = select_stable_subset(samples, limit=args.retrieval_limit, seed=args.seed)
     answer_limit = args.answer_limit if args.answer_limit is not None else args.retrieval_limit
-    answer_sample_ids = {sample.qid for sample in select_stable_subset(retrieval_samples, limit=answer_limit, seed=args.seed)}
-    answer_samples = [sample for sample in retrieval_samples if sample.qid in answer_sample_ids]
-    corpus_blocks = collect_evidence_blocks(samples)
-    corpus_by_id = {block.block_id: block for block in corpus_blocks}
+    answer_source_samples = retrieval_samples if not answer_only else select_stable_subset(samples, limit=answer_limit, seed=args.seed)
+    answer_sample_ids = {
+        sample.qid for sample in select_stable_subset(answer_source_samples, limit=answer_limit, seed=args.seed)
+    }
+    answer_samples = [sample for sample in answer_source_samples if sample.qid in answer_sample_ids]
+    corpus_by_id = {block.block_id: block for block in active_corpus_blocks}
     run_id = args.run_id or datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     run_dir = repo_path(root, args.output_root) / run_id
     if run_dir.exists() and not args.force:
@@ -837,72 +1137,6 @@ def run_focused_evaluation(args: Any, *, root: Path) -> dict[str, Any]:
         shutil.rmtree(run_dir)
     for subdir in ("retrieval", "answer_policy", "logs"):
         (run_dir / subdir).mkdir(parents=True, exist_ok=True)
-
-    dense_encoder, dense_load_timing = build_dense_resources(
-        backend=args.dense_backend,
-        model_path=args.dense_model_path,
-        device=args.dense_device,
-        use_fp16=args.dense_fp16,
-        allow_mock_backends=args.allow_mock_backends,
-    )
-    dense_index, dense_index_build_ms = build_dense_index_for_corpus(
-        blocks=corpus_blocks,
-        dense_encoder=dense_encoder,
-        output_dir=run_dir,
-    )
-    reranker, reranker_load_timing = build_reranker(
-        backend=args.reranker_backend,
-        model_path=args.reranker_model_path,
-        device=args.reranker_device,
-        use_fp16=args.reranker_fp16,
-        allow_mock_backends=args.allow_mock_backends,
-    )
-
-    bm25 = evaluate_retrieval_mode(
-        mode="bm25",
-        samples=retrieval_samples,
-        blocks=corpus_blocks,
-        top_k=args.top_k,
-        total_records=len(retrieval_samples),
-        invalid_records=contract.invalid_records,
-        bm25_top_n=args.bm25_top_n,
-    )
-    hybrid = evaluate_retrieval_mode(
-        mode="hybrid_rerank",
-        samples=retrieval_samples,
-        blocks=corpus_blocks,
-        top_k=args.top_k,
-        dense_encoder=dense_encoder,
-        dense_index=dense_index,
-        reranker=reranker,
-        total_records=len(retrieval_samples),
-        invalid_records=contract.invalid_records,
-        bm25_top_n=args.bm25_top_n,
-        dense_top_n=args.dense_top_n,
-        fusion_top_n=args.fusion_top_n,
-        rrf_k=args.rrf_k,
-    )
-    hybrid["summary"]["model_load_latency_ms"] = {
-        "dense": dense_load_timing.dense_model_load_ms,
-        "reranker": reranker_load_timing.reranker_model_load_ms,
-    }
-    hybrid["summary"]["index_build_latency_ms"] = dense_index_build_ms
-    retrieval_comparison = {
-        "baseline": "bm25",
-        "candidate": "hybrid_rerank",
-        "metrics": compare_metrics(
-            hybrid["summary"],
-            bm25["summary"],
-            ["recall_at_1", "recall_at_3", "recall_at_5", "mrr", "gold_page_hit_rate"],
-        ),
-    }
-    combined_retrieval_rows = []
-    bm25_rows = {row["qid"]: row for row in bm25["rows"]}
-    for hybrid_row in hybrid["rows"]:
-        row = {"qid": hybrid_row["qid"], "bm25": bm25_rows.get(hybrid_row["qid"]), "hybrid": hybrid_row}
-        if row["bm25"] and not hybrid_row["gold_block_rank"] and row["bm25"].get("gold_block_rank"):
-            hybrid_row["failure_taxonomy"] = sorted(set(hybrid_row["failure_taxonomy"] + ["reranker_demoted_gold"]))
-        combined_retrieval_rows.append(row)
 
     retrieval_config = {
         "top_k": args.top_k,
@@ -914,14 +1148,95 @@ def run_focused_evaluation(args: Any, *, root: Path) -> dict[str, Any]:
         "dense_backend": REAL_DENSE_BACKEND if args.dense_backend == "bge" else args.dense_backend,
         "reranker_backend": REAL_RERANKER_BACKEND if args.reranker_backend == "cross_encoder" else args.reranker_backend,
     }
-    fixed_records = build_fixed_evidence_records(
-        samples=answer_samples,
-        retrieval_rows=hybrid["rows"],
-        corpus_blocks=corpus_by_id,
-        top_k=args.top_k,
-        seed=args.seed,
-        retrieval_config=retrieval_config,
-    )
+    if answer_only:
+        bm25 = {"summary": {"status": "blocked"}, "rows": []}
+        hybrid = {"summary": {"status": "blocked"}, "rows": []}
+        retrieval_comparison = {
+            "status": "blocked",
+            "reason": "query-independent retrieval corpus was not supplied",
+            "metrics": {},
+        }
+        combined_retrieval_rows: list[dict[str, Any]] = []
+        fixed_records = build_fixed_reader_evidence_records(
+            samples=answer_samples,
+            top_k=args.top_k,
+            seed=args.seed,
+        )
+    else:
+        dense_encoder, dense_load_timing = build_dense_resources(
+            backend=args.dense_backend,
+            model_path=args.dense_model_path,
+            device=args.dense_device,
+            use_fp16=args.dense_fp16,
+            allow_mock_backends=args.allow_mock_backends,
+        )
+        dense_index, dense_index_build_ms = build_dense_index_for_corpus(
+            blocks=active_corpus_blocks,
+            dense_encoder=dense_encoder,
+            output_dir=run_dir,
+        )
+        reranker, reranker_load_timing = build_reranker(
+            backend=args.reranker_backend,
+            model_path=args.reranker_model_path,
+            device=args.reranker_device,
+            use_fp16=args.reranker_fp16,
+            allow_mock_backends=args.allow_mock_backends,
+        )
+        bm25 = evaluate_retrieval_mode(
+            mode="bm25",
+            samples=retrieval_samples,
+            blocks=active_corpus_blocks,
+            top_k=args.top_k,
+            total_records=len(retrieval_samples),
+            invalid_records=retrieval_contract.invalid_records,
+            bm25_top_n=args.bm25_top_n,
+        )
+        hybrid = evaluate_retrieval_mode(
+            mode="hybrid_rerank",
+            samples=retrieval_samples,
+            blocks=active_corpus_blocks,
+            top_k=args.top_k,
+            dense_encoder=dense_encoder,
+            dense_index=dense_index,
+            reranker=reranker,
+            total_records=len(retrieval_samples),
+            invalid_records=retrieval_contract.invalid_records,
+            bm25_top_n=args.bm25_top_n,
+            dense_top_n=args.dense_top_n,
+            fusion_top_n=args.fusion_top_n,
+            rrf_k=args.rrf_k,
+        )
+        hybrid["summary"]["model_load_latency_ms"] = {
+            "dense": dense_load_timing.dense_model_load_ms,
+            "reranker": reranker_load_timing.reranker_model_load_ms,
+        }
+        hybrid["summary"]["index_build_latency_ms"] = dense_index_build_ms
+        retrieval_comparison = {
+            "baseline": "bm25",
+            "candidate": "hybrid_rerank",
+            "metrics": compare_metrics(
+                hybrid["summary"],
+                bm25["summary"],
+                ["recall_at_1", "recall_at_3", "recall_at_5", "mrr", "gold_page_hit_rate"],
+            ),
+        }
+        combined_retrieval_rows = []
+        bm25_rows = {row["qid"]: row for row in bm25["rows"]}
+        for hybrid_row in hybrid["rows"]:
+            row = {"qid": hybrid_row["qid"], "bm25": bm25_rows.get(hybrid_row["qid"]), "hybrid": hybrid_row}
+            if row["bm25"] and not hybrid_row["gold_block_rank"] and row["bm25"].get("gold_block_rank"):
+                hybrid_row["failure_taxonomy"] = sorted(
+                    set(hybrid_row["failure_taxonomy"] + ["reranker_demoted_gold"])
+                )
+            combined_retrieval_rows.append(row)
+        fixed_records = build_fixed_evidence_records(
+            samples=answer_samples,
+            retrieval_rows=hybrid["rows"],
+            corpus_blocks=corpus_by_id,
+            top_k=args.top_k,
+            seed=args.seed,
+            retrieval_config=retrieval_config,
+        )
     fixed_hash = fixed_evidence_hash(fixed_records)
     forbidden_fixed = validate_no_forbidden_paths(fixed_records, where="fixed_evidence")
     if forbidden_fixed:
@@ -1038,11 +1353,12 @@ def run_focused_evaluation(args: Any, *, root: Path) -> dict[str, Any]:
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
     benchmark_manifest = {
-        "contract": contract.to_dict(),
+        "retrieval_contract": retrieval_contract.to_dict(),
+        "reader_contract": reader_contract.to_dict(),
         "seed": args.seed,
-        "retrieval_sample_count": len(retrieval_samples),
+        "retrieval_sample_count": 0 if answer_only else len(retrieval_samples),
         "answer_sample_count": len(fixed_samples),
-        "retrieval_qid_hash": qid_hash([sample.qid for sample in retrieval_samples]),
+        "retrieval_qid_hash": None if answer_only else qid_hash([sample.qid for sample in retrieval_samples]),
         "answer_qid_hash": qid_hash([sample.qid for sample in fixed_samples]),
         "fixed_evidence_sha256": fixed_hash,
         "fixed_evidence_path": safe_artifact_path(root, fixed_path),
@@ -1055,7 +1371,8 @@ def run_focused_evaluation(args: Any, *, root: Path) -> dict[str, Any]:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "status": "success",
         "result_type": "fixed subset evaluation, not formal benchmark",
-        "benchmark_input": safe_artifact_path(root, benchmark_input),
+        "qa_input": safe_artifact_path(root, qa_input),
+        "corpus_input": safe_artifact_path(root, repo_path(root, corpus_input_arg)) if corpus_input_arg else None,
         "output_dir": safe_artifact_path(root, run_dir),
         "models": {
             "dense_backend": retrieval_config["dense_backend"],
@@ -1074,7 +1391,9 @@ def run_focused_evaluation(args: Any, *, root: Path) -> dict[str, Any]:
         "status": "success",
         "run_id": run_id,
         "result_type": "fixed subset evaluation, not formal benchmark",
-        "benchmark_role": contract.role,
+        "benchmark_role": retrieval_contract.role,
+        "retrieval_evaluation": "blocked" if answer_only else "ready",
+        "answer_policy_evaluation": "ready",
         "retrieval": {
             "bm25": bm25["summary"],
             "hybrid": hybrid["summary"],
@@ -1108,6 +1427,6 @@ def run_focused_evaluation(args: Any, *, root: Path) -> dict[str, Any]:
         retrieval_comparison=retrieval_comparison,
         answer_comparison=answer_comparison,
         failure_counts=failure_counts,
-        benchmark_role=contract.role,
+        benchmark_role=retrieval_contract.role,
     )
     return summary

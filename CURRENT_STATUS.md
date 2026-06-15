@@ -238,6 +238,8 @@ Status:
 ```text
 Phase 3A -> implemented
 real focused evaluation -> not_started
+retrieval evaluation -> blocked
+answer policy evaluation -> implemented
 formal benchmark -> not_started
 ```
 
@@ -245,5 +247,11 @@ Boundary:
 
 - Local validation does not load real BGE-M3, reranker, SFT, or GRPO models.
 - Mock fixture output must not be reported as real focused-evaluation results.
+- The current `mp_docvqa_imdb_ocr_5000_split/dev.jsonl` artifact is not an
+  accepted retrieval corpus because its evidence is stored per QA record and no
+  independent canonical per-doc corpus artifact has been verified.
+- SFT vs GRPO can still run through `--answer-only` when a reader evidence
+  artifact passes the reader contract, but that path must not report retrieval
+  Recall/MRR.
 - Do not modify retrieval algorithms, query normalization, prompts,
   AnswerPolicy, reward code, checkpoints, or training data in Phase 3A.

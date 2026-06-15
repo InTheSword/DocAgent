@@ -11,10 +11,10 @@ sys.path.insert(0, str(ROOT))
 
 from docagent.eval.phase3_focused import (
     DEFAULT_BGE_MODEL_PATH,
-    DEFAULT_GRPO_ADAPTER_PATH,
     DEFAULT_QWEN_MODEL_PATH,
     DEFAULT_RERANKER_MODEL_PATH,
     DEFAULT_SEED,
+    GRPO_DEFAULT_ADAPTER_PATH,
     SFT_DEFAULT_ADAPTER_PATH,
     run_focused_evaluation,
 )
@@ -23,9 +23,13 @@ from docagent.eval.phase3_focused import (
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Phase 3A focused retrieval and AnswerPolicy evaluation.")
     parser.add_argument("--benchmark-input", default="data/benchmark/mp_docvqa_imdb_ocr_5000_split/dev.jsonl")
+    parser.add_argument("--qa-input", default=None)
+    parser.add_argument("--corpus-input", default=None)
     parser.add_argument("--output-root", default="outputs/evaluation/phase3_focused_eval")
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--validate-only", action="store_true")
+    parser.add_argument("--answer-only", action="store_true")
     parser.add_argument("--seed", default=DEFAULT_SEED)
     parser.add_argument("--retrieval-limit", type=int, default=300)
     parser.add_argument("--answer-limit", type=int, default=150)
@@ -45,7 +49,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--answer-backend", choices=["qwen", "heuristic"], default="qwen")
     parser.add_argument("--base-model-path", default=DEFAULT_QWEN_MODEL_PATH)
     parser.add_argument("--sft-adapter-path", default=SFT_DEFAULT_ADAPTER_PATH)
-    parser.add_argument("--grpo-adapter-path", default=DEFAULT_GRPO_ADAPTER_PATH)
+    parser.add_argument("--grpo-adapter-path", default=GRPO_DEFAULT_ADAPTER_PATH)
     parser.add_argument("--qwen-device", default="cuda:0")
     parser.add_argument("--qwen-torch-dtype", default="bfloat16")
     parser.add_argument("--max-prompt-tokens", type=int, default=4096)
@@ -64,12 +68,14 @@ def main() -> None:
     try:
         payload = run_focused_evaluation(args, root=ROOT)
     except Exception as exc:
-        payload = {
-            "command": "phase3_focused_eval",
-            "status": "failed",
-            "exception": f"{type(exc).__name__}: {exc}",
-            "traceback_tail": traceback.format_exc().splitlines()[-20:],
-        }
+        payload = getattr(exc, "payload", None)
+        if payload is None:
+            payload = {
+                "command": "phase3_focused_eval",
+                "status": "failed",
+                "exception": f"{type(exc).__name__}: {exc}",
+                "traceback_tail": traceback.format_exc().splitlines()[-20:],
+            }
         exit_code = 1
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     raise SystemExit(exit_code)

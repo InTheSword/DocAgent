@@ -46,6 +46,8 @@ are used.
 | Phase 2B-2 real-document E2E | accepted | prior integration checkpoint |
 | Phase 3A local framework | implemented | contract, runner, report, fixture tests |
 | Real focused evaluation | not_started | requires AutoDL models and benchmark artifacts |
+| Retrieval evaluation | blocked | current MP-DocVQA split lacks an accepted independent corpus artifact |
+| AnswerPolicy evaluation | implemented | can run over a valid fixed reader evidence artifact |
 | Formal benchmark | not_started | out of scope for this milestone |
 
 ## 4. Required Local Contract
@@ -89,6 +91,20 @@ Qwen3 base model
 SFT adapter
 GRPO adapter
 ```
+
+Current corpus audit:
+
+```text
+data/benchmark/mp_docvqa_imdb_ocr_5000_split/dev.jsonl
+-> QA records include per-record official-OCR evidence
+-> no separate canonical per-doc corpus artifact is recorded
+-> repeated doc_id evidence signatures may differ
+-> retrieval evaluation is blocked unless --corpus-input is supplied
+```
+
+If retrieval is blocked, `--answer-only` may run SFT vs GRPO only when the
+reader evidence artifact passes its reader contract. That path must not report
+BM25/Hybrid Recall or MRR.
 
 ## 6. Stop Condition
 
