@@ -1,7 +1,7 @@
 # DocAgent Implementation Plan
 
 > High-level roadmap only.  
-> Current executable work is defined in `docs/PHASE2_ACTIVE_PLAN.md`.
+> Current executable work is defined in `docs/PHASE3_ACTIVE_PLAN.md`.
 
 ## 1. Project objective
 
@@ -22,7 +22,8 @@ data and evidence schema
 | Document | Purpose |
 |---|---|
 | `AGENTS.md` | repository-wide Codex rules and document routing |
-| `docs/PHASE2_ACTIVE_PLAN.md` | current unique milestone and stop condition |
+| `docs/PHASE3_ACTIVE_PLAN.md` | current unique milestone and stop condition |
+| `docs/PHASE2_ACTIVE_PLAN.md` | accepted Phase 2 history and stop condition |
 | `docs/IMPLEMENTATION_PLAN.md` | high-level roadmap and accepted/deferred phases |
 | `docs/SERVER_SETUP.md` | local/server boundary and stable environment facts |
 | `docs/DATASETS.md` | dataset sources, roles, split, and download policy |
@@ -118,11 +119,11 @@ implementation/integration -> accepted
 formal retrieval and QA benchmark -> not benchmark_evaluated
 ```
 
-## 6. Active phase
+## 6. Accepted Phase 2B
 
 ### Phase 2B: real MinerU and real-document QA
 
-Status: `active`
+Status: `accepted`
 
 Target:
 
@@ -152,9 +153,33 @@ docs/design/phase2/PHASE2_REAL_DOCUMENT_HYBRID_RETRIEVAL_MVP.zh-CN.md
 docs/design/phase2/PHASE2_STRUCTURED_PDF_PARSING_SUPPLEMENT.zh-CN.md
 ```
 
-## 7. Planned phases
+## 7. Active phase
 
-### Phase 3: table and numeric branch
+### Phase 3A: focused evaluation and ablation
+
+Status: `implemented`
+
+Target:
+
+```text
+fixed benchmark subset
+→ BM25 vs Hybrid retrieval comparison
+→ fixed Hybrid evidence artifact
+→ SFT vs GRPO AnswerPolicy comparison
+→ summary report
+```
+
+Boundary:
+
+```text
+local framework -> implemented
+real focused evaluation -> not_started
+formal benchmark -> not_started
+```
+
+## 8. Planned phases
+
+### Table and numeric branch
 
 Preferred depth extension:
 
@@ -165,7 +190,7 @@ Preferred depth extension:
 - Numeric Accuracy;
 - type-aware reward if new training is justified.
 
-### Phase 4: visual review branch
+### Visual review branch
 
 Optional after the table branch:
 
@@ -182,7 +207,7 @@ Optional after the table branch:
 - final benchmark and real-document report;
 - README, resume bullets, and interview material.
 
-## 8. Global roadmap constraints
+## 9. Global roadmap constraints
 
 1. Complete one real-component milestone before expanding scope.
 2. Mock backends are not project results.

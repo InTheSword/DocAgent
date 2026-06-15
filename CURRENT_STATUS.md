@@ -216,3 +216,34 @@ scenario quality -> measured
 formal benchmark -> not benchmark_evaluated
 quality optimization -> deferred
 ```
+
+## Phase 3A Implemented
+
+Phase 3A local focused-evaluation framework is implemented. Real focused
+evaluation on AutoDL has not started.
+
+Implemented locally:
+
+- benchmark validity contract for corpus-backed records with
+  `metadata.gold_block_ids`;
+- deterministic qid-hash subset sampling;
+- BM25 vs Hybrid retrieval runner using shared retrieval code;
+- fixed Hybrid evidence artifact generation for shared SFT/GRPO reader input;
+- SFT vs GRPO AnswerPolicy runner over identical evidence order;
+- comparison JSON and Markdown summary outputs;
+- fixture tests using explicit mock backends only.
+
+Status:
+
+```text
+Phase 3A -> implemented
+real focused evaluation -> not_started
+formal benchmark -> not_started
+```
+
+Boundary:
+
+- Local validation does not load real BGE-M3, reranker, SFT, or GRPO models.
+- Mock fixture output must not be reported as real focused-evaluation results.
+- Do not modify retrieval algorithms, query normalization, prompts,
+  AnswerPolicy, reward code, checkpoints, or training data in Phase 3A.

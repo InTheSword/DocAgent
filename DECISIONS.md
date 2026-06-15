@@ -115,3 +115,31 @@ Boundary:
 - Defer quality optimization. Current known failures are two reader table-column
   selection errors and one large-table retrieval / partial-answer / location
   error.
+
+## 2026-06-15: Phase 3A Focused Evaluation Boundary
+
+Decision: implement a focused fixed-subset evaluation layer instead of
+expanding product features or creating a broad ablation matrix.
+
+Rationale:
+
+- Phase 2B-2 accepted the real-document integration path but did not produce a
+  formal benchmark.
+- The next evidence needed for project presentation is narrow: BM25 vs Hybrid
+  retrieval, and SFT vs GRPO over identical fixed evidence.
+- Existing retrieval, workflow, AnswerPolicy, metrics, and validators are
+  sufficient; Phase 3A should orchestrate them rather than alter algorithms or
+  prompts.
+
+Constraints:
+
+- The retrieval comparison must use the same qids, corpus, gold evidence,
+  document scope, top-k, query input, and metric code.
+- SFT and GRPO must consume the same fixed Hybrid evidence artifact; they must
+  not retrieve independently.
+- `deterministic_keyword_v1` is recorded only as deterministic query
+  normalization, not as a full query-rewrite strategy.
+- Local tests may use explicit mock backends, but real focused evaluation
+  remains `not_started` until AutoDL runs real BGE-M3, reranker, SFT, and GRPO.
+- The result is a fixed-subset evaluation unless an official complete split and
+  official scoring protocol are used.

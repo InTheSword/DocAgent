@@ -4,14 +4,15 @@
 
 ## 1. Current policy
 
-During the active Phase 2A milestone:
+During the active Phase 3A milestone:
 
 ```text
-reuse accepted MP-DocVQA EvidenceBlock/benchmark artifacts
-→ verify real hybrid retrieval
+reuse accepted MP-DocVQA corpus-backed benchmark artifacts
+→ validate BM25 vs Hybrid on a fixed subset
+→ generate fixed Hybrid evidence for SFT vs GRPO
 ```
 
-Do not rebuild training data or add a new dataset.
+Do not rebuild training data, change splits, or add a new dataset.
 
 ## 2. MP-DocVQA
 

@@ -28,6 +28,21 @@ def token_f1(prediction: str, gold: str) -> float:
     return 2 * precision * recall / (precision + recall)
 
 
+def character_f1(prediction: str, gold: str) -> float:
+    pred = normalize_text(prediction).replace(" ", "")
+    ref = normalize_text(gold).replace(" ", "")
+    if not pred or not ref:
+        return 0.0
+    pred_counts = Counter(pred)
+    ref_counts = Counter(ref)
+    overlap = sum(min(pred_counts.get(char, 0), ref_counts.get(char, 0)) for char in set(pred_counts) | set(ref_counts))
+    if overlap == 0:
+        return 0.0
+    precision = overlap / len(pred)
+    recall = overlap / len(ref)
+    return 2 * precision * recall / (precision + recall)
+
+
 def _to_number(value: str) -> float | None:
     match = re.search(r"-?\(?\$?\d[\d,]*(?:\.\d+)?%?\)?", str(value))
     if not match:
@@ -54,4 +69,3 @@ def numeric_match(prediction: str, gold: str, tolerance: float = 1e-3) -> bool:
     if pred_num is None or gold_num is None:
         return False
     return abs(pred_num - gold_num) <= tolerance * max(abs(gold_num), 1.0)
-
