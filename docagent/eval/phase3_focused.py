@@ -291,6 +291,20 @@ def gold_coverage_report(samples: list[DocAgentSample], corpus_by_doc: dict[str,
     }
 
 
+def corpus_block_errors(blocks: list[EvidenceBlock]) -> list[str]:
+    errors: list[str] = []
+    seen_block_ids: set[str] = set()
+    for block in blocks:
+        if block.block_id in seen_block_ids:
+            errors.append(f"duplicate block_id in corpus: {block.block_id}")
+        seen_block_ids.add(block.block_id)
+        if not block.doc_id:
+            errors.append(f"missing doc_id for block_id={block.block_id}")
+        if not block.retrieval_text:
+            errors.append(f"missing retrieval content for block_id={block.block_id}")
+    return errors
+
+
 def validate_benchmark_contract(
     samples: list[DocAgentSample],
     *,
@@ -324,6 +338,7 @@ def validate_benchmark_contract(
                 + ", ".join(repeated_audit["inconsistent_doc_ids"][:10])
             )
 
+    errors.extend(corpus_block_errors(active_corpus_blocks))
     corpus_by_doc = corpus_blocks_by_doc(active_corpus_blocks)
     block_count = sum(len(blocks) for blocks in corpus_by_doc.values())
     one_signature_per_doc = bool(using_independent_corpus) and all(

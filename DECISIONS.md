@@ -170,3 +170,28 @@ Constraints:
 - Valid reader artifacts may still be used for SFT vs GRPO through
   `--answer-only`, but that path is an AnswerPolicy comparison only and must
   not report retrieval metrics.
+
+## 2026-06-15: Phase 3A MP-DocVQA Corpus Construction
+
+Decision: construct the Phase 3A MP-DocVQA retrieval benchmark as separate
+QA, corpus, and manifest artifacts.
+
+Rationale:
+
+- The QA artifact should carry qid, doc_id, question, answer, answer_type, and
+  existing `metadata.gold_block_ids`, but no embedded candidate evidence.
+- The corpus artifact should carry one stable official-OCR page block per
+  canonical document page, using the existing `{page_id}_official_ocr` block ID
+  rule.
+- Gold mapping must be reused from the source QA artifact when available, or
+  from explicit IMDb answer-page metadata; it must not be inferred by searching
+  the answer string.
+
+Constraints:
+
+- Server-specific IMDb/OCR paths must be CLI inputs, not tracked constants.
+- The generated corpus must pass the Phase 3 runner validator with
+  `corpus_is_query_independent=true`, one corpus per doc, no duplicate block
+  IDs, non-empty retrieval text, and complete gold block coverage before
+  retrieval evaluation can move from `blocked` to `ready`.
+- The builder does not run BGE-M3, the reranker, Qwen, or AnswerPolicy smoke.

@@ -250,6 +250,9 @@ Boundary:
 - The current `mp_docvqa_imdb_ocr_5000_split/dev.jsonl` artifact is not an
   accepted retrieval corpus because its evidence is stored per QA record and no
   independent canonical per-doc corpus artifact has been verified.
+- `scripts/build_phase3_mpdocvqa_retrieval_benchmark.py` can build the required
+  QA/corpus/manifest artifacts from real RRC IMDb / official OCR data, but the
+  server has not yet produced and validated those artifacts.
 - SFT vs GRPO can still run through `--answer-only` when a reader evidence
   artifact passes the reader contract, but that path must not report retrieval
   Recall/MRR.

@@ -106,6 +106,27 @@ If retrieval is blocked, `--answer-only` may run SFT vs GRPO only when the
 reader evidence artifact passes its reader contract. That path must not report
 BM25/Hybrid Recall or MRR.
 
+MP-DocVQA retrieval corpus builder:
+
+```text
+scripts/build_phase3_mpdocvqa_retrieval_benchmark.py
+-> reads RRC IMDb records and optional official OCR root
+-> reuses source QA qids and metadata.gold_block_ids when provided
+-> writes a QA artifact without embedded evidence
+-> writes a query-independent EvidenceBlock corpus artifact
+-> writes a manifest with qid/corpus hashes, page coverage, and gold coverage
+```
+
+Current local status remains:
+
+```text
+retrieval evaluation -> blocked
+```
+
+It can change to `ready` only after AutoDL builds the corpus from real
+MP-DocVQA IMDb / official OCR data and the runner validator accepts
+`--qa-input` plus `--corpus-input`.
+
 ## 6. Stop Condition
 
 After the following are complete, stop:
