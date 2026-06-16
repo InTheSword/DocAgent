@@ -10,6 +10,7 @@ import pytest
 
 from docagent.eval.phase3_focused import (
     DEFAULT_SEED,
+    corpus_hash,
     fixed_evidence_hash,
     load_corpus_blocks,
     qid_hash,
@@ -84,6 +85,7 @@ def _corpus_records() -> list[dict]:
 def _args(tmp_path: Path, input_path: Path, corpus_path: Path | None = None) -> Namespace:
     return Namespace(
         benchmark_input=input_path.relative_to(tmp_path).as_posix(),
+        benchmark_manifest=None,
         qa_input=None,
         corpus_input=corpus_path.relative_to(tmp_path).as_posix() if corpus_path else None,
         output_root="outputs/evaluation/phase3_focused_eval",
@@ -149,6 +151,7 @@ def test_cli_help_subprocess_starts() -> None:
     )
     assert result.returncode == 0
     assert "--corpus-input" in result.stdout
+    assert "--benchmark-manifest" in result.stdout
     assert "--answer-only" in result.stdout
 
 
@@ -227,6 +230,102 @@ def test_independent_qa_and_corpus_contract_passes(tmp_path: Path) -> None:
     assert contract.gold_block_coverage["coverage_rate"] == 1.0
     assert contract.corpus_hash == second_contract.corpus_hash
     assert contract.qid_hash == qid_hash(["q_date", "q_total"])
+
+
+def _write_regression_manifest(
+    tmp_path: Path,
+    *,
+    qa_path: Path,
+    corpus_path: Path,
+    qids: list[str] | None = None,
+    corpus_records: list[dict] | None = None,
+) -> Path:
+    qids = qids or [record["qid"] for record in read_jsonl(qa_path)]
+    corpus_records = corpus_records or read_jsonl(corpus_path)
+    manifest_path = tmp_path / "globocan_africa_2022_regression_benchmark_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "artifact_role": "real_document_regression",
+                "source_qa_role": "globocan_scenario_acceptance",
+                "evaluation_scope": "scenario_regression",
+                "formal_benchmark": False,
+                "primary_benchmark": False,
+                "qa_artifact": qa_path.relative_to(tmp_path).as_posix(),
+                "corpus_artifact": corpus_path.relative_to(tmp_path).as_posix(),
+                "corpus_is_query_independent": True,
+                "qid_hash": qid_hash(qids),
+                "corpus_hash": corpus_hash([EvidenceBlock.from_dict(record) for record in corpus_records]),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return manifest_path
+
+
+def test_regression_manifest_controls_focused_eval_contract_role(tmp_path: Path) -> None:
+    qa_path = tmp_path / "scenario_qa.jsonl"
+    corpus_path = tmp_path / "globocan_africa_2022_regression_corpus.jsonl"
+    write_jsonl(qa_path, _qa_records_without_reader_evidence())
+    write_jsonl(corpus_path, _corpus_records())
+    manifest_path = _write_regression_manifest(tmp_path, qa_path=qa_path, corpus_path=corpus_path)
+    args = _args(tmp_path, qa_path, corpus_path)
+    args.benchmark_manifest = manifest_path.relative_to(tmp_path).as_posix()
+    args.retrieval_only = True
+
+    summary = run_focused_evaluation(args, root=tmp_path)
+
+    run_dir = tmp_path / "outputs" / "evaluation" / "phase3_focused_eval" / "fixture-run"
+    benchmark_manifest = json.loads((run_dir / "benchmark_manifest.json").read_text(encoding="utf-8"))
+    assert summary["benchmark_role"] == "real_document_regression"
+    assert summary["source_qa_role"] == "globocan_scenario_acceptance"
+    assert summary["evaluation_scope"] == "scenario_regression"
+    assert summary["formal_benchmark"] is False
+    assert summary["primary_benchmark"] is False
+    assert "real-document scenario regression" in summary["result_type"]
+    assert benchmark_manifest["reader_contract"] is None
+    assert benchmark_manifest["retrieval_contract"]["artifact_role"] == "real_document_regression"
+    assert benchmark_manifest["retrieval_contract"]["evaluation_scope"] == "scenario_regression"
+
+
+def test_regression_manifest_hash_mismatch_fails_with_metadata_error(tmp_path: Path) -> None:
+    qa_path = tmp_path / "scenario_qa.jsonl"
+    corpus_path = tmp_path / "globocan_africa_2022_regression_corpus.jsonl"
+    write_jsonl(qa_path, _qa_records_without_reader_evidence())
+    write_jsonl(corpus_path, _corpus_records())
+    manifest_path = _write_regression_manifest(tmp_path, qa_path=qa_path, corpus_path=corpus_path, qids=["wrong"])
+    args = _args(tmp_path, qa_path, corpus_path)
+    args.benchmark_manifest = manifest_path.relative_to(tmp_path).as_posix()
+    args.validate_only = True
+
+    with pytest.raises(RuntimeError, match="invalid evaluation contract metadata: qid_hash mismatch"):
+        run_focused_evaluation(args, root=tmp_path)
+
+
+def test_regression_manifest_corpus_hash_mismatch_fails_with_metadata_error(tmp_path: Path) -> None:
+    qa_path = tmp_path / "scenario_qa.jsonl"
+    corpus_path = tmp_path / "globocan_africa_2022_regression_corpus.jsonl"
+    write_jsonl(qa_path, _qa_records_without_reader_evidence())
+    write_jsonl(corpus_path, _corpus_records())
+    wrong_corpus_records = [
+        _block("doc_invoice", "invoice_date_block", "Changed text"),
+        _block("doc_invoice", "invoice_total_block", "Total: $42.00"),
+        _block("doc_invoice", "invoice_vendor_block", "Vendor: Example Co."),
+    ]
+    manifest_path = _write_regression_manifest(
+        tmp_path,
+        qa_path=qa_path,
+        corpus_path=corpus_path,
+        corpus_records=wrong_corpus_records,
+    )
+    args = _args(tmp_path, qa_path, corpus_path)
+    args.benchmark_manifest = manifest_path.relative_to(tmp_path).as_posix()
+    args.validate_only = True
+
+    with pytest.raises(RuntimeError, match="invalid evaluation contract metadata: corpus_hash mismatch"):
+        run_focused_evaluation(args, root=tmp_path)
 
 
 def test_gold_block_missing_from_independent_corpus_fails(tmp_path: Path) -> None:
@@ -339,3 +438,60 @@ def test_answer_only_runs_when_retrieval_is_blocked(tmp_path: Path) -> None:
     run_dir = tmp_path / "outputs" / "evaluation" / "phase3_focused_eval" / "fixture-run"
     fixed_records = read_jsonl(run_dir / "answer_policy" / "fixed_evidence.jsonl")
     assert all(record["metadata"]["reader_evidence_source"] == "provided_reader_evidence" for record in fixed_records)
+
+
+def test_answer_only_missing_evidence_fails_reader_contract(tmp_path: Path) -> None:
+    input_path = tmp_path / "phase3_reader.jsonl"
+    write_jsonl(input_path, _qa_records_without_reader_evidence())
+    args = _args(tmp_path, input_path)
+    args.answer_only = True
+
+    with pytest.raises(Exception) as exc_info:
+        run_focused_evaluation(args, root=tmp_path)
+
+    payload = getattr(exc_info.value, "payload", {})
+    assert payload["status"] == "failed"
+    assert payload["answer_policy_evaluation"] == "blocked"
+    assert "reader evidence artifact is invalid" in payload["exception"]
+
+
+def test_full_mode_retrieval_miss_is_quality_result_not_input_contract_failure(tmp_path: Path) -> None:
+    qa_path = tmp_path / "phase3_qa.jsonl"
+    corpus_path = tmp_path / "phase3_corpus.jsonl"
+    write_jsonl(
+        qa_path,
+        [
+            {
+                "qid": "q_vendor",
+                "source": "phase3_fixture",
+                "doc_id": "doc_invoice",
+                "question": "What is the vendor name?",
+                "answer": "Gold Corp",
+                "answer_type": "extractive",
+                "evidence": [],
+                "metadata": {"gold_block_ids": ["invoice_gold_block"]},
+            }
+        ],
+    )
+    write_jsonl(
+        corpus_path,
+        [
+            _block("doc_invoice", "invoice_vendor_block", "Vendor: Example Co."),
+            _block("doc_invoice", "invoice_gold_block", "Unrelated footer Gold Corp"),
+        ],
+    )
+    args = _args(tmp_path, qa_path, corpus_path)
+    args.top_k = 1
+    args.retrieval_limit = 1
+    args.answer_limit = 1
+
+    summary = run_focused_evaluation(args, root=tmp_path)
+
+    run_dir = tmp_path / "outputs" / "evaluation" / "phase3_focused_eval" / "fixture-run"
+    fixed_records = read_jsonl(run_dir / "answer_policy" / "fixed_evidence.jsonl")
+    benchmark_manifest = json.loads((run_dir / "benchmark_manifest.json").read_text(encoding="utf-8"))
+    fixed_ids = [block["block_id"] for block in fixed_records[0]["evidence"]]
+    assert summary["status"] == "success"
+    assert "invoice_gold_block" not in fixed_ids
+    assert benchmark_manifest["reader_contract"]["status"] == "ready"
+    assert benchmark_manifest["reader_contract"]["gold_block_coverage"]["coverage_rate"] == 0.0

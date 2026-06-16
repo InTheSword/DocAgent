@@ -425,7 +425,12 @@ def require_ready_contract(contract: BenchmarkContract) -> None:
         raise RuntimeError("invalid benchmark contract: " + "; ".join(contract.errors))
 
 
-def validate_reader_artifact_contract(samples: list[DocAgentSample], *, input_path: str | Path) -> BenchmarkContract:
+def validate_reader_artifact_contract(
+    samples: list[DocAgentSample],
+    *,
+    input_path: str | Path,
+    require_gold_in_evidence: bool = True,
+) -> BenchmarkContract:
     errors: list[str] = []
     invalid_qids: set[str] = set()
     seen_qids: set[str] = set()
@@ -443,7 +448,7 @@ def validate_reader_artifact_contract(samples: list[DocAgentSample], *, input_pa
             sample_errors.append("missing metadata.gold_block_ids")
         evidence_ids = {block.block_id for block in sample.evidence}
         for block_id in gold_ids:
-            if block_id not in evidence_ids:
+            if require_gold_in_evidence and block_id not in evidence_ids:
                 sample_errors.append(f"gold block not in reader evidence: {block_id}")
         if sample_errors:
             invalid_qids.add(sample.qid)
@@ -1066,6 +1071,7 @@ def write_summary_markdown(
     answer_comparison: dict[str, Any],
     failure_counts: dict[str, int],
     benchmark_role: str,
+    result_type: str = "fixed subset evaluation, not formal benchmark",
 ) -> None:
     hybrid_better = any(
         item.get("absolute_delta", 0.0) > 0
@@ -1103,7 +1109,7 @@ def write_summary_markdown(
         f"- GRPO better than SFT: {str(grpo_better).lower()}",
         f"- AnswerPolicy improvements: {', '.join(answer_improved) if answer_improved else 'none'}",
         f"- Main failure types: {json.dumps(failure_counts, ensure_ascii=False, sort_keys=True)}",
-        f"- Result type: fixed subset evaluation, not formal benchmark; dataset role={benchmark_role}",
+        f"- Result type: {result_type}; dataset role={benchmark_role}",
         "",
     ]
     path.write_text("\n".join(lines), encoding="utf-8")
@@ -1117,23 +1123,114 @@ def collect_failure_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
     return dict(sorted(counts.items()))
 
 
+def load_benchmark_manifest(root: Path, manifest_arg: str | Path | None) -> dict[str, Any] | None:
+    if not manifest_arg:
+        return None
+    path = repo_path(root, manifest_arg)
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise RuntimeError(f"invalid evaluation contract metadata: cannot read benchmark manifest: {exc}") from exc
+
+
+def manifest_artifact_arg(manifest: dict[str, Any], key: str) -> str:
+    value = manifest.get(key)
+    if not value:
+        raise RuntimeError(f"invalid evaluation contract metadata: benchmark manifest missing {key}")
+    return str(value)
+
+
+def _same_repo_path(root: Path, left: str | Path, right: str | Path) -> bool:
+    return repo_path(root, left).resolve() == repo_path(root, right).resolve()
+
+
+def manifest_contract_kwargs(manifest: dict[str, Any] | None) -> dict[str, Any]:
+    if not manifest:
+        return {}
+    return {
+        "artifact_role": manifest.get("artifact_role"),
+        "source_qa_role": manifest.get("source_qa_role"),
+        "evaluation_scope": manifest.get("evaluation_scope", "primary_retrieval"),
+        "formal_benchmark": bool(manifest.get("formal_benchmark", False)),
+        "primary_benchmark": bool(manifest.get("primary_benchmark", True)),
+    }
+
+
+def verify_manifest_contract_metadata(
+    *,
+    manifest: dict[str, Any] | None,
+    samples: list[DocAgentSample],
+    corpus_blocks: list[EvidenceBlock] | None,
+) -> None:
+    if not manifest:
+        return
+    expected_qid_hash = manifest.get("qid_hash")
+    actual_qid_hash = qid_hash([sample.qid for sample in samples])
+    if expected_qid_hash and expected_qid_hash != actual_qid_hash:
+        raise RuntimeError(
+            "invalid evaluation contract metadata: "
+            f"qid_hash mismatch manifest={expected_qid_hash} actual={actual_qid_hash}"
+        )
+    expected_corpus_hash = manifest.get("corpus_hash")
+    if expected_corpus_hash:
+        if corpus_blocks is None:
+            raise RuntimeError("invalid evaluation contract metadata: benchmark manifest requires corpus input")
+        actual_corpus_hash = corpus_hash(corpus_blocks)
+        if expected_corpus_hash != actual_corpus_hash:
+            raise RuntimeError(
+                "invalid evaluation contract metadata: "
+                f"corpus_hash mismatch manifest={expected_corpus_hash} actual={actual_corpus_hash}"
+            )
+    if manifest.get("corpus_is_query_independent") is False:
+        raise RuntimeError("invalid evaluation contract metadata: manifest corpus_is_query_independent is false")
+
+
+def result_type_for_contract(contract: BenchmarkContract, *, retrieval_only: bool = False) -> str:
+    if contract.evaluation_scope == "scenario_regression":
+        suffix = "retrieval-only " if retrieval_only else ""
+        return f"real-document scenario regression {suffix}metrics, not formal benchmark"
+    suffix = "retrieval-only " if retrieval_only else ""
+    return f"{suffix}fixed subset evaluation, not formal benchmark"
+
+
 def run_focused_evaluation(args: Any, *, root: Path) -> dict[str, Any]:
     if getattr(args, "validate_only", False) and getattr(args, "answer_only", False):
         raise RuntimeError("--validate-only and --answer-only cannot be combined")
     if getattr(args, "retrieval_only", False) and getattr(args, "answer_only", False):
         raise RuntimeError("--retrieval-only and --answer-only cannot be combined")
-    qa_input_arg = getattr(args, "qa_input", None) or args.benchmark_input
+    benchmark_manifest_arg = getattr(args, "benchmark_manifest", None)
+    source_manifest = load_benchmark_manifest(root, benchmark_manifest_arg)
+    manifest_qa_arg = manifest_artifact_arg(source_manifest, "qa_artifact") if source_manifest else None
+    manifest_corpus_arg = manifest_artifact_arg(source_manifest, "corpus_artifact") if source_manifest else None
+    explicit_qa_arg = getattr(args, "qa_input", None)
+    explicit_corpus_arg = getattr(args, "corpus_input", None)
+    if source_manifest and explicit_qa_arg and not _same_repo_path(root, explicit_qa_arg, manifest_qa_arg):
+        raise RuntimeError("invalid evaluation contract metadata: --qa-input does not match benchmark manifest")
+    if source_manifest and explicit_corpus_arg and not _same_repo_path(root, explicit_corpus_arg, manifest_corpus_arg):
+        raise RuntimeError("invalid evaluation contract metadata: --corpus-input does not match benchmark manifest")
+    qa_input_arg = manifest_qa_arg or explicit_qa_arg or args.benchmark_input
     qa_input = repo_path(root, qa_input_arg)
     samples = load_samples(qa_input)
-    corpus_input_arg = getattr(args, "corpus_input", None)
+    corpus_input_arg = manifest_corpus_arg or explicit_corpus_arg
     corpus_blocks = load_corpus_blocks(repo_path(root, corpus_input_arg)) if corpus_input_arg else None
+    verify_manifest_contract_metadata(
+        manifest=source_manifest,
+        samples=samples,
+        corpus_blocks=corpus_blocks,
+    )
     retrieval_contract = validate_benchmark_contract(
         samples,
         input_path=qa_input_arg,
         corpus_blocks=corpus_blocks,
         corpus_input_path=corpus_input_arg,
+        **manifest_contract_kwargs(source_manifest),
     )
-    reader_contract = validate_reader_artifact_contract(samples, input_path=qa_input_arg)
+    answer_only = bool(getattr(args, "answer_only", False))
+    reader_contract = (
+        validate_reader_artifact_contract(samples, input_path=qa_input_arg)
+        if answer_only
+        else None
+    )
     if getattr(args, "validate_only", False):
         payload = contract_payload(
             retrieval_contract=retrieval_contract,
@@ -1141,19 +1238,18 @@ def run_focused_evaluation(args: Any, *, root: Path) -> dict[str, Any]:
             status="success" if retrieval_contract.status == "ready" else "failed",
             exception=None
             if retrieval_contract.status == "ready"
-            else "retrieval evaluation blocked: query-independent --corpus-input is required",
+            else "invalid evaluation contract metadata: " + "; ".join(retrieval_contract.errors[:5]),
         )
         if payload["status"] != "success":
             raise ContractValidationError(payload)
         return payload
-    answer_only = bool(getattr(args, "answer_only", False))
     if not answer_only and retrieval_contract.status != "ready":
         raise ContractValidationError(
             contract_payload(
                 retrieval_contract=retrieval_contract,
                 reader_contract=reader_contract,
                 status="failed",
-                exception="retrieval evaluation blocked: query-independent --corpus-input is required",
+                exception="invalid evaluation contract metadata: " + "; ".join(retrieval_contract.errors[:5]),
             )
         )
     if answer_only and reader_contract.status != "ready":
@@ -1194,6 +1290,7 @@ def run_focused_evaluation(args: Any, *, root: Path) -> dict[str, Any]:
         "dense_backend": REAL_DENSE_BACKEND if args.dense_backend == "bge" else args.dense_backend,
         "reranker_backend": REAL_RERANKER_BACKEND if args.reranker_backend == "cross_encoder" else args.reranker_backend,
     }
+    result_type = result_type_for_contract(retrieval_contract)
     if answer_only:
         bm25 = {"summary": {"status": "blocked"}, "rows": []}
         hybrid = {"summary": {"status": "blocked"}, "rows": []}
@@ -1298,7 +1395,8 @@ def run_focused_evaluation(args: Any, *, root: Path) -> dict[str, Any]:
                 path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
             benchmark_manifest = {
                 "retrieval_contract": retrieval_contract.to_dict(),
-                "reader_contract": reader_contract.to_dict(),
+                "reader_contract": reader_contract.to_dict() if reader_contract is not None else None,
+                "source_benchmark_manifest": safe_artifact_path(root, repo_path(root, benchmark_manifest_arg)) if benchmark_manifest_arg else None,
                 "seed": args.seed,
                 "retrieval_sample_count": len(retrieval_samples),
                 "answer_sample_count": 0,
@@ -1313,9 +1411,10 @@ def run_focused_evaluation(args: Any, *, root: Path) -> dict[str, Any]:
                 "run_id": run_id,
                 "generated_at": datetime.now(timezone.utc).isoformat(),
                 "status": "success",
-                "result_type": "retrieval-only fixed subset evaluation, not formal benchmark",
+                "result_type": result_type_for_contract(retrieval_contract, retrieval_only=True),
                 "qa_input": safe_artifact_path(root, qa_input),
                 "corpus_input": safe_artifact_path(root, repo_path(root, corpus_input_arg)) if corpus_input_arg else None,
+                "benchmark_manifest_input": safe_artifact_path(root, repo_path(root, benchmark_manifest_arg)) if benchmark_manifest_arg else None,
                 "output_dir": safe_artifact_path(root, run_dir),
                 "models": {
                     "dense_backend": retrieval_config["dense_backend"],
@@ -1330,8 +1429,12 @@ def run_focused_evaluation(args: Any, *, root: Path) -> dict[str, Any]:
                 "command": "phase3_focused_eval",
                 "status": "success",
                 "run_id": run_id,
-                "result_type": "retrieval-only fixed subset evaluation, not formal benchmark",
+                "result_type": result_type_for_contract(retrieval_contract, retrieval_only=True),
                 "benchmark_role": retrieval_contract.role,
+                "source_qa_role": retrieval_contract.source_qa_role,
+                "evaluation_scope": retrieval_contract.evaluation_scope,
+                "formal_benchmark": retrieval_contract.formal_benchmark,
+                "primary_benchmark": retrieval_contract.primary_benchmark,
                 "retrieval_evaluation": "ready",
                 "answer_policy_evaluation": "not_started",
                 "retrieval": {
@@ -1363,6 +1466,7 @@ def run_focused_evaluation(args: Any, *, root: Path) -> dict[str, Any]:
                 answer_comparison={"metrics": {}},
                 failure_counts=failure_counts,
                 benchmark_role=retrieval_contract.role,
+                result_type=result_type_for_contract(retrieval_contract, retrieval_only=True),
             )
             return summary
         fixed_records = build_fixed_evidence_records(
@@ -1380,6 +1484,20 @@ def run_focused_evaluation(args: Any, *, root: Path) -> dict[str, Any]:
     fixed_path = run_dir / "answer_policy" / "fixed_evidence.jsonl"
     write_jsonl(fixed_path, fixed_records)
     fixed_samples = [DocAgentSample.from_dict(record) for record in fixed_records]
+    reader_contract = validate_reader_artifact_contract(
+        fixed_samples,
+        input_path=safe_artifact_path(root, fixed_path),
+        require_gold_in_evidence=answer_only,
+    )
+    if reader_contract.status != "ready":
+        raise ContractValidationError(
+            contract_payload(
+                retrieval_contract=retrieval_contract,
+                reader_contract=reader_contract,
+                status="failed",
+                exception="answer policy evaluation blocked: fixed reader evidence artifact is invalid",
+            )
+        )
 
     sft_policy, sft_load_ms = build_answer_policy(
         policy_backend=args.answer_backend,
@@ -1491,6 +1609,7 @@ def run_focused_evaluation(args: Any, *, root: Path) -> dict[str, Any]:
     benchmark_manifest = {
         "retrieval_contract": retrieval_contract.to_dict(),
         "reader_contract": reader_contract.to_dict(),
+        "source_benchmark_manifest": safe_artifact_path(root, repo_path(root, benchmark_manifest_arg)) if benchmark_manifest_arg else None,
         "seed": args.seed,
         "retrieval_sample_count": 0 if answer_only else len(retrieval_samples),
         "answer_sample_count": len(fixed_samples),
@@ -1506,9 +1625,10 @@ def run_focused_evaluation(args: Any, *, root: Path) -> dict[str, Any]:
         "run_id": run_id,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "status": "success",
-        "result_type": "fixed subset evaluation, not formal benchmark",
+        "result_type": result_type,
         "qa_input": safe_artifact_path(root, qa_input),
         "corpus_input": safe_artifact_path(root, repo_path(root, corpus_input_arg)) if corpus_input_arg else None,
+        "benchmark_manifest_input": safe_artifact_path(root, repo_path(root, benchmark_manifest_arg)) if benchmark_manifest_arg else None,
         "output_dir": safe_artifact_path(root, run_dir),
         "models": {
             "dense_backend": retrieval_config["dense_backend"],
@@ -1526,8 +1646,12 @@ def run_focused_evaluation(args: Any, *, root: Path) -> dict[str, Any]:
         "command": "phase3_focused_eval",
         "status": "success",
         "run_id": run_id,
-        "result_type": "fixed subset evaluation, not formal benchmark",
+        "result_type": result_type,
         "benchmark_role": retrieval_contract.role,
+        "source_qa_role": retrieval_contract.source_qa_role,
+        "evaluation_scope": retrieval_contract.evaluation_scope,
+        "formal_benchmark": retrieval_contract.formal_benchmark,
+        "primary_benchmark": retrieval_contract.primary_benchmark,
         "retrieval_evaluation": "blocked" if answer_only else "ready",
         "answer_policy_evaluation": "ready",
         "retrieval": {
@@ -1564,5 +1688,6 @@ def run_focused_evaluation(args: Any, *, root: Path) -> dict[str, Any]:
         answer_comparison=answer_comparison,
         failure_counts=failure_counts,
         benchmark_role=retrieval_contract.role,
+        result_type=result_type,
     )
     return summary

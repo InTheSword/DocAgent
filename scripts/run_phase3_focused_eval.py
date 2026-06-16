@@ -23,6 +23,7 @@ from docagent.eval.phase3_focused import (
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Phase 3A focused retrieval and AnswerPolicy evaluation.")
     parser.add_argument("--benchmark-input", default="data/benchmark/mp_docvqa_imdb_ocr_5000_split/dev.jsonl")
+    parser.add_argument("--benchmark-manifest", default=None)
     parser.add_argument("--qa-input", default=None)
     parser.add_argument("--corpus-input", default=None)
     parser.add_argument("--output-root", default="outputs/evaluation/phase3_focused_eval")

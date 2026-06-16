@@ -203,19 +203,22 @@ class AcceptanceRunner:
             [
                 sys.executable,
                 "scripts/run_phase3_focused_eval.py",
+                "--benchmark-manifest",
+                contract["manifest"],
                 "--qa-input",
                 contract["qa"],
                 "--benchmark-input",
                 contract["qa"],
                 "--corpus-input",
                 contract["corpus"],
-                "--retrieval-only",
                 "--output-root",
                 str(self.output_root / "focused_eval"),
                 "--run-id",
                 run_id,
                 "--force",
                 "--retrieval-limit",
+                "8",
+                "--answer-limit",
                 "8",
                 "--top-k",
                 str(self.args.top_k),
@@ -233,8 +236,11 @@ class AcceptanceRunner:
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
         return {
             "status": "success",
+            "evaluation_scope": summary["evaluation_scope"],
+            "formal_benchmark": summary["formal_benchmark"],
             "summary": safe_path(summary_path),
             "retrieval": summary["retrieval"]["comparison"],
+            "answer_policy": summary["answer_policy"]["comparison"],
             "result": result,
         }
 
