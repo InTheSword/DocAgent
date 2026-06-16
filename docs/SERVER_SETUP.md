@@ -29,8 +29,12 @@ Do not commit credentials, access tokens, signed URLs, or private SSH details.
 
 ```bash
 cd /root/autodl-tmp/docagent
+source /root/miniconda3/etc/profile.d/conda.sh
 conda activate docagent
 ```
+
+Non-interactive shells must load the Conda hook before `conda activate`.
+Do not assume the hook is already available in Bash.
 
 Observed environment:
 

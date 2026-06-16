@@ -303,3 +303,96 @@ Boundary:
   MinerU API ingestion with a runtime `MINERU_TOKEN`.
 - GLOBOCAN regression is ready as a real-document scenario contract, not a
   formal benchmark result.
+
+## Phase 3 GLOBOCAN Server Regression Accepted
+
+The GLOBOCAN real-document scenario regression passed on AutoDL at commit
+`3390bcde1c703c7bd95c567e6da3bdb04591c0d8`.
+
+Server environment:
+
+```text
+Python -> /root/miniconda3/envs/docagent/bin/python
+Conda environment -> docagent
+GPU -> 2 x NVIDIA GeForce RTX 4090 D
+PyTorch -> 2.12.0+cu130
+Transformers -> 5.8.1
+PEFT -> 0.19.1
+FlagEmbedding -> import passed
+```
+
+Run scope:
+
+```text
+evaluation_scope = scenario_regression
+formal_benchmark = false
+verified_qa_count = 8
+query_independent_block_count = 35
+document_count = 1
+```
+
+Retrieval scenario comparison:
+
+| Metric | BM25 | Hybrid | Absolute Delta | Relative Delta |
+|---|---:|---:|---:|---:|
+| Recall@1 | 0.375 | 0.875 | +0.500 | +1.3333 |
+| Recall@3 | 0.875 | 0.875 | 0.000 | 0.0000 |
+| Recall@5 | 0.875 | 0.875 | 0.000 | 0.0000 |
+| MRR | 0.6041666667 | 0.875 | +0.2708333333 | +0.4482758621 |
+| Gold page hit rate | 1.0 | 1.0 | 0.000 | 0.0000 |
+
+```text
+在 GLOBOCAN 8 条真实文档场景回归中，Hybrid + Reranker
+主要改善正确证据的首位排序：
+Recall@1 从 0.375 提升至 0.875，MRR 从 0.604 提升至 0.875。
+Recall@3/5 未提升，说明当前收益主要来自重排，而不是扩大候选覆盖。
+```
+
+AnswerPolicy scenario comparison:
+
+```text
+fixed_evidence_sha256 = 04536f8fdbd3ea2e6c4a8ef93befd6aa270eb5c5ae700f1edcdacf2eed35adee
+normalized EM = 0.625
+answer hit = 0.625
+token F1 = 0.675
+character F1 = 0.7842548077
+valid JSON rate = 1.0
+format valid rate = 1.0
+block location hit = 0.875
+page location hit = 0.875
+final location in evidence rate = 1.0
+repair attempted rate = 0.0
+repair success rate = 0.0
+```
+
+SFT and GRPO used the same fixed evidence and produced identical metrics.
+
+```text
+真实文档回归验证了 SFT 与 GRPO adapter 均可通过统一
+Training–Inference Contract、Canonical Output 和验证链路运行。
+
+8 条 GLOBOCAN 场景中未观察到 GRPO 相对 SFT 的回答指标提升。
+该结果只证明兼容性和无明显回归，不能用于宣称 GRPO 优于 SFT。
+```
+
+Status:
+
+```text
+training-inference contract -> server_validated
+real-document evaluation framework -> server_validated
+GLOBOCAN regression contract -> accepted
+GLOBOCAN server real regression -> accepted
+Hybrid retrieval scenario effectiveness -> measured
+AnswerPolicy scenario compatibility -> measured
+formal benchmark -> not_started
+MP-DocVQA retrieval evaluation -> blocked
+MP-DocVQA AnswerPolicy evaluation -> ready
+CDC -> blocked_by_missing_mineru_output
+```
+
+Boundary:
+
+- This is a real-document scenario regression result, not a formal benchmark.
+- GRPO effectiveness remains unproven beyond compatibility on this scenario.
+- GRPO vs SFT should next be evaluated on a larger MP-DocVQA fixed-evidence
+  reader artifact.

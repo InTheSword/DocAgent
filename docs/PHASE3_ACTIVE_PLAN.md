@@ -45,12 +45,14 @@ are used.
 |---|---|---|
 | Phase 2B-2 real-document E2E | accepted | prior integration checkpoint |
 | Phase 3A local framework | implemented | contract, runner, report, fixture tests |
-| Real focused evaluation | not_started | requires AutoDL models and benchmark artifacts |
-| Retrieval evaluation | blocked | current MP-DocVQA split lacks an accepted independent corpus artifact |
-| AnswerPolicy evaluation | ready | can run over a valid fixed reader evidence artifact |
-| Training-inference contract | implemented | shared context builder, prompt compiler, and output adapter |
-| Real-document evaluation framework | implemented | QA/corpus/manifest contract builder and server acceptance entry |
-| GLOBOCAN regression | ready | real-document scenario contract, not a formal benchmark result |
+| Training-inference contract | server_validated | shared context builder, prompt compiler, output adapter, and validation chain passed server regression |
+| Real-document evaluation framework | server_validated | QA/corpus/manifest contract builder and server acceptance entry passed |
+| GLOBOCAN regression contract | accepted | scenario regression contract with 8 verified QA and 35 independent blocks |
+| GLOBOCAN server real regression | accepted | real BGE-M3, reranker, SFT, and GRPO run completed |
+| Hybrid retrieval scenario effectiveness | measured | scenario-regression retrieval metrics recorded |
+| AnswerPolicy scenario compatibility | measured | SFT and GRPO both ran over identical fixed evidence |
+| Retrieval evaluation | blocked | MP-DocVQA split lacks an accepted independent corpus artifact |
+| AnswerPolicy evaluation | ready | MP-DocVQA fixed-evidence reader evaluation is ready |
 | CDC real document | blocked_by_missing_mineru_output | requires existing MinerU output or runtime MinerU API ingestion |
 | Formal benchmark | not_started | out of scope for this milestone |
 
@@ -150,12 +152,81 @@ scripts/run_phase3_server_acceptance.py
 Current local closure status:
 
 ```text
-training-inference contract -> implemented
-real-document evaluation framework -> implemented
-server real evaluation -> not_started
-GLOBOCAN regression -> ready
+training-inference contract -> server_validated
+real-document evaluation framework -> server_validated
+GLOBOCAN regression contract -> accepted
+GLOBOCAN server real regression -> accepted
+Hybrid retrieval scenario effectiveness -> measured
+AnswerPolicy scenario compatibility -> measured
+formal benchmark -> not_started
+MP-DocVQA retrieval evaluation -> blocked
+MP-DocVQA AnswerPolicy evaluation -> ready
 CDC real document -> blocked_by_missing_mineru_output
 ```
+
+GLOBOCAN server regression:
+
+```text
+commit = 3390bcde1c703c7bd95c567e6da3bdb04591c0d8
+evaluation_scope = scenario_regression
+formal_benchmark = false
+verified_qa_count = 8
+query_independent_block_count = 35
+fixed_evidence_sha256 = 04536f8fdbd3ea2e6c4a8ef93befd6aa270eb5c5ae700f1edcdacf2eed35adee
+```
+
+Retrieval scenario metrics:
+
+| Metric | BM25 | Hybrid | Absolute Delta | Relative Delta |
+|---|---:|---:|---:|---:|
+| Recall@1 | 0.375 | 0.875 | +0.500 | +1.3333 |
+| Recall@3 | 0.875 | 0.875 | 0.000 | 0.0000 |
+| Recall@5 | 0.875 | 0.875 | 0.000 | 0.0000 |
+| MRR | 0.6041666667 | 0.875 | +0.2708333333 | +0.4482758621 |
+| Gold page hit rate | 1.0 | 1.0 | 0.000 | 0.0000 |
+
+```text
+在 GLOBOCAN 8 条真实文档场景回归中，Hybrid + Reranker
+主要改善正确证据的首位排序：
+Recall@1 从 0.375 提升至 0.875，MRR 从 0.604 提升至 0.875。
+Recall@3/5 未提升，说明当前收益主要来自重排，而不是扩大候选覆盖。
+```
+
+AnswerPolicy scenario metrics:
+
+```text
+SFT = GRPO on all recorded metrics
+normalized EM = 0.625
+answer hit = 0.625
+token F1 = 0.675
+character F1 = 0.7842548077
+valid JSON rate = 1.0
+format valid rate = 1.0
+block location hit = 0.875
+page location hit = 0.875
+final location in evidence rate = 1.0
+repair attempted rate = 0.0
+repair success rate = 0.0
+```
+
+```text
+真实文档回归验证了 SFT 与 GRPO adapter 均可通过统一
+Training–Inference Contract、Canonical Output 和验证链路运行。
+
+8 条 GLOBOCAN 场景中未观察到 GRPO 相对 SFT 的回答指标提升。
+该结果只证明兼容性和无明显回归，不能用于宣称 GRPO 优于 SFT。
+```
+
+Next priorities:
+
+1. Run a larger SFT vs GRPO AnswerPolicy evaluation on the MP-DocVQA
+   fixed-evidence reader artifact to determine whether post-training has a
+   measurable benefit.
+2. Process the CDC PDF and add a second real document with verified scenario QA
+   to broaden real-document regression document and question coverage.
+
+Do not continue restoring the full MP-DocVQA retrieval corpus, and do not start
+UI, Memory, multi-document, or multi-format development in this phase.
 
 ## 6. Stop Condition
 
