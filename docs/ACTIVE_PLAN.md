@@ -36,14 +36,19 @@ Real-document E2E -> PDF -> parse -> retrieve -> GRPO -> canonical output
 ```text
 training-inference contract -> server_validated
 real-document evaluation framework -> server_validated
+fixed-evidence safety hotfix -> server_validated
 GLOBOCAN regression contract -> accepted
 GLOBOCAN server real regression -> accepted
 Hybrid retrieval scenario effectiveness -> measured
 AnswerPolicy scenario compatibility -> measured
+MP-DocVQA AnswerPolicy evaluation -> measured
+MP-DocVQA AnswerPolicy sample_count -> 150
+SFT/GRPO fixed-evidence parity -> verified
+GRPO grounding improvement -> small_measured_gain
+GRPO answer accuracy improvement -> inconclusive
 formal benchmark -> not_started
 MP-DocVQA retrieval evaluation -> blocked
-MP-DocVQA AnswerPolicy evaluation -> ready
-CDC real document -> blocked_by_missing_mineru_output
+CDC -> next_priority
 ```
 
 ## Allowed Scope
@@ -92,13 +97,56 @@ Training–Inference Contract、Canonical Output 和验证链路运行。
 该结果只证明兼容性和无明显回归，不能用于宣称 GRPO 优于 SFT。
 ```
 
+The MP-DocVQA fixed-evidence reader evaluation also completed on AutoDL at
+commit `1ef68838210d56e8624b7ef0c0633b705e8ccfe5`.
+
+```text
+evaluation_scope = mpdocvqa_fixed_evidence_reader
+formal_benchmark = false
+sample_limit = 150
+seed = 42
+top_k = 20
+fixed_evidence_sha256 = 8c4d60a189675a4ba52fa61d47db68c070f2f13218b5e73b1a18ded6fceeb940
+completed = SFT 150/150, GRPO 150/150
+failed = SFT 0, GRPO 0
+```
+
+SFT vs GRPO fixed-evidence reader metrics:
+
+| Metric | SFT | GRPO | Delta |
+|---|---:|---:|---:|
+| Normalized EM | 0.380000 | 0.386667 | +0.006667 |
+| Answer hit | 0.406667 | 0.406667 | 0.000000 |
+| Token F1 | 0.483865 | 0.484643 | +0.000778 |
+| Character F1 | 0.615299 | 0.625152 | +0.009853 |
+| Valid JSON | 1.000000 | 1.000000 | 0.000000 |
+| Format valid | 1.000000 | 1.000000 | 0.000000 |
+| Block location hit | 0.866667 | 0.893333 | +0.026667 |
+| Page location hit | 0.880000 | 0.900000 | +0.020000 |
+| Final location in evidence | 1.000000 | 1.000000 | 0.000000 |
+| Repair attempted/success | 0.086667 | 0.086667 | 0.000000 |
+| Mean latency | 4289.27 ms | 4237.41 ms | -51.86 ms |
+
+```text
+在 150 条相同 fixed evidence 的 MP-DocVQA reader 样本上，
+GRPO 相比 SFT 在 block/page 证据定位和 character F1 上有轻微提升，
+Normalized EM 仅提高约 0.67 个百分点，Answer Hit 不变。
+
+结果说明 GRPO 没有破坏结构化输出，并表现出有限的 grounding 改善；
+不能据此宣称 GRPO 在答案正确率上存在显著优势。
+```
+
+`top_k=20` is only the fixed-evidence reader-evaluation evidence budget over
+the existing reader artifact. It is not an online Retrieval top-k setting and
+must not be used to compute or report Retrieval Recall/MRR.
+
 ## Next Priorities
 
-1. Run a larger SFT vs GRPO AnswerPolicy evaluation on the MP-DocVQA
-   fixed-evidence reader artifact to determine whether post-training has a
-   measurable benefit.
-2. Process the CDC PDF and add a second real document with verified scenario QA
+1. Process the CDC PDF and add a second real document with verified scenario QA
    to broaden real-document regression document and question coverage.
+2. Do not run all 453 MP-DocVQA AnswerPolicy samples for this closeout; the
+   150-sample fixed-evidence reader result is sufficient for the current
+   project closure.
 
 Do not continue restoring the full MP-DocVQA retrieval corpus, and do not start
 UI, Memory, multi-document, or multi-format development in this phase.
@@ -107,6 +155,7 @@ UI, Memory, multi-document, or multi-format development in this phase.
 
 ```text
 GLOBOCAN real server regression recorded
++ MP-DocVQA fixed-evidence reader evaluation recorded
 + documentation status updated
 + local tests pass
 + commit/push complete

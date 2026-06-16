@@ -292,6 +292,87 @@ Constraints:
 - Do not claim GRPO is better than SFT from this 8-question scenario result.
 - Keep MP-DocVQA retrieval evaluation blocked until a query-independent corpus
   is accepted.
-- Next measure GRPO vs SFT on a larger MP-DocVQA fixed-evidence reader artifact,
-  and add CDC as a second real document scenario after MinerU output is
-  available.
+- GRPO vs SFT has now been measured on a larger MP-DocVQA fixed-evidence
+  reader artifact; next add CDC as a second real document scenario after
+  MinerU output is available.
+
+## 2026-06-16: MP-DocVQA Fixed-Evidence Reader Evaluation Closeout
+
+Decision: record the 150-sample MP-DocVQA SFT vs GRPO run as a
+fixed-evidence reader evaluation, not as a formal benchmark and not as a
+retrieval evaluation.
+
+Evidence:
+
+- The fixed-evidence safety hotfix at
+  `1ef68838210d56e8624b7ef0c0633b705e8ccfe5` passed the server 5-sample
+  smoke; the earlier OCR body URL/path false positive did not recur.
+- AutoDL then completed 150/150 SFT and 150/150 GRPO samples on
+  `data/benchmark/mp_docvqa_imdb_ocr_5000_split/dev.jsonl`.
+- Both policies used identical fixed evidence with SHA256
+  `8c4d60a189675a4ba52fa61d47db68c070f2f13218b5e73b1a18ded6fceeb940`.
+- `evaluation_scope=mpdocvqa_fixed_evidence_reader` and
+  `formal_benchmark=false`.
+
+Metrics:
+
+| Metric | SFT | GRPO | Delta |
+|---|---:|---:|---:|
+| Normalized EM | 0.380000 | 0.386667 | +0.006667 |
+| Answer hit | 0.406667 | 0.406667 | 0.000000 |
+| Token F1 | 0.483865 | 0.484643 | +0.000778 |
+| Character F1 | 0.615299 | 0.625152 | +0.009853 |
+| Valid JSON | 1.000000 | 1.000000 | 0.000000 |
+| Format valid | 1.000000 | 1.000000 | 0.000000 |
+| Block location hit | 0.866667 | 0.893333 | +0.026667 |
+| Page location hit | 0.880000 | 0.900000 | +0.020000 |
+| Final location in evidence | 1.000000 | 1.000000 | 0.000000 |
+| Repair attempted/success | 0.086667 | 0.086667 | 0.000000 |
+| Mean latency | 4289.27 ms | 4237.41 ms | -51.86 ms |
+
+Conclusion:
+
+```text
+在 150 条相同 fixed evidence 的 MP-DocVQA reader 样本上，
+GRPO 相比 SFT 在 block/page 证据定位和 character F1 上有轻微提升，
+Normalized EM 仅提高约 0.67 个百分点，Answer Hit 不变。
+
+结果说明 GRPO 没有破坏结构化输出，并表现出有限的 grounding 改善；
+不能据此宣称 GRPO 在答案正确率上存在显著优势。
+```
+
+Constraints:
+
+- `top_k=20` is only the fixed-evidence reader-evaluation evidence budget over
+  the existing reader artifact. It is not an online Retrieval top-k setting and
+  must not be used to compute Retrieval Recall/MRR.
+- The earlier `top_k=5` smoke failure was not a code defect; qid `64253` had
+  its gold block at source-evidence rank 8, so Top-5 truncated gold evidence.
+- Do not describe the 150-sample result as a formal benchmark.
+- Do not run all 453 MP-DocVQA AnswerPolicy samples for this closeout; the
+  150-sample run is sufficient for the current project closure.
+- Keep MP-DocVQA retrieval evaluation blocked until an accepted independent
+  corpus artifact exists.
+- Next priority is the CDC PDF real-document path: MinerU parsing,
+  EvidenceBlock ingest, structure-quality acceptance, and candidate scenario
+  QA.
+
+## 2026-06-16: Single-GPU Phase 3 Evaluation Default
+
+Decision: default current inference, retrieval, and document-evaluation server
+runs to one RTX 4090D 24GB GPU.
+
+Rationale:
+
+- The completed Phase 3 server runs used `cuda:0`; the second GPU did not
+  automatically accelerate Qwen3-1.7B fixed-evidence inference.
+- Average utilization was limited by single-sample autoregressive generation,
+  CPU preprocessing, and serial SFT/GRPO execution.
+- The server has been reduced to 1 x RTX 4090D 24GB for current evaluation
+  work.
+
+Constraints:
+
+- Do not assume two GPUs improve current inference or retrieval runs.
+- Use two GPUs only for heavier training, or after implementing explicit
+  SFT/GRPO dual-process parallelism with separate GPU assignment.

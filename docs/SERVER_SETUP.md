@@ -43,6 +43,7 @@ Python: 3.10.20
 PyTorch: 2.12.0+cu130
 Transformers: 5.8.1
 TorchVision: not installed
+GPU: 1 x NVIDIA GeForce RTX 4090D 24GB
 ```
 
 AutoDL no-card mode may produce:
@@ -56,6 +57,19 @@ This is expected and must not be treated as a broken installation.
 Do not reinstall PyTorch solely because no-card mode reports no CUDA device.
 
 The current `docagent` environment is stable for the accepted Qwen3 workflow.
+
+Current Phase 3 evaluation policy:
+
+```text
+default device scope: single GPU
+current server GPU: 1 x NVIDIA GeForce RTX 4090D 24GB
+```
+
+The completed Qwen3-1.7B fixed-evidence runs used `cuda:0`. Two GPUs do not
+automatically speed up the current inference, retrieval, or document-evaluation
+paths because generation is single-sample autoregressive and SFT/GRPO runs are
+serial. Use two GPUs only for heavier training, or after implementing explicit
+SFT/GRPO dual-process parallelism with separate GPU assignment.
 
 ## 4. Expected model paths
 

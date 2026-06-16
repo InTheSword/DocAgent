@@ -288,20 +288,22 @@ Status:
 ```text
 training-inference contract -> implemented
 real-document evaluation framework -> implemented
-server real evaluation -> not_started
-GLOBOCAN regression -> ready
-CDC real document -> blocked_by_missing_mineru_output
+server real evaluation -> measured
+GLOBOCAN regression -> accepted
+fixed-evidence safety hotfix -> server_validated
 MP-DocVQA retrieval evaluation -> blocked
-AnswerPolicy evaluation -> ready
+MP-DocVQA AnswerPolicy evaluation -> measured
+CDC -> next_priority
 ```
 
 Boundary:
 
 - Local tests use fixtures or help startup only; they do not load BGE-M3,
   reranker, Qwen, SFT adapter, or GRPO adapter.
-- CDC remains blocked until server-side MinerU output exists or the server runs
-  MinerU API ingestion with a runtime `MINERU_TOKEN`.
-- GLOBOCAN regression is ready as a real-document scenario contract, not a
+- CDC is the next priority and still requires server-side MinerU output or
+  MinerU API ingestion before it can become a second accepted real-document
+  scenario.
+- GLOBOCAN regression is accepted as a real-document scenario contract, not a
   formal benchmark result.
 
 ## Phase 3 GLOBOCAN Server Regression Accepted
@@ -309,7 +311,7 @@ Boundary:
 The GLOBOCAN real-document scenario regression passed on AutoDL at commit
 `3390bcde1c703c7bd95c567e6da3bdb04591c0d8`.
 
-Server environment:
+Server environment for that historical GLOBOCAN run:
 
 ```text
 Python -> /root/miniconda3/envs/docagent/bin/python
@@ -380,19 +382,94 @@ Status:
 ```text
 training-inference contract -> server_validated
 real-document evaluation framework -> server_validated
+fixed-evidence safety hotfix -> server_validated
 GLOBOCAN regression contract -> accepted
 GLOBOCAN server real regression -> accepted
 Hybrid retrieval scenario effectiveness -> measured
 AnswerPolicy scenario compatibility -> measured
+MP-DocVQA AnswerPolicy evaluation -> measured
+MP-DocVQA AnswerPolicy sample_count -> 150
+SFT/GRPO fixed-evidence parity -> verified
+GRPO grounding improvement -> small_measured_gain
+GRPO answer accuracy improvement -> inconclusive
 formal benchmark -> not_started
 MP-DocVQA retrieval evaluation -> blocked
-MP-DocVQA AnswerPolicy evaluation -> ready
-CDC -> blocked_by_missing_mineru_output
+CDC -> next_priority
 ```
 
 Boundary:
 
 - This is a real-document scenario regression result, not a formal benchmark.
 - GRPO effectiveness remains unproven beyond compatibility on this scenario.
-- GRPO vs SFT should next be evaluated on a larger MP-DocVQA fixed-evidence
-  reader artifact.
+- GRPO vs SFT has now been evaluated on a larger MP-DocVQA fixed-evidence
+  reader artifact; CDC should next be added as a second real document scenario.
+
+## Phase 3 MP-DocVQA AnswerPolicy Evaluation Measured
+
+MP-DocVQA fixed-evidence reader evaluation completed on AutoDL at commit
+`1ef68838210d56e8624b7ef0c0633b705e8ccfe5`. This is not a formal benchmark
+and does not report retrieval Recall/MRR.
+
+Run scope:
+
+```text
+server_gpu = 1 x NVIDIA GeForce RTX 4090D 24GB
+dataset = data/benchmark/mp_docvqa_imdb_ocr_5000_split/dev.jsonl
+evaluation_scope = mpdocvqa_fixed_evidence_reader
+formal_benchmark = false
+sample_limit = 150
+seed = 42
+top_k = 20
+fixed_evidence_sha256 = 8c4d60a189675a4ba52fa61d47db68c070f2f13218b5e73b1a18ded6fceeb940
+output_dir = outputs/evaluation/phase3_focused_eval/mpdocvqa_answer_policy_150_top20_20260616_131117/
+```
+
+The `top_k=20` setting is only the fixed-evidence reader-evaluation evidence
+budget over the existing reader artifact. It is not an online Retrieval top-k
+setting and must not be used to compute Retrieval Recall/MRR. The earlier
+`top_k=5` smoke failure was not a code defect because qid `64253` had its gold
+block at source-evidence rank 8.
+
+Metrics:
+
+| Metric | SFT | GRPO | Delta |
+|---|---:|---:|---:|
+| Completed | 150/150 | 150/150 | 0 |
+| Failed | 0 | 0 | 0 |
+| Normalized EM | 0.380000 | 0.386667 | +0.006667 |
+| Answer hit | 0.406667 | 0.406667 | 0.000000 |
+| Token F1 | 0.483865 | 0.484643 | +0.000778 |
+| Character F1 | 0.615299 | 0.625152 | +0.009853 |
+| Valid JSON | 1.000000 | 1.000000 | 0.000000 |
+| Format valid | 1.000000 | 1.000000 | 0.000000 |
+| Block location hit | 0.866667 | 0.893333 | +0.026667 |
+| Page location hit | 0.880000 | 0.900000 | +0.020000 |
+| Final location in evidence | 1.000000 | 1.000000 | 0.000000 |
+| Repair attempted/success | 0.086667 | 0.086667 | 0.000000 |
+| Mean latency | 4289.27 ms | 4237.41 ms | -51.86 ms |
+
+Conclusion:
+
+```text
+在 150 条相同 fixed evidence 的 MP-DocVQA reader 样本上，
+GRPO 相比 SFT 在 block/page 证据定位和 character F1 上有轻微提升，
+Normalized EM 仅提高约 0.67 个百分点，Answer Hit 不变。
+
+结果说明 GRPO 没有破坏结构化输出，并表现出有限的 grounding 改善；
+不能据此宣称 GRPO 在答案正确率上存在显著优势。
+```
+
+Current status:
+
+```text
+fixed-evidence safety hotfix -> server_validated
+MP-DocVQA AnswerPolicy evaluation -> measured
+MP-DocVQA AnswerPolicy sample_count -> 150
+SFT/GRPO fixed-evidence parity -> verified
+GRPO grounding improvement -> small_measured_gain
+GRPO answer accuracy improvement -> inconclusive
+formal benchmark -> not_started
+MP-DocVQA retrieval evaluation -> blocked
+GLOBOCAN regression -> accepted
+CDC -> next_priority
+```
