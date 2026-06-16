@@ -142,11 +142,18 @@ class AcceptanceRunner:
         self.artifacts["globocan_contract"] = safe_path(manifest)
         return {
             "status": "ready",
+            "evaluation_scope": payload["evaluation_scope"],
+            "formal_benchmark": payload["formal_benchmark"],
+            "primary_benchmark": payload["primary_benchmark"],
+            "source_qa_role": payload["source_qa_role"],
             "qa": payload["qa_artifact"],
             "corpus": payload["corpus_artifact"],
             "manifest": safe_path(manifest),
             "sample_count": payload["sample_count"],
+            "verified_qa_count": payload["verified_qa_count"],
             "block_count": payload["block_count"],
+            "corpus_is_query_independent": payload["corpus_is_query_independent"],
+            "gold_block_coverage": payload["gold_block_coverage"],
             "result": result,
         }
 

@@ -9,7 +9,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from docagent.eval.phase3_focused import corpus_hash, qid_hash, validate_benchmark_contract
+from docagent.eval.phase3_focused import classify_benchmark_path, corpus_hash, qid_hash, validate_benchmark_contract
 from docagent.ingestion.hashing import sha256_file
 from docagent.schemas import DocAgentSample, EvidenceBlock
 from docagent.utils.jsonl import read_jsonl, write_jsonl
@@ -23,6 +23,8 @@ ANSWER_TYPE_MAP = {
     "comparison": "extractive",
     "chart": "visual",
 }
+GENERATED_ARTIFACT_ROLE = "real_document_regression"
+EVALUATION_SCOPE = "scenario_regression"
 
 
 def repo_path(path: str | Path) -> Path:
@@ -64,7 +66,16 @@ def verified_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
-def qa_sample(record: dict[str, Any]) -> dict[str, Any]:
+def source_qa_role(records: list[dict[str, Any]], qa_path: Path) -> str:
+    for record in records:
+        for key in ("source_qa_role", "artifact_role", "benchmark_role", "role"):
+            value = record.get(key)
+            if value:
+                return str(value)
+    return classify_benchmark_path(qa_path)
+
+
+def qa_sample(record: dict[str, Any], *, source_role: str) -> dict[str, Any]:
     answer_type = ANSWER_TYPE_MAP.get(str(record.get("answer_type") or "text"), "extractive")
     answers = [str(item) for item in record.get("answers") or [] if str(item).strip()]
     gold_block_ids = [str(item) for item in record.get("gold_block_ids") or [] if str(item).strip()]
@@ -83,6 +94,8 @@ def qa_sample(record: dict[str, Any]) -> dict[str, Any]:
             "gold_block_ids": gold_block_ids,
             "gold_pages": gold_pages,
             "answers": answers,
+            "source_qa_role": source_role,
+            "evaluation_scope": EVALUATION_SCOPE,
             "scenario_answer_type": record.get("answer_type"),
             "verification_status": scenario_status(record),
             "evidence_note": record.get("evidence_note"),
@@ -133,18 +146,24 @@ def build_contract(
     if len(blocks_by_id) != len(corpus):
         raise RuntimeError("duplicate block_id in retrieval corpus")
     raw_qa = read_jsonl(qa_path)
+    source_role = source_qa_role(raw_qa, qa_path)
     verified = verified_records(raw_qa)
     draft_count = len(raw_qa) - len(verified)
     errors = validate_real_document_records(verified, blocks_by_id)
     if errors:
         raise RuntimeError("invalid real-document QA contract: " + "; ".join(errors[:20]))
-    qa_records = [qa_sample(record) for record in verified]
+    qa_records = [qa_sample(record, source_role=source_role) for record in verified]
     samples = [DocAgentSample.from_dict(record) for record in qa_records]
     contract = validate_benchmark_contract(
         samples,
         input_path=f"{benchmark_id}_qa.jsonl",
         corpus_blocks=corpus,
         corpus_input_path=f"{benchmark_id}_corpus.jsonl",
+        artifact_role=GENERATED_ARTIFACT_ROLE,
+        source_qa_role=source_role,
+        evaluation_scope=EVALUATION_SCOPE,
+        formal_benchmark=False,
+        primary_benchmark=False,
     )
     if contract.status != "ready":
         raise RuntimeError("invalid retrieval contract: " + "; ".join(contract.errors))
@@ -174,9 +193,13 @@ def build_contract(
         "page_count": len({block.page_id for block in all_blocks if block.page_id is not None}),
     }
     benchmark_manifest = {
-        "artifact_role": "real_document_regression_manifest",
+        "artifact_role": GENERATED_ARTIFACT_ROLE,
         "benchmark_id": benchmark_id,
         "result_type": "real-document regression/scenario QA, not a formal benchmark",
+        "source_qa_role": source_role,
+        "evaluation_scope": EVALUATION_SCOPE,
+        "formal_benchmark": False,
+        "primary_benchmark": False,
         "source_dataset": "repository real document scenario",
         "qa_artifact": _safe_path(qa_output),
         "corpus_artifact": _safe_path(corpus_output),
@@ -185,6 +208,7 @@ def build_contract(
         "corpus_is_query_independent": True,
         "one_corpus_signature_per_doc": True,
         "sample_count": len(qa_records),
+        "verified_qa_count": len(qa_records),
         "draft_sample_count": draft_count,
         "document_count": len({block.doc_id for block in corpus}),
         "block_count": len(corpus),
@@ -211,7 +235,12 @@ def build_contract(
         ),
         "metrics": {
             "sample_count": len(qa_records),
+            "verified_qa_count": len(qa_records),
             "draft_sample_count": draft_count,
+            "source_qa_role": source_role,
+            "evaluation_scope": EVALUATION_SCOPE,
+            "formal_benchmark": False,
+            "primary_benchmark": False,
             "document_count": benchmark_manifest["document_count"],
             "block_count": len(corpus),
             "qid_hash": benchmark_manifest["qid_hash"],

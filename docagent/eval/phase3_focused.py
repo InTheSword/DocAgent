@@ -76,12 +76,20 @@ class BenchmarkContract:
     page_coverage: dict[str, Any] | None = None
     gold_block_coverage: dict[str, Any] | None = None
     repeated_doc_audit: dict[str, Any] | None = None
+    source_qa_role: str | None = None
+    evaluation_scope: str = "primary_retrieval"
+    formal_benchmark: bool = False
+    primary_benchmark: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "artifact_role": self.role,
             "input_path": self.input_path,
             "role": self.role,
+            "source_qa_role": self.source_qa_role or self.role,
+            "evaluation_scope": self.evaluation_scope,
+            "formal_benchmark": self.formal_benchmark,
+            "primary_benchmark": self.primary_benchmark,
             "status": self.status,
             "total_records": self.total_records,
             "valid_records": self.valid_records,
@@ -311,11 +319,28 @@ def validate_benchmark_contract(
     input_path: str | Path,
     corpus_blocks: list[EvidenceBlock] | None = None,
     corpus_input_path: str | Path | None = None,
+    artifact_role: str | None = None,
+    evaluation_scope: str = "primary_retrieval",
+    formal_benchmark: bool = False,
+    primary_benchmark: bool = True,
+    source_qa_role: str | None = None,
 ) -> BenchmarkContract:
     errors: list[str] = []
-    role = classify_benchmark_path(input_path)
-    if role in {"smoke_fixture", "globocan_scenario_acceptance", "pre_retrieved_reader_data"}:
-        errors.append(f"forbidden primary benchmark role: {role}")
+    inferred_source_role = source_qa_role or classify_benchmark_path(input_path)
+    role = artifact_role or inferred_source_role
+    forbidden_primary_roles = {"smoke_fixture", "globocan_scenario_acceptance", "pre_retrieved_reader_data"}
+    scenario_regression_ok = (
+        role == "real_document_regression"
+        and inferred_source_role == "globocan_scenario_acceptance"
+        and evaluation_scope == "scenario_regression"
+        and not formal_benchmark
+        and not primary_benchmark
+    )
+    source_role_forbidden = inferred_source_role in forbidden_primary_roles
+    if source_role_forbidden and not scenario_regression_ok:
+        errors.append(f"forbidden primary benchmark role: {inferred_source_role}")
+    elif (formal_benchmark or primary_benchmark) and source_role_forbidden:
+        errors.append(f"forbidden primary benchmark role: {inferred_source_role}")
     using_independent_corpus = corpus_blocks is not None
     if using_independent_corpus:
         corpus_source = "independent_corpus_input"
@@ -388,6 +413,10 @@ def validate_benchmark_contract(
         page_coverage=page_coverage_report(samples, corpus_by_doc),
         gold_block_coverage=gold_coverage_report(samples, corpus_by_doc),
         repeated_doc_audit=repeated_audit,
+        source_qa_role=inferred_source_role,
+        evaluation_scope=evaluation_scope,
+        formal_benchmark=formal_benchmark,
+        primary_benchmark=primary_benchmark,
     )
 
 
