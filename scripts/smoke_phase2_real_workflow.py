@@ -296,7 +296,10 @@ def validate_run_artifacts(
         "final_location_in_top_k": final_location_in_top_k,
         "final_location_block_id": final_block_id,
         "retrieval_trace_present": bool(candidates and retrieval_output.get("dense_backend") == DENSE_BACKEND),
-        "answer_trace_present": bool((answer_trace.get("output_summary") or {}).get("raw_preview")),
+        "answer_trace_present": bool(
+            (answer_trace.get("output_summary") or {}).get("raw_model_output")
+            or (answer_trace.get("output_summary") or {}).get("canonical_output")
+        ),
     }
 
 

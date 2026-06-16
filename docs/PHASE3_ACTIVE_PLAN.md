@@ -47,7 +47,11 @@ are used.
 | Phase 3A local framework | implemented | contract, runner, report, fixture tests |
 | Real focused evaluation | not_started | requires AutoDL models and benchmark artifacts |
 | Retrieval evaluation | blocked | current MP-DocVQA split lacks an accepted independent corpus artifact |
-| AnswerPolicy evaluation | implemented | can run over a valid fixed reader evidence artifact |
+| AnswerPolicy evaluation | ready | can run over a valid fixed reader evidence artifact |
+| Training-inference contract | implemented | shared context builder, prompt compiler, and output adapter |
+| Real-document evaluation framework | implemented | QA/corpus/manifest contract builder and server acceptance entry |
+| GLOBOCAN regression | ready | real-document scenario contract, not a formal benchmark result |
+| CDC real document | blocked_by_missing_mineru_output | requires existing MinerU output or runtime MinerU API ingestion |
 | Formal benchmark | not_started | out of scope for this milestone |
 
 ## 4. Required Local Contract
@@ -126,6 +130,32 @@ retrieval evaluation -> blocked
 It can change to `ready` only after AutoDL builds the corpus from real
 MP-DocVQA IMDb / official OCR data and the runner validator accepts
 `--qa-input` plus `--corpus-input`.
+
+Real-document closure path:
+
+```text
+scripts/build_real_document_benchmark.py
+-> reads an already ingested document directory and scenario QA
+-> writes QA, corpus, document manifest, and benchmark manifest artifacts
+-> validates duplicate qids, duplicate block ids, empty retrieval text, and
+   complete gold block coverage
+
+scripts/run_phase3_server_acceptance.py
+-> preflight
+-> real-document-regression
+-> answer-policy-eval
+-> focused-eval
+```
+
+Current local closure status:
+
+```text
+training-inference contract -> implemented
+real-document evaluation framework -> implemented
+server real evaluation -> not_started
+GLOBOCAN regression -> ready
+CDC real document -> blocked_by_missing_mineru_output
+```
 
 ## 6. Stop Condition
 

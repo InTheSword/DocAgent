@@ -12,6 +12,8 @@ from docagent.tools.answer_repair import repair_answer
 from docagent.tools.format_check import check_answer_format
 from docagent.tools.location_check import check_location
 from docagent.tools.visual_review import visual_review
+from docagent.workflow.output_adapter import canonicalize_output
+from docagent.workflow.prompts import build_evidence_context
 
 
 def _trace(
@@ -133,6 +135,29 @@ def run_qa_workflow(
                 output_summary={"block_id": block.block_id, "result": result},
             )
 
+    evidence_context = build_evidence_context(
+        question=question,
+        task_type=answer_type_hint or "local_fact_qa",
+        evidence_blocks=state.retrieved_blocks,
+    )
+    _trace(
+        state,
+        trace_repository,
+        "build_evidence_context",
+        input_summary={
+            "question": question,
+            "answer_type": answer_type_hint,
+            "block_ids": [block.block_id for block in state.retrieved_blocks],
+        },
+        output_summary={
+            "task_type": evidence_context["task_type"],
+            "selected_block_ids": evidence_context["selected_block_ids"],
+            "dropped_block_ids": evidence_context["dropped_block_ids"],
+            "evidence_context_hash": evidence_context["evidence_context_hash"],
+            "truncation_applied": evidence_context["truncation_applied"],
+        },
+    )
+
     try:
         generation = answer_policy.generate(
             question=question,
@@ -142,14 +167,28 @@ def run_qa_workflow(
             qid=qid,
         )
         state.draft_answer = generation.parsed or {}
+        canonical_draft = canonicalize_output(state.draft_answer, state.retrieved_blocks)
+        prompt_version = generation.metadata.get("prompt_version")
+        selected_block_ids = generation.metadata.get("selected_block_ids") or evidence_context["selected_block_ids"]
+        dropped_block_ids = generation.metadata.get("dropped_block_ids") or evidence_context["dropped_block_ids"]
+        evidence_context_hash = generation.metadata.get("evidence_context_hash") or evidence_context["evidence_context_hash"]
+        truncation_applied = bool(generation.metadata.get("truncation_applied") or evidence_context["truncation_applied"])
         state.generation_metadata = {
             key: value
             for key, value in {
                 "policy_mode": policy_mode,
+                "prompt_version": prompt_version,
+                "task_type": generation.metadata.get("task_type") or answer_type_hint or "local_fact_qa",
+                "selected_block_ids": selected_block_ids,
+                "dropped_block_ids": dropped_block_ids,
+                "evidence_context_hash": evidence_context_hash,
                 "prompt_token_count": generation.prompt_token_count,
+                "truncation_applied": truncation_applied,
                 "completion_token_count": generation.completion_token_count,
                 "finish_reason": generation.finish_reason,
                 "latency_ms": generation.latency_ms,
+                "raw_model_output": generation.raw_text,
+                "canonical_output": canonical_draft,
                 **generation.metadata,
             }.items()
             if key != "parse_result"
@@ -165,10 +204,17 @@ def run_qa_workflow(
             },
             output_summary={
                 "policy_mode": policy_mode,
+                "prompt_version": prompt_version,
+                "task_type": state.generation_metadata["task_type"],
+                "selected_block_ids": selected_block_ids,
+                "dropped_block_ids": dropped_block_ids,
+                "evidence_context_hash": evidence_context_hash,
                 "prompt_token_count": generation.prompt_token_count,
+                "truncation_applied": truncation_applied,
                 "completion_token_count": generation.completion_token_count,
                 "parse_result": state.parse_result,
-                "raw_preview": generation.raw_text[:500],
+                "raw_model_output": generation.raw_text,
+                "canonical_output": canonical_draft,
             },
             latency_ms=generation.latency_ms,
         )
@@ -200,6 +246,7 @@ def run_qa_workflow(
         }
         state.format_check = check_answer_format(state.final_answer)
         state.location_check = check_location(state.final_answer, state.retrieved_blocks)
+        state.final_answer = canonicalize_output(state.final_answer, state.retrieved_blocks)
         state.repair_result.update(
             {
                 "format_success": state.format_check["success"],
@@ -211,17 +258,30 @@ def run_qa_workflow(
             trace_repository,
             "answer_repair",
             input_summary={"repair_reason": state.repair_result},
-            output_summary={"repair_result": state.repair_result, "final_answer": state.final_answer},
+            output_summary={
+                "repair_attempted": state.repair_attempted,
+                "repair_result": state.repair_result,
+                "canonical_output": state.final_answer,
+                "format_validation": state.format_check,
+                "location_validation": state.location_check,
+            },
             success=state.format_check["success"] and state.location_check["success"],
         )
     else:
-        state.final_answer = state.draft_answer
+        state.final_answer = canonicalize_output(state.draft_answer, state.retrieved_blocks)
     state.status = "completed"
     _trace(
         state,
         trace_repository,
         "finalize",
-        output_summary={"final_answer": state.final_answer, "status": state.status},
+        output_summary={
+            "canonical_output": state.final_answer,
+            "format_validation": state.format_check,
+            "location_validation": state.location_check,
+            "repair_attempted": state.repair_attempted,
+            "repair_result": state.repair_result,
+            "status": state.status,
+        },
     )
     if trace_repository is not None and state.run_id:
         trace_repository.complete_run(run_id=state.run_id, final_answer=state.final_answer)

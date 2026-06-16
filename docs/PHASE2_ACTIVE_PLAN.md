@@ -1,7 +1,7 @@
 # Phase 2 Active Plan
 
-> This file defines the only active Codex milestone.  
-> It is intentionally short and operational.
+> Archived historical record. This file no longer defines the active Codex
+> milestone. Current task routing starts at `docs/ACTIVE_PLAN.md`.
 
 ## 1. Accepted checkpoint
 

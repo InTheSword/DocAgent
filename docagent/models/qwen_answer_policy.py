@@ -8,7 +8,7 @@ from typing import Any
 from docagent.models.base import GenerationError, GenerationResult, ModelLoadError
 from docagent.models.output_parser import parse_generation_output
 from docagent.schemas import EvidenceBlock
-from docagent.workflow.prompts import build_answer_messages, fallback_chat_prompt
+from docagent.workflow.prompts import compile_answer_prompt, fallback_chat_prompt
 
 
 @dataclass
@@ -59,7 +59,7 @@ class QwenAnswerPolicy:
     ) -> GenerationResult:
         start = time.perf_counter()
         tokenizer, model = self._load()
-        messages = build_answer_messages(
+        bundle = compile_answer_prompt(
             question=question,
             evidence_blocks=evidence_blocks,
             tool_results=tool_results,
@@ -68,8 +68,8 @@ class QwenAnswerPolicy:
             max_chars_per_block=self.config.max_chars_per_block,
             max_total_chars=self.config.max_total_chars,
         )
-        prompt_text = self._render_prompt(tokenizer, messages)
-        prompt_text = self._cap_prompt(tokenizer, prompt_text)
+        prompt_text = self._render_prompt(tokenizer, bundle.messages)
+        prompt_text, cap_truncated = self._cap_prompt(tokenizer, prompt_text)
         prompt_token_count = self._count_tokens(tokenizer, prompt_text)
 
         try:
@@ -111,6 +111,8 @@ class QwenAnswerPolicy:
                 "parse_result": parse_result.to_dict(),
                 "max_new_tokens": self.config.max_new_tokens,
                 "do_sample": self.config.do_sample,
+                **bundle.metadata,
+                "truncation_applied": bool(bundle.metadata["truncation_applied"] or cap_truncated),
             },
         )
 
@@ -210,14 +212,14 @@ class QwenAnswerPolicy:
         except Exception:
             return None
 
-    def _cap_prompt(self, tokenizer: Any, prompt_text: str) -> str:
+    def _cap_prompt(self, tokenizer: Any, prompt_text: str) -> tuple[str, bool]:
         limit = self.config.max_prompt_tokens
         if limit is None or limit <= 0:
-            return prompt_text
+            return prompt_text, False
         try:
             ids = tokenizer(prompt_text, add_special_tokens=False)["input_ids"]
             if len(ids) <= limit:
-                return prompt_text
-            return tokenizer.decode(ids[-limit:], skip_special_tokens=True)
+                return prompt_text, False
+            return tokenizer.decode(ids[-limit:], skip_special_tokens=True), True
         except Exception:
-            return prompt_text
+            return prompt_text, False

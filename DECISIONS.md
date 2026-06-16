@@ -195,3 +195,54 @@ Constraints:
   IDs, non-empty retrieval text, and complete gold block coverage before
   retrieval evaluation can move from `blocked` to `ready`.
 - The builder does not run BGE-M3, the reranker, Qwen, or AnswerPolicy smoke.
+
+## 2026-06-16: Unified Training-Inference Answer Protocol
+
+Decision: route SFT dataset construction, GRPO dataset construction,
+heuristic AnswerPolicy, Qwen AnswerPolicy, and workflow answer generation
+through one evidence-context builder and one checkpoint-compatible prompt
+compiler.
+
+Rationale:
+
+- Phase 3 comparisons require the training and inference paths to share prompt
+  semantics, evidence ordering, block serialization, and truncation metadata.
+- The workflow must persist enough trace data to audit whether a real retrieved
+  block reached the model prompt and whether validation or repair changed the
+  final answer.
+
+Constraints:
+
+- Do not change retrieval algorithms, top-k, query normalization, reward code,
+  checkpoints, or training splits as part of this unification.
+- Keep the core answer prompt semantics compatible with the existing SFT/GRPO
+  checkpoints.
+- Do not persist full prompts, credentials, signed URLs, or private artifacts in
+  Git.
+
+## 2026-06-16: Real-Document Acceptance Entry Point
+
+Decision: add a single server acceptance entry point that performs compact
+preflight, real-document contract construction, retrieval-only regression, and
+optional focused-eval orchestration without loading answer models unless that
+stage is explicitly selected.
+
+Rationale:
+
+- The server worktree may contain large untracked data and temporary notebook
+  artifacts, so acceptance should reject tracked dirty changes but ignore
+  untracked `data/`, `.ipynb_checkpoints`, and scratch files.
+- GLOBOCAN is a real-document regression/scenario corpus and should be emitted
+  as explicit QA, corpus, document manifest, and benchmark manifest artifacts.
+- CDC should be handled as a real-document parsing dependency: ready when
+  parsed MinerU output exists, otherwise blocked until server-side MinerU API
+  ingestion is run with a runtime token.
+
+Constraints:
+
+- The server command must not install packages, download models, or commit
+  generated artifacts.
+- It must write long logs under `outputs/`, emit compact JSON, and avoid
+  printing or persisting API tokens.
+- Real metrics remain `not_started` until AutoDL runs the selected real-model
+  stages.

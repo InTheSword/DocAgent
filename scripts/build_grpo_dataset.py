@@ -13,11 +13,9 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 from docagent.schemas import DocAgentSample
 from docagent.utils.jsonl import read_jsonl, write_jsonl
+from docagent.workflow.prompts import compile_answer_prompt
 from build_sft_dataset import (
-    EXTRACTION_RULES_TEXT,
-    SYSTEM_PROMPT,
     build_location_target,
-    format_evidence,
     normalize_answer,
     ordered_evidence_blocks,
     select_gold_block,
@@ -39,44 +37,25 @@ def build_grpo_record(
     gold_answer = normalize_answer(sample.answer)
     gold_block_id = gold_block.block_id if gold_block else None
     evidence_blocks = ordered_evidence_blocks(sample, gold_first=gold_first)[:max_evidence_blocks]
-    output_schema = json.dumps(
-        {
-            "answer": "short answer string copied or normalized from evidence",
-            "evidence_location": {"page": 1, "block_id": "candidate_block_id"},
-            "evidence": "minimal supporting span, compact row, or calculation inputs",
-            "reason": "one sentence explaining why the evidence supports the answer",
-        },
-        ensure_ascii=False,
-    )
-    user_content = (
-        "## Task\n"
-        "Answer the question from the evidence candidates and cite the exact supporting location.\n\n"
-        "## Question\n"
-        f"{sample.question}\n\n"
-        "## Answer Type\n"
-        f"{sample.answer_type}\n\n"
-        "## Evidence Candidates\n"
-        f"{format_evidence(evidence_blocks, max_block_chars=max_block_chars, answer=gold_answer, gold_block_id=gold_block_id)}\n\n"
-        "## Output Contract\n"
-        f"Return JSON matching this schema: {output_schema}\n"
-        "Rules:\n"
-        f"{EXTRACTION_RULES_TEXT}\n"
-        "- answer must be concise and grounded in the evidence.\n"
-        "- evidence_location must be a JSON object copied from one evidence header.\n"
-        "- evidence must be the shortest sufficient supporting span or compact table row, no more than 300 characters.\n"
-        "- reason must explain the answer-source relation in one sentence."
+    bundle = compile_answer_prompt(
+        question=sample.question,
+        evidence_blocks=evidence_blocks,
+        answer_type=sample.answer_type,
+        append_no_think=False,
+        max_chars_per_block=max_block_chars,
+        answer=gold_answer,
+        gold_block_id=gold_block_id,
     )
     return {
         "id": sample.qid,
         "source": sample.source,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_content},
-        ],
+        "messages": bundle.messages,
         "gold_answer": gold_answer,
         "gold_location": gold_location,
         "answer_type": sample.answer_type,
         "reward_schema": ["format_reward", "answer_reward", "location_reward"],
+        "prompt_version": bundle.prompt_version,
+        "evidence_context_hash": bundle.evidence_context["evidence_context_hash"],
         "metadata": {
             "doc_id": sample.doc_id,
             "gold_block_id": gold_block.block_id if gold_block else None,

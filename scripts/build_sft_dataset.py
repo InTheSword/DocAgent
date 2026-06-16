@@ -10,32 +10,21 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from docagent.eval.answer_metrics import normalize_text
 from docagent.schemas import DocAgentSample, EvidenceBlock
 from docagent.utils.jsonl import read_jsonl, write_jsonl
+from docagent.workflow.prompts import (
+    EXTRACTION_RULES_TEXT,
+    OUTPUT_SCHEMA,
+    SYSTEM_PROMPT,
+    build_location_target,
+    centered_evidence_window,
+    compile_answer_prompt,
+    contains_answer,
+    smart_truncate,
+)
 
 
 TARGET_EVIDENCE_CHARS = 300
-
-SYSTEM_PROMPT = (
-    "You are DocAgent, a document question-answering assistant. "
-    "Use only the provided evidence candidates. Return exactly one valid JSON object. "
-    "Do not include markdown, chain-of-thought, analysis text, or <think> tags."
-)
-
-EXTRACTION_RULES_TEXT = (
-    "- Use only evidence text from the candidates; do not use outside knowledge or common expansions.\n"
-    "- Match the exact question intent before selecting an answer span.\n"
-    "- For tables, lists, and key-value blocks, first match the relevant row, column, label, or relation, then copy the value.\n"
-    "- Do not answer with a neighboring entity, label, heading, total, or abbreviation unless the question asks for it."
-)
-
-OUTPUT_SCHEMA = {
-    "answer": "short answer string copied or normalized from evidence",
-    "evidence_location": {"page": 1, "block_id": "candidate_block_id"},
-    "evidence": "minimal supporting span, compact row, or calculation inputs",
-    "reason": "one sentence explaining why the evidence supports the answer",
-}
 
 
 def load_samples(path: Path) -> list[DocAgentSample]:
@@ -60,120 +49,10 @@ def ordered_evidence_blocks(sample: DocAgentSample, gold_first: bool = True) -> 
     return [gold_block] + [block for block in sample.evidence if block.block_id != gold_block.block_id]
 
 
-def build_location_target(block: EvidenceBlock) -> dict[str, Any]:
-    location = block.location.to_dict()
-    location["block_id"] = block.block_id
-    return location
-
-
-def format_block_text(block: EvidenceBlock, max_chars: int, answer: str = "") -> str:
-    text = block.retrieval_text.strip()
-    if answer and contains_answer(text, answer):
-        return centered_evidence_window(text, answer, max_chars)
-    return smart_truncate(text, max_chars)
-
-
-def format_evidence(
-    blocks: list[EvidenceBlock],
-    max_block_chars: int = 1200,
-    answer: str = "",
-    gold_block_id: str | None = None,
-) -> str:
-    parts = []
-    for block in blocks:
-        location = build_location_target(block)
-        location_text = json.dumps(location, ensure_ascii=False)
-        block_answer = answer if gold_block_id and block.block_id == gold_block_id else ""
-        evidence_text = format_block_text(block, max_block_chars, block_answer)
-        parts.append(
-            f"[{block.block_type.upper()} | block_id={block.block_id} | location={location_text}]\n"
-            f"{evidence_text}"
-        )
-    return "\n\n".join(parts)
-
-
 def normalize_answer(answer: str | list[str]) -> str:
     if isinstance(answer, list):
         return ", ".join(str(item) for item in answer if str(item).strip())
     return str(answer)
-
-
-def smart_truncate(text: str, limit: int = TARGET_EVIDENCE_CHARS) -> str:
-    text = re.sub(r"\s+", " ", text).strip()
-    if len(text) <= limit:
-        return text
-    prefix = text[:limit]
-    split_at = max(prefix.rfind(" "), prefix.rfind(";"), prefix.rfind(","))
-    if split_at >= int(limit * 0.5):
-        prefix = prefix[:split_at]
-    return prefix.rstrip(" ,;:-")
-
-
-def contains_answer(text: str, answer: str) -> bool:
-    if not answer:
-        return False
-    text_norm = normalize_text(text)
-    answer_norm = normalize_text(answer)
-    return bool(answer_norm and answer_norm in text_norm)
-
-
-def find_answer_span(text: str, answer: str) -> tuple[int, int] | None:
-    answer = str(answer or "").strip()
-    if not answer:
-        return None
-
-    direct = re.search(re.escape(answer), text, flags=re.IGNORECASE)
-    if direct:
-        return direct.start(), direct.end()
-
-    answer_tokens = normalize_text(answer).split()
-    if not answer_tokens:
-        return None
-
-    tokens: list[tuple[str, int, int]] = []
-    for match in re.finditer(r"[A-Za-z0-9\u4e00-\u9fff.%+-]+", text):
-        token = normalize_text(match.group(0))
-        if token:
-            tokens.append((token, match.start(), match.end()))
-
-    window = len(answer_tokens)
-    for start_idx in range(0, len(tokens) - window + 1):
-        if [item[0] for item in tokens[start_idx : start_idx + window]] == answer_tokens:
-            return tokens[start_idx][1], tokens[start_idx + window - 1][2]
-    return None
-
-
-def centered_evidence_window(text: str, answer: str, limit: int = TARGET_EVIDENCE_CHARS) -> str:
-    compact = re.sub(r"\s+", " ", text).strip()
-    if len(compact) <= limit:
-        return compact
-
-    span = find_answer_span(compact, answer)
-    if span is None:
-        return smart_truncate(compact, limit)
-
-    start, end = span
-    answer_len = max(end - start, 1)
-    side_budget = max((limit - answer_len) // 2, 0)
-    left = max(start - side_budget, 0)
-    right = min(end + side_budget, len(compact))
-
-    if right - left < limit:
-        if left == 0:
-            right = min(limit, len(compact))
-        elif right == len(compact):
-            left = max(0, len(compact) - limit)
-
-    if left > 0:
-        next_space = compact.find(" ", left)
-        if 0 <= next_space < start:
-            left = next_space + 1
-    if right < len(compact):
-        prev_space = compact.rfind(" ", end, right)
-        if prev_space > end:
-            right = prev_space
-
-    return compact[left:right].strip(" ,;:-")
 
 
 def extract_target_evidence(block: EvidenceBlock, answer: str) -> str:
@@ -185,7 +64,7 @@ def extract_target_evidence(block: EvidenceBlock, answer: str) -> str:
     if block.block_type == "table":
         for line in lines:
             if contains_answer(line, answer):
-                return centered_evidence_window(line, answer)
+                return centered_evidence_window(line, answer, TARGET_EVIDENCE_CHARS)
 
     segments = [
         segment.strip()
@@ -194,9 +73,9 @@ def extract_target_evidence(block: EvidenceBlock, answer: str) -> str:
     ]
     for segment in segments:
         if contains_answer(segment, answer):
-            return centered_evidence_window(segment, answer)
+            return centered_evidence_window(segment, answer, TARGET_EVIDENCE_CHARS)
 
-    return smart_truncate(text)
+    return smart_truncate(text, TARGET_EVIDENCE_CHARS)
 
 
 def build_reason(sample: DocAgentSample, block: EvidenceBlock | None, evidence: str) -> str:
@@ -240,40 +119,31 @@ def build_sft_record(
     max_block_chars: int,
     gold_first: bool,
 ) -> dict[str, Any]:
-    output_schema = json.dumps(OUTPUT_SCHEMA, ensure_ascii=False)
     answer = normalize_answer(sample.answer)
     gold_block = select_gold_block(sample)
     gold_block_id = gold_block.block_id if gold_block else None
     evidence_blocks = ordered_evidence_blocks(sample, gold_first=gold_first)[:max_evidence_blocks]
-    user_content = (
-        "## Task\n"
-        "Answer the question from the evidence candidates and cite the exact supporting location.\n\n"
-        "## Question\n"
-        f"{sample.question}\n\n"
-        "## Answer Type\n"
-        f"{sample.answer_type}\n\n"
-        "## Evidence Candidates\n"
-        f"{format_evidence(evidence_blocks, max_block_chars=max_block_chars, answer=answer, gold_block_id=gold_block_id)}\n\n"
-        "## Output Contract\n"
-        f"Return JSON matching this schema: {output_schema}\n"
-        "Rules:\n"
-        f"{EXTRACTION_RULES_TEXT}\n"
-        "- answer must be concise and grounded in the evidence.\n"
-        "- evidence_location must be a JSON object copied from one evidence header.\n"
-        "- evidence must be the shortest sufficient supporting span or compact table row, no more than 300 characters.\n"
-        "- reason must explain the answer-source relation in one sentence."
+    bundle = compile_answer_prompt(
+        question=sample.question,
+        evidence_blocks=evidence_blocks,
+        answer_type=sample.answer_type,
+        append_no_think=False,
+        max_chars_per_block=max_block_chars,
+        answer=answer,
+        gold_block_id=gold_block_id,
     )
     return {
         "id": sample.qid,
         "source": sample.source,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_content},
+            *bundle.messages,
             {
                 "role": "assistant",
                 "content": json.dumps(build_assistant_target(sample), ensure_ascii=False),
             },
         ],
+        "prompt_version": bundle.prompt_version,
+        "evidence_context_hash": bundle.evidence_context["evidence_context_hash"],
     }
 
 

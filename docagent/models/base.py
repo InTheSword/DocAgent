@@ -7,7 +7,7 @@ from typing import Any, Protocol
 
 from docagent.schemas import EvidenceBlock
 from docagent.workflow.answer_policy import heuristic_answer
-from docagent.workflow.prompts import build_answer_messages, fallback_chat_prompt
+from docagent.workflow.prompts import compile_answer_prompt, fallback_chat_prompt
 
 
 @dataclass
@@ -62,13 +62,13 @@ class HeuristicAnswerPolicy:
         qid: str | None = None,
     ) -> GenerationResult:
         start = time.perf_counter()
-        messages = build_answer_messages(
+        bundle = compile_answer_prompt(
             question=question,
             evidence_blocks=evidence_blocks,
             tool_results=tool_results,
             answer_type=answer_type,
         )
-        prompt_text = fallback_chat_prompt(messages)
+        prompt_text = fallback_chat_prompt(bundle.messages)
         parsed = heuristic_answer(question, evidence_blocks)
         raw_text = json.dumps(parsed, ensure_ascii=False)
         return GenerationResult(
@@ -79,5 +79,5 @@ class HeuristicAnswerPolicy:
             completion_token_count=len(raw_text.split()),
             finish_reason="heuristic",
             latency_ms=(time.perf_counter() - start) * 1000,
-            metadata={"policy_mode": self.mode, "qid": qid},
+            metadata={"policy_mode": self.mode, "qid": qid, **bundle.metadata},
         )

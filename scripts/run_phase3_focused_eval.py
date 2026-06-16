@@ -30,6 +30,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--validate-only", action="store_true")
     parser.add_argument("--answer-only", action="store_true")
+    parser.add_argument("--retrieval-only", action="store_true")
     parser.add_argument("--seed", default=DEFAULT_SEED)
     parser.add_argument("--retrieval-limit", type=int, default=300)
     parser.add_argument("--answer-limit", type=int, default=150)

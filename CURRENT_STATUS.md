@@ -1,6 +1,6 @@
 # Current Status
 
-Updated: 2026-06-15
+Updated: 2026-06-16
 
 ## Phase 1 Complete
 
@@ -258,3 +258,48 @@ Boundary:
   Recall/MRR.
 - Do not modify retrieval algorithms, query normalization, prompts,
   AnswerPolicy, reward code, checkpoints, or training data in Phase 3A.
+
+## Phase 3 Local Closure Implemented
+
+The local Phase 3 closure now separates model-facing protocol, real-document
+contracts, and server acceptance orchestration. No real model evaluation has
+been run for this update.
+
+Implemented locally:
+
+- Added a shared evidence-context builder and checkpoint-compatible answer
+  prompt compiler used by SFT dataset construction, GRPO dataset construction,
+  heuristic policy, Qwen AnswerPolicy, and the workflow model node.
+- Added a canonical output adapter so workflow traces can store raw model
+  output, canonical output, validation status, and repair status consistently.
+- Extended workflow traces with `prompt_version`, `task_type`, selected and
+  dropped block ids, `evidence_context_hash`, prompt token count, truncation,
+  raw output, canonical output, validation, and repair metadata.
+- Added real-document QA/corpus/document-manifest/benchmark-manifest contract
+  construction for the existing GLOBOCAN scenario corpus.
+- Added one fixed server acceptance entry point:
+  `scripts/run_phase3_server_acceptance.py`.
+- Added `--retrieval-only` to the Phase 3 focused runner so retrieval contract
+  checks and real-document retrieval regression can run without loading SFT or
+  GRPO adapters.
+
+Status:
+
+```text
+training-inference contract -> implemented
+real-document evaluation framework -> implemented
+server real evaluation -> not_started
+GLOBOCAN regression -> ready
+CDC real document -> blocked_by_missing_mineru_output
+MP-DocVQA retrieval evaluation -> blocked
+AnswerPolicy evaluation -> ready
+```
+
+Boundary:
+
+- Local tests use fixtures or help startup only; they do not load BGE-M3,
+  reranker, Qwen, SFT adapter, or GRPO adapter.
+- CDC remains blocked until server-side MinerU output exists or the server runs
+  MinerU API ingestion with a runtime `MINERU_TOKEN`.
+- GLOBOCAN regression is ready as a real-document scenario contract, not a
+  formal benchmark result.

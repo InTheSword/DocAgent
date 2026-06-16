@@ -8,7 +8,7 @@
 Before every task, read only:
 
 1. `AGENTS.md`
-2. `docs/PHASE3_ACTIVE_PLAN.md`
+2. `docs/ACTIVE_PLAN.md`
 3. source code and tests directly related to the task
 
 Do not scan every document by default.
@@ -22,7 +22,8 @@ Read additional documents only when the task requires them.
 | `docs/IMPLEMENTATION_PLAN.md` | deciding project scope, changing milestones, or updating the roadmap |
 | `docs/SERVER_SETUP.md` | proposing server commands, checking environments, installing packages, downloading models, or running real models/tools |
 | `docs/DATASETS.md` | downloading, converting, splitting, rebuilding, or evaluating datasets |
-| `docs/PHASE2_ACTIVE_PLAN.md` | checking accepted Phase 2 status or legacy Phase 2 stop conditions |
+| `docs/PHASE3_ACTIVE_PLAN.md` | checking detailed Phase 3 implementation notes or updating the Phase 3 working record |
+| `docs/PHASE2_ACTIVE_PLAN.md` | checking archived Phase 2 status or legacy Phase 2 stop conditions |
 | `docs/design/phase2/PHASE2_REAL_DOCUMENT_HYBRID_RETRIEVAL_MVP.zh-CN.md` | implementing document registration, EvidenceBlock persistence, BGE-M3, FAISS, RRF, reranker, retrieval integration, SQLite document/index storage, or Phase 2 CLI/evaluation |
 | `docs/design/phase2/PHASE2_STRUCTURED_PDF_PARSING_SUPPLEMENT.zh-CN.md` | implementing MinerU conversion, heading hierarchy, section paths, boilerplate filtering, table/image structure, context expansion, cross-page relations, or parsing-quality checks |
 | `docs/DocAgent 技术文档 3.0.pdf` | architecture intent is unclear, a new phase is being designed, or implementation may diverge from the original blueprint |
@@ -30,7 +31,7 @@ Read additional documents only when the task requires them.
 | `DECISIONS.md` | revisiting a durable architecture, dependency, or scope decision |
 
 The detailed design files explain **how** a Phase 2 module should work.  
-`docs/PHASE3_ACTIVE_PLAN.md` defines **what must be done now**.
+`docs/ACTIVE_PLAN.md` defines **what must be done now**.
 
 ## 3. Source-of-truth priority
 
@@ -39,7 +40,7 @@ When information conflicts, use:
 ```text
 1. explicit current user instruction
 2. AGENTS.md
-3. docs/PHASE3_ACTIVE_PLAN.md
+3. docs/ACTIVE_PLAN.md
 4. verified current code, tests, and server artifacts
 5. relevant detailed design document
 6. CURRENT_STATUS.md / DECISIONS.md
@@ -57,6 +58,7 @@ Use only:
 ```text
 not_started
 implemented
+ready
 mock_verified
 server_dependency_ready
 real_model_verified
@@ -64,6 +66,7 @@ benchmark_evaluated
 accepted
 frozen
 blocked
+blocked_by_missing_mineru_output
 ```
 
 Examples:
@@ -83,7 +86,7 @@ Mock verification must never be reported as real-component completion.
 Only implement the milestone in:
 
 ```text
-docs/PHASE3_ACTIVE_PLAN.md
+docs/ACTIVE_PLAN.md
 ```
 
 Before a non-trivial change, briefly state:

@@ -1091,6 +1091,8 @@ def collect_failure_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
 def run_focused_evaluation(args: Any, *, root: Path) -> dict[str, Any]:
     if getattr(args, "validate_only", False) and getattr(args, "answer_only", False):
         raise RuntimeError("--validate-only and --answer-only cannot be combined")
+    if getattr(args, "retrieval_only", False) and getattr(args, "answer_only", False):
+        raise RuntimeError("--retrieval-only and --answer-only cannot be combined")
     qa_input_arg = getattr(args, "qa_input", None) or args.benchmark_input
     qa_input = repo_path(root, qa_input_arg)
     samples = load_samples(qa_input)
@@ -1244,6 +1246,96 @@ def run_focused_evaluation(args: Any, *, root: Path) -> dict[str, Any]:
                     set(hybrid_row["failure_taxonomy"] + ["reranker_demoted_gold"])
                 )
             combined_retrieval_rows.append(row)
+        if bool(getattr(args, "retrieval_only", False)):
+            retrieval_failures = [
+                {
+                    "qid": row["hybrid"]["qid"],
+                    "bm25_failure_taxonomy": (row.get("bm25") or {}).get("failure_taxonomy", []),
+                    "hybrid_failure_taxonomy": row["hybrid"].get("failure_taxonomy", []),
+                    "bm25_gold_block_rank": (row.get("bm25") or {}).get("gold_block_rank"),
+                    "hybrid_gold_block_rank": row["hybrid"].get("gold_block_rank"),
+                }
+                for row in combined_retrieval_rows
+                if (row.get("bm25") or {}).get("failure_taxonomy") or row["hybrid"].get("failure_taxonomy")
+            ]
+            failure_counts = collect_failure_counts(hybrid["rows"])
+            write_jsonl(run_dir / "retrieval" / "per_sample_results.jsonl", combined_retrieval_rows)
+            write_jsonl(run_dir / "retrieval" / "failure_cases.jsonl", retrieval_failures)
+            for path, payload in (
+                (run_dir / "retrieval" / "bm25_metrics.json", bm25["summary"]),
+                (run_dir / "retrieval" / "hybrid_metrics.json", hybrid["summary"]),
+                (run_dir / "retrieval" / "comparison.json", retrieval_comparison),
+            ):
+                path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            benchmark_manifest = {
+                "retrieval_contract": retrieval_contract.to_dict(),
+                "reader_contract": reader_contract.to_dict(),
+                "seed": args.seed,
+                "retrieval_sample_count": len(retrieval_samples),
+                "answer_sample_count": 0,
+                "retrieval_qid_hash": qid_hash([sample.qid for sample in retrieval_samples]),
+                "answer_qid_hash": None,
+                "fixed_evidence_sha256": None,
+                "fixed_evidence_path": None,
+                "retrieval_config": retrieval_config,
+            }
+            run_manifest = {
+                "command": "phase3_focused_eval",
+                "run_id": run_id,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "status": "success",
+                "result_type": "retrieval-only fixed subset evaluation, not formal benchmark",
+                "qa_input": safe_artifact_path(root, qa_input),
+                "corpus_input": safe_artifact_path(root, repo_path(root, corpus_input_arg)) if corpus_input_arg else None,
+                "output_dir": safe_artifact_path(root, run_dir),
+                "models": {
+                    "dense_backend": retrieval_config["dense_backend"],
+                    "dense_model": safe_model_label(args.dense_model_path),
+                    "reranker_backend": retrieval_config["reranker_backend"],
+                    "reranker_model": safe_model_label(args.reranker_model_path),
+                    "answer_backend": None,
+                    "mock_backends_allowed": bool(args.allow_mock_backends),
+                },
+            }
+            summary = {
+                "command": "phase3_focused_eval",
+                "status": "success",
+                "run_id": run_id,
+                "result_type": "retrieval-only fixed subset evaluation, not formal benchmark",
+                "benchmark_role": retrieval_contract.role,
+                "retrieval_evaluation": "ready",
+                "answer_policy_evaluation": "not_started",
+                "retrieval": {
+                    "bm25": bm25["summary"],
+                    "hybrid": hybrid["summary"],
+                    "comparison": retrieval_comparison,
+                },
+                "answer_policy": {},
+                "failure_counts": failure_counts,
+                "artifact_paths": {
+                    "run_manifest": safe_artifact_path(root, run_dir / "run_manifest.json"),
+                    "benchmark_manifest": safe_artifact_path(root, run_dir / "benchmark_manifest.json"),
+                    "summary": safe_artifact_path(root, run_dir / "summary.json"),
+                    "summary_md": safe_artifact_path(root, run_dir / "summary.md"),
+                },
+            }
+            for path, payload in (
+                (run_dir / "run_manifest.json", run_manifest),
+                (run_dir / "benchmark_manifest.json", benchmark_manifest),
+                (run_dir / "summary.json", summary),
+            ):
+                forbidden = validate_no_forbidden_paths(payload)
+                if forbidden:
+                    raise RuntimeError(f"refusing to persist forbidden path or URL data in {path.name}: {forbidden[:3]}")
+                path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_summary_markdown(
+                run_dir / "summary.md",
+                retrieval_comparison=retrieval_comparison,
+                answer_comparison={"metrics": {}},
+                failure_counts=failure_counts,
+                benchmark_role=retrieval_contract.role,
+            )
+            return summary
         fixed_records = build_fixed_evidence_records(
             samples=answer_samples,
             retrieval_rows=hybrid["rows"],
