@@ -48,7 +48,29 @@ DEFAULT_RERANKER_MODEL_PATH = "/root/autodl-tmp/models/bge-reranker-v2-m3"
 DEFAULT_QWEN_MODEL_PATH = "/root/autodl-tmp/models/Qwen3-1.7B"
 DEFAULT_SEED = "phase3a-focused-eval-v1"
 WINDOWS_ABSOLUTE_RE = re.compile(r"(^|[^A-Za-z0-9])([A-Za-z]:[\\/]|\\\\)")
-SIGNED_URL_RE = re.compile(r"(X-Amz-Signature=|[?&](?:token|signature|sig)=)", re.IGNORECASE)
+SIGNED_URL_RE = re.compile(
+    r"(X-Amz-(?:Signature|Credential|Security-Token)=|[?&](?:token|signature|sig)=)",
+    re.IGNORECASE,
+)
+SEMANTIC_TEXT_FIELDS = {
+    "answer",
+    "content",
+    "evidence",
+    "reason",
+    "table_html",
+    "text",
+    "visual_summary",
+}
+STRUCTURED_CREDENTIAL_FIELDS = {
+    "access_token",
+    "api_key",
+    "api_token",
+    "authorization",
+    "bearer_token",
+    "mineru_token",
+    "secret_key",
+}
+ALLOWED_MODEL_PATH_PREFIX = "/root/autodl-tmp/models/"
 
 
 class ContractValidationError(RuntimeError):
@@ -497,6 +519,21 @@ def contract_payload(
     return payload
 
 
+def _leaf_field_name(where: str) -> str:
+    segment = where.rsplit(".", 1)[-1]
+    segment = re.sub(r"\[\d+\]", "", segment)
+    return segment.lower()
+
+
+def _is_semantic_text_field(where: str) -> bool:
+    return _leaf_field_name(where) in SEMANTIC_TEXT_FIELDS
+
+
+def _is_structured_credential_field(where: str) -> bool:
+    field_name = _leaf_field_name(where)
+    return field_name in STRUCTURED_CREDENTIAL_FIELDS or field_name.endswith("_token")
+
+
 def validate_no_forbidden_paths(value: Any, *, where: str = "payload") -> list[dict[str, str]]:
     hits: list[dict[str, str]] = []
     if isinstance(value, dict):
@@ -506,11 +543,15 @@ def validate_no_forbidden_paths(value: Any, *, where: str = "payload") -> list[d
         for index, item in enumerate(value):
             hits.extend(validate_no_forbidden_paths(item, where=f"{where}[{index}]"))
     elif isinstance(value, str):
-        if SIGNED_URL_RE.search(value):
+        if _is_semantic_text_field(where):
+            return hits
+        if _is_structured_credential_field(where) and value.strip():
+            hits.append({"where": where, "reason": "credential_field", "value": value[:120]})
+        elif SIGNED_URL_RE.search(value):
             hits.append({"where": where, "reason": "signed_url_or_token", "value": value[:120]})
         elif WINDOWS_ABSOLUTE_RE.search(value):
             hits.append({"where": where, "reason": "windows_absolute_path", "value": value})
-        elif value.startswith("/") and not value.startswith("/root/autodl-tmp/models/"):
+        elif value.startswith("/") and not value.startswith(ALLOWED_MODEL_PATH_PREFIX):
             hits.append({"where": where, "reason": "absolute_path", "value": value})
     return hits
 

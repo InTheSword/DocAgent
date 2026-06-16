@@ -82,6 +82,9 @@ def _corpus_records() -> list[dict]:
     ]
 
 
+FALSE_POSITIVE_OCR_TEXT = "/ a the / / / the / source:\nhttps://www.industrydocuments.ucsf.edu/docs/sybx0223"
+
+
 def _args(tmp_path: Path, input_path: Path, corpus_path: Path | None = None) -> Namespace:
     return Namespace(
         benchmark_input=input_path.relative_to(tmp_path).as_posix(),
@@ -153,6 +156,70 @@ def test_cli_help_subprocess_starts() -> None:
     assert "--corpus-input" in result.stdout
     assert "--benchmark-manifest" in result.stdout
     assert "--answer-only" in result.stdout
+
+
+def test_forbidden_path_scanner_allows_semantic_document_text_fields() -> None:
+    payload = {
+        "fixed_evidence": [
+            {
+                "answer": r"C:\Users\x\a.jpg",
+                "reason": "/leading slash OCR text",
+                "evidence": [
+                    {
+                        "text": FALSE_POSITIVE_OCR_TEXT,
+                        "content": r"C:\Users\x\a.jpg",
+                        "table_html": '<a href="https://example.test/table">source</a>',
+                        "visual_summary": "/root/private/a.jpg",
+                    }
+                ],
+            }
+        ]
+    }
+    original_payload = json.loads(json.dumps(payload))
+
+    assert validate_no_forbidden_paths(payload, where="fixed_evidence") == []
+    assert payload == original_payload
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected_reason"),
+    [
+        ({"image_path": "/root/private/a.jpg"}, "absolute_path"),
+        ({"image_path": r"C:\Users\x\a.jpg"}, "windows_absolute_path"),
+        ({"download_url": "https://example.test/a.zip?X-Amz-Signature=abc"}, "signed_url_or_token"),
+        ({"headers": {"Authorization": "Bearer secret"}}, "credential_field"),
+        ({"api_token": "secret"}, "credential_field"),
+        ({"mineru_token": "secret"}, "credential_field"),
+    ],
+)
+def test_forbidden_path_scanner_rejects_structured_paths_urls_and_tokens(
+    payload: dict,
+    expected_reason: str,
+) -> None:
+    hits = validate_no_forbidden_paths(payload)
+
+    assert hits
+    assert hits[0]["reason"] == expected_reason
+
+
+def test_forbidden_path_scanner_allows_relative_structured_path() -> None:
+    assert validate_no_forbidden_paths({"image_path": "images/a.jpg"}) == []
+
+
+def test_fixed_evidence_hash_is_unchanged_by_security_scan() -> None:
+    records = [
+        {
+            "qid": "q_source",
+            "evidence": [{"block_id": "b1", "text": FALSE_POSITIVE_OCR_TEXT}],
+            "answer": r"C:\Users\x\a.jpg",
+        }
+    ]
+    original_records = json.loads(json.dumps(records))
+    before_hash = fixed_evidence_hash(records)
+
+    assert validate_no_forbidden_paths(records, where="fixed_evidence") == []
+    assert records == original_records
+    assert fixed_evidence_hash(records) == before_hash
 
 
 def test_stable_subset_uses_qid_hash_not_file_prefix() -> None:
@@ -427,7 +494,9 @@ def test_contract_failure_returns_nonzero_exit_code(tmp_path: Path) -> None:
 
 def test_answer_only_runs_when_retrieval_is_blocked(tmp_path: Path) -> None:
     input_path = tmp_path / "phase3_reader.jsonl"
-    write_jsonl(input_path, _sample_records())
+    records = _sample_records()
+    records[0]["evidence"][0]["text"] = FALSE_POSITIVE_OCR_TEXT
+    write_jsonl(input_path, records)
     args = _args(tmp_path, input_path)
     args.answer_only = True
 
@@ -438,6 +507,7 @@ def test_answer_only_runs_when_retrieval_is_blocked(tmp_path: Path) -> None:
     run_dir = tmp_path / "outputs" / "evaluation" / "phase3_focused_eval" / "fixture-run"
     fixed_records = read_jsonl(run_dir / "answer_policy" / "fixed_evidence.jsonl")
     assert all(record["metadata"]["reader_evidence_source"] == "provided_reader_evidence" for record in fixed_records)
+    assert fixed_records[0]["evidence"][0]["text"] == FALSE_POSITIVE_OCR_TEXT
 
 
 def test_answer_only_missing_evidence_fails_reader_contract(tmp_path: Path) -> None:
