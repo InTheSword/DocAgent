@@ -2,50 +2,72 @@
 
 Updated: 2026-06-17
 
-## Phase 4A Active
+## Phase 4A Accepted
 
 Phase 3 is accepted and frozen. Its evaluation implementation, metrics, and
-conclusions are historical and unchanged in this phase.
+conclusions remain historical and unchanged.
 
-Implemented locally:
+Phase 4A server acceptance is complete at commit
+`f3d6237b9f7f53cd9f2a8e21d4441e7f911a7979` on branch
+`codex/phase4-mpdocvqa-raw-foundation`.
 
-- Added `scripts/build_mpdocvqa_raw_documents.py` to restore MP-DocVQA raw
-  parquet rows into stable page-window document assets, multi-page PDFs, QA
-  JSONL, manifests, and compact audit reports.
-- Added fixture coverage in `tests/test_mpdocvqa_raw_documents_builder.py` for
-  single-page and multi-page recovery, source-doc/window identity, window
-  deduplication, conflict rejection, cross-shard deduplication,
-  stringified-field parsing, image-format detection, PDF page-count checks,
-  relative POSIX manifest paths, deterministic sampling, CLI help, and
-  `--validate-only`.
-- Audited the real local shard `val-00001-of-00029.parquet`:
+Accepted server input:
+
+- shard:
+  `/root/autodl-tmp/datasets/mp_docvqa/parquet/val-00001-of-00029.parquet`
+- `size_bytes=255412525`
+- `sha256=493d31bb7b99da676876e4350b27f15ca3e4273518493a09fc799f31d5a3609b`
+- long-lived untracked server paths `data/`, `tmp.py`, `.ipynb_checkpoints/`,
+  and `scripts/.ipynb_checkpoints/` were explicitly treated as non-blocking
+  because they are not tracked modifications
+
+Accepted server results:
+
+- `builder --help`, `py_compile`, real-shard `validate-only`, 5-window sample
+  build, and sample artifact self-check all passed
+- `phase4_mpdocvqa_raw_server_smoke_shell_exit_code=0`
+- real shard audit:
   `row_count=179`, `unique_source_doc_count=44`, `unique_window_count=61`,
-  `same_source_multiple_window_count=6`, `conflicting_window_count=0`,
-  `valid_window_count=61`.
-- Verified the real storage contract:
-  `questionId/doc_id/page_ids/answers/answer_page_idx -> string`,
-  `page_ids/answers -> stringified lists`,
-  `answer_page_idx -> stringified zero-based integer`,
-  `image_1...image_20 -> struct<bytes: binary, path: string>`,
-  `non-null image format -> JPEG`.
-- Built a real 5-window local sample package under
-  `outputs/phase4/mpdocvqa_raw_sample/`.
+  `different_window_same_source_doc_count=23`,
+  `conflicting_window_count=0`
+- sample build:
+  `document_window_count=5`, `qa_count=12`, `absolute_path_hit_count=0`
 
-Window identity audit:
+Accepted document/window boundary:
 
-- Window identity is now derived from:
-  `source_doc_id + canonical ordered_page_ids`.
-- Different ordered page windows under the same `source_doc_id` are treated as
-  valid separate document instances.
-- The previously flagged 6 repeated source docs are now recognized as
-  `same source, different window`, not as conflicts.
-- No true same-window hash conflicts were found in the local shard audit.
+- The restored artifact is an MP-DocVQA `page_window` document, not
+  necessarily a complete original source document.
+- Stable document-window identity is defined by:
+  `source_doc_id + ordered_page_ids`.
+- Different ordered page windows under the same `source_doc_id` are valid
+  independent inputs, not conflicts.
+
+Accepted sample windows:
+
+- `rzbj0037__e09400dd12a9c549`: `source_doc_id=rzbj0037`, `page_count=4`,
+  `qa_count=6`
+- `hqvw0217__bc714cf4181a5632`: `source_doc_id=hqvw0217`, `page_count=1`,
+  `qa_count=1`
+- `jrcy0227__558596710c584b02`: `source_doc_id=jrcy0227`, `page_count=20`,
+  `qa_count=1`
+- `mxxj0037__3e113e49e156e47c`: `source_doc_id=mxxj0037`, `page_count=2`,
+  `qa_count=2`
+- `hljn0226__2583bb36ed16bec4`: `source_doc_id=hljn0226`, `page_count=2`,
+  `qa_count=2`
+
+All accepted sample windows satisfy:
+
+- `input_scope=page_window`
+- `document.pdf` exists
+- `document_manifest.json` exists
+- `source_shards` are recorded correctly
+- persistent paths remain relative
 
 Overlap audit:
 
 - Historical SFT/GRPO source artifacts were not present in the checked local
-  repo paths, so overlap status is `not_available`.
-- This raw MP-DocVQA document path is intended for integration, page retrieval,
+  repo paths, so overlap status remains `not_available`.
+- The MP-DocVQA raw document path is intended for integration, page retrieval,
   and system E2E, not as strict independent generalization evidence.
 
 Status:
@@ -53,8 +75,16 @@ Status:
 ```text
 Phase 3 -> accepted
 Phase 3 evaluation implementation -> frozen
-Phase 4A raw multi-page document foundation -> implemented
-MP-DocVQA raw sample package -> implemented
+Phase 4A implementation -> accepted
+MP-DocVQA raw Parquet schema audit -> accepted
+page-window identity model -> accepted
+multi-page image restoration -> server_validated
+deterministic document asset builder -> server_validated
+Linux PDF generation -> server_validated
+cross-shard identity design -> implemented_not_yet_multi_shard_validated
+MinerU ingestion -> not_started
+raw-document retrieval evaluation -> not_started
+raw-document E2E -> not_started
 CDC -> not_started
 ```
 

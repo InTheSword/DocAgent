@@ -6,19 +6,20 @@
 ## Current Stage
 
 ```text
-Phase 4A: MP-DocVQA raw multi-page document foundation
+Phase 4B: MP-DocVQA raw-document MinerU ingestion and small-scale E2E
 ```
 
 ## Current Goal
 
 ```text
-MP-DocVQA parquet shard
--> source document / page-window identity
--> ordered page image restoration
--> deterministic multi-page PDF synthesis
--> QA JSONL
--> document/source manifest
--> compact schema/build/overlap audit
+page-window PDF
+-> MinerU
+-> EvidenceBlock
+-> page aggregate
+-> gold page mapping
+-> page-level retrieval
+-> AnswerPolicy
+-> answer / evidence page / trace
 ```
 
 ## Current Status
@@ -26,66 +27,71 @@ MP-DocVQA parquet shard
 ```text
 Phase 3 historical record -> accepted
 Phase 3 evaluation implementation -> frozen
-MP-DocVQA raw parquet schema audit -> implemented
-MP-DocVQA raw document builder -> implemented
-MP-DocVQA raw sample package -> implemented
+Phase 4A implementation -> accepted
+MP-DocVQA raw Parquet schema audit -> accepted
+page-window identity model -> accepted
+multi-page image restoration -> server_validated
+deterministic document asset builder -> server_validated
+Linux PDF generation -> server_validated
+cross-shard identity design -> implemented_not_yet_multi_shard_validated
+MinerU ingestion -> not_started
+raw-document retrieval evaluation -> not_started
+raw-document E2E -> not_started
 CDC -> not_started
 ```
 
-Phase 3 is historical and frozen. Do not rewrite its evaluation implementation,
-metrics, or conclusions in this phase.
+Phase 3 is historical and frozen. Phase 4A is accepted. Do not rewrite Phase 3
+evaluation implementation, metrics, or conclusions in this phase.
 
 ## Allowed Scope
 
-- audit the real local MP-DocVQA parquet shard;
-- restore consistent raw multi-page document assets for a small local sample;
-- emit compact QA/document/source manifests and audit reports;
-- keep all generated sample assets under ignored `outputs/`.
+- use a small representative set of accepted MP-DocVQA page-window documents;
+- process only 3-5 windows first, not all 29 shards;
+- prioritize the existing accepted server sample assets;
+- keep generated assets under ignored `outputs/`.
 
 ## Blockers
 
-- No blocker for the local Phase 4A foundation.
-- MinerU parsing, retrieval, CDC real-document work, and multi-shard recovery
-  remain intentionally out of scope for this round.
+- No blocker for the accepted Phase 4A foundation.
+- Phase 4B has not started implementation yet.
 
 ## Local Validation
 
-This phase requires local validation only:
+Phase 4A server acceptance is now recorded from real execution:
 
 ```text
-targeted fixture tests
-+ full pytest regression
-+ real parquet validate-only audit
-+ 3-5 unique document sample build
+server_branch = codex/phase4-mpdocvqa-raw-foundation
+server_commit = f3d6237b9f7f53cd9f2a8e21d4441e7f911a7979
+server_shard = val-00001-of-00029.parquet
+server_shard_sha256 = 493d31bb7b99da676876e4350b27f15ca3e4273518493a09fc799f31d5a3609b
+phase4_mpdocvqa_raw_server_smoke_shell_exit_code = 0
 ```
 
-The current real local sample build uses:
+Accepted Phase 4A server audit:
 
 ```text
-source_shard = val-00001-of-00029.parquet
 row_count = 179
 unique_source_doc_count = 44
 unique_window_count = 61
+different_window_same_source_doc_count = 23
 conflicting_window_count = 0
 valid_window_count = 61
-sample_windows = 5
-seed = 42
+document_window_count = 5
+qa_count = 12
+absolute_path_hit_count = 0
 ```
 
 ## Next Priorities
 
-1. After user confirmation, reuse the Phase 4A builder for the next approved
-   local/server shard scope and feed accepted raw documents into the MinerU
-   parsing path.
-2. Keep CDC queued after the Phase 4A local foundation; do not start CDC
-   parsing or evaluation in this round.
+1. Start Phase 4B with 3-5 accepted page-window documents, covering 1-page,
+   2-5-page, and 10-20-page inputs.
+2. Prefer the existing accepted server sample assets before expanding scope.
+3. Keep CDC queued after the first MP-DocVQA raw-document MinerU/E2E slice.
 
 ## Stop Condition
 
 ```text
-real parquet audit recorded
-+ builder/tests pass
-+ local sample package built
+Phase 4A server acceptance recorded
 + documentation updated
 + commit/push complete
 + stop for user confirmation

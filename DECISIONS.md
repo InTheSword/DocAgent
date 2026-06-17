@@ -427,3 +427,50 @@ Constraints:
   image hashes is a true conflict.
 - Do not attempt source-document window union or full-document reconstruction
   in this phase.
+
+## 2026-06-17: Phase 4A Server Acceptance and Phase 4B Entry Boundary
+
+Decision: accept Phase 4A as the raw MP-DocVQA page-window document
+foundation, and start Phase 4B as a small-scale MinerU/E2E milestone over a
+small accepted window set.
+
+Evidence:
+
+- AutoDL server branch `codex/phase4-mpdocvqa-raw-foundation` ran the accepted
+  implementation commit `f3d6237b9f7f53cd9f2a8e21d4441e7f911a7979`.
+- The real input shard
+  `/root/autodl-tmp/datasets/mp_docvqa/parquet/val-00001-of-00029.parquet`
+  had `sha256=493d31bb7b99da676876e4350b27f15ca3e4273518493a09fc799f31d5a3609b`.
+- `builder --help`, `py_compile`, real-shard `validate-only`, 5-window sample
+  build, and sample self-check all passed with
+  `phase4_mpdocvqa_raw_server_smoke_shell_exit_code=0`.
+- Real shard audit reached `row_count=179`, `unique_source_doc_count=44`,
+  `unique_window_count=61`, `different_window_same_source_doc_count=23`, and
+  `conflicting_window_count=0`.
+- Accepted sample build reached `document_window_count=5`, `qa_count=12`, and
+  `absolute_path_hit_count=0`.
+
+Boundary:
+
+- The accepted Phase 4A artifact is a `page_window` document, not a proven full
+  original source document reconstruction.
+- `source_doc_id + ordered_page_ids` remains the stable document-window
+  identity, and different windows from the same source document remain legal
+  independent inputs.
+- Cross-shard identity design is implemented, but full multi-shard validation
+  is still deferred.
+
+Phase 4B scope:
+
+- Start with only 3-5 accepted page-window documents.
+- Cover 1-page, 2-5-page, and 10-20-page windows.
+- Prefer the already accepted server sample assets.
+- Target flow:
+  `page-window PDF -> MinerU -> EvidenceBlock -> page aggregate -> gold page mapping -> page-level retrieval -> AnswerPolicy -> answer / evidence page / trace`.
+
+Constraints:
+
+- Do not process all 29 shards at Phase 4B start.
+- Do not redefine page-window artifacts as full source-document ground truth.
+- Do not change training, retrieval-model, prompt, or AnswerPolicy code as part
+  of the Phase 4A acceptance closeout.
