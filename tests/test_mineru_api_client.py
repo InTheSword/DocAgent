@@ -8,17 +8,25 @@ import zipfile
 from pathlib import Path
 
 import pytest
+import requests
 
-from docagent.integrations.mineru_api import HttpResponse, MinerUApiClient, MinerUApiError
+from docagent.integrations.mineru_api import HttpResponse, MinerUApiClient, MinerUApiError, UrllibMinerUHttpClient
 
 
 class FakeHttpClient:
-    def __init__(self, *, states: list[str] | None = None, zip_bytes: bytes | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        states: list[str] | None = None,
+        zip_bytes: bytes | None = None,
+        upload_response: HttpResponse | None = None,
+    ) -> None:
         self.states = states or ["done"]
         self.zip_bytes = zip_bytes if zip_bytes is not None else _zip_bytes({"sample_content_list.json": "[]"})
+        self.upload_response = upload_response or HttpResponse(status_code=200, content=b"ok")
         self.post_payloads: list[dict] = []
         self.post_headers: list[dict] = []
-        self.put_calls: list[tuple[str, Path]] = []
+        self.put_calls: list[tuple[str, Path, tuple[float, float] | None]] = []
         self.get_urls: list[str] = []
 
     def post_json(self, url: str, *, headers: dict[str, str], payload: dict) -> HttpResponse:
@@ -29,9 +37,9 @@ class FakeHttpClient:
             json_data={"code": 0, "msg": "ok", "data": {"batch_id": "batch1", "file_urls": ["https://upload.example/signed"]}},
         )
 
-    def put_file(self, url: str, file_path: Path) -> HttpResponse:
-        self.put_calls.append((url, file_path))
-        return HttpResponse(status_code=200, content=b"ok")
+    def put_file(self, url: str, file_path: Path, *, timeout: tuple[float, float] | None = None) -> HttpResponse:
+        self.put_calls.append((url, file_path, timeout))
+        return self.upload_response
 
     def get_json(self, url: str, *, headers: dict[str, str]) -> HttpResponse:
         self.get_urls.append(url)
@@ -57,6 +65,13 @@ def _zip_bytes(files: dict[str, str]) -> bytes:
     return buffer.getvalue()
 
 
+def _response(status_code: int, content: bytes = b"") -> requests.Response:
+    response = requests.Response()
+    response.status_code = status_code
+    response._content = content
+    return response
+
+
 def test_mineru_api_client_reads_token_and_writes_sanitized_manifest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MINERU_TOKEN", "secret-token")
     source = tmp_path / "sample.pdf"
@@ -75,6 +90,7 @@ def test_mineru_api_client_reads_token_and_writes_sanitized_manifest(tmp_path: P
     assert fake.post_payloads[0]["files"] == [{"name": "sample.pdf", "data_id": "sample_data"}]
     assert fake.post_payloads[0]["model_version"] == "vlm"
     assert fake.put_calls[0][0] == "https://upload.example/signed"
+    assert fake.put_calls[0][2] == (10.0, 600.0)
     manifest_text = (tmp_path / "mineru" / "mineru_api_manifest.json").read_text(encoding="utf-8")
     assert "secret-token" not in manifest_text
     assert "upload.example" not in manifest_text
@@ -163,3 +179,118 @@ def test_ingest_document_mineru_api_requires_live_api_before_network(tmp_path: P
 
     assert completed.returncode != 0
     assert "--live-api" in completed.stderr
+
+
+def test_signed_upload_uses_streaming_put_without_api_headers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source = tmp_path / "sample.pdf"
+    raw = b"%PDF-1.4\nstream body"
+    source.write_bytes(raw)
+    captured: dict[str, object] = {}
+
+    def fake_put(url: str, *, data, timeout):
+        captured["url"] = url
+        captured["body"] = data.read()
+        captured["timeout"] = timeout
+        captured["data_type"] = type(data).__name__
+        return _response(200, b"ok")
+
+    monkeypatch.setattr(requests, "put", fake_put)
+    response = UrllibMinerUHttpClient().put_file(
+        "https://mineru.oss-cn-shanghai.aliyuncs.com/object.pdf?Signature=abc&Expires=123",
+        source,
+        timeout=(3.0, 7.0),
+    )
+
+    assert response.status_code == 200
+    assert captured["url"] == "https://mineru.oss-cn-shanghai.aliyuncs.com/object.pdf?Signature=abc&Expires=123"
+    assert captured["body"] == raw
+    assert captured["timeout"] == (3.0, 7.0)
+    assert captured["data_type"] in {"BufferedReader", "FileIO"}
+
+
+def test_signed_upload_does_not_call_read_bytes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source = tmp_path / "sample.pdf"
+    source.write_bytes(b"%PDF-1.4\nstream")
+
+    def forbidden_read_bytes(self):
+        raise AssertionError("read_bytes must not be used for signed upload")
+
+    def fake_put(url: str, *, data, timeout):
+        return _response(200, data.read())
+
+    monkeypatch.setattr(Path, "read_bytes", forbidden_read_bytes)
+    monkeypatch.setattr(requests, "put", fake_put)
+
+    response = UrllibMinerUHttpClient().put_file("https://upload.example/signed", source, timeout=(1.0, 2.0))
+
+    assert response.status_code == 200
+
+
+def test_signed_upload_accepts_any_2xx_status(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source = tmp_path / "sample.pdf"
+    source.write_bytes(b"%PDF-1.4\nsample")
+
+    def fake_put(url: str, *, data, timeout):
+        data.read()
+        return _response(204)
+
+    monkeypatch.setattr(requests, "put", fake_put)
+
+    response = UrllibMinerUHttpClient().put_file("https://upload.example/signed", source, timeout=(1.0, 2.0))
+
+    assert response.status_code == 204
+
+
+def test_signed_upload_403_parses_safe_oss_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source = tmp_path / "sample.pdf"
+    source.write_bytes(b"%PDF-1.4\nsample")
+    xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<Error>
+  <Code>SignatureDoesNotMatch</Code>
+  <Message>The request signature we calculated does not match.</Message>
+  <RequestId>abc123</RequestId>
+</Error>"""
+
+    def fake_put(url: str, *, data, timeout):
+        data.read()
+        return _response(403, xml)
+
+    monkeypatch.setattr(requests, "put", fake_put)
+
+    response = UrllibMinerUHttpClient().put_file(
+        "https://upload.example/object?Signature=secret-query",
+        source,
+        timeout=(1.0, 2.0),
+    )
+
+    assert response.status_code == 403
+    assert response.error_code == "SignatureDoesNotMatch"
+    assert response.error_message == "The request signature we calculated does not match."
+    assert response.request_id_present is True
+
+
+def test_submit_local_pdf_403_error_is_safe(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MINERU_TOKEN", "secret-token")
+    source = tmp_path / "sample.pdf"
+    source.write_bytes(b"%PDF-1.4\nsample")
+    fake = FakeHttpClient(
+        upload_response=HttpResponse(
+            status_code=403,
+            content=b"<Error><Code>SignatureDoesNotMatch</Code><Message>bad signature</Message><RequestId>r1</RequestId></Error>",
+            error_code="SignatureDoesNotMatch",
+            error_message="bad signature",
+            request_id_present=True,
+        )
+    )
+    client = MinerUApiClient(http_client=fake)
+
+    with pytest.raises(MinerUApiError) as excinfo:
+        client.submit_local_pdf(file_path=source, data_id="sample_data")
+
+    message = str(excinfo.value)
+    assert "HTTP 403" in message
+    assert "OSS code=SignatureDoesNotMatch" in message
+    assert "request_id_present=True" in message
+    assert "https://upload.example" not in message
+    assert "secret-token" not in message
+    assert "Signature=" not in message

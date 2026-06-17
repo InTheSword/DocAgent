@@ -5,10 +5,13 @@ import os
 import time
 import urllib.error
 import urllib.request
+import xml.etree.ElementTree as ET
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
+
+import requests
 
 from docagent.ingestion.hashing import sha256_file
 from docagent.parser.mineru_converter import find_content_list
@@ -29,6 +32,9 @@ class HttpResponse:
     status_code: int
     json_data: dict[str, Any] | None = None
     content: bytes | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+    request_id_present: bool | None = None
 
 
 class MinerUHttpClient(Protocol):
@@ -41,7 +47,7 @@ class MinerUHttpClient(Protocol):
     def get_bytes(self, url: str) -> HttpResponse:
         ...
 
-    def put_file(self, url: str, file_path: Path) -> HttpResponse:
+    def put_file(self, url: str, file_path: Path, *, timeout: tuple[float, float] | None = None) -> HttpResponse:
         ...
 
 
@@ -63,13 +69,22 @@ class UrllibMinerUHttpClient:
         except urllib.error.HTTPError as exc:
             return HttpResponse(status_code=exc.code, content=exc.read())
 
-    def put_file(self, url: str, file_path: Path) -> HttpResponse:
-        request = urllib.request.Request(url, data=file_path.read_bytes(), method="PUT")
+    def put_file(self, url: str, file_path: Path, *, timeout: tuple[float, float] | None = None) -> HttpResponse:
+        timeout_value = timeout or (10.0, 600.0)
         try:
-            with urllib.request.urlopen(request) as response:
-                return HttpResponse(status_code=response.status, content=response.read())
-        except urllib.error.HTTPError as exc:
-            return HttpResponse(status_code=exc.code, content=exc.read())
+            with file_path.open("rb") as handle:
+                response = requests.put(url, data=handle, timeout=timeout_value)
+        except requests.RequestException as exc:
+            raise MinerUApiError(f"MinerU file upload request failed: {type(exc).__name__}") from exc
+        content = response.content or b""
+        error = _safe_oss_error(content) if response.status_code < 200 or response.status_code >= 300 else {}
+        return HttpResponse(
+            status_code=response.status_code,
+            content=content,
+            error_code=error.get("code"),
+            error_message=error.get("message"),
+            request_id_present=error.get("request_id_present"),
+        )
 
     def _open_json(self, request: urllib.request.Request) -> HttpResponse:
         try:
@@ -112,6 +127,36 @@ def _first_done_result(data: dict[str, Any]) -> dict[str, Any]:
     raise MinerUApiError("batch result has no done extract_result")
 
 
+def _safe_oss_error(content: bytes, *, max_message_chars: int = 160) -> dict[str, Any]:
+    if not content:
+        return {}
+    try:
+        root = ET.fromstring(content[:4096])
+    except ET.ParseError:
+        return {}
+    code = root.findtext("Code")
+    message = root.findtext("Message")
+    request_id = root.findtext("RequestId")
+    result: dict[str, Any] = {}
+    if code:
+        result["code"] = code.strip()[:80]
+    if message:
+        result["message"] = " ".join(message.split())[:max_message_chars]
+    result["request_id_present"] = bool(request_id)
+    return result
+
+
+def _upload_error_message(response: HttpResponse) -> str:
+    message = f"MinerU file upload failed: HTTP {response.status_code}"
+    if response.error_code:
+        message += f", OSS code={response.error_code}"
+    if response.error_message:
+        message += f", message={response.error_message}"
+    if response.request_id_present is not None:
+        message += f", request_id_present={response.request_id_present}"
+    return message
+
+
 def _safe_extract(zip_path: Path, target_dir: Path) -> None:
     target_dir.mkdir(parents=True, exist_ok=True)
     target_root = target_dir.resolve()
@@ -151,6 +196,7 @@ class MinerUApiClient:
         enable_table: bool | None = True,
         enable_formula: bool | None = True,
         language: str | None = "en",
+        upload_timeout: tuple[float, float] = (10.0, 600.0),
     ) -> dict[str, Any]:
         path = Path(file_path)
         payload: dict[str, Any] = {
@@ -175,9 +221,9 @@ class MinerUApiClient:
         file_urls = data.get("data", {}).get("file_urls")
         if not batch_id or not isinstance(file_urls, list) or len(file_urls) != 1:
             raise MinerUApiError("MinerU upload-url response missing batch_id or file_urls")
-        upload_response = self.http_client.put_file(str(file_urls[0]), path)
+        upload_response = self.http_client.put_file(str(file_urls[0]), path, timeout=upload_timeout)
         if upload_response.status_code < 200 or upload_response.status_code >= 300:
-            raise MinerUApiError(f"MinerU file upload failed with HTTP {upload_response.status_code}")
+            raise MinerUApiError(_upload_error_message(upload_response))
         return {
             "batch_id": batch_id,
             "payload": payload,

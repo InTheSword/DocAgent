@@ -513,3 +513,40 @@ Constraints:
   prior gate returns.
 - Continue Phase 4B in the same Codex thread and feature branch:
   `codex/phase4b-mpdocvqa-e2e`.
+
+## 2026-06-17: MinerU Signed Upload Client
+
+Decision: use streaming `requests.put(upload_url, data=file, timeout=(connect,
+read))` for MinerU OSS signed URL uploads instead of `urllib.request.Request`
+with `data=file_path.read_bytes()`.
+
+Rationale:
+
+- Gate 1 live execution reached MinerU upload URL generation, proving the API
+  token and `/api/v4/file-urls/batch` request were valid.
+- The existing urllib PUT returned HTTP 403 at the OSS signed URL upload step.
+- Independent server diagnosis in the same environment, with the same token,
+  same PDF, and same signed URL contract, succeeded with streaming
+  `requests.put(..., data=file)`.
+- The failure is scoped to the signed upload client implementation, not
+  Phase 4A sample assets, upload URL generation, networking, or the PDF.
+
+Constraints:
+
+- Do not send Authorization, MinerU API headers, or explicit Content-Type to
+  the signed upload URL.
+- Do not modify signed URLs or persist signed URL query parameters.
+- Do not load large PDFs into memory for upload.
+- Upload failures may report HTTP status, safe OSS `Code`, a truncated OSS
+  `Message`, and whether a RequestId existed, but must not include signed URLs,
+  tokens, Authorization headers, temporary credentials, or full cloud response
+  bodies.
+
+Current status:
+
+```text
+Gate 1 real MinerU smoke -> blocked_by_signed_upload_client
+Gate 2 -> blocked_by_gate1
+Gate 3 -> blocked_by_gate2
+Gate 4 -> blocked_by_gate3
+```

@@ -30,7 +30,7 @@ Phase 3 evaluation implementation -> frozen
 Phase 4A implementation -> accepted
 Phase 4B -> active
 Gate 1 local implementation -> implemented
-Gate 1 real MinerU smoke -> not_started
+Gate 1 real MinerU smoke -> blocked_by_signed_upload_client
 Gate 2 -> blocked_by_gate1
 Gate 3 -> blocked_by_gate2
 Gate 4 -> blocked_by_gate3
@@ -52,6 +52,9 @@ evaluation implementation, metrics, or conclusions in this phase.
 ## Blockers
 
 - No blocker for the accepted Phase 4A foundation.
+- Gate 1 live MinerU smoke reached signed URL upload and failed at OSS PUT
+  with HTTP 403. Independent server diagnosis verified the token, upload URL,
+  network, PDF, and `requests.put(..., data=file)` streaming upload path.
 - Gate 2 waits for Gate 1 real MinerU smoke output.
 - Gate 3 waits for Gate 2 representative multi-page ingestion.
 - Gate 4 waits for Gate 3 page-level retrieval and AnswerPolicy E2E.
@@ -84,8 +87,8 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Run the Gate 1 live MinerU smoke for
-   `hqvw0217__bc714cf4181a5632` on AutoDL using the Phase 4B feature branch.
+1. Retry the Gate 1 live MinerU smoke for
+   `hqvw0217__bc714cf4181a5632` after the signed upload client fix is pushed.
 2. If Gate 1 succeeds, continue Gate 2 in the same Codex thread and branch.
 3. Keep CDC queued until Phase 4B completes.
 

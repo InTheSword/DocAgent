@@ -58,7 +58,7 @@ not a full 29-shard rollout.
 | Phase 4A cross-shard identity design | implemented_not_yet_multi_shard_validated | multi-shard contract implemented, not yet server-validated |
 | Phase 4B | active | current milestone |
 | Gate 1 local implementation | implemented | runner and fixture tests added locally |
-| Gate 1 real MinerU smoke | not_started | waits for AutoDL live API result |
+| Gate 1 real MinerU smoke | blocked_by_signed_upload_client | first live run reached OSS signed PUT and failed with HTTP 403 |
 | Gate 2 | blocked_by_gate1 | representative 1/4/20-page ingestion waits for Gate 1 |
 | Gate 3 | blocked_by_gate2 | page-level retrieval and AnswerPolicy E2E waits for Gate 2 |
 | Gate 4 | blocked_by_gate3 | 10-20 windows / 30-50 QA waits for Gate 3 |
@@ -145,7 +145,7 @@ hqvw0217__bc714cf4181a5632
 Gate order remains:
 
 ```text
-Gate 1 real MinerU smoke -> not_started
+Gate 1 real MinerU smoke -> blocked_by_signed_upload_client
 Gate 2 -> blocked_by_gate1
 Gate 3 -> blocked_by_gate2
 Gate 4 -> blocked_by_gate3
@@ -157,7 +157,24 @@ Phase 4B must still use one Codex thread and one feature branch:
 codex/phase4b-mpdocvqa-e2e
 ```
 
-Do not expand past Gate 1 until the server returns the live MinerU result.
+Do not expand past Gate 1 until the signed upload fix is server-retried and
+the live MinerU result returns.
+
+Server diagnosis from the first Gate 1 attempt:
+
+```text
+MINERU_TOKEN -> set and valid
+POST /api/v4/file-urls/batch -> HTTP 200, code=0
+existing urllib PUT upload -> HTTP 403
+independent requests streaming PUT on the same URL/PDF -> HTTP 200
+```
+
+Conclusion:
+
+```text
+Gate 1 is blocked by the signed upload client implementation, not by token,
+network, PDF, upload URL generation, or Phase 4A sample assets.
+```
 
 The eventual Phase 4B scope remains:
 
@@ -200,7 +217,7 @@ Do not:
 
 ## 8. Next Priorities
 
-1. Wait for the AutoDL Gate 1 smoke result.
+1. Retry the AutoDL Gate 1 smoke after the signed upload client fix is pushed.
 2. If Gate 1 succeeds, continue Gate 2 in the same thread and branch.
 3. Keep CDC queued after Phase 4B.
 
