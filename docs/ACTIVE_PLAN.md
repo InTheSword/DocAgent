@@ -28,16 +28,15 @@ page-window PDF
 Phase 3 historical record -> accepted
 Phase 3 evaluation implementation -> frozen
 Phase 4A implementation -> accepted
-MP-DocVQA raw Parquet schema audit -> accepted
-page-window identity model -> accepted
-multi-page image restoration -> server_validated
-deterministic document asset builder -> server_validated
-Linux PDF generation -> server_validated
-cross-shard identity design -> implemented_not_yet_multi_shard_validated
-MinerU ingestion -> not_started
-raw-document retrieval evaluation -> not_started
-raw-document E2E -> not_started
-CDC -> not_started
+Phase 4B -> active
+Gate 1 local implementation -> implemented
+Gate 1 real MinerU smoke -> not_started
+Gate 2 -> blocked_by_gate1
+Gate 3 -> blocked_by_gate2
+Gate 4 -> blocked_by_gate3
+CDC -> queued after Phase 4B
+Router/tools -> queued after CDC
+Demo/closure -> final phase
 ```
 
 Phase 3 is historical and frozen. Phase 4A is accepted. Do not rewrite Phase 3
@@ -53,7 +52,9 @@ evaluation implementation, metrics, or conclusions in this phase.
 ## Blockers
 
 - No blocker for the accepted Phase 4A foundation.
-- Phase 4B has not started implementation yet.
+- Gate 2 waits for Gate 1 real MinerU smoke output.
+- Gate 3 waits for Gate 2 representative multi-page ingestion.
+- Gate 4 waits for Gate 3 page-level retrieval and AnswerPolicy E2E.
 
 ## Local Validation
 
@@ -83,18 +84,17 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Start Phase 4B with 3-5 accepted page-window documents, covering 1-page,
-   2-5-page, and 10-20-page inputs.
-2. Prefer the existing accepted server sample assets before expanding scope.
-3. Keep CDC queued after the first MP-DocVQA raw-document MinerU/E2E slice.
+1. Run the Gate 1 live MinerU smoke for
+   `hqvw0217__bc714cf4181a5632` on AutoDL using the Phase 4B feature branch.
+2. If Gate 1 succeeds, continue Gate 2 in the same Codex thread and branch.
+3. Keep CDC queued until Phase 4B completes.
 
 ## Stop Condition
 
 ```text
-Phase 4A server acceptance recorded
-+ documentation updated
-+ commit/push complete
-+ stop for user confirmation
+Gate 1 local implementation committed and pushed
++ one AutoDL Gate 1 command provided
++ stop for server result
 ```
 
 ## Phase Documents

@@ -2,6 +2,43 @@
 
 Updated: 2026-06-17
 
+## Phase 4B Active
+
+Phase 4A remains accepted. Phase 4B is the active milestone and uses the
+single feature branch `codex/phase4b-mpdocvqa-e2e`.
+
+Current Phase 4B status:
+
+```text
+Phase 4A -> accepted
+Phase 4B -> active
+Gate 1 local implementation -> implemented
+Gate 1 real MinerU smoke -> not_started
+Gate 2 -> blocked_by_gate1
+Gate 3 -> blocked_by_gate2
+Gate 4 -> blocked_by_gate3
+CDC -> queued after Phase 4B
+Router/tools -> queued after CDC
+Demo/closure -> final phase
+```
+
+Gate 1 local implementation adds a reusable MP-DocVQA page-window ingestion
+runner for:
+
+```text
+Phase 4A sample assets
+-> existing MinerU API client
+-> existing DocumentIngestionService
+-> EvidenceBlock
+-> page_documents
+-> structure quality
+-> QA page mapping
+-> compact acceptance report
+```
+
+The Gate 1 real MinerU smoke has not run yet. Do not mark Gate 1 or Phase 4B
+as accepted until the server returns a successful live MinerU result.
+
 ## Phase 4A Accepted
 
 Phase 3 is accepted and frozen. Its evaluation implementation, metrics, and
@@ -82,10 +119,15 @@ multi-page image restoration -> server_validated
 deterministic document asset builder -> server_validated
 Linux PDF generation -> server_validated
 cross-shard identity design -> implemented_not_yet_multi_shard_validated
-MinerU ingestion -> not_started
-raw-document retrieval evaluation -> not_started
-raw-document E2E -> not_started
-CDC -> not_started
+Phase 4B -> active
+Gate 1 local implementation -> implemented
+Gate 1 real MinerU smoke -> not_started
+Gate 2 -> blocked_by_gate1
+Gate 3 -> blocked_by_gate2
+Gate 4 -> blocked_by_gate3
+CDC -> queued after Phase 4B
+Router/tools -> queued after CDC
+Demo/closure -> final phase
 ```
 
 ## Phase 1 Complete

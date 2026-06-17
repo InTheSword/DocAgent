@@ -474,3 +474,42 @@ Constraints:
 - Do not redefine page-window artifacts as full source-document ground truth.
 - Do not change training, retrieval-model, prompt, or AnswerPolicy code as part
   of the Phase 4A acceptance closeout.
+
+## 2026-06-17: Phase 4B Gate 1 Local Runner Boundary
+
+Decision: implement Gate 1 as a reusable MP-DocVQA page-window ingestion runner
+that wraps existing MinerU API, `DocumentIngestionService`, EvidenceBlock,
+page aggregate, structure-quality, SQLite, and JSONL utilities.
+
+Status:
+
+```text
+Phase 4A -> accepted
+Phase 4B -> active
+Gate 1 local implementation -> implemented
+Gate 1 real MinerU smoke -> not_started
+Gate 2 -> blocked_by_gate1
+Gate 3 -> blocked_by_gate2
+Gate 4 -> blocked_by_gate3
+CDC -> queued after Phase 4B
+Router/tools -> queued after CDC
+Demo/closure -> final phase
+```
+
+Rationale:
+
+- Phase 4A already defines page-window identity and deterministic PDF assets.
+- Gate 1 only needs to validate the first raw-input path:
+  `document.pdf -> MinerU -> EvidenceBlock -> page_documents -> gold page mapping`.
+- The runner must not reimplement the MinerU HTTP client, ingestion service,
+  EvidenceBlock schema, or SQLite schema.
+
+Constraints:
+
+- `validate-only` must not call MinerU.
+- Local tests may use fixture/fake MinerU outputs only.
+- Gate 1 is not accepted until the AutoDL live MinerU smoke succeeds.
+- Gate 2/3/4, retrieval, Qwen, and expanded windows remain blocked until the
+  prior gate returns.
+- Continue Phase 4B in the same Codex thread and feature branch:
+  `codex/phase4b-mpdocvqa-e2e`.

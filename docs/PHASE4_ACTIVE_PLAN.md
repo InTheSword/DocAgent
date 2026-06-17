@@ -56,10 +56,15 @@ not a full 29-shard rollout.
 | Phase 4A deterministic asset builder | server_validated | help, py_compile, validate-only, build, self-check passed |
 | Phase 4A Linux PDF generation | server_validated | `document.pdf` and manifest checks passed |
 | Phase 4A cross-shard identity design | implemented_not_yet_multi_shard_validated | multi-shard contract implemented, not yet server-validated |
-| Phase 4B MinerU ingestion | not_started | next active scope |
-| Phase 4B raw-document retrieval | not_started | queued after ingestion |
-| Phase 4B raw-document E2E | not_started | queued after ingestion/retrieval |
-| CDC real document | not_started | queued after first Phase 4B slice |
+| Phase 4B | active | current milestone |
+| Gate 1 local implementation | implemented | runner and fixture tests added locally |
+| Gate 1 real MinerU smoke | not_started | waits for AutoDL live API result |
+| Gate 2 | blocked_by_gate1 | representative 1/4/20-page ingestion waits for Gate 1 |
+| Gate 3 | blocked_by_gate2 | page-level retrieval and AnswerPolicy E2E waits for Gate 2 |
+| Gate 4 | blocked_by_gate3 | 10-20 windows / 30-50 QA waits for Gate 3 |
+| CDC | queued after Phase 4B | do not start during Phase 4B gates |
+| Router/tools | queued after CDC | later phase |
+| Demo/closure | final phase | later phase |
 
 Phase 4A accepted server input:
 
@@ -130,7 +135,31 @@ Phase 4A accepted contract remains:
 
 ## 5. Phase 4B Initial Scope
 
-Start only with:
+Gate 1 local implementation is now present. The next action is a single live
+MinerU smoke for:
+
+```text
+hqvw0217__bc714cf4181a5632
+```
+
+Gate order remains:
+
+```text
+Gate 1 real MinerU smoke -> not_started
+Gate 2 -> blocked_by_gate1
+Gate 3 -> blocked_by_gate2
+Gate 4 -> blocked_by_gate3
+```
+
+Phase 4B must still use one Codex thread and one feature branch:
+
+```text
+codex/phase4b-mpdocvqa-e2e
+```
+
+Do not expand past Gate 1 until the server returns the live MinerU result.
+
+The eventual Phase 4B scope remains:
 
 - 3-5 document windows;
 - coverage across 1-page, 2-5-page, and 10-20-page documents;
@@ -156,24 +185,31 @@ builder --help
 
 ## 7. Server Boundary
 
-This handoff round only records accepted server output. Do not:
+Current server boundary:
 
-- rerun server commands;
-- run MinerU;
-- run retrieval or answer models.
+- run only the single Gate 1 live MinerU smoke command supplied by Codex;
+- check that `MINERU_TOKEN` is set without printing it;
+- do not run retrieval, Qwen, Gate 2, Gate 3, or Gate 4 until Gate 1 returns.
+
+Do not:
+
+- print or persist `MINERU_TOKEN`;
+- install packages or modify the stable `docagent` environment;
+- run retrieval or answer models in Gate 1;
+- create per-gate branches.
 
 ## 8. Next Priorities
 
-1. Reuse the accepted sample windows as the initial Phase 4B MinerU ingestion set.
-2. Build the first page-window PDF -> MinerU -> EvidenceBlock -> page aggregate path.
-3. After ingestion is stable, add gold page mapping, page-level retrieval, and AnswerPolicy.
+1. Wait for the AutoDL Gate 1 smoke result.
+2. If Gate 1 succeeds, continue Gate 2 in the same thread and branch.
+3. Keep CDC queued after Phase 4B.
 
 ## 9. Stop Condition
 
 Stop after the following are complete:
 
 ```text
-Phase 4A server acceptance recorded
-+ documentation updated
-+ commit/push complete
+Gate 1 local implementation committed and pushed
++ one AutoDL Gate 1 command provided
++ stop for server result
 ```
