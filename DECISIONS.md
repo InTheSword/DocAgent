@@ -376,3 +376,30 @@ Constraints:
 - Do not assume two GPUs improve current inference or retrieval runs.
 - Use two GPUs only for heavier training, or after implementing explicit
   SFT/GRPO dual-process parallelism with separate GPU assignment.
+
+## 2026-06-17: Phase 4A Raw MP-DocVQA Foundation
+
+Decision: switch the active milestone to a local raw-document foundation for
+MP-DocVQA parquet shards before any MinerU, retrieval, CDC, or model work.
+
+Rationale:
+
+- Phase 3 closed without an accepted raw MP-DocVQA document asset layer, so
+  there is still no clean path from original shard rows to standard page
+  images, multi-page PDFs, or later parsing inputs.
+- The real local shard audit shows that `page_ids`, `answers`, and
+  `answer_page_idx` are stored as strings, while images are stored as
+  `struct<bytes, path>`, so the raw builder must parse real storage rather than
+  rely on nominal schema assumptions.
+- Some repeated `doc_id` groups expose different page windows or page SHA
+  signatures across QA rows; those conflicts must be rejected instead of
+  silently merged.
+
+Constraints:
+
+- Do not run MinerU, retrieval, Qwen, SFT/GRPO, or CDC in this phase.
+- Do not restore all 29 shards in this round.
+- Do not let training-overlap concerns block the raw document foundation; a
+  light overlap audit is sufficient.
+- Keep generated parquet-derived assets under ignored `outputs/` paths and do
+  not commit restored images, PDFs, or sample QA outputs.

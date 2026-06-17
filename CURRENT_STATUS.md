@@ -1,6 +1,57 @@
 # Current Status
 
-Updated: 2026-06-16
+Updated: 2026-06-17
+
+## Phase 4A Active
+
+Phase 3 is accepted and frozen. Its evaluation implementation, metrics, and
+conclusions are historical and unchanged in this phase.
+
+Implemented locally:
+
+- Added `scripts/build_mpdocvqa_raw_documents.py` to restore MP-DocVQA raw
+  parquet rows into deduplicated document assets, multi-page PDFs, QA JSONL,
+  manifests, and compact audit reports.
+- Added fixture coverage in `tests/test_mpdocvqa_raw_documents_builder.py` for
+  single-page and multi-page recovery, doc-level deduplication, conflict
+  rejection, stringified-field parsing, image-format detection, PDF page-count
+  checks, relative POSIX manifest paths, deterministic sampling, CLI help, and
+  `--validate-only`.
+- Audited the real local shard `val-00001-of-00029.parquet`:
+  `row_count=179`, `unique_doc_count=44`, `valid_doc_count=38`,
+  `invalid_doc_count=6`.
+- Verified the real storage contract:
+  `questionId/doc_id/page_ids/answers/answer_page_idx -> string`,
+  `page_ids/answers -> stringified lists`,
+  `answer_page_idx -> stringified zero-based integer`,
+  `image_1...image_20 -> struct<bytes: binary, path: string>`,
+  `non-null image format -> JPEG`.
+- Built a real 5-document local sample package under
+  `outputs/phase4/mpdocvqa_raw_sample/`.
+
+Conflict audit:
+
+- The shard contains 6 conflicting `doc_id` groups that expose different page
+  windows or page SHA signatures across QA rows:
+  `fxxj0037`, `jrcy0227`, `rzbj0037`, `tnbx0223`, `trgj0223`, `ynbx0223`.
+- Those documents are rejected by the builder and are not silently merged.
+
+Overlap audit:
+
+- Historical SFT/GRPO source artifacts were not present in the checked local
+  repo paths, so overlap status is `not_available`.
+- This raw MP-DocVQA document path is intended for integration, page retrieval,
+  and system E2E, not as strict independent generalization evidence.
+
+Status:
+
+```text
+Phase 3 -> accepted
+Phase 3 evaluation implementation -> frozen
+Phase 4A raw multi-page document foundation -> implemented
+MP-DocVQA raw sample package -> implemented
+CDC -> not_started
+```
 
 ## Phase 1 Complete
 
