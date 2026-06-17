@@ -10,31 +10,36 @@ conclusions are historical and unchanged in this phase.
 Implemented locally:
 
 - Added `scripts/build_mpdocvqa_raw_documents.py` to restore MP-DocVQA raw
-  parquet rows into deduplicated document assets, multi-page PDFs, QA JSONL,
-  manifests, and compact audit reports.
+  parquet rows into stable page-window document assets, multi-page PDFs, QA
+  JSONL, manifests, and compact audit reports.
 - Added fixture coverage in `tests/test_mpdocvqa_raw_documents_builder.py` for
-  single-page and multi-page recovery, doc-level deduplication, conflict
-  rejection, stringified-field parsing, image-format detection, PDF page-count
-  checks, relative POSIX manifest paths, deterministic sampling, CLI help, and
+  single-page and multi-page recovery, source-doc/window identity, window
+  deduplication, conflict rejection, cross-shard deduplication,
+  stringified-field parsing, image-format detection, PDF page-count checks,
+  relative POSIX manifest paths, deterministic sampling, CLI help, and
   `--validate-only`.
 - Audited the real local shard `val-00001-of-00029.parquet`:
-  `row_count=179`, `unique_doc_count=44`, `valid_doc_count=38`,
-  `invalid_doc_count=6`.
+  `row_count=179`, `unique_source_doc_count=44`, `unique_window_count=61`,
+  `same_source_multiple_window_count=6`, `conflicting_window_count=0`,
+  `valid_window_count=61`.
 - Verified the real storage contract:
   `questionId/doc_id/page_ids/answers/answer_page_idx -> string`,
   `page_ids/answers -> stringified lists`,
   `answer_page_idx -> stringified zero-based integer`,
   `image_1...image_20 -> struct<bytes: binary, path: string>`,
   `non-null image format -> JPEG`.
-- Built a real 5-document local sample package under
+- Built a real 5-window local sample package under
   `outputs/phase4/mpdocvqa_raw_sample/`.
 
-Conflict audit:
+Window identity audit:
 
-- The shard contains 6 conflicting `doc_id` groups that expose different page
-  windows or page SHA signatures across QA rows:
-  `fxxj0037`, `jrcy0227`, `rzbj0037`, `tnbx0223`, `trgj0223`, `ynbx0223`.
-- Those documents are rejected by the builder and are not silently merged.
+- Window identity is now derived from:
+  `source_doc_id + canonical ordered_page_ids`.
+- Different ordered page windows under the same `source_doc_id` are treated as
+  valid separate document instances.
+- The previously flagged 6 repeated source docs are now recognized as
+  `same source, different window`, not as conflicts.
+- No true same-window hash conflicts were found in the local shard audit.
 
 Overlap audit:
 

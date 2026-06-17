@@ -391,9 +391,9 @@ Rationale:
   `answer_page_idx` are stored as strings, while images are stored as
   `struct<bytes, path>`, so the raw builder must parse real storage rather than
   rely on nominal schema assumptions.
-- Some repeated `doc_id` groups expose different page windows or page SHA
-  signatures across QA rows; those conflicts must be rejected instead of
-  silently merged.
+- The same source `doc_id` may appear with multiple ordered page windows
+  because each parquet row carries at most 20 page images; the builder must
+  distinguish source-document identity from page-window identity.
 
 Constraints:
 
@@ -403,3 +403,27 @@ Constraints:
   light overlap audit is sufficient.
 - Keep generated parquet-derived assets under ignored `outputs/` paths and do
   not commit restored images, PDFs, or sample QA outputs.
+
+## 2026-06-17: MP-DocVQA Page-Window Identity
+
+Decision: define the Phase 4A document instance as
+`source_doc_id + canonical ordered_page_ids`, not as `source_doc_id` alone.
+
+Rationale:
+
+- ModelScope/Hugging Face previews and the local parquet audit show that the
+  same source document may be split into multiple page windows across QA rows.
+- Treating `source_doc_id` as the only identity incorrectly turns valid
+  windows into false conflicts and drops usable QA/document assets.
+- A stable window signature derived from canonical JSON
+  `{source_doc_id, ordered_page_ids}` remains reproducible across shards and
+  independent of row order.
+
+Constraints:
+
+- Same `source_doc_id` plus different ordered page windows must be preserved as
+  separate valid document instances, even when windows overlap.
+- Only same `source_doc_id` plus same ordered page window plus different page
+  image hashes is a true conflict.
+- Do not attempt source-document window union or full-document reconstruction
+  in this phase.

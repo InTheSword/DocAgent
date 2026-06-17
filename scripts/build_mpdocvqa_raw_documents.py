@@ -11,7 +11,7 @@ import sys
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import pyarrow.parquet as pq
 from PIL import Image, UnidentifiedImageError
@@ -22,10 +22,11 @@ sys.path.insert(0, str(ROOT))
 from docagent.utils.jsonl import write_jsonl
 
 
-BUILDER_VERSION = "phase4a-mpdocvqa-raw-v1"
+BUILDER_VERSION = "phase4a-mpdocvqa-raw-v2"
 DEFAULT_OUTPUT_ROOT = "outputs/phase4/mpdocvqa_raw_sample"
 IMAGE_COLUMNS = [f"image_{index}" for index in range(1, 21)]
-REPEATED_CONTENT_WARNING = "duplicate_image_content_within_document"
+INPUT_SCOPE = "page_window"
+REPEATED_CONTENT_WARNING = "duplicate_image_content_within_window"
 
 
 class BuildError(RuntimeError):
@@ -50,7 +51,9 @@ class PageRecord:
 class RowRecord:
     qid: str
     question: str
-    doc_id: str
+    source_doc_id: str
+    window_signature: str
+    window_doc_id: str
     page_ids: list[str]
     answers: list[str]
     answer_page_idx: int
@@ -61,19 +64,24 @@ class RowRecord:
     repeated_page_content: bool
 
     @property
-    def signature(self) -> tuple[tuple[str, ...], tuple[str, ...]]:
-        return tuple(self.page_ids), tuple(page.sha256 for page in self.pages)
+    def page_sha256(self) -> tuple[str, ...]:
+        return tuple(page.sha256 for page in self.pages)
 
 
 @dataclass
-class DocumentRecord:
+class WindowRecord:
     doc_id: str
+    source_doc_id: str
+    window_signature: str
     page_ids: list[str]
     qa_rows: list[RowRecord]
     page_sha256: list[str]
     page_formats: list[str]
+    source_shards: list[str]
     repeated_page_content: bool = False
     warnings: list[str] = field(default_factory=list)
+    input_scope: str = INPUT_SCOPE
+    document_is_full_source_document: bool = False
 
     @property
     def page_count(self) -> int:
@@ -82,8 +90,8 @@ class DocumentRecord:
 
 @dataclass
 class AuditResult:
-    valid_documents: dict[str, DocumentRecord]
-    invalid_documents: dict[str, list[str]]
+    valid_windows: dict[str, WindowRecord]
+    invalid_windows: dict[str, list[str]]
     schema_audit: dict[str, Any]
     overlap_audit: dict[str, Any]
 
@@ -115,6 +123,25 @@ def relative_posix(path: Path, root: Path) -> str:
     return path.resolve().relative_to(root.resolve()).as_posix()
 
 
+def input_path_key(path: Path) -> str:
+    return path.resolve().as_posix().lower()
+
+
+def normalize_input_parquets(value: Path | str | Iterable[Path | str]) -> list[Path]:
+    if isinstance(value, (str, Path)):
+        candidates = [value]
+    else:
+        candidates = list(value)
+    normalized: dict[str, Path] = {}
+    for candidate in candidates:
+        path = repo_path(candidate)
+        normalized[input_path_key(path)] = path
+    paths = sorted(normalized.values(), key=input_path_key)
+    if not paths:
+        raise BuildError("at least one input parquet is required")
+    return paths
+
+
 def parse_string_list(value: Any, *, field_name: str) -> list[str]:
     if value is None:
         return []
@@ -138,8 +165,7 @@ def parse_string_list(value: Any, *, field_name: str) -> list[str]:
             items = [text]
     else:
         items = [value]
-    normalized = [str(item).strip() for item in items if str(item).strip()]
-    return normalized
+    return [str(item).strip() for item in items if str(item).strip()]
 
 
 def parse_int(value: Any, *, field_name: str) -> int:
@@ -203,6 +229,17 @@ def image_payload(value: Any, *, column_name: str) -> tuple[bytes | None, str | 
     raise BuildError(f"{column_name} uses unsupported storage type: {type(value).__name__}")
 
 
+def window_identity(source_doc_id: str, ordered_page_ids: list[str]) -> tuple[str, str]:
+    payload = json.dumps(
+        {"ordered_page_ids": ordered_page_ids, "source_doc_id": source_doc_id},
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    signature = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    return signature, f"{source_doc_id}__{signature[:16]}"
+
+
 def parse_row(raw_row: dict[str, Any], *, source_shard: str, include_raw_bytes: bool) -> RowRecord:
     qid = str(raw_row.get("questionId") or raw_row.get("questionid") or "").strip()
     if not qid:
@@ -210,8 +247,8 @@ def parse_row(raw_row: dict[str, Any], *, source_shard: str, include_raw_bytes: 
     question = str(raw_row.get("question") or "").strip()
     if not question:
         raise BuildError(f"{qid}: question is missing")
-    doc_id = str(raw_row.get("doc_id") or "").strip()
-    if not doc_id:
+    source_doc_id = str(raw_row.get("doc_id") or "").strip()
+    if not source_doc_id:
         raise BuildError(f"{qid}: doc_id is missing")
 
     page_ids = parse_string_list(raw_row.get("page_ids"), field_name=f"{qid}.page_ids")
@@ -226,6 +263,7 @@ def parse_row(raw_row: dict[str, Any], *, source_shard: str, include_raw_bytes: 
 
     answer_page_idx = parse_int(raw_row.get("answer_page_idx"), field_name=f"{qid}.answer_page_idx")
     source_split = str(raw_row.get("data_split") or "").strip() or "unknown"
+    window_signature, window_doc_id = window_identity(source_doc_id, page_ids)
 
     pages: list[PageRecord] = []
     image_storage_kinds: list[str] = []
@@ -266,15 +304,15 @@ def parse_row(raw_row: dict[str, Any], *, source_shard: str, include_raw_bytes: 
             f"{qid}: page_ids count {len(page_ids)} does not match non-null image count {len(pages)}"
         )
     if answer_page_idx < 0 or answer_page_idx >= len(page_ids):
-        raise BuildError(
-            f"{qid}: answer_page_idx {answer_page_idx} is out of range for {len(page_ids)} pages"
-        )
+        raise BuildError(f"{qid}: answer_page_idx {answer_page_idx} is out of range for {len(page_ids)} pages")
 
     repeated_page_content = len({page.sha256 for page in pages}) != len(pages)
     return RowRecord(
         qid=qid,
         question=question,
-        doc_id=doc_id,
+        source_doc_id=source_doc_id,
+        window_signature=window_signature,
+        window_doc_id=window_doc_id,
         page_ids=page_ids,
         answers=answers,
         answer_page_idx=answer_page_idx,
@@ -292,7 +330,6 @@ def locate_overlap_source() -> tuple[list[Path], Path | None]:
         ROOT / "data" / "benchmark" / "mp_docvqa_imdb_ocr_5000_split" / "train.jsonl",
         ROOT / "data" / "benchmark" / "mp_docvqa_imdb_ocr_5000_split" / "imdb_val.npy",
         ROOT / "data" / "benchmark" / "mp_docvqa_imdb_ocr_5000_split" / "imdb_train.npy",
-        ROOT / "outputs" / "evaluation" / "phase3_focused_eval" / "mpdocvqa_answer_policy_150_top20_20260616_131117" / "metadata.json",
     ]
     for candidate in candidates:
         if candidate.exists():
@@ -301,13 +338,14 @@ def locate_overlap_source() -> tuple[list[Path], Path | None]:
 
 
 def overlap_audit(rows: list[RowRecord]) -> dict[str, Any]:
-    searched_paths, found_path = locate_overlap_source()
+    checked_paths, found_path = locate_overlap_source()
     payload: dict[str, Any] = {
         "status": "not_available",
-        "checked_paths": [path.relative_to(ROOT).as_posix() for path in searched_paths],
+        "checked_paths": [path.relative_to(ROOT).as_posix() for path in checked_paths],
         "note": (
-            "MP-DocVQA val 原始文档链路主要用于 integration、page retrieval 和 system E2E；"
-            "训练重叠样本不能作为严格独立泛化证据。"
+            "MP-DocVQA val raw document windows are primarily for integration, "
+            "page retrieval, and system E2E. Training overlap cannot be used as "
+            "strict independent generalization evidence."
         ),
     }
     if found_path is not None:
@@ -315,115 +353,149 @@ def overlap_audit(rows: list[RowRecord]) -> dict[str, Any]:
     return payload
 
 
-def audit_parquet(input_parquet: Path) -> AuditResult:
-    parquet = pq.ParquetFile(input_parquet)
-    schema = parquet.schema_arrow
-    source_shard = input_parquet.name
-
-    parsed_rows_by_doc: dict[str, list[RowRecord]] = defaultdict(list)
-    row_issues_by_doc: dict[str, list[str]] = defaultdict(list)
+def audit_parquet(input_parquets: Path | str | Iterable[Path | str]) -> AuditResult:
+    parquet_paths = normalize_input_parquets(input_parquets)
+    parsed_rows_by_window: dict[str, list[RowRecord]] = defaultdict(list)
     invalid_row_examples: list[dict[str, Any]] = []
     image_storage_kinds = Counter()
     image_formats = Counter()
     image_path_extensions = Counter()
     page_count_distribution = Counter()
     answer_idx_distribution = Counter()
-    docs_with_multiple_qas = Counter()
+    row_count_by_shard: dict[str, int] = {}
+    schema_by_shard: dict[str, dict[str, Any]] = {}
+    source_doc_windows: dict[str, set[str]] = defaultdict(set)
+    duplicate_window_count = 0
 
-    for batch in parquet.iter_batches(
-        batch_size=16,
-        columns=[
+    for parquet_path in parquet_paths:
+        parquet = pq.ParquetFile(parquet_path)
+        schema = parquet.schema_arrow
+        row_count_by_shard[parquet_path.name] = parquet.metadata.num_rows
+        schema_by_shard[parquet_path.name] = {
+            "column_names": schema.names,
+            "arrow_schema": str(schema),
+            "field_arrow_types": {name: str(schema.field(name).type) for name in schema.names},
+            "key_field_arrow_types": {
+                name: str(schema.field(name).type)
+                for name in ("questionId", "question", "doc_id", "page_ids", "answers", "answer_page_idx", "data_split")
+                if name in schema.names
+            },
+        }
+        columns = [
             name
             for name in ("questionId", "question", "doc_id", "page_ids", "answers", "answer_page_idx", "data_split")
             if name in schema.names
-        ]
-        + [column for column in IMAGE_COLUMNS if column in schema.names],
-    ):
-        for raw_row in batch.to_pylist():
-            doc_id = str(raw_row.get("doc_id") or "")
-            try:
-                row = parse_row(raw_row, source_shard=source_shard, include_raw_bytes=False)
-            except BuildError as exc:
-                if doc_id:
-                    row_issues_by_doc[doc_id].append(str(exc))
-                if len(invalid_row_examples) < 10:
-                    invalid_row_examples.append(
-                        {
-                            "questionId": str(raw_row.get("questionId") or raw_row.get("questionid") or ""),
-                            "doc_id": doc_id,
-                            "reason": str(exc),
-                        }
-                    )
-                continue
+        ] + [column for column in IMAGE_COLUMNS if column in schema.names]
 
-            parsed_rows_by_doc[row.doc_id].append(row)
-            docs_with_multiple_qas[row.doc_id] += 1
-            page_count_distribution[len(row.page_ids)] += 1
-            answer_idx_distribution[row.answer_page_idx] += 1
-            image_formats.update(page.image_format for page in row.pages)
-            for page in row.pages:
-                image_path_extensions[Path(page.source_name).suffix.lower() or "<none>"] += 1
-            image_storage_kinds.update(kind for kind in row.image_storage_kinds if kind != "null")
+        for batch in parquet.iter_batches(batch_size=16, columns=columns):
+            for raw_row in batch.to_pylist():
+                try:
+                    row = parse_row(raw_row, source_shard=parquet_path.name, include_raw_bytes=False)
+                except BuildError as exc:
+                    if len(invalid_row_examples) < 10:
+                        invalid_row_examples.append(
+                            {
+                                "questionId": str(raw_row.get("questionId") or raw_row.get("questionid") or ""),
+                                "source_doc_id": str(raw_row.get("doc_id") or ""),
+                                "source_shard": parquet_path.name,
+                                "reason": str(exc),
+                            }
+                        )
+                    continue
 
-    valid_documents: dict[str, DocumentRecord] = {}
-    invalid_documents: dict[str, list[str]] = {}
+                parsed_rows_by_window[row.window_doc_id].append(row)
+                source_doc_windows[row.source_doc_id].add(row.window_doc_id)
+                page_count_distribution[len(row.page_ids)] += 1
+                answer_idx_distribution[row.answer_page_idx] += 1
+                image_formats.update(page.image_format for page in row.pages)
+                for page in row.pages:
+                    image_path_extensions[Path(page.source_name).suffix.lower() or "<none>"] += 1
+                image_storage_kinds.update(kind for kind in row.image_storage_kinds if kind != "null")
+
+    valid_windows: dict[str, WindowRecord] = {}
+    invalid_windows: dict[str, list[str]] = {}
     conflict_examples: dict[str, Any] = {}
-    repeated_content_docs: list[str] = []
-    for doc_id, rows in parsed_rows_by_doc.items():
-        issues = list(dict.fromkeys(row_issues_by_doc.get(doc_id, [])))
-        signature_map: dict[tuple[tuple[str, ...], tuple[str, ...]], RowRecord] = {}
-        for row in rows:
-            signature_map.setdefault(row.signature, row)
-        if len(signature_map) > 1:
-            issues.append("conflicting page_ids or page image sha256 across rows for the same doc_id")
-            if len(conflict_examples) < 5:
-                conflict_examples[doc_id] = [
-                    {
-                        "page_ids": list(signature[0]),
-                        "page_sha256_prefixes": [value[:12] for value in signature[1]],
-                    }
-                    for signature in signature_map.keys()
-                ]
-        canonical = rows[0]
-        repeated_content = any(row.repeated_page_content for row in rows)
+    repeated_content_windows: list[str] = []
+    invalid_window_records: list[dict[str, Any]] = []
+
+    for window_doc_id, rows in sorted(parsed_rows_by_window.items()):
+        rows_sorted = sorted(rows, key=lambda item: (item.qid, item.source_shard, item.question))
+        canonical = rows_sorted[0]
+        rows_by_hash: dict[tuple[str, ...], list[RowRecord]] = defaultdict(list)
+        for row in rows_sorted:
+            rows_by_hash[row.page_sha256].append(row)
+        duplicate_window_count += sum(len(group) - 1 for group in rows_by_hash.values())
+
+        repeated_page_content = any(row.repeated_page_content for row in rows_sorted)
         warnings: list[str] = []
-        if repeated_content:
-            repeated_content_docs.append(doc_id)
+        if repeated_page_content:
+            repeated_content_windows.append(window_doc_id)
             warnings.append(REPEATED_CONTENT_WARNING)
-        if issues:
-            invalid_documents[doc_id] = issues
+
+        if len(rows_by_hash) > 1:
+            reason = "conflicting page image sha256 for the same source_doc_id and ordered page_ids"
+            invalid_windows[window_doc_id] = [reason]
+            invalid_window_records.append(
+                {
+                    "doc_id": window_doc_id,
+                    "source_doc_id": canonical.source_doc_id,
+                    "window_signature": canonical.window_signature,
+                    "ordered_page_ids": canonical.page_ids,
+                    "reasons": [reason],
+                }
+            )
+            if len(conflict_examples) < 5:
+                conflict_examples[window_doc_id] = {
+                    "source_doc_id": canonical.source_doc_id,
+                    "ordered_page_ids": canonical.page_ids,
+                    "hash_variants": [
+                        {
+                            "source_shards": sorted({row.source_shard for row in group}),
+                            "page_sha256_prefixes": [value[:12] for value in page_sha256],
+                        }
+                        for page_sha256, group in sorted(rows_by_hash.items())
+                    ],
+                }
             continue
-        valid_documents[doc_id] = DocumentRecord(
-            doc_id=doc_id,
+
+        valid_windows[window_doc_id] = WindowRecord(
+            doc_id=window_doc_id,
+            source_doc_id=canonical.source_doc_id,
+            window_signature=canonical.window_signature,
             page_ids=list(canonical.page_ids),
-            qa_rows=sorted(rows, key=lambda item: item.qid),
-            page_sha256=[page.sha256 for page in canonical.pages],
+            qa_rows=rows_sorted,
+            page_sha256=list(canonical.page_sha256),
             page_formats=[page.image_format for page in canonical.pages],
-            repeated_page_content=repeated_content,
+            source_shards=sorted({row.source_shard for row in rows_sorted}),
+            repeated_page_content=repeated_page_content,
             warnings=warnings,
         )
 
-    for doc_id, issues in row_issues_by_doc.items():
-        if doc_id not in parsed_rows_by_doc:
-            invalid_documents[doc_id] = list(dict.fromkeys(issues))
+    unique_source_doc_count = len(source_doc_windows)
+    unique_window_count = len(parsed_rows_by_window)
+    same_source_multiple_window_count = sum(1 for window_ids in source_doc_windows.values() if len(window_ids) > 1)
+    different_window_same_source_doc_count = sum(
+        len(window_ids) for window_ids in source_doc_windows.values() if len(window_ids) > 1
+    )
+    max_windows_per_source_doc = max((len(window_ids) for window_ids in source_doc_windows.values()), default=0)
+    max_qas_per_window = max((len(window.qa_rows) for window in valid_windows.values()), default=0)
 
-    all_rows = [row for rows in parsed_rows_by_doc.values() for row in rows]
+    all_rows = [row for rows in parsed_rows_by_window.values() for row in rows]
     overlap = overlap_audit(all_rows)
+    total_row_count = sum(row_count_by_shard.values())
+    first_schema = schema_by_shard[parquet_paths[0].name]
     schema_audit = {
         "builder_version": BUILDER_VERSION,
-        "source_shard": source_shard,
-        "row_count": parquet.metadata.num_rows,
-        "column_names": schema.names,
-        "arrow_schema": str(schema),
-        "field_arrow_types": {name: str(schema.field(name).type) for name in schema.names},
-        "key_field_arrow_types": {
-            name: str(schema.field(name).type)
-            for name in ("questionId", "question", "doc_id", "page_ids", "answers", "answer_page_idx", "data_split")
-            if name in schema.names
-        },
+        "input_shards": [path.name for path in parquet_paths],
+        "row_count": total_row_count,
+        "row_count_by_shard": row_count_by_shard,
+        "column_names": first_schema["column_names"],
+        "arrow_schema": first_schema["arrow_schema"],
+        "field_arrow_types": first_schema["field_arrow_types"],
+        "key_field_arrow_types": first_schema["key_field_arrow_types"],
+        "schema_by_shard": schema_by_shard,
         "stringified_fields": ["page_ids", "answers", "answer_page_idx"],
         "image_storage": {
-            "arrow_type": str(schema.field("image_1").type) if "image_1" in schema.names else None,
             "storage_kinds": dict(image_storage_kinds),
             "path_extensions": dict(image_path_extensions),
             "image_formats": dict(image_formats),
@@ -435,26 +507,24 @@ def audit_parquet(input_parquet: Path) -> AuditResult:
             "out_of_range_rows": 0,
         },
         "doc_audit": {
-            "unique_doc_count": len({row.doc_id for row in all_rows} | set(invalid_documents)),
-            "valid_doc_count": len(valid_documents),
-            "invalid_doc_count": len(invalid_documents),
-            "docs_with_multiple_qas": sum(1 for count in docs_with_multiple_qas.values() if count > 1),
-            "max_qas_per_doc": max(docs_with_multiple_qas.values()) if docs_with_multiple_qas else 0,
-            "conflicting_doc_count": sum(
-                1 for issues in invalid_documents.values() if any("conflicting page_ids" in issue for issue in issues)
-            ),
+            "unique_source_doc_count": unique_source_doc_count,
+            "unique_document_window_count": unique_window_count,
+            "duplicate_window_count": duplicate_window_count,
+            "same_source_multiple_window_count": same_source_multiple_window_count,
+            "different_window_same_source_doc_count": different_window_same_source_doc_count,
+            "conflicting_window_count": len(invalid_windows),
+            "valid_window_count": len(valid_windows),
+            "max_windows_per_source_doc": max_windows_per_source_doc,
+            "max_qas_per_window": max_qas_per_window,
             "conflict_examples": conflict_examples,
-            "duplicate_image_content_doc_ids": repeated_content_docs,
+            "duplicate_image_content_window_ids": repeated_content_windows,
         },
         "invalid_row_examples": invalid_row_examples,
-        "invalid_documents": [
-            {"doc_id": doc_id, "reasons": reasons}
-            for doc_id, reasons in sorted(invalid_documents.items())
-        ],
+        "invalid_windows": invalid_window_records,
     }
     return AuditResult(
-        valid_documents=valid_documents,
-        invalid_documents=invalid_documents,
+        valid_windows=valid_windows,
+        invalid_windows=invalid_windows,
         schema_audit=schema_audit,
         overlap_audit=overlap,
     )
@@ -471,44 +541,44 @@ def answer_bucket(page_count: int, answer_index: int) -> str:
     return "mid"
 
 
-def selection_features(document: DocumentRecord) -> set[str]:
+def selection_features(window: WindowRecord) -> set[str]:
     features = set()
-    if document.page_count == 1:
+    if window.page_count == 1:
         features.add("page:single")
-    elif document.page_count <= 5:
+    elif window.page_count <= 5:
         features.add("page:short")
     else:
         features.add("page:long")
-    for row in document.qa_rows:
-        features.add(f"answer:{answer_bucket(document.page_count, row.answer_page_idx)}")
+    for row in window.qa_rows:
+        features.add(f"answer:{answer_bucket(window.page_count, row.answer_page_idx)}")
     return features
 
 
 def select_sample_documents(
-    documents: dict[str, DocumentRecord],
+    windows: dict[str, WindowRecord],
     *,
     sample_documents: int,
     seed: str,
     explicit_doc_ids: list[str] | None,
-) -> list[DocumentRecord]:
+) -> list[WindowRecord]:
     if explicit_doc_ids:
-        selected: list[DocumentRecord] = []
+        selected: list[WindowRecord] = []
         seen: set[str] = set()
         for doc_id in explicit_doc_ids:
             if doc_id in seen:
                 continue
             seen.add(doc_id)
             try:
-                selected.append(documents[doc_id])
+                selected.append(windows[doc_id])
             except KeyError as exc:
                 raise BuildError(f"requested doc_id is unavailable or invalid: {doc_id}") from exc
         return selected
 
-    ordered = sorted(documents.values(), key=lambda item: (stable_key(seed, item.doc_id), item.doc_id))
+    ordered = sorted(windows.values(), key=lambda item: (stable_key(seed, item.doc_id), item.doc_id))
     if sample_documents >= len(ordered):
         return ordered
 
-    selected: list[DocumentRecord] = []
+    selected: list[WindowRecord] = []
     covered: set[str] = set()
     remaining = ordered[:]
     while remaining and len(selected) < sample_documents:
@@ -528,40 +598,44 @@ def select_sample_documents(
         covered.update(selection_features(best))
         remaining = [item for item in remaining if item.doc_id != best.doc_id]
 
+    selected_ids = {window.doc_id for window in selected}
     for item in ordered:
         if len(selected) >= sample_documents:
             break
-        if item.doc_id not in {doc.doc_id for doc in selected}:
+        if item.doc_id not in selected_ids:
             selected.append(item)
+            selected_ids.add(item.doc_id)
     return selected[:sample_documents]
 
 
-def load_selected_pages(input_parquet: Path, documents: list[DocumentRecord]) -> dict[str, list[PageRecord]]:
-    expected = {document.doc_id: tuple(document.page_sha256) for document in documents}
-    selected = set(expected)
+def load_selected_pages(
+    input_parquets: list[Path],
+    windows: list[WindowRecord],
+) -> dict[str, list[PageRecord]]:
+    expected = {window.doc_id: tuple(window.page_sha256) for window in windows}
+    selected_ids = set(expected)
     loaded: dict[str, list[PageRecord]] = {}
-    parquet = pq.ParquetFile(input_parquet)
-    for batch in parquet.iter_batches(
-        batch_size=16,
-        columns=[
+    for parquet_path in input_parquets:
+        parquet = pq.ParquetFile(parquet_path)
+        columns = [
             name
             for name in ("questionId", "question", "doc_id", "page_ids", "answers", "answer_page_idx", "data_split")
             if name in parquet.schema_arrow.names
-        ]
-        + [column for column in IMAGE_COLUMNS if column in parquet.schema_arrow.names],
-    ):
-        for raw_row in batch.to_pylist():
-            doc_id = str(raw_row.get("doc_id") or "")
-            if doc_id not in selected or doc_id in loaded:
-                continue
-            row = parse_row(raw_row, source_shard=input_parquet.name, include_raw_bytes=True)
-            if tuple(page.sha256 for page in row.pages) == expected[doc_id]:
-                loaded[doc_id] = row.pages
-        if len(loaded) == len(selected):
+        ] + [column for column in IMAGE_COLUMNS if column in parquet.schema_arrow.names]
+        for batch in parquet.iter_batches(batch_size=16, columns=columns):
+            for raw_row in batch.to_pylist():
+                row = parse_row(raw_row, source_shard=parquet_path.name, include_raw_bytes=True)
+                if row.window_doc_id not in selected_ids or row.window_doc_id in loaded:
+                    continue
+                if row.page_sha256 == expected[row.window_doc_id]:
+                    loaded[row.window_doc_id] = row.pages
+            if len(loaded) == len(selected_ids):
+                break
+        if len(loaded) == len(selected_ids):
             break
-    missing = sorted(selected - set(loaded))
+    missing = sorted(selected_ids - set(loaded))
     if missing:
-        raise BuildError(f"failed to load page bytes for selected documents: {missing}")
+        raise BuildError(f"failed to load page bytes for selected windows: {missing}")
     return loaded
 
 
@@ -585,21 +659,20 @@ def render_pdf_bytes(page_files: list[Path]) -> bytes:
 def build_document_assets(
     *,
     output_root: Path,
-    document: DocumentRecord,
+    window: WindowRecord,
     pages: list[PageRecord],
-    source_shard: str,
     generation_commit: str,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    doc_dir = output_root / "documents" / document.doc_id
+    doc_dir = output_root / "documents" / window.doc_id
     pages_dir = doc_dir / "pages"
     pages_dir.mkdir(parents=True, exist_ok=True)
 
     page_manifest = []
     page_files: list[Path] = []
     for page in pages:
-        page_file = pages_dir / f"{page.ordinal:04d}{page.extension}"
         if page.raw_bytes is None:
-            raise BuildError(f"missing raw bytes for {document.doc_id}:{page.page_id}")
+            raise BuildError(f"missing raw bytes for {window.doc_id}:{page.page_id}")
+        page_file = pages_dir / f"{page.ordinal:04d}{page.extension}"
         page_file.write_bytes(page.raw_bytes)
         page_files.append(page_file)
         page_manifest.append(
@@ -622,12 +695,16 @@ def build_document_assets(
     pdf_sha256 = hashlib.sha256(pdf_bytes).hexdigest()
     pdf_stable = pdf_bytes == render_pdf_bytes(page_files)
 
-    qa_count = len(document.qa_rows)
     manifest = {
         "builder_version": BUILDER_VERSION,
         "generation_commit": generation_commit,
-        "doc_id": document.doc_id,
-        "source_shard": source_shard,
+        "doc_id": window.doc_id,
+        "document_instance_id": window.doc_id,
+        "source_doc_id": window.source_doc_id,
+        "window_signature": window.window_signature,
+        "input_scope": window.input_scope,
+        "document_is_full_source_document": window.document_is_full_source_document,
+        "source_shards": window.source_shards,
         "page_count": len(page_manifest),
         "ordered_page_ids": [page["page_id"] for page in page_manifest],
         "ordered_page_files": [page["page_file"] for page in page_manifest],
@@ -642,19 +719,24 @@ def build_document_assets(
                 else "PDF bytes changed across two local renders; page order and manifest remain deterministic"
             ),
         },
-        "qa_count": qa_count,
-        "warnings": document.warnings,
+        "qa_count": len(window.qa_rows),
+        "warnings": window.warnings,
     }
     manifest_path = doc_dir / "document_manifest.json"
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     documents_record = {
-        "doc_id": document.doc_id,
+        "doc_id": window.doc_id,
+        "document_instance_id": window.doc_id,
+        "source_doc_id": window.source_doc_id,
+        "window_signature": window.window_signature,
+        "input_scope": window.input_scope,
+        "source_shards": window.source_shards,
         "page_count": len(page_manifest),
-        "qa_count": qa_count,
+        "qa_count": len(window.qa_rows),
         "document_manifest": relative_posix(manifest_path, output_root),
         "pdf_path": manifest["pdf_path"],
         "pdf_sha256": pdf_sha256,
-        "warnings": document.warnings,
+        "warnings": window.warnings,
     }
     return manifest, documents_record
 
@@ -663,7 +745,8 @@ def qa_record(row: RowRecord) -> dict[str, Any]:
     return {
         "qid": row.qid,
         "raw_question_id": row.qid,
-        "doc_id": row.doc_id,
+        "doc_id": row.window_doc_id,
+        "source_doc_id": row.source_doc_id,
         "question": row.question,
         "answers": row.answers,
         "answer_page_idx": row.answer_page_idx,
@@ -695,7 +778,7 @@ def clear_output_root(output_root: Path) -> None:
 def build_outputs(
     *,
     audit: AuditResult,
-    input_parquet: Path,
+    input_parquets: Path | str | Iterable[Path | str],
     output_root: Path,
     sample_documents: int,
     seed: str,
@@ -703,57 +786,68 @@ def build_outputs(
     validate_only: bool,
     overwrite: bool,
 ) -> dict[str, Any]:
+    parquet_paths = normalize_input_parquets(input_parquets)
     generation_commit = git_commit()
-    selected_documents = select_sample_documents(
-        audit.valid_documents,
+    doc_audit = audit.schema_audit["doc_audit"]
+    selected_windows = select_sample_documents(
+        audit.valid_windows,
         sample_documents=sample_documents,
         seed=seed,
         explicit_doc_ids=requested_doc_ids or None,
     )
-    if not selected_documents:
-        raise BuildError("no valid documents are available for selection")
+    if not selected_windows:
+        raise BuildError("no valid document windows are available for selection")
 
     qa_records = [
         qa_record(row)
-        for document in selected_documents
-        for row in sorted(document.qa_rows, key=lambda item: item.qid)
+        for window in selected_windows
+        for row in sorted(window.qa_rows, key=lambda item: (item.qid, item.source_shard, item.question))
     ]
     build_report = {
         "builder_version": BUILDER_VERSION,
         "generation_commit": generation_commit,
-        "source_shard": input_parquet.name,
+        "input_parquet_shards": [path.name for path in parquet_paths],
         "status": "success",
         "validate_only": validate_only,
         "sample_documents_requested": sample_documents,
         "seed": seed,
         "requested_doc_ids": requested_doc_ids,
-        "selected_doc_ids": [document.doc_id for document in selected_documents],
-        "selected_doc_page_counts": {document.doc_id: document.page_count for document in selected_documents},
-        "selected_doc_answer_buckets": {
-            document.doc_id: sorted({answer_bucket(document.page_count, row.answer_page_idx) for row in document.qa_rows})
-            for document in selected_documents
+        "selected_window_ids": [window.doc_id for window in selected_windows],
+        "selected_source_doc_ids": [window.source_doc_id for window in selected_windows],
+        "selected_window_page_counts": {window.doc_id: window.page_count for window in selected_windows},
+        "selected_window_answer_buckets": {
+            window.doc_id: sorted({answer_bucket(window.page_count, row.answer_page_idx) for row in window.qa_rows})
+            for window in selected_windows
         },
-        "valid_doc_count": len(audit.valid_documents),
-        "invalid_doc_count": len(audit.invalid_documents),
-        "invalid_documents": [
-            {"doc_id": doc_id, "reasons": reasons}
-            for doc_id, reasons in sorted(audit.invalid_documents.items())
-        ],
+        "row_count": audit.schema_audit["row_count"],
+        "unique_source_doc_count": doc_audit["unique_source_doc_count"],
+        "unique_window_count": doc_audit["unique_document_window_count"],
+        "duplicate_window_count": doc_audit["duplicate_window_count"],
+        "same_source_multiple_window_count": doc_audit["same_source_multiple_window_count"],
+        "different_window_same_source_doc_count": doc_audit["different_window_same_source_doc_count"],
+        "conflicting_window_count": doc_audit["conflicting_window_count"],
+        "valid_window_count": doc_audit["valid_window_count"],
+        "invalid_windows": audit.schema_audit["invalid_windows"],
         "qa_count": len(qa_records),
         "overlap_audit_status": audit.overlap_audit["status"],
     }
+    metrics = {
+        "row_count": audit.schema_audit["row_count"],
+        "unique_source_doc_count": doc_audit["unique_source_doc_count"],
+        "unique_window_count": doc_audit["unique_document_window_count"],
+        "same_source_multiple_window_count": doc_audit["same_source_multiple_window_count"],
+        "conflicting_window_count": doc_audit["conflicting_window_count"],
+        "valid_window_count": doc_audit["valid_window_count"],
+        "qa_count": len(qa_records),
+        "duplicate_window_count": doc_audit["duplicate_window_count"],
+    }
+
     if validate_only:
         return {
             "command": "build_mpdocvqa_raw_documents",
             "status": "success",
             "artifact_paths": [],
-            "metrics": {
-                "row_count": audit.schema_audit["row_count"],
-                "valid_doc_count": len(audit.valid_documents),
-                "invalid_doc_count": len(audit.invalid_documents),
-                "selected_doc_count": len(selected_documents),
-                "qa_count": len(qa_records),
-            },
+            "metrics": metrics,
             "build_report": build_report,
         }
 
@@ -763,18 +857,15 @@ def build_outputs(
         clear_output_root(output_root)
     output_root.mkdir(parents=True, exist_ok=True)
 
-    selected_pages = load_selected_pages(input_parquet, selected_documents)
-    document_manifests = []
+    selected_pages = load_selected_pages(parquet_paths, selected_windows)
     document_records = []
-    for document in selected_documents:
-        manifest, record = build_document_assets(
+    for window in selected_windows:
+        _, record = build_document_assets(
             output_root=output_root,
-            document=document,
-            pages=selected_pages[document.doc_id],
-            source_shard=input_parquet.name,
+            window=window,
+            pages=selected_pages[window.doc_id],
             generation_commit=generation_commit,
         )
-        document_manifests.append(manifest)
         document_records.append(record)
 
     write_jsonl(output_root / "documents.jsonl", document_records)
@@ -791,9 +882,9 @@ def build_outputs(
         "builder_version": BUILDER_VERSION,
         "generation_commit": generation_commit,
         "source_dataset": "lmms-lab/MP-DocVQA",
-        "source_shard": input_parquet.name,
-        "selected_doc_ids": [document.doc_id for document in selected_documents],
-        "selected_document_count": len(selected_documents),
+        "input_parquet_shards": [path.name for path in parquet_paths],
+        "selected_window_ids": [window.doc_id for window in selected_windows],
+        "selected_document_window_count": len(selected_windows),
         "qa_count": len(qa_records),
         "documents_jsonl": "documents.jsonl",
         "qa_jsonl": "qa.jsonl",
@@ -821,21 +912,15 @@ def build_outputs(
             relative_posix(output_root / "build_report.json", output_root),
             relative_posix(output_root / "overlap_audit.json", output_root),
         ],
-        "metrics": {
-            "row_count": audit.schema_audit["row_count"],
-            "valid_doc_count": len(audit.valid_documents),
-            "invalid_doc_count": len(audit.invalid_documents),
-            "selected_doc_count": len(selected_documents),
-            "qa_count": len(qa_records),
-        },
+        "metrics": metrics,
     }
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Restore MP-DocVQA raw multi-page document assets from a parquet shard."
+        description="Restore MP-DocVQA raw multi-page document windows from one or more parquet shards."
     )
-    parser.add_argument("--input-parquet", required=True)
+    parser.add_argument("--input-parquet", nargs="+", required=True)
     parser.add_argument(
         "--output-root",
         default=DEFAULT_OUTPUT_ROOT,
@@ -851,14 +936,14 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    input_parquet = repo_path(args.input_parquet)
+    parquet_paths = normalize_input_parquets(args.input_parquet)
     output_root = repo_path(args.output_root)
     exit_code = 0
     try:
-        audit = audit_parquet(input_parquet)
+        audit = audit_parquet(parquet_paths)
         payload = build_outputs(
             audit=audit,
-            input_parquet=input_parquet,
+            input_parquets=parquet_paths,
             output_root=output_root,
             sample_documents=args.sample_documents,
             seed=str(args.seed),

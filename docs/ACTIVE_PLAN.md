@@ -13,7 +13,7 @@ Phase 4A: MP-DocVQA raw multi-page document foundation
 
 ```text
 MP-DocVQA parquet shard
--> doc_id-level deduplication
+-> source document / page-window identity
 -> ordered page image restoration
 -> deterministic multi-page PDF synthesis
 -> QA JSONL
@@ -64,9 +64,11 @@ The current real local sample build uses:
 ```text
 source_shard = val-00001-of-00029.parquet
 row_count = 179
-valid_doc_count = 38
-invalid_doc_count = 6
-sample_documents = 5
+unique_source_doc_count = 44
+unique_window_count = 61
+conflicting_window_count = 0
+valid_window_count = 61
+sample_windows = 5
 seed = 42
 ```
 

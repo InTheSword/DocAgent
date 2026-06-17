@@ -28,7 +28,7 @@ Goal:
 
 ```text
 parquet shard
--> doc_id-level document deduplication
+-> source document / page-window identity
 -> ordered page image restoration
 -> multi-page PDF
 -> QA JSONL
@@ -55,10 +55,12 @@ Real local shard audit summary:
 ```text
 source_shard = val-00001-of-00029.parquet
 row_count = 179
-unique_doc_count = 44
-valid_doc_count = 38
-invalid_doc_count = 6
-sample_documents = 5
+unique_source_doc_count = 44
+unique_window_count = 61
+same_source_multiple_window_count = 6
+conflicting_window_count = 0
+valid_window_count = 61
+sample_windows = 5
 seed = 42
 ```
 
@@ -74,27 +76,38 @@ image_1 ... image_20 -> struct<bytes: binary, path: string>
 non-null image format -> JPEG
 ```
 
+Window identity:
+
+```text
+window_signature = sha256(canonical JSON {source_doc_id, ordered_page_ids})
+window doc_id = source_doc_id + "__" + short(window_signature)
+input_scope = page_window
+document_is_full_source_document = false
+```
+
 Conflict audit:
 
 ```text
-invalid conflicting doc_id count = 6
-conflicting doc_ids = rzbj0037, ynbx0223, tnbx0223, jrcy0227, trgj0223, fxxj0037
+same source doc with multiple windows = 6
+different-window window count under those sources = 23
+conflicting windows = 0
 ```
 
-Those documents must not be silently merged across rows.
+Different ordered page windows under the same `source_doc_id` are valid and
+must not be collapsed or rejected.
 
 ## 4. Required Local Contract
 
 The local implementation must provide:
 
 - compact parquet schema audit without printing raw image bytes;
-- doc-level deduplication with conflict rejection;
+- stable page-window identity and window-level deduplication;
 - ordered page image restoration using detected real image format;
 - deterministic PDF synthesis from the restored page order;
 - QA JSONL with raw `questionId`, zero-based `answer_page_idx`, mapped
   `gold_page_id`, and `gold_page_ordinal`;
 - relative POSIX output paths in manifests;
-- sample selection by unique document, not by QA row.
+- sample selection by unique document window, not by QA row.
 
 ## 5. Out of Scope
 
