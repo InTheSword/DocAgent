@@ -32,8 +32,10 @@ PHASE = "Phase 4B"
 GATE = "Gate 1"
 DEFAULT_OUTPUT_ROOT = "outputs/phase4/mpdocvqa_ingestion"
 ALLOWED_QUALITY_STATUSES = {"passed", "passed_with_warnings"}
-WINDOWS_PATH_RE = re.compile(r"(^|[^A-Za-z0-9])([A-Za-z]:[\\/]|\\\\)")
+WINDOWS_DRIVE_PATH_RE = re.compile(r"^[A-Za-z]:[\\/]")
+UNC_PATH_RE = re.compile(r"^\\\\[A-Za-z0-9._-]+[\\/][^\s\\/]+")
 URL_RE = re.compile(r"https?://[^\s\"'<>]+")
+PATH_PREVIEW_LIMIT = 160
 
 
 class Phase4BIngestionError(RuntimeError):
@@ -62,6 +64,10 @@ def repo_path(path: str | Path) -> Path:
     return value if value.is_absolute() else ROOT / value
 
 
+def _gate(args: argparse.Namespace) -> str:
+    return str(getattr(args, "gate", GATE) or GATE)
+
+
 def _relative_posix(path: Path, base: Path) -> str:
     try:
         return path.resolve().relative_to(base.resolve()).as_posix()
@@ -73,12 +79,35 @@ def _artifact_path(path: Path, work_dir: Path) -> str:
     return _relative_posix(path, work_dir)
 
 
+def _absolute_path_reason(value: str) -> str | None:
+    stripped = value.strip()
+    if not stripped or "://" in stripped:
+        return None
+    if WINDOWS_DRIVE_PATH_RE.match(stripped):
+        return "windows_drive_absolute_path"
+    if UNC_PATH_RE.match(stripped):
+        return "unc_absolute_path"
+    if stripped.startswith("/") and not stripped.startswith("//"):
+        return "posix_absolute_path"
+    return None
+
+
 def _looks_like_local_absolute_path(value: str) -> bool:
-    if "://" in value:
-        return False
-    if WINDOWS_PATH_RE.search(value):
-        return True
-    return value.startswith("/") and not value.startswith("//")
+    return _absolute_path_reason(value) is not None
+
+
+def _path_basename_portable(value: str) -> str:
+    stripped = value.strip().rstrip("\\/")
+    if not stripped:
+        return ""
+    return re.split(r"[\\/]", stripped)[-1]
+
+
+def _preview_value(value: str, *, limit: int = PATH_PREVIEW_LIMIT) -> str:
+    preview = _sanitize_text(value).replace("\r", "\\r").replace("\n", "\\n").strip()
+    if len(preview) > limit:
+        return preview[: limit - 3] + "..."
+    return preview
 
 
 def _scan_absolute_paths(value: Any, *, where: str, hits: list[dict[str, str]]) -> None:
@@ -88,8 +117,10 @@ def _scan_absolute_paths(value: Any, *, where: str, hits: list[dict[str, str]]) 
     elif isinstance(value, list):
         for index, item in enumerate(value):
             _scan_absolute_paths(item, where=f"{where}[{index}]", hits=hits)
-    elif isinstance(value, str) and _looks_like_local_absolute_path(value):
-        hits.append({"where": where, "value": value})
+    elif isinstance(value, str):
+        reason = _absolute_path_reason(value)
+        if reason is not None:
+            hits.append({"where": where, "reason": reason, "value_preview": _preview_value(value)})
 
 
 def _contains_sensitive_text(value: str) -> bool:
@@ -144,7 +175,7 @@ def _sanitize_json_value(value: Any) -> Any:
         return [_sanitize_json_value(item) for item in value]
     if isinstance(value, str):
         if _looks_like_local_absolute_path(value):
-            return Path(value).name
+            return _path_basename_portable(value)
         return _sanitize_text(value)
     return value
 
@@ -306,13 +337,13 @@ def _validate_qa_records(
             raise Phase4BIngestionError(f"{qid}: answers must be a non-empty list")
 
 
-def _validate_runtime(args: argparse.Namespace, *, validate_only: bool) -> None:
+def _validate_runtime(args: argparse.Namespace, *, validate_only: bool, revalidate_existing: bool = False) -> None:
     output_root = repo_path(args.output_root)
     if output_root.exists() and not output_root.is_dir():
         raise Phase4BIngestionError("--output-root exists and is not a directory")
     if args.live_api and not bool(os.getenv("MINERU_TOKEN")):
         raise Phase4BIngestionError("MINERU_TOKEN is not set")
-    if not validate_only and not args.live_api:
+    if not validate_only and not revalidate_existing and not args.live_api:
         raise Phase4BIngestionError("Gate 1 ingestion requires --live-api")
 
 
@@ -322,7 +353,7 @@ def _validate_only_payload(args: argparse.Namespace, sample: SampleInputs) -> di
         "command": COMMAND,
         "status": "success",
         "phase": PHASE,
-        "gate": GATE,
+        "gate": _gate(args),
         "validate_only": True,
         "doc_id": sample.doc_id,
         "source_doc_id": sample.source_doc_id,
@@ -490,6 +521,15 @@ def _copy_report(src: Path, dst: Path) -> None:
         dst.write_text(src.read_text(encoding="utf-8-sig"), encoding="utf-8")
 
 
+def _decode_json_column(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        return value
+
+
 def _scan_json_artifacts(work_dir: Path, sqlite_path: Path) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     absolute_hits: list[dict[str, str]] = []
     sensitive_hits: list[dict[str, str]] = []
@@ -508,16 +548,29 @@ def _scan_json_artifacts(work_dir: Path, sqlite_path: Path) -> tuple[list[dict[s
         _scan_sensitive_text(payload, where=rel, hits=sensitive_hits)
     if sqlite_path.exists():
         with sqlite3.connect(sqlite_path) as conn:
-            for table, columns in {
-                "documents": ["doc_id", "file_path"],
-                "evidence_blocks": ["block_id", "payload_json", "metadata_json"],
-                "document_indexes": ["doc_id", "artifact_path", "metadata_json"],
-            }.items():
-                selected = ", ".join(columns)
-                for row in conn.execute(f"SELECT {selected} FROM {table}").fetchall():
-                    record = dict(zip(columns, row))
-                    _scan_absolute_paths(record, where=f"sqlite.{table}", hits=absolute_hits)
-                    _scan_sensitive_text(record, where=f"sqlite.{table}", hits=sensitive_hits)
+            for doc_id, file_path in conn.execute("SELECT doc_id, file_path FROM documents").fetchall():
+                where = f"sqlite.documents[{doc_id}].file_path"
+                _scan_absolute_paths(file_path, where=where, hits=absolute_hits)
+                _scan_sensitive_text(file_path, where=where, hits=sensitive_hits)
+            for block_id, payload_json, metadata_json in conn.execute(
+                "SELECT block_id, payload_json, metadata_json FROM evidence_blocks"
+            ).fetchall():
+                for column, raw_value in {"payload_json": payload_json, "metadata_json": metadata_json}.items():
+                    where = f"sqlite.evidence_blocks[{block_id}].{column}"
+                    decoded = _decode_json_column(raw_value)
+                    _scan_absolute_paths(decoded, where=where, hits=absolute_hits)
+                    _scan_sensitive_text(decoded, where=where, hits=sensitive_hits)
+            for doc_id, index_type, model_id, artifact_path, metadata_json in conn.execute(
+                "SELECT doc_id, index_type, model_id, artifact_path, metadata_json FROM document_indexes"
+            ).fetchall():
+                index_key = f"{doc_id}:{index_type}:{model_id or ''}"
+                artifact_where = f"sqlite.document_indexes[{index_key}].artifact_path"
+                _scan_absolute_paths(artifact_path, where=artifact_where, hits=absolute_hits)
+                _scan_sensitive_text(artifact_path, where=artifact_where, hits=sensitive_hits)
+                metadata_where = f"sqlite.document_indexes[{index_key}].metadata_json"
+                decoded = _decode_json_column(metadata_json)
+                _scan_absolute_paths(decoded, where=metadata_where, hits=absolute_hits)
+                _scan_sensitive_text(decoded, where=metadata_where, hits=sensitive_hits)
     return absolute_hits, sensitive_hits
 
 
@@ -559,6 +612,99 @@ def _acceptance_failures(
     if not no_mock_fallback:
         failures.append("live_api_required")
     return failures
+
+
+def _build_acceptance_report(
+    *,
+    args: argparse.Namespace,
+    sample: SampleInputs,
+    work_dir: Path,
+    sqlite_path: Path,
+    evidence_path: Path,
+    pages_path: Path,
+    ingestion_report_path: Path,
+    structure_quality_path: Path,
+    ingestion_doc_id: str,
+    no_mock_fallback: bool,
+    revalidate_existing: bool = False,
+) -> dict[str, Any]:
+    blocks = _load_blocks(evidence_path)
+    page_blocks = _load_blocks(pages_path)
+    quality = _read_json(structure_quality_path)
+    page_identity = _build_page_identity_mapping(sample=sample, page_blocks=page_blocks)
+    qa_mapping = _build_qa_page_mapping(sample=sample, page_identity=page_identity)
+    page_identity_path = work_dir / "page_identity_mapping.jsonl"
+    qa_mapping_path = work_dir / "qa_page_mapping.jsonl"
+    write_jsonl(page_identity_path, page_identity)
+    write_jsonl(qa_mapping_path, qa_mapping)
+
+    parsed_page_count = len({block.page_id for block in blocks if block.page_id is not None})
+    block_type_counts = dict(sorted(Counter(block.block_type for block in blocks).items()))
+    valid_mapping_count = sum(1 for record in qa_mapping if record["mapping_valid"])
+    invalid_mapping_count = len(qa_mapping) - valid_mapping_count
+    invalid_page_identity_count = sum(1 for record in page_identity if not record["mapping_valid"])
+    absolute_hits, sensitive_hits = _scan_json_artifacts(work_dir, sqlite_path)
+    failures = _acceptance_failures(
+        sample=sample,
+        parsed_page_count=parsed_page_count,
+        page_document_count=len(page_blocks),
+        invalid_page_identity_count=invalid_page_identity_count,
+        structure_quality_status=str(quality.get("overall_status") or ""),
+        missing_image_reference_count=int(quality.get("missing_image_reference_count") or 0),
+        valid_mapping_count=valid_mapping_count,
+        invalid_mapping_count=invalid_mapping_count,
+        absolute_path_count=len(absolute_hits),
+        sensitive_hit_count=len(sensitive_hits),
+        no_mock_fallback=no_mock_fallback,
+    )
+
+    artifact_paths = {
+        "documents": _artifact_path(work_dir / "documents", work_dir),
+        "sqlite": _artifact_path(sqlite_path, work_dir),
+        "ingestion_report": _artifact_path(ingestion_report_path, work_dir),
+        "structure_quality": _artifact_path(structure_quality_path, work_dir),
+        "qa_page_mapping": _artifact_path(qa_mapping_path, work_dir),
+        "page_identity_mapping": _artifact_path(page_identity_path, work_dir),
+        "acceptance_report": "acceptance_report.json",
+        "logs": "logs",
+    }
+    report = {
+        "command": COMMAND,
+        "status": "success" if not failures else "failed",
+        "phase": PHASE,
+        "gate": _gate(args),
+        "doc_id": sample.doc_id,
+        "ingestion_doc_id": ingestion_doc_id,
+        "source_doc_id": sample.source_doc_id,
+        "input_scope": sample.input_scope,
+        "source_pdf_sha256": sha256_file(sample.pdf_path),
+        "expected_page_count": sample.expected_page_count,
+        "pdf_page_count": sample.pdf_page_count,
+        "parsed_page_count": parsed_page_count,
+        "raw_block_count": quality.get("raw_block_count"),
+        "converted_block_count": len(blocks),
+        "block_type_counts": block_type_counts,
+        "page_document_count": len(page_blocks),
+        "missing_image_reference_count": int(quality.get("missing_image_reference_count") or 0),
+        "persisted_absolute_path_count": len(absolute_hits),
+        "structure_quality_status": quality.get("overall_status"),
+        "qa_count": len(sample.qa_records),
+        "page_identity_mapping_invalid_count": invalid_page_identity_count,
+        "gold_page_mapping_valid_count": valid_mapping_count,
+        "gold_page_mapping_invalid_count": invalid_mapping_count,
+        "no_mock_fallback": no_mock_fallback,
+        "artifact_paths": artifact_paths,
+        "warnings": list(quality.get("warnings") or []),
+        "failures": failures,
+    }
+    if revalidate_existing:
+        report["revalidate_existing"] = True
+    if absolute_hits:
+        report["persisted_absolute_path_examples"] = absolute_hits[:5]
+    if sensitive_hits:
+        report["sensitive_artifact_examples"] = sensitive_hits[:5]
+    _write_json(work_dir / "acceptance_report.json", report)
+    return report
 
 
 def _run_ingestion(
@@ -604,82 +750,81 @@ def _run_ingestion(
     _copy_report(ingestion_report_path, top_ingestion_path)
     _copy_report(structure_quality_path, top_quality_path)
 
-    blocks = _load_blocks(evidence_path)
-    page_blocks = _load_blocks(pages_path)
-    quality = _read_json(structure_quality_path)
-    page_identity = _build_page_identity_mapping(sample=sample, page_blocks=page_blocks)
-    qa_mapping = _build_qa_page_mapping(sample=sample, page_identity=page_identity)
-    page_identity_path = work_dir / "page_identity_mapping.jsonl"
-    qa_mapping_path = work_dir / "qa_page_mapping.jsonl"
-    write_jsonl(page_identity_path, page_identity)
-    write_jsonl(qa_mapping_path, qa_mapping)
-
-    parsed_page_count = len({block.page_id for block in blocks if block.page_id is not None})
-    block_type_counts = dict(sorted(Counter(block.block_type for block in blocks).items()))
-    valid_mapping_count = sum(1 for record in qa_mapping if record["mapping_valid"])
-    invalid_mapping_count = len(qa_mapping) - valid_mapping_count
-    invalid_page_identity_count = sum(1 for record in page_identity if not record["mapping_valid"])
-    absolute_hits, sensitive_hits = _scan_json_artifacts(work_dir, sqlite_path)
     no_mock_fallback = bool(args.live_api)
-    failures = _acceptance_failures(
+    return _build_acceptance_report(
+        args=args,
         sample=sample,
-        parsed_page_count=parsed_page_count,
-        page_document_count=len(page_blocks),
-        invalid_page_identity_count=invalid_page_identity_count,
-        structure_quality_status=str(quality.get("overall_status") or ""),
-        missing_image_reference_count=int(quality.get("missing_image_reference_count") or 0),
-        valid_mapping_count=valid_mapping_count,
-        invalid_mapping_count=invalid_mapping_count,
-        absolute_path_count=len(absolute_hits),
-        sensitive_hit_count=len(sensitive_hits),
+        work_dir=work_dir,
+        sqlite_path=sqlite_path,
+        evidence_path=evidence_path,
+        pages_path=pages_path,
+        ingestion_report_path=top_ingestion_path,
+        structure_quality_path=top_quality_path,
+        ingestion_doc_id=result.document.doc_id,
         no_mock_fallback=no_mock_fallback,
+        revalidate_existing=False,
     )
 
-    artifact_paths = {
-        "documents": _artifact_path(work_dir / "documents", work_dir),
-        "sqlite": _artifact_path(sqlite_path, work_dir),
-        "ingestion_report": _artifact_path(top_ingestion_path, work_dir),
-        "structure_quality": _artifact_path(top_quality_path, work_dir),
-        "qa_page_mapping": _artifact_path(qa_mapping_path, work_dir),
-        "page_identity_mapping": _artifact_path(page_identity_path, work_dir),
-        "acceptance_report": "acceptance_report.json",
-        "logs": "logs",
-    }
-    report = {
-        "command": COMMAND,
-        "status": "success" if not failures else "failed",
-        "phase": PHASE,
-        "gate": GATE,
-        "doc_id": sample.doc_id,
-        "ingestion_doc_id": result.document.doc_id,
-        "source_doc_id": sample.source_doc_id,
-        "input_scope": sample.input_scope,
-        "source_pdf_sha256": sha256_file(sample.pdf_path),
-        "expected_page_count": sample.expected_page_count,
-        "pdf_page_count": sample.pdf_page_count,
-        "parsed_page_count": parsed_page_count,
-        "raw_block_count": quality.get("raw_block_count"),
-        "converted_block_count": len(blocks),
-        "block_type_counts": block_type_counts,
-        "page_document_count": len(page_blocks),
-        "missing_image_reference_count": int(quality.get("missing_image_reference_count") or 0),
-        "persisted_absolute_path_count": len(absolute_hits),
-        "structure_quality_status": quality.get("overall_status"),
-        "qa_count": len(sample.qa_records),
-        "page_identity_mapping_invalid_count": invalid_page_identity_count,
-        "gold_page_mapping_valid_count": valid_mapping_count,
-        "gold_page_mapping_invalid_count": invalid_mapping_count,
-        "no_mock_fallback": no_mock_fallback,
-        "artifact_paths": artifact_paths,
-        "warnings": list(quality.get("warnings") or []),
-        "failures": failures,
-    }
-    if absolute_hits:
-        report["persisted_absolute_path_examples"] = absolute_hits[:5]
-    if sensitive_hits:
-        report["sensitive_artifact_examples"] = sensitive_hits[:5]
-    _write_json(work_dir / "acceptance_report.json", report)
-    return report
+
+def _find_existing_document_dir(work_dir: Path) -> Path:
+    document_root = work_dir / "documents"
+    if not document_root.is_dir():
+        raise Phase4BIngestionError("existing artifact documents directory is missing")
+    candidates = sorted(
+        path
+        for path in document_root.iterdir()
+        if path.is_dir() and (path / "evidence_blocks.jsonl").is_file() and (path / "page_documents.jsonl").is_file()
+    )
+    if not candidates:
+        raise Phase4BIngestionError("existing artifact evidence/page document files are missing")
+    if len(candidates) > 1:
+        raise Phase4BIngestionError("existing artifact documents directory is ambiguous")
+    return candidates[0]
+
+
+def _read_existing_no_mock_fallback(work_dir: Path) -> bool:
+    report_path = work_dir / "acceptance_report.json"
+    if not report_path.is_file():
+        return False
+    try:
+        payload = _read_json(report_path)
+    except Exception:
+        return False
+    return bool(payload.get("no_mock_fallback"))
+
+
+def _run_revalidate_existing(*, args: argparse.Namespace, sample: SampleInputs) -> dict[str, Any]:
+    _validate_runtime(args, validate_only=False, revalidate_existing=True)
+    work_dir = repo_path(args.output_root) / sample.doc_id
+    if not work_dir.is_dir():
+        raise Phase4BIngestionError(f"existing output work directory missing: {work_dir.name}")
+    sqlite_path = work_dir / "docagent.sqlite"
+    if not sqlite_path.is_file():
+        raise Phase4BIngestionError("existing artifact docagent.sqlite is missing")
+    internal_doc_dir = _find_existing_document_dir(work_dir)
+    evidence_path = internal_doc_dir / "evidence_blocks.jsonl"
+    pages_path = internal_doc_dir / "page_documents.jsonl"
+    top_ingestion_path = work_dir / "ingestion_report.json"
+    top_quality_path = work_dir / "structure_quality.json"
+    ingestion_report_path = top_ingestion_path if top_ingestion_path.is_file() else internal_doc_dir / "ingestion_report.json"
+    structure_quality_path = top_quality_path if top_quality_path.is_file() else internal_doc_dir / "structure_quality.json"
+    if not ingestion_report_path.is_file():
+        raise Phase4BIngestionError("existing artifact ingestion_report.json is missing")
+    if not structure_quality_path.is_file():
+        raise Phase4BIngestionError("existing artifact structure_quality.json is missing")
+    return _build_acceptance_report(
+        args=args,
+        sample=sample,
+        work_dir=work_dir,
+        sqlite_path=sqlite_path,
+        evidence_path=evidence_path,
+        pages_path=pages_path,
+        ingestion_report_path=ingestion_report_path,
+        structure_quality_path=structure_quality_path,
+        ingestion_doc_id=internal_doc_dir.name,
+        no_mock_fallback=_read_existing_no_mock_fallback(work_dir),
+        revalidate_existing=True,
+    )
 
 
 def _failure_payload(
@@ -697,7 +842,7 @@ def _failure_payload(
         "status": "failed",
         "exit_code": 1,
         "phase": PHASE,
-        "gate": GATE,
+        "gate": _gate(args),
         "doc_id": doc_id,
         "exception": _sanitize_text(f"{type(exc).__name__}: {exc}"),
         "traceback_tail": tail,
@@ -725,6 +870,8 @@ def run_phase4b_ingestion(
         sample = _load_sample_inputs(args)
         if args.validate_only:
             return _validate_only_payload(args, sample)
+        if args.revalidate_existing:
+            return _run_revalidate_existing(args=args, sample=sample)
         return _run_ingestion(args=args, sample=sample, api_client_factory=api_client_factory)
     except Exception as exc:
         return _failure_payload(args=args, exc=exc, sample=sample)
@@ -732,15 +879,17 @@ def run_phase4b_ingestion(
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run Phase 4B Gate 1 MP-DocVQA page-window MinerU ingestion."
+        description="Run or revalidate Phase 4B MP-DocVQA page-window MinerU ingestion."
     )
     parser.add_argument("--sample-root", required=True)
     parser.add_argument("--doc-id", required=True)
     parser.add_argument("--output-root", default=DEFAULT_OUTPUT_ROOT)
     parser.add_argument("--parser-mode", choices=["parse_existing"], default="parse_existing")
+    parser.add_argument("--gate", default=GATE)
     parser.add_argument("--live-api", action="store_true")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--validate-only", action="store_true")
+    parser.add_argument("--revalidate-existing", action="store_true")
     return parser.parse_args(argv)
 
 

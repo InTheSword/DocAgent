@@ -13,8 +13,10 @@ Current Phase 4B status:
 Phase 4A -> accepted
 Phase 4B -> active
 Gate 1 local implementation -> implemented
-Gate 1 real MinerU smoke -> blocked_by_signed_upload_client
-Gate 2 -> blocked_by_gate1
+Gate 1 -> accepted
+Gate 2 4-page -> accepted
+Gate 2 20-page ingestion -> completed
+Gate 2 20-page acceptance -> blocked_by_false_positive_path_scan
 Gate 3 -> blocked_by_gate2
 Gate 4 -> blocked_by_gate3
 CDC -> queued after Phase 4B
@@ -36,11 +38,13 @@ Phase 4A sample assets
 -> compact acceptance report
 ```
 
-The first Gate 1 real MinerU smoke reached signed URL upload and failed with
-HTTP 403. Server-side diagnosis verified that `MINERU_TOKEN`, upload URL
-generation, network access, and the PDF were valid, and that streaming
-`requests.put(upload_url, data=file)` succeeds for the same file. Do not mark
-Gate 1 or Phase 4B as accepted until the fixed client passes the live smoke.
+Gate 1 single-page live MinerU ingestion is accepted. Gate 2 accepted the
+4-page representative window. The 20-page window completed MinerU parsing,
+EvidenceBlock conversion, page document creation, and QA page mapping, but
+acceptance is blocked by a false-positive portability scan that read serialized
+SQLite JSON and treated OCR `\$34.20` text as a UNC path. Do not mark Gate 2 or
+Phase 4B as accepted until the existing 20-page artifact is revalidated with the
+fixed scanner.
 
 ## Phase 4A Accepted
 
@@ -124,8 +128,10 @@ Linux PDF generation -> server_validated
 cross-shard identity design -> implemented_not_yet_multi_shard_validated
 Phase 4B -> active
 Gate 1 local implementation -> implemented
-Gate 1 real MinerU smoke -> blocked_by_signed_upload_client
-Gate 2 -> blocked_by_gate1
+Gate 1 -> accepted
+Gate 2 4-page -> accepted
+Gate 2 20-page ingestion -> completed
+Gate 2 20-page acceptance -> blocked_by_false_positive_path_scan
 Gate 3 -> blocked_by_gate2
 Gate 4 -> blocked_by_gate3
 CDC -> queued after Phase 4B

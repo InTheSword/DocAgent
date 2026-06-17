@@ -58,8 +58,10 @@ not a full 29-shard rollout.
 | Phase 4A cross-shard identity design | implemented_not_yet_multi_shard_validated | multi-shard contract implemented, not yet server-validated |
 | Phase 4B | active | current milestone |
 | Gate 1 local implementation | implemented | runner and fixture tests added locally |
-| Gate 1 real MinerU smoke | blocked_by_signed_upload_client | first live run reached OSS signed PUT and failed with HTTP 403 |
-| Gate 2 | blocked_by_gate1 | representative 1/4/20-page ingestion waits for Gate 1 |
+| Gate 1 | accepted | single-page live MinerU ingestion accepted |
+| Gate 2 4-page | accepted | representative 4-page live MinerU ingestion accepted |
+| Gate 2 20-page ingestion | completed | MinerU, EvidenceBlock, page documents, and QA mapping completed |
+| Gate 2 20-page acceptance | blocked_by_false_positive_path_scan | SQLite JSON path scan misread OCR `\$34.20` text as a UNC path |
 | Gate 3 | blocked_by_gate2 | page-level retrieval and AnswerPolicy E2E waits for Gate 2 |
 | Gate 4 | blocked_by_gate3 | 10-20 windows / 30-50 QA waits for Gate 3 |
 | CDC | queued after Phase 4B | do not start during Phase 4B gates |
@@ -135,18 +137,21 @@ Phase 4A accepted contract remains:
 
 ## 5. Phase 4B Initial Scope
 
-Gate 1 local implementation is now present. The next action is a single live
-MinerU smoke for:
+Gate 1 is accepted. Gate 2 has accepted the representative 4-page window and
+completed MinerU ingestion plus page mapping for the 20-page window:
 
 ```text
-hqvw0217__bc714cf4181a5632
+rzbj0037__e09400dd12a9c549 -> accepted
+jrcy0227__558596710c584b02 -> ingestion completed, acceptance blocked by false-positive path scan
 ```
 
 Gate order remains:
 
 ```text
-Gate 1 real MinerU smoke -> blocked_by_signed_upload_client
-Gate 2 -> blocked_by_gate1
+Gate 1 -> accepted
+Gate 2 4-page -> accepted
+Gate 2 20-page ingestion -> completed
+Gate 2 20-page acceptance -> blocked_by_false_positive_path_scan
 Gate 3 -> blocked_by_gate2
 Gate 4 -> blocked_by_gate3
 ```
@@ -157,10 +162,7 @@ Phase 4B must still use one Codex thread and one feature branch:
 codex/phase4b-mpdocvqa-e2e
 ```
 
-Do not expand past Gate 1 until the signed upload fix is server-retried and
-the live MinerU result returns.
-
-Server diagnosis from the first Gate 1 attempt:
+Prior Gate 1 signed-upload diagnosis:
 
 ```text
 MINERU_TOKEN -> set and valid
@@ -169,11 +171,15 @@ existing urllib PUT upload -> HTTP 403
 independent requests streaming PUT on the same URL/PDF -> HTTP 200
 ```
 
-Conclusion:
+Current Gate 2 diagnosis:
 
 ```text
-Gate 1 is blocked by the signed upload client implementation, not by token,
-network, PDF, upload URL generation, or Phase 4A sample assets.
+jrcy0227__558596710c584b02 expected/parsed/page_document -> 20/20/20
+qa mapping -> 1/1
+missing image reference -> 0
+no mock fallback -> true
+structure quality -> passed_with_warnings
+persisted absolute path -> false-positive SQLite JSON scan of OCR `\$34.20`
 ```
 
 The eventual Phase 4B scope remains:
@@ -204,21 +210,23 @@ builder --help
 
 Current server boundary:
 
-- run only the single Gate 1 live MinerU smoke command supplied by Codex;
-- check that `MINERU_TOKEN` is set without printing it;
-- do not run retrieval, Qwen, Gate 2, Gate 3, or Gate 4 until Gate 1 returns.
+- run only the Gate 2 existing-artifact revalidation command supplied by Codex;
+- do not call MinerU during revalidation;
+- do not run retrieval, Qwen, Gate 3, or Gate 4 until Gate 2 returns.
 
 Do not:
 
 - print or persist `MINERU_TOKEN`;
 - install packages or modify the stable `docagent` environment;
-- run retrieval or answer models in Gate 1;
+- run retrieval or answer models during Gate 2 revalidation;
 - create per-gate branches.
 
 ## 8. Next Priorities
 
-1. Retry the AutoDL Gate 1 smoke after the signed upload client fix is pushed.
-2. If Gate 1 succeeds, continue Gate 2 in the same thread and branch.
+1. Revalidate the existing 20-page Gate 2 artifact after the SQLite JSON path
+   scan fix is pushed.
+2. If revalidation succeeds, continue Gate 2 handling in the same thread and
+   branch.
 3. Keep CDC queued after Phase 4B.
 
 ## 9. Stop Condition
@@ -226,7 +234,7 @@ Do not:
 Stop after the following are complete:
 
 ```text
-Gate 1 local implementation committed and pushed
-+ one AutoDL Gate 1 command provided
+SQLite JSON path scan fix committed and pushed
++ one AutoDL Gate 2 revalidate-existing command provided
 + stop for server result
 ```

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -9,8 +10,14 @@ from typing import Any
 from PIL import Image
 
 from docagent.ingestion.hashing import sha256_file
+from docagent.storage.db import connect
 from docagent.utils.jsonl import read_jsonl, write_jsonl
-from scripts.run_phase4b_mpdocvqa_ingestion import parse_args, run_phase4b_ingestion
+from scripts.run_phase4b_mpdocvqa_ingestion import (
+    _looks_like_local_absolute_path,
+    _scan_json_artifacts,
+    parse_args,
+    run_phase4b_ingestion,
+)
 
 
 TARGET_DOC_ID = "hqvw0217__bc714cf4181a5632"
@@ -361,6 +368,127 @@ def test_structure_quality_passed_with_warnings_can_pass(tmp_path: Path, monkeyp
     assert "unknown_raw_types_present" in payload["warnings"]
 
 
+def test_json_sqlite_path_scan_ignores_ocr_latex_escapes(tmp_path: Path) -> None:
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    sqlite_path = work_dir / "docagent.sqlite"
+    conn = connect(sqlite_path)
+    try:
+        conn.execute(
+            """
+            INSERT INTO evidence_blocks(block_id, doc_id, page_id, block_type, text, payload_json, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "b1",
+                "doc",
+                1,
+                "text",
+                r"for \$34.20",
+                json.dumps(
+                    {
+                        "text": r"Meetings \$34.20",
+                        "json_encoded": r"\\$34.20",
+                        "semantic_backslash": r"ordinary \ marker",
+                    }
+                ),
+                json.dumps({"note": r"Many thanks ... \$34.20"}),
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    absolute_hits, sensitive_hits = _scan_json_artifacts(work_dir, sqlite_path)
+    with sqlite3.connect(sqlite_path) as verify_conn:
+        stored_payload = verify_conn.execute(
+            "SELECT payload_json FROM evidence_blocks WHERE block_id = 'b1'"
+        ).fetchone()[0]
+
+    assert absolute_hits == []
+    assert sensitive_hits == []
+    assert r"\\$34.20" in stored_payload
+
+
+def test_json_sqlite_path_scan_detects_real_absolute_paths_with_compact_examples(tmp_path: Path) -> None:
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    sqlite_path = work_dir / "docagent.sqlite"
+    conn = connect(sqlite_path)
+    try:
+        conn.execute(
+            """
+            INSERT INTO evidence_blocks(block_id, doc_id, page_id, block_type, text, payload_json, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "b1",
+                "doc",
+                1,
+                "text",
+                "content",
+                json.dumps({"posix": "/root/data/file.pdf", "win": r"C:\Users\name\file.pdf"}),
+                json.dumps({"unc": r"\\server\share\file.pdf"}),
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO document_indexes(doc_id, index_type, model_id, artifact_path, metadata_json)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("doc", "bm25", "", "indexes/bm25.json", json.dumps({"source": "/root/metadata/file.json"})),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    absolute_hits, _ = _scan_json_artifacts(work_dir, sqlite_path)
+
+    reasons = {hit["reason"] for hit in absolute_hits}
+    assert {
+        "posix_absolute_path",
+        "windows_drive_absolute_path",
+        "unc_absolute_path",
+    }.issubset(reasons)
+    assert all(set(hit) == {"where", "reason", "value_preview"} for hit in absolute_hits)
+    assert all(len(hit["value_preview"]) <= 160 for hit in absolute_hits)
+    assert not any("payload_json" in hit["value_preview"] for hit in absolute_hits)
+
+
+def test_invalid_json_sqlite_path_scan_uses_safe_string_fallback(tmp_path: Path) -> None:
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    sqlite_path = work_dir / "docagent.sqlite"
+    conn = connect(sqlite_path)
+    try:
+        conn.execute(
+            """
+            INSERT INTO evidence_blocks(block_id, doc_id, page_id, block_type, text, payload_json, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("b1", "doc", 1, "text", "content", r"C:\Users\name\file.pdf", None),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    absolute_hits, _ = _scan_json_artifacts(work_dir, sqlite_path)
+
+    assert len(absolute_hits) == 1
+    assert absolute_hits[0]["reason"] == "windows_drive_absolute_path"
+    assert absolute_hits[0]["value_preview"] == r"C:\Users\name\file.pdf"
+
+
+def test_absolute_path_detection_is_platform_independent() -> None:
+    assert _looks_like_local_absolute_path("/root/data/file.pdf")
+    assert _looks_like_local_absolute_path(r"C:\Users\name\file.pdf")
+    assert _looks_like_local_absolute_path(r"\\server\share\file.pdf")
+    assert not _looks_like_local_absolute_path(r"\$34.20")
+    assert not _looks_like_local_absolute_path(r"\\$34.20")
+    assert not _looks_like_local_absolute_path(r"ordinary \ marker")
+    assert not _looks_like_local_absolute_path(r"price C:\Users\name\file.pdf mentioned in text")
+
+
 def test_absolute_paths_tokens_and_signed_urls_are_not_persisted(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("MINERU_TOKEN", "secret-token")
     sample = _sample_root(tmp_path)
@@ -387,6 +515,60 @@ def test_absolute_paths_tokens_and_signed_urls_are_not_persisted(tmp_path: Path,
     assert "download.example" not in text
     assert "Authorization" not in text
     assert "C:\\secret" not in text
+
+
+def test_revalidate_existing_does_not_call_api_and_clears_latex_escape_false_positive(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("MINERU_TOKEN", "secret-token")
+    sample = _sample_root(tmp_path)
+    fake = FakeMinerUApi(page_indices=[0])
+    out = tmp_path / "out"
+    args = _args(str(sample), TARGET_DOC_ID, str(out), "--live-api")
+    initial = run_phase4b_ingestion(args, api_client_factory=lambda: fake)
+    assert initial["status"] == "success"
+    assert initial["gate"] == "Gate 1"
+
+    sqlite_path = out / TARGET_DOC_ID / "docagent.sqlite"
+    with sqlite3.connect(sqlite_path) as conn:
+        block_id, payload_json = conn.execute(
+            "SELECT block_id, payload_json FROM evidence_blocks WHERE block_type = 'text' LIMIT 1"
+        ).fetchone()
+        payload = json.loads(payload_json)
+        payload["text"] = r"for \$34.20"
+        conn.execute(
+            "UPDATE evidence_blocks SET text = ?, payload_json = ? WHERE block_id = ?",
+            (payload["text"], json.dumps(payload, ensure_ascii=False), block_id),
+        )
+        conn.commit()
+    original_payload = sqlite_path.read_bytes()
+
+    def fail_if_called() -> FakeMinerUApi:
+        raise AssertionError("revalidate-existing must not call MinerU client")
+
+    revalidate_args = _args(
+        str(sample),
+        TARGET_DOC_ID,
+        str(out),
+        "--gate",
+        "Gate 2",
+        "--revalidate-existing",
+    )
+    payload = run_phase4b_ingestion(revalidate_args, api_client_factory=fail_if_called)
+
+    assert payload["status"] == "success"
+    assert payload["gate"] == "Gate 2"
+    assert payload["revalidate_existing"] is True
+    assert payload["persisted_absolute_path_count"] == 0
+    assert payload["no_mock_fallback"] is True
+    assert sqlite_path.read_bytes() == original_payload
+    with sqlite3.connect(sqlite_path) as conn:
+        stored_text, stored_payload = conn.execute(
+            "SELECT text, payload_json FROM evidence_blocks WHERE block_id = ?",
+            (block_id,),
+        ).fetchone()
+    assert stored_text == r"for \$34.20"
+    assert json.loads(stored_payload)["text"] == r"for \$34.20"
 
 
 def test_api_exception_writes_compact_sanitized_failure(tmp_path: Path, monkeypatch) -> None:

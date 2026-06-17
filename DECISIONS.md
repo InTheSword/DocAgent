@@ -550,3 +550,45 @@ Gate 2 -> blocked_by_gate1
 Gate 3 -> blocked_by_gate2
 Gate 4 -> blocked_by_gate3
 ```
+
+## 2026-06-17: Phase 4B SQLite JSON Path Audit and Existing Artifact Revalidation
+
+Decision: persisted path audits must parse SQLite JSON columns before scanning
+their values, and Gate 2 may revalidate already-ingested artifacts without
+calling MinerU.
+
+Rationale:
+
+- Gate 1 single-page ingestion is accepted, and the Gate 2 four-page window is
+  accepted from live MinerU output.
+- The Gate 2 twenty-page window completed MinerU parsing, EvidenceBlock
+  conversion, page document creation, and QA page mapping.
+- Its only failed acceptance item was a portability scan hit in
+  `sqlite.evidence_blocks.payload_json`.
+- The inspected values were OCR text such as `\$34.20`, not local filesystem
+  paths. The prior scanner searched serialized JSON strings directly, so JSON
+  escaping could make ordinary OCR text look like a UNC prefix.
+
+Constraints:
+
+- Do not modify OCR text, EvidenceBlock content, answers, or source gold labels.
+- For SQLite JSON columns, first `json.loads()` valid JSON and recursively scan
+  the parsed dict/list/string values. Invalid JSON may use the safe plain-string
+  fallback.
+- Treat absolute paths as complete string values after trimming, not arbitrary
+  substrings inside semantic text.
+- Keep path examples compact: where, reason, and a truncated value preview only.
+- Existing-artifact revalidation must read current JSON/JSONL/SQLite artifacts,
+  recompute portability and acceptance failures, update `acceptance_report.json`,
+  and must not upload files, poll MinerU, or re-run ingestion.
+
+Current status:
+
+```text
+Gate 1 -> accepted
+Gate 2 4-page -> accepted
+Gate 2 20-page ingestion -> completed
+Gate 2 20-page acceptance -> blocked_by_false_positive_path_scan
+Gate 3 -> blocked_by_gate2
+Gate 4 -> blocked_by_gate3
+```
