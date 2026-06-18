@@ -33,8 +33,9 @@ Gate 1 local implementation -> implemented
 Gate 1 -> accepted
 Gate 2 -> accepted
 Gate 3 local implementation -> implemented
-Gate 3 server real E2E -> not_started
-Gate 4 -> blocked_by_gate3
+Gate 3 server real E2E -> real_model_verified
+Gate 3A failure review/context instrumentation -> implemented
+Gate 4 -> blocked
 CDC -> queued after Phase 4B
 Router/tools -> queued after CDC
 Demo/closure -> final phase
@@ -53,8 +54,9 @@ evaluation implementation, metrics, or conclusions in this phase.
 ## Blockers
 
 - No blocker for the accepted Phase 4A foundation.
-- Gate 3 server real E2E has not started.
-- Gate 4 waits for Gate 3 page-level retrieval and AnswerPolicy E2E.
+- Gate 3 server real E2E has completed but remains a quality-review target,
+  not an accepted expansion signal.
+- Gate 4 waits for Gate 3A failure review and page-rank-aware context results.
 
 ## Local Validation
 
@@ -84,16 +86,16 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Run the Gate 3 server real E2E over the accepted 1/4/20-page windows.
-2. Return compact retrieval/answer/trace summary artifacts before any Gate 4
-   expansion.
+1. Re-run Gate 3 retrieval-only with the Gate 3A context/review artifacts.
+2. Re-run Gate 3 full GRPO E2E and compare against
+   `gate3_mpdocvqa_20260618_155135`.
 3. Keep CDC queued until Phase 4B completes.
 
 ## Stop Condition
 
 ```text
-Gate 3 local implementation committed and pushed
-+ three short AutoDL Gate 3 command blocks provided
+Gate 3A local instrumentation/context update committed and pushed
++ short AutoDL Gate 3A rerun command blocks provided
 + stop for server result
 ```
 

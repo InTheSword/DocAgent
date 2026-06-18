@@ -9,7 +9,8 @@ from typing import Any
 
 from docagent.schemas import EvidenceBlock, EvidenceLocation
 from docagent.utils.jsonl import read_jsonl, write_jsonl
-from scripts.run_phase4b_mpdocvqa_e2e import parse_args, run_phase4b_e2e
+from docagent.workflow.prompts import build_evidence_context, compile_answer_prompt
+from scripts.run_phase4b_mpdocvqa_e2e import build_failure_cases, parse_args, run_phase4b_e2e
 
 
 DOC_A = "docA__window"
@@ -236,6 +237,7 @@ def test_retrieval_only_writes_doc_scoped_page_metrics_and_fixed_evidence(tmp_pa
     summary = run_phase4b_e2e(args)
     run_dir = output_root / "retrieval"
     retrieval_rows = read_jsonl(run_dir / "page_retrieval_results.jsonl")
+    retrieval_preview = json.loads((run_dir / "retrieval_preview.json").read_text(encoding="utf-8"))["records"]
     fixed_rows = read_jsonl(run_dir / "fixed_evidence.jsonl")
     metrics = json.loads((run_dir / "page_retrieval_metrics.json").read_text(encoding="utf-8"))
 
@@ -246,6 +248,10 @@ def test_retrieval_only_writes_doc_scoped_page_metrics_and_fixed_evidence(tmp_pa
     assert {row["mode"] for row in retrieval_rows} == {"bm25", "hybrid"}
     assert metrics["bm25"]["sample_count"] == metrics["hybrid"]["sample_count"] == 3
     assert metrics["hybrid"]["recall_at_1"] == 1.0
+    assert retrieval_preview
+    assert all(record["hybrid"]["top_pages"] for record in retrieval_preview)
+    first_top_page = retrieval_preview[0]["hybrid"]["top_pages"][0]
+    assert {"rank", "parsed_page_number", "page_aggregate_id", "score"}.issubset(first_top_page)
     for row in retrieval_rows:
         assert set(row["ranking"]).issubset(set(row["corpus_page_ids"]))
         assert row["query_rewrite"] == "none"
@@ -253,6 +259,11 @@ def test_retrieval_only_writes_doc_scoped_page_metrics_and_fixed_evidence(tmp_pa
     assert all("answers" not in json.dumps(row) for row in fixed_rows)
     assert all("gold_page" not in json.dumps(row) for row in fixed_rows)
     assert any(row["truncation_applied"] for row in fixed_rows)
+    assert fixed_rows[0]["selected_pages"][0]["retrieval_rank"] == 1
+    first_block = EvidenceBlock.from_dict(fixed_rows[0]["evidence"][0])
+    assert first_block.metadata["retrieval_rank"] == 1
+    assert first_block.metadata["parsed_page_number"] == first_block.page_id
+    assert first_block.metadata["page_aggregate_id"]
     assert summary["fixed_evidence_hash"]
     assert all("\\" not in value and ":" not in value for value in summary["artifact_paths"].values())
 
@@ -280,6 +291,7 @@ def test_full_mock_answer_policy_writes_answer_metrics_and_sqlite_trace(tmp_path
     summary = run_phase4b_e2e(args)
     run_dir = output_root / "full"
     answer_rows = read_jsonl(run_dir / "answer_results.jsonl")
+    answer_preview = json.loads((run_dir / "answer_results_preview.json").read_text(encoding="utf-8"))["records"]
     answer_metrics = json.loads((run_dir / "answer_metrics.json").read_text(encoding="utf-8"))
 
     assert summary["status"] == "success"
@@ -287,14 +299,94 @@ def test_full_mock_answer_policy_writes_answer_metrics_and_sqlite_trace(tmp_path
     assert answer_metrics["completed_count"] == 3
     assert answer_metrics["valid_json_rate"] == 1.0
     assert answer_metrics["format_valid_rate"] == 1.0
+    assert "page_location_hit" in answer_metrics
+    assert "block_location_hit" in answer_metrics
     assert answer_metrics["final_location_in_evidence_rate"] == 1.0
     assert len(answer_rows) == 3
+    assert answer_preview
+    assert all(record["model_answer"] for record in answer_preview)
+    assert "page_location_hit" in summary
+    assert "block_location_hit" in summary
     with sqlite3.connect(run_dir / "docagent.sqlite") as conn:
         assert conn.execute("SELECT COUNT(*) FROM qa_runs").fetchone()[0] == 3
         assert conn.execute("SELECT COUNT(*) FROM tool_traces").fetchone()[0] >= 15
     assert summary["trace_counts"]["qa_runs"] == 3
     assert summary["artifact_paths"]["sqlite"] == "docagent.sqlite"
     assert (run_dir / "summary.md").is_file()
+
+
+def test_context_and_prompt_include_retrieval_page_metadata_without_gold_labels(tmp_path: Path) -> None:
+    sample_root, ingestion_root, output_root = _fixture(tmp_path)
+    args = _args(
+        sample_root,
+        ingestion_root,
+        output_root,
+        "--run-id",
+        "context",
+        "--dense-backend",
+        "hash",
+        "--reranker-backend",
+        "keyword",
+        "--allow-mock-backends",
+        "--retrieval-only",
+        "--force",
+    )
+    run_phase4b_e2e(args)
+    fixed_row = read_jsonl(output_root / "context" / "fixed_evidence.jsonl")[0]
+    blocks = [EvidenceBlock.from_dict(record) for record in fixed_row["evidence"]]
+
+    context = build_evidence_context(question="Where is alpha total?", evidence_blocks=blocks)
+    prompt = compile_answer_prompt(question="Where is alpha total?", evidence_blocks=blocks).messages[-1]["content"]
+    serialized = json.dumps(fixed_row, ensure_ascii=False)
+
+    assert context["evidence"][0]["retrieval_rank"] == 1
+    assert context["evidence"][0]["location"]["page_aggregate_id"]
+    assert "retrieval_rank" in prompt
+    assert "page_aggregate_id" in prompt
+    assert "Prefer evidence from pages with higher retrieval rank" in prompt
+    assert "gold_page" not in serialized
+    assert "answers" not in serialized
+
+
+def test_failure_cases_are_compact_and_include_retrieval_context(tmp_path: Path) -> None:
+    retrieval_rows = [
+        {
+            "qid": "q_failure",
+            "doc_id": DOC_A,
+            "source_doc_id": "docA",
+            "mode": "hybrid",
+            "gold_page_rank": 2,
+            "gold_parsed_page_number": 4,
+            "gold_page_aggregate_id": "page-4",
+            "candidates": [
+                {"final_rank": 1, "parsed_page_number": 2, "page_aggregate_id": "page-2", "reranker_score": 0.9},
+                {"final_rank": 2, "parsed_page_number": 4, "page_aggregate_id": "page-4", "reranker_score": 0.8},
+            ],
+        }
+    ]
+    answer_rows = [
+        {
+            "qid": "q_failure",
+            "doc_id": DOC_A,
+            "status": "completed",
+            "prediction": {"answer": "wrong", "evidence_location": {"page": 2, "block_id": "block-1"}},
+            "gold": {"parsed_page_number": 4, "page_aggregate_id": "page-4"},
+            "answer_metrics": {"answer_hit": False},
+            "validation": {"gold_page_location_hit": False},
+            "failure_taxonomy": ["answer_miss", "gold_page_location_miss"],
+            "evidence_block_ids": [f"block-{idx}" for idx in range(10)],
+        }
+    ]
+    failure_rows = build_failure_cases(answer_rows=answer_rows, retrieval_rows=retrieval_rows)
+
+    assert failure_rows
+    first = failure_rows[0]
+    assert first["selected_top_pages"]
+    assert "gold_page_rank" in first
+    assert "gold_page_in_top_k" in first
+    assert set(first["evidence_block_ids"]) == {"count", "first", "last"}
+    assert isinstance(first["evidence_block_ids"]["count"], int)
+    assert len(json.dumps(first, ensure_ascii=False)) < 5000
 
 
 def test_cli_help_starts() -> None:

@@ -1,6 +1,6 @@
 # Current Status
 
-Updated: 2026-06-17
+Updated: 2026-06-18
 
 ## Phase 4B Active
 
@@ -16,8 +16,9 @@ Gate 1 local implementation -> implemented
 Gate 1 -> accepted
 Gate 2 -> accepted
 Gate 3 local implementation -> implemented
-Gate 3 server real E2E -> not_started
-Gate 4 -> blocked_by_gate3
+Gate 3 server real E2E -> real_model_verified
+Gate 3A failure review/context instrumentation -> implemented
+Gate 4 -> blocked
 CDC -> queued after Phase 4B
 Router/tools -> queued after CDC
 Demo/closure -> final phase
@@ -39,10 +40,12 @@ Phase 4A sample assets
 
 Gate 1 single-page live MinerU ingestion is accepted. Gate 2 accepted the
 representative 1/4/20-page windows after existing-artifact revalidation fixed
-the SQLite JSON path-scan false positive. Gate 3 local implementation is
-present for page-level BM25/Hybrid retrieval, fixed evidence construction, and
-mockable AnswerPolicy E2E. Do not mark Gate 3 or Phase 4B as accepted until the
-AutoDL real E2E run returns.
+the SQLite JSON path-scan false positive. Gate 3 real E2E completed on AutoDL
+for 3 windows / 25 pages / 8 QA with valid JSON and trace persistence, but
+Reader quality remains under review because the model often selects a non-gold
+page or similar field from the retrieved top-k pages. Gate 3A local
+instrumentation and page-rank-aware context are implemented. Do not mark Gate 3
+or Phase 4B as accepted until the follow-up real E2E review returns.
 
 ## Phase 4A Accepted
 
@@ -129,8 +132,9 @@ Gate 1 local implementation -> implemented
 Gate 1 -> accepted
 Gate 2 -> accepted
 Gate 3 local implementation -> implemented
-Gate 3 server real E2E -> not_started
-Gate 4 -> blocked_by_gate3
+Gate 3 server real E2E -> real_model_verified
+Gate 3A failure review/context instrumentation -> implemented
+Gate 4 -> blocked
 CDC -> queued after Phase 4B
 Router/tools -> queued after CDC
 Demo/closure -> final phase

@@ -21,8 +21,11 @@ SYSTEM_PROMPT = (
 EXTRACTION_RULES_TEXT = (
     "- Use only evidence text from the candidates; do not use outside knowledge or common expansions.\n"
     "- Match the exact question intent before selecting an answer span.\n"
+    "- Prefer evidence from pages with higher retrieval rank; use lower-ranked pages only when the question intent fits them better.\n"
+    "- If multiple pages contain similar fields, choose the field type requested by the question, such as index, percentage, source, date, or heading.\n"
     "- For tables, lists, and key-value blocks, first match the relevant row, column, label, or relation, then copy the value.\n"
-    "- Do not answer with a neighboring entity, label, heading, total, or abbreviation unless the question asks for it."
+    "- Do not answer with a neighboring entity, label, heading, total, or abbreviation unless the question asks for it.\n"
+    "- evidence_location must point to the block where the final answer actually comes from."
 )
 
 OUTPUT_SCHEMA = {
@@ -121,12 +124,30 @@ def centered_evidence_window(text: str, answer: str, limit: int) -> str:
 def build_location_target(block: EvidenceBlock) -> dict[str, Any]:
     location = block.location.to_dict()
     location["block_id"] = block.block_id
+    retrieval = _retrieval_context(block)
+    if retrieval:
+        location.update(retrieval)
     return location
+
+
+def _retrieval_context(block: EvidenceBlock) -> dict[str, Any]:
+    metadata = block.metadata or {}
+    context: dict[str, Any] = {}
+    retrieval_rank = metadata.get("retrieval_rank", metadata.get("retrieval_page_rank"))
+    parsed_page_number = metadata.get("parsed_page_number", metadata.get("retrieval_parsed_page_number"))
+    page_aggregate_id = metadata.get("page_aggregate_id", metadata.get("retrieval_page_aggregate_id"))
+    if retrieval_rank is not None:
+        context["retrieval_rank"] = retrieval_rank
+    if parsed_page_number is not None:
+        context["parsed_page_number"] = parsed_page_number
+    if page_aggregate_id:
+        context["page_aggregate_id"] = page_aggregate_id
+    return context
 
 
 def _context_location(block: EvidenceBlock) -> dict[str, Any]:
     location = block.location.to_dict()
-    return {
+    payload = {
         "page": location.get("page", block.page_id),
         "bbox": location.get("bbox"),
         "block_id": block.block_id,
@@ -137,6 +158,8 @@ def _context_location(block: EvidenceBlock) -> dict[str, Any]:
         "slide": location.get("slide"),
         "section": location.get("section") or block.metadata.get("section_title"),
     }
+    payload.update(_retrieval_context(block))
+    return payload
 
 
 def _context_block_type(block: EvidenceBlock) -> str:
@@ -208,6 +231,7 @@ def build_evidence_context(
                 "doc_id": block.doc_id,
                 "block_id": block.block_id,
                 "block_type": _context_block_type(block),
+                **_retrieval_context(block),
                 "location": _context_location(block),
                 "content": content,
             }

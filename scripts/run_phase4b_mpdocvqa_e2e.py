@@ -398,6 +398,49 @@ def _json_float(value: float | None) -> float | None:
     return number
 
 
+def _candidate_score(candidate: dict[str, Any]) -> float | None:
+    for key in ("reranker_score", "rrf_score", "dense_score", "bm25_score"):
+        if candidate.get(key) is not None:
+            return _json_float(candidate.get(key))
+    return None
+
+
+def _candidate_top_page(candidate: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "rank": candidate.get("final_rank"),
+        "parsed_page_number": candidate.get("parsed_page_number"),
+        "page_aggregate_id": candidate.get("page_aggregate_id"),
+        "score": _candidate_score(candidate),
+    }
+
+
+def _top_pages(row: dict[str, Any]) -> list[dict[str, Any]]:
+    return [_candidate_top_page(candidate) for candidate in row.get("candidates") or []]
+
+
+def build_retrieval_preview(retrieval_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_qid: dict[str, dict[str, Any]] = defaultdict(dict)
+    for row in retrieval_rows:
+        qid = str(row.get("qid"))
+        item = by_qid.setdefault(
+            qid,
+            {
+                "qid": qid,
+                "doc_id": row.get("doc_id"),
+                "source_doc_id": row.get("source_doc_id"),
+                "gold_parsed_page_number": row.get("gold_parsed_page_number"),
+                "gold_page_aggregate_id": row.get("gold_page_aggregate_id"),
+            },
+        )
+        mode = str(row.get("mode"))
+        item[mode] = {
+            "gold_page_rank": row.get("gold_page_rank"),
+            "gold_page_in_top_k": row.get("gold_page_rank") is not None,
+            "top_pages": _top_pages(row),
+        }
+    return [by_qid[qid] for qid in sorted(by_qid)]
+
+
 def run_retrieval(
     *,
     windows: list[DocumentWindow],
@@ -540,6 +583,9 @@ def _clone_block_with_context_metadata(
         {
             "phase4b_context_source": "hybrid_page_retrieval",
             "retrieval_scope": RETRIEVAL_SCOPE,
+            "retrieval_rank": page_rank,
+            "parsed_page_number": parsed_page_number,
+            "page_aggregate_id": page_aggregate_id,
             "retrieval_page_rank": page_rank,
             "retrieval_parsed_page_number": parsed_page_number,
             "retrieval_page_aggregate_id": page_aggregate_id,
@@ -569,9 +615,10 @@ def build_fixed_evidence(
             page_record = page_record_lookup[page_id]
             selected_pages.append(
                 {
-                    "rank": page_rank,
+                    "retrieval_rank": page_rank,
                     "page_aggregate_id": page_id,
                     "parsed_page_number": page_record.parsed_page_number,
+                    "child_block_count": len(page_record.child_block_ids),
                     "child_block_ids": list(page_record.child_block_ids),
                 }
             )
@@ -668,9 +715,96 @@ def _answer_failure_taxonomy(
     return labels
 
 
+def _compact_id_list(values: list[str], *, edge: int = 3) -> dict[str, Any]:
+    ordered = list(values)
+    if len(ordered) <= edge * 2:
+        return {"count": len(ordered), "first": ordered, "last": []}
+    return {"count": len(ordered), "first": ordered[:edge], "last": ordered[-edge:]}
+
+
+def _model_answer(row: dict[str, Any]) -> str | None:
+    prediction = row.get("prediction")
+    if isinstance(prediction, dict) and prediction.get("answer") is not None:
+        return str(prediction.get("answer"))
+    canonical = row.get("canonical_output")
+    if isinstance(canonical, dict) and canonical.get("answer") is not None:
+        return str(canonical.get("answer"))
+    if row.get("model_answer") is not None:
+        return str(row.get("model_answer"))
+    return None
+
+
+def _prediction_location(row: dict[str, Any]) -> dict[str, Any]:
+    prediction = row.get("prediction")
+    if isinstance(prediction, dict) and isinstance(prediction.get("evidence_location"), dict):
+        return prediction["evidence_location"]
+    canonical = row.get("canonical_output")
+    if isinstance(canonical, dict) and isinstance(canonical.get("evidence_location"), dict):
+        return canonical["evidence_location"]
+    return {}
+
+
+def build_answer_results_preview(answer_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    preview: list[dict[str, Any]] = []
+    for row in answer_rows:
+        location = _prediction_location(row)
+        preview.append(
+            {
+                "qid": row.get("qid"),
+                "doc_id": row.get("doc_id"),
+                "status": row.get("status"),
+                "model_answer": _model_answer(row),
+                "predicted_page": location.get("page"),
+                "predicted_block_id": location.get("block_id"),
+                "gold_parsed_page_number": (row.get("gold") or {}).get("parsed_page_number"),
+                "answer_hit": (row.get("answer_metrics") or {}).get("answer_hit"),
+                "gold_page_location_hit": (row.get("validation") or {}).get("gold_page_location_hit"),
+                "page_location_hit": (row.get("validation") or {}).get("page_location_hit"),
+                "block_location_hit": (row.get("validation") or {}).get("block_location_hit"),
+                "failure_taxonomy": list(row.get("failure_taxonomy") or []),
+            }
+        )
+    return preview
+
+
+def build_failure_cases(
+    *,
+    answer_rows: list[dict[str, Any]],
+    retrieval_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    preview_by_qid = {record["qid"]: record for record in build_retrieval_preview(retrieval_rows)}
+    cases: list[dict[str, Any]] = []
+    for row in answer_rows:
+        taxonomy = list(row.get("failure_taxonomy") or [])
+        if not taxonomy:
+            continue
+        retrieval = preview_by_qid.get(str(row.get("qid")), {})
+        hybrid = retrieval.get("hybrid") or {}
+        evidence_ids = [str(item) for item in row.get("evidence_block_ids") or []]
+        cases.append(
+            {
+                "qid": row.get("qid"),
+                "doc_id": row.get("doc_id"),
+                "status": row.get("status"),
+                "failure_taxonomy": taxonomy,
+                "model_answer": _model_answer(row),
+                "predicted_location": _prediction_location(row),
+                "gold": row.get("gold") or {},
+                "gold_page_rank": hybrid.get("gold_page_rank"),
+                "gold_page_in_top_k": bool(hybrid.get("gold_page_in_top_k")),
+                "selected_top_pages": hybrid.get("top_pages") or [],
+                "evidence_block_ids": _compact_id_list(evidence_ids),
+                "answer_metrics": row.get("answer_metrics") or {},
+                "validation": row.get("validation") or {},
+            }
+        )
+    return cases
+
+
 def summarize_answer_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     completed = [row for row in rows if row.get("status") == "completed"]
     latencies = [float(row.get("latency_ms") or 0.0) for row in completed]
+    page_location_hit = _mean_bool([row["validation"]["gold_page_location_hit"] for row in completed])
     return {
         "sample_count": len(rows),
         "completed_count": len(completed),
@@ -681,7 +815,9 @@ def summarize_answer_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "character_f1": _mean([float(row["answer_metrics"]["character_f1"]) for row in completed]),
         "valid_json_rate": _mean_bool([row["validation"]["valid_json"] for row in completed]),
         "format_valid_rate": _mean_bool([row["validation"]["format_valid"] for row in completed]),
-        "gold_page_location_hit": _mean_bool([row["validation"]["gold_page_location_hit"] for row in completed]),
+        "gold_page_location_hit": page_location_hit,
+        "page_location_hit": page_location_hit,
+        "block_location_hit": _mean_bool([row["validation"].get("block_location_hit", False) for row in completed]),
         "final_location_in_evidence_rate": _mean_bool(
             [row["validation"]["final_location_in_evidence"] for row in completed]
         ),
@@ -743,14 +879,17 @@ def run_answer_phase(
                 selected_block_ids = {block.block_id for block in evidence_blocks}
                 selected_pages = {block.page_id for block in evidence_blocks if block.page_id is not None}
                 location_page = location.get("page")
+                location_block_id = location.get("block_id")
                 gold_page = _as_int(mapping.get("parsed_page_number"), field=f"{qid}.parsed_page_number")
+                block_location_hit = bool(location_block_id and location_block_id in selected_block_ids)
                 final_location_in_evidence = bool(
-                    (location.get("block_id") and location.get("block_id") in selected_block_ids)
+                    block_location_hit
                     or (location_page in selected_pages)
                 )
                 valid_json = bool(state.parse_result.get("raw_json_ok") or state.parse_result.get("schema_ok") or state.draft_answer)
                 format_valid = bool(state.format_check.get("success"))
                 gold_page_location_hit = location_page == gold_page
+                page_location_hit = gold_page_location_hit
                 repair_success = bool(
                     state.repair_attempted
                     and state.format_check.get("success")
@@ -771,6 +910,8 @@ def run_answer_phase(
                             "format_valid": format_valid,
                             "location_valid": bool(state.location_check.get("success")),
                             "gold_page_location_hit": gold_page_location_hit,
+                            "page_location_hit": page_location_hit,
+                            "block_location_hit": block_location_hit,
                             "final_location_in_evidence": final_location_in_evidence,
                             "repair_attempted": bool(state.repair_attempted),
                             "repair_success": repair_success,
@@ -907,8 +1048,10 @@ def run_phase4b_e2e(args: argparse.Namespace) -> dict[str, Any]:
         "page_corpus": run_dir / "page_corpus.jsonl",
         "page_retrieval_results": run_dir / "page_retrieval_results.jsonl",
         "page_retrieval_metrics": run_dir / "page_retrieval_metrics.json",
+        "retrieval_preview": run_dir / "retrieval_preview.json",
         "fixed_evidence": run_dir / "fixed_evidence.jsonl",
         "answer_results": run_dir / "answer_results.jsonl",
+        "answer_results_preview": run_dir / "answer_results_preview.json",
         "answer_metrics": run_dir / "answer_metrics.json",
         "failure_cases": run_dir / "failure_cases.jsonl",
         "summary": run_dir / "summary.json",
@@ -962,6 +1105,8 @@ def run_phase4b_e2e(args: argparse.Namespace) -> dict[str, Any]:
     )
     write_jsonl(paths["page_retrieval_results"], retrieval_rows)
     _write_json(paths["page_retrieval_metrics"], page_metrics)
+    retrieval_preview = build_retrieval_preview(retrieval_rows)
+    _write_json(paths["retrieval_preview"], {"records": retrieval_preview})
 
     fixed_records, fixed_evidence_by_qid = build_fixed_evidence(
         windows=windows,
@@ -1010,12 +1155,10 @@ def run_phase4b_e2e(args: argparse.Namespace) -> dict[str, Any]:
     else:
         write_jsonl(paths["answer_results"], [])
         _write_json(paths["answer_metrics"], answer_metrics)
+    answer_results_preview = build_answer_results_preview(answer_rows)
+    _write_json(paths["answer_results_preview"], {"records": answer_results_preview})
 
-    failure_rows = [
-        row
-        for row in [*retrieval_rows, *answer_rows]
-        if row.get("failure_taxonomy")
-    ]
+    failure_rows = build_failure_cases(answer_rows=answer_rows, retrieval_rows=retrieval_rows)
     write_jsonl(paths["failure_cases"], failure_rows)
     trace_counts = _trace_counts(paths["sqlite"])
     summary = {
@@ -1035,8 +1178,12 @@ def run_phase4b_e2e(args: argparse.Namespace) -> dict[str, Any]:
         "page_retrieval_metrics": page_metrics,
         "page_retrieval_delta": page_metrics["comparison"],
         "answer_metrics": answer_metrics,
+        "page_location_hit": answer_metrics.get("page_location_hit", answer_metrics.get("gold_page_location_hit")),
+        "block_location_hit": answer_metrics.get("block_location_hit"),
         "fixed_evidence_hash": fixed_hash,
         "trace_counts": trace_counts,
+        "retrieval_preview": retrieval_preview,
+        "answer_results_preview": answer_results_preview,
         "resource_plan": {
             **release_info,
             "dense_model_load_ms": dense_timing.dense_model_load_ms,

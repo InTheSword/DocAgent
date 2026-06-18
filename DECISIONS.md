@@ -592,6 +592,45 @@ Gate 3 server real E2E -> not_started
 Gate 4 -> blocked_by_gate3
 ```
 
+## 2026-06-18: Phase 4B Gate 3A Failure Review and Page-Rank Context
+
+Decision: keep Gate 3 active after the first real E2E run and add failure
+review instrumentation plus page-rank-aware evidence context before any Gate 4
+expansion.
+
+Rationale:
+
+- AutoDL run `gate3_mpdocvqa_20260618_155135` completed the 3-window /
+  25-page / 8-QA chain with 8/8 completed samples, valid JSON rate 1.0, format
+  valid rate 1.0, and SQLite trace persistence.
+- Hybrid page retrieval improved over BM25 and put every gold page into Top-3
+  and Top-5, but the reader still often cited a non-gold page or a similar
+  wrong field from selected evidence.
+- The next evidence needed is a compact review artifact showing prediction,
+  retrieval top pages, gold page rank, and selected evidence context, plus a
+  prompt/context update that preserves retrieval rank and page identity for the
+  model.
+
+Constraints:
+
+- Do not change MinerU ingestion, Phase 4A assets, retrieval model choices,
+  training data, checkpoints, or AnswerPolicy output schema.
+- Do not add gold labels or reference answers to fixed evidence.
+- Keep child blocks ordered by page retrieval rank, parsed page number, reading
+  order, and block id.
+- Gate 4 remains blocked until the Gate 3A retrieval-only and full GRPO reruns
+  return.
+
+Current status:
+
+```text
+Gate 1 -> accepted
+Gate 2 -> accepted
+Gate 3 server real E2E -> real_model_verified
+Gate 3A failure review/context instrumentation -> implemented
+Gate 4 -> blocked
+```
+
 ## 2026-06-18: Phase 4B Gate 3 Page-Level Retrieval and E2E Boundary
 
 Decision: implement Gate 3 as a selected-document-window page retrieval and

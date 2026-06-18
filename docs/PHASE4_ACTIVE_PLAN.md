@@ -61,8 +61,9 @@ not a full 29-shard rollout.
 | Gate 1 | accepted | single-page live MinerU ingestion accepted |
 | Gate 2 | accepted | representative 1/4/20-page live ingestion accepted |
 | Gate 3 local implementation | implemented | page corpus, BM25/Hybrid retrieval, fixed evidence, AnswerPolicy runner, and fixture tests |
-| Gate 3 server real E2E | not_started | waits for AutoDL run over accepted 1/4/20-page artifacts |
-| Gate 4 | blocked_by_gate3 | 10-20 windows / 30-50 QA waits for Gate 3 |
+| Gate 3 server real E2E | real_model_verified | 3 windows / 25 pages / 8 QA ran through on AutoDL |
+| Gate 3A failure review/context instrumentation | implemented | compact failure review and page-rank-aware evidence context |
+| Gate 4 | blocked | 10-20 windows / 30-50 QA waits for Gate 3A review |
 | CDC | queued after Phase 4B | do not start during Phase 4B gates |
 | Router/tools | queued after CDC | later phase |
 | Demo/closure | final phase | later phase |
@@ -150,9 +151,18 @@ Gate order remains:
 Gate 1 -> accepted
 Gate 2 -> accepted
 Gate 3 local implementation -> implemented
-Gate 3 server real E2E -> not_started
-Gate 4 -> blocked_by_gate3
+Gate 3 server real E2E -> real_model_verified
+Gate 3A failure review/context instrumentation -> implemented
+Gate 4 -> blocked
 ```
+
+Gate 3 server run `gate3_mpdocvqa_20260618_155135` completed at commit
+`e9ee7bda869cf4b22f0ac577ccd626eab120c7d6` with 8/8 completed samples,
+valid JSON rate 1.0, and trace persistence. Retrieval was sufficient for the
+small-slice integration review (`Hybrid Recall@3=1.0`, `Recall@5=1.0`), but
+Reader output often selected a non-gold page or a similar wrong field from
+top-k evidence. Gate 4 remains blocked until the Gate 3A failure review and
+page-rank-aware context rerun returns.
 
 Phase 4B must still use one Codex thread and one feature branch:
 
@@ -208,7 +218,8 @@ builder --help
 
 Current server boundary:
 
-- run only the Gate 3 real E2E command blocks supplied by Codex;
+- run only the Gate 3A retrieval-only and full E2E rerun command blocks
+  supplied by Codex;
 - run Git sync, environment preflight, and actual evaluation as three short
   foreground Bash command blocks;
 - do not run Gate 4 until Gate 3 returns.
@@ -224,8 +235,10 @@ Do not:
 
 ## 8. Next Priorities
 
-1. Run Gate 3 server real E2E over the accepted 1/4/20-page artifacts.
-2. If Gate 3 succeeds, record server results before considering Gate 4.
+1. Run Gate 3A retrieval-only and compare the fixed evidence hash with
+   `98ae4499c9f4aca60753d953ca6f92792b503cfe3911c014cf6b44b1a2a9b277`.
+2. Run Gate 3A full GRPO E2E and compare metrics with
+   `gate3_mpdocvqa_20260618_155135` before considering Gate 4.
 3. Keep CDC queued after Phase 4B.
 
 ## 9. Stop Condition
@@ -233,7 +246,7 @@ Do not:
 Stop after the following are complete:
 
 ```text
-Gate 3 local implementation committed and pushed
-+ three short AutoDL Gate 3 command blocks provided
+Gate 3A local instrumentation/context update committed and pushed
++ short AutoDL Gate 3A rerun command blocks provided
 + stop for server result
 ```
