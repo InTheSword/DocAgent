@@ -215,6 +215,31 @@ def test_validate_only_loads_gate2_contract_without_models(tmp_path: Path) -> No
     assert not output_root.exists()
 
 
+def test_validate_only_loads_doc_ids_from_manifest_file(tmp_path: Path) -> None:
+    sample_root, ingestion_root, output_root = _fixture(tmp_path)
+    manifest = tmp_path / "expanded_sample_manifest.jsonl"
+    write_jsonl(manifest, [{"doc_id": DOC_B}])
+    args = parse_args(
+        [
+            "--sample-root",
+            str(sample_root),
+            "--ingestion-root",
+            str(ingestion_root),
+            "--output-root",
+            str(output_root),
+            "--doc-id-file",
+            str(manifest),
+            "--validate-only",
+        ]
+    )
+
+    payload = run_phase4b_e2e(args)
+
+    assert payload["status"] == "success"
+    assert payload["document_count"] == 1
+    assert payload["qa_count"] == 1
+
+
 def test_retrieval_only_writes_doc_scoped_page_metrics_and_fixed_evidence(tmp_path: Path) -> None:
     sample_root, ingestion_root, output_root = _fixture(tmp_path)
     args = _args(
@@ -303,6 +328,8 @@ def test_full_mock_answer_policy_writes_answer_metrics_and_sqlite_trace(tmp_path
     assert "page_location_hit" in answer_metrics
     assert "block_location_hit" in answer_metrics
     assert answer_metrics["final_location_in_evidence_rate"] == 1.0
+    assert "by_doc" in answer_metrics
+    assert "by_shard" in answer_metrics
     assert len(answer_rows) == 3
     assert answer_preview
     assert all(record["model_answer"] for record in answer_preview)

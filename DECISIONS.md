@@ -629,7 +629,7 @@ Current status:
 ```text
 Gate 1 -> accepted
 Gate 2 -> accepted
-Gate 3 server real E2E -> real_model_verified
+Gate 3 server real E2E -> accepted
 Gate 3A failure review instrumentation -> accepted
 Gate 3A rank-aware context/prompt -> implemented
 Gate 4 -> blocked
@@ -662,6 +662,44 @@ Constraints:
   as the default Gate 3 path.
 - Do not change retrieval models, checkpoints, MinerU artifacts, or sample
   scope.
+
+## 2026-06-19: Phase 4B Gate 4 Expanded Raw-Input Regression
+
+Decision: unblock Gate 4 as an expanded MP-DocVQA raw-input E2E regression
+after Gate 3A instrumentation and default prompt rollback were accepted on
+AutoDL.
+
+Rationale:
+
+- The rollback server run restored the original Gate 3 default metrics while
+  preserving accepted instrumentation artifacts.
+- The remaining evidence needed is not another prompt tweak on the 8-QA slice,
+  but a larger raw-input stability run covering additional page-window
+  documents and QA from MP-DocVQA validation shards 1-4.
+- Gate 4 should measure whether document-window PDF creation, MinerU ingestion,
+  page mapping, page retrieval, fixed evidence, GRPO AnswerPolicy, JSON/format
+  validation, and SQLite trace remain stable over 80-100 QA.
+
+Constraints:
+
+- Gate 4 is an expanded raw-input E2E regression, not a formal benchmark.
+- Default `rank_aware_context` remains false.
+- Do not retrain, change retrieval models, modify OCR text, alter gold labels,
+  merge main, start CDC, or process all 29 shards.
+- Server execution must be staged: sample manifest, ingestion, validate-only,
+  retrieval-only, full GRPO E2E, then compact comparison.
+
+Current status:
+
+```text
+Gate 1 -> accepted
+Gate 2 -> accepted
+Gate 3 real-model E2E -> accepted
+Gate 3A instrumentation -> accepted
+Gate 3A default prompt rollback -> accepted
+Gate 4 local implementation -> implemented
+Gate 4 server expanded regression -> not_started
+```
 
 ## 2026-06-18: Phase 4B Gate 3 Page-Level Retrieval and E2E Boundary
 

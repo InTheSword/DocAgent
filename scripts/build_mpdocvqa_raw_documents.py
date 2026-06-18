@@ -52,6 +52,7 @@ class RowRecord:
     qid: str
     question: str
     source_doc_id: str
+    row_index: int | None
     window_signature: str
     window_doc_id: str
     page_ids: list[str]
@@ -240,7 +241,13 @@ def window_identity(source_doc_id: str, ordered_page_ids: list[str]) -> tuple[st
     return signature, f"{source_doc_id}__{signature[:16]}"
 
 
-def parse_row(raw_row: dict[str, Any], *, source_shard: str, include_raw_bytes: bool) -> RowRecord:
+def parse_row(
+    raw_row: dict[str, Any],
+    *,
+    source_shard: str,
+    include_raw_bytes: bool,
+    row_index: int | None = None,
+) -> RowRecord:
     qid = str(raw_row.get("questionId") or raw_row.get("questionid") or "").strip()
     if not qid:
         raise BuildError("questionId is missing")
@@ -311,6 +318,7 @@ def parse_row(raw_row: dict[str, Any], *, source_shard: str, include_raw_bytes: 
         qid=qid,
         question=question,
         source_doc_id=source_doc_id,
+        row_index=row_index,
         window_signature=window_signature,
         window_doc_id=window_doc_id,
         page_ids=page_ids,
@@ -387,10 +395,16 @@ def audit_parquet(input_parquets: Path | str | Iterable[Path | str]) -> AuditRes
             if name in schema.names
         ] + [column for column in IMAGE_COLUMNS if column in schema.names]
 
+        row_index = 0
         for batch in parquet.iter_batches(batch_size=16, columns=columns):
             for raw_row in batch.to_pylist():
                 try:
-                    row = parse_row(raw_row, source_shard=parquet_path.name, include_raw_bytes=False)
+                    row = parse_row(
+                        raw_row,
+                        source_shard=parquet_path.name,
+                        include_raw_bytes=False,
+                        row_index=row_index,
+                    )
                 except BuildError as exc:
                     if len(invalid_row_examples) < 10:
                         invalid_row_examples.append(
@@ -401,7 +415,9 @@ def audit_parquet(input_parquets: Path | str | Iterable[Path | str]) -> AuditRes
                                 "reason": str(exc),
                             }
                         )
+                    row_index += 1
                     continue
+                row_index += 1
 
                 parsed_rows_by_window[row.window_doc_id].append(row)
                 source_doc_windows[row.source_doc_id].add(row.window_doc_id)
@@ -755,6 +771,7 @@ def qa_record(row: RowRecord) -> dict[str, Any]:
         "gold_page_ordinal": row.answer_page_idx + 1,
         "source_split": row.source_split,
         "source_shard": row.source_shard,
+        "source_row_index": row.row_index,
     }
 
 

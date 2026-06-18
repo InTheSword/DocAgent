@@ -61,10 +61,12 @@ not a full 29-shard rollout.
 | Gate 1 | accepted | single-page live MinerU ingestion accepted |
 | Gate 2 | accepted | representative 1/4/20-page live ingestion accepted |
 | Gate 3 local implementation | implemented | page corpus, BM25/Hybrid retrieval, fixed evidence, AnswerPolicy runner, and fixture tests |
-| Gate 3 server real E2E | real_model_verified | 3 windows / 25 pages / 8 QA ran through on AutoDL |
+| Gate 3 server real E2E | accepted | 3 windows / 25 pages / 8 QA ran through on AutoDL |
 | Gate 3A failure review instrumentation | accepted | compact retrieval/answer previews and failure cases accepted by artifact check |
 | Gate 3A rank-aware context/prompt | implemented | opt-in only; default prompt/context restored to Gate 3 behavior |
-| Gate 4 | blocked | 10-20 windows / 30-50 QA waits for Gate 3A default rerun |
+| Gate 3A default prompt rollback | accepted | default full E2E restored Gate 3 behavior |
+| Gate 4 local implementation | implemented | expanded sample manifest, manifest doc-id loading, per-shard metrics, and staged commands |
+| Gate 4 server expanded regression | not_started | waits for staged AutoDL execution |
 | CDC | queued after Phase 4B | do not start during Phase 4B gates |
 | Router/tools | queued after CDC | later phase |
 | Demo/closure | final phase | later phase |
@@ -152,10 +154,12 @@ Gate order remains:
 Gate 1 -> accepted
 Gate 2 -> accepted
 Gate 3 local implementation -> implemented
-Gate 3 server real E2E -> real_model_verified
+Gate 3 server real E2E -> accepted
 Gate 3A failure review instrumentation -> accepted
 Gate 3A rank-aware context/prompt -> implemented
-Gate 4 -> blocked
+Gate 3A default prompt rollback -> accepted
+Gate 4 local implementation -> implemented
+Gate 4 server expanded regression -> not_started
 ```
 
 Gate 3 server run `gate3_mpdocvqa_20260618_155135` completed at commit
@@ -166,7 +170,8 @@ Reader output often selected a non-gold page or a similar wrong field from
 top-k evidence. Gate 3A instrumentation artifacts were accepted, but the first
 rank-aware prompt/context default regressed answer quality. The default full
 E2E path must use the Gate 3 prompt/context shape; `--rank-aware-context` is a
-separate diagnostic flag. Gate 4 remains blocked.
+separate diagnostic flag. The rollback server run restored Gate 3 answer
+metrics, so Gate 4 is unblocked for expanded raw-input E2E regression.
 
 Phase 4B must still use one Codex thread and one feature branch:
 
@@ -194,16 +199,20 @@ structure quality -> passed_with_warnings
 persisted absolute path -> 0 after SQLite JSON scan fix and existing-artifact revalidation
 ```
 
-The eventual Phase 4B scope remains:
+Gate 4 expanded scope:
 
-- 3-5 document windows;
-- coverage across 1-page, 2-5-page, and 10-20-page documents;
-- existing accepted server sample assets where possible.
+- build a deterministic expanded sample from MP-DocVQA validation shards 1-4;
+- target 80-100 QA with page-window coverage across single, short, medium, and
+  long windows;
+- reuse accepted baseline ingestion artifacts for the three Gate 1/2/3
+  windows;
+- run ingestion, validate-only, retrieval-only, and full GRPO E2E as separate
+  server phases.
 
 Do not do the following in the first Phase 4B slice:
 
 - full 29-shard restoration;
-- large-scale window expansion before the small slice is accepted;
+- all 29 shards;
 - CDC work before the first MP-DocVQA raw-document MinerU/E2E slice is stable.
 
 ## 6. Phase 4A Accepted Validation
@@ -222,36 +231,34 @@ builder --help
 
 Current server boundary:
 
-- run only the Gate 3A retrieval-only, default full E2E, and optional
-  rank-aware full E2E rerun command blocks supplied by Codex;
-- run Git sync, environment preflight, and actual evaluation as three short
-  foreground Bash command blocks;
-- do not run Gate 4 until Gate 3 returns.
+- run only the staged Gate 4 command blocks supplied by Codex;
+- keep Git sync, sample build, ingestion, validate-only, retrieval-only, full
+  E2E, and comparison as separate foreground Bash blocks;
+- do not skip validate-only or retrieval-only before full E2E.
 
 Do not:
 
 - print or persist `MINERU_TOKEN`;
 - install packages or modify the stable `docagent` environment;
 - use `nohup`, `setsid`, background `&`, `tmux`, `kill`, `pkill`, or `exec` in
-  user-pasted Gate 3 commands;
-- run all 29 shards or large-scale expansion in Gate 3;
+  user-pasted Gate 4 commands;
+- run all 29 shards;
 - create per-gate branches.
 
 ## 8. Next Priorities
 
-1. Run Gate 3A retrieval-only and confirm instrumentation artifacts still
-   exist.
-2. Run Gate 3A full GRPO E2E with default prompt/context and compare metrics
-   with `gate3_mpdocvqa_20260618_155135`.
-3. Optionally run full GRPO E2E with `--rank-aware-context` as a diagnostic.
-4. Keep CDC queued after Phase 4B.
+1. Build Gate 4 expanded sample manifest and raw PDF assets.
+2. Ingest missing selected windows in batches.
+3. Run expanded validate-only, retrieval-only, and full GRPO E2E.
+4. Compare expanded results with `gate3_mpdocvqa_20260618_155135`.
+5. Keep CDC queued after Phase 4B.
 
 ## 9. Stop Condition
 
 Stop after the following are complete:
 
 ```text
-Gate 3A default prompt/context rollback committed and pushed
-+ short AutoDL Gate 3A rerun command blocks provided
+Gate 4 local implementation committed and pushed
++ staged AutoDL Gate 4 command blocks provided
 + stop for server result
 ```

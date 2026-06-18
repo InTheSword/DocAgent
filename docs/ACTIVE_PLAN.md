@@ -33,10 +33,12 @@ Gate 1 local implementation -> implemented
 Gate 1 -> accepted
 Gate 2 -> accepted
 Gate 3 local implementation -> implemented
-Gate 3 server real E2E -> real_model_verified
+Gate 3 server real E2E -> accepted
 Gate 3A failure review instrumentation -> accepted
 Gate 3A rank-aware context/prompt -> implemented
-Gate 4 -> blocked
+Gate 3A default prompt rollback -> accepted
+Gate 4 local implementation -> implemented
+Gate 4 server expanded regression -> not_started
 CDC -> queued after Phase 4B
 Router/tools -> queued after CDC
 Demo/closure -> final phase
@@ -55,11 +57,10 @@ evaluation implementation, metrics, or conclusions in this phase.
 ## Blockers
 
 - No blocker for the accepted Phase 4A foundation.
-- Gate 3 server real E2E has completed but remains a quality-review target,
-  not an accepted expansion signal.
-- Gate 4 waits for the Gate 3A default prompt/context rerun. Rank-aware
-  context is opt-in only because the first default prompt change regressed
-  answer quality.
+- Gate 3 real-model E2E and Gate 3A default prompt rollback are accepted for
+  the small 3-window regression.
+- Gate 4 now expands raw-input E2E regression; it is not a formal benchmark and
+  does not change the default AnswerPolicy prompt/context.
 
 ## Local Validation
 
@@ -89,18 +90,19 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Re-run Gate 3 retrieval-only with accepted Gate 3A instrumentation.
-2. Re-run Gate 3 full GRPO E2E with default prompt/context and compare against
-   `gate3_mpdocvqa_20260618_155135`.
-3. Optionally re-run full E2E with `--rank-aware-context` as a separate
-   diagnostic, not as the default path.
+1. Build and validate the Gate 4 expanded sample manifest from MP-DocVQA val
+   shards 1-4.
+2. Ingest only missing selected windows, reusing the accepted 3-window baseline
+   artifacts.
+3. Run expanded validate-only, retrieval-only, and full GRPO E2E in separate
+   server phases.
 4. Keep CDC queued until Phase 4B completes.
 
 ## Stop Condition
 
 ```text
-Gate 3A default prompt/context rollback committed and pushed
-+ short AutoDL Gate 3A rerun command blocks provided
+Gate 4 local implementation committed and pushed
++ staged AutoDL Gate 4 command blocks provided
 + stop for server result
 ```
 

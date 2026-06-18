@@ -1,6 +1,6 @@
 # Current Status
 
-Updated: 2026-06-18
+Updated: 2026-06-19
 
 ## Phase 4B Active
 
@@ -16,10 +16,12 @@ Gate 1 local implementation -> implemented
 Gate 1 -> accepted
 Gate 2 -> accepted
 Gate 3 local implementation -> implemented
-Gate 3 server real E2E -> real_model_verified
+Gate 3 server real E2E -> accepted
 Gate 3A failure review instrumentation -> accepted
 Gate 3A rank-aware context/prompt -> implemented
-Gate 4 -> blocked
+Gate 3A default prompt rollback -> accepted
+Gate 4 local implementation -> implemented
+Gate 4 server expanded regression -> not_started
 CDC -> queued after Phase 4B
 Router/tools -> queued after CDC
 Demo/closure -> final phase
@@ -48,8 +50,10 @@ page or similar field from the retrieved top-k pages. Gate 3A local
 instrumentation was accepted after artifact checks. The rank-aware prompt and
 context default changed reader behavior and is now opt-in only via
 `--rank-aware-context`; default full E2E returns to the Gate 3 prompt/context
-shape. Do not mark Gate 3 or Phase 4B as accepted until the follow-up real E2E
-review returns.
+shape. The default rollback server run restored Gate 3 metrics, so Gate 4 is
+unblocked for expanded raw-input E2E regression. Gate 4 is not a formal
+benchmark and should report stability, retrieval, answer, trace, and failure
+distribution over the expanded sample.
 
 ## Phase 4A Accepted
 
@@ -136,10 +140,12 @@ Gate 1 local implementation -> implemented
 Gate 1 -> accepted
 Gate 2 -> accepted
 Gate 3 local implementation -> implemented
-Gate 3 server real E2E -> real_model_verified
+Gate 3 server real E2E -> accepted
 Gate 3A failure review instrumentation -> accepted
 Gate 3A rank-aware context/prompt -> implemented
-Gate 4 -> blocked
+Gate 3A default prompt rollback -> accepted
+Gate 4 local implementation -> implemented
+Gate 4 server expanded regression -> not_started
 CDC -> queued after Phase 4B
 Router/tools -> queued after CDC
 Demo/closure -> final phase

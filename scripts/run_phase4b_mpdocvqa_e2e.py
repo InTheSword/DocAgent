@@ -152,6 +152,46 @@ def _load_blocks(path: Path) -> list[EvidenceBlock]:
     return [EvidenceBlock.from_dict(record) for record in read_jsonl(path)]
 
 
+def _doc_ids_from_file(path: Path) -> list[str]:
+    if not path.is_file():
+        raise Phase4BE2EError(f"doc id file missing: {path}")
+    if path.suffix.lower() == ".jsonl":
+        return [
+            str(record.get("doc_id") or "").strip()
+            for record in read_jsonl(path)
+            if str(record.get("doc_id") or "").strip()
+        ]
+    payload = _read_json(path)
+    if isinstance(payload, list):
+        return [str(item).strip() for item in payload if str(item).strip()]
+    if isinstance(payload, dict):
+        values = payload.get("selected_window_ids") or payload.get("doc_ids") or payload.get("records")
+        if isinstance(values, list):
+            if values and isinstance(values[0], dict):
+                return [
+                    str(item.get("doc_id") or "").strip()
+                    for item in values
+                    if str(item.get("doc_id") or "").strip()
+                ]
+            return [str(item).strip() for item in values if str(item).strip()]
+    raise Phase4BE2EError(f"unsupported doc id file format: {path}")
+
+
+def _requested_doc_ids(args: argparse.Namespace) -> list[str]:
+    doc_ids: list[str] = []
+    if args.doc_id_file:
+        doc_ids.extend(_doc_ids_from_file(repo_path(args.doc_id_file)))
+    if args.doc_id:
+        doc_ids.extend(args.doc_id)
+    seen: set[str] = set()
+    unique: list[str] = []
+    for doc_id in doc_ids or DEFAULT_DOC_IDS:
+        if doc_id and doc_id not in seen:
+            seen.add(doc_id)
+            unique.append(doc_id)
+    return unique
+
+
 def _load_document_window(
     *,
     doc_id: str,
@@ -226,7 +266,7 @@ def _load_document_window(
 def load_gate3_inputs(args: argparse.Namespace) -> list[DocumentWindow]:
     sample_root = repo_path(args.sample_root)
     ingestion_root = repo_path(args.ingestion_root)
-    doc_ids = args.doc_id or DEFAULT_DOC_IDS
+    doc_ids = _requested_doc_ids(args)
     windows = [
         _load_document_window(doc_id=doc_id, sample_root=sample_root, ingestion_root=ingestion_root)
         for doc_id in doc_ids
@@ -295,6 +335,12 @@ def _first_rank(ranking: list[str], gold_id: str) -> int | None:
         return None
 
 
+def _retrieval_failure_taxonomy(gold_page_rank: int | None) -> list[str]:
+    if gold_page_rank is None or gold_page_rank > 5:
+        return ["retrieval_gold_miss_top5"]
+    return []
+
+
 def _mean(values: list[float]) -> float:
     return sum(values) / max(len(values), 1)
 
@@ -314,8 +360,10 @@ def summarize_page_retrieval(rows: list[dict[str, Any]], *, mode: str) -> dict[s
     ranks = [row["gold_page_rank"] for row in mode_rows]
     latencies = [float(row["latency_ms"]) for row in mode_rows]
     by_doc: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    by_shard: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in mode_rows:
         by_doc[row["doc_id"]].append(row)
+        by_shard[str(row.get("source_shard") or "unknown")].append(row)
 
     def _metrics(items: list[dict[str, Any]]) -> dict[str, Any]:
         item_ranks = [item["gold_page_rank"] for item in items]
@@ -332,6 +380,7 @@ def summarize_page_retrieval(rows: list[dict[str, Any]], *, mode: str) -> dict[s
         "mode": mode,
         "latency": _latency(latencies),
         "by_doc": {doc_id: _metrics(items) for doc_id, items in sorted(by_doc.items())},
+        "by_shard": {shard: _metrics(items) for shard, items in sorted(by_shard.items())},
         "gold_page_ranks": [
             {"qid": row["qid"], "doc_id": row["doc_id"], "gold_page_rank": row["gold_page_rank"]}
             for row in mode_rows
@@ -428,6 +477,7 @@ def build_retrieval_preview(retrieval_rows: list[dict[str, Any]]) -> list[dict[s
                 "qid": qid,
                 "doc_id": row.get("doc_id"),
                 "source_doc_id": row.get("source_doc_id"),
+                "source_shard": row.get("source_shard"),
                 "gold_parsed_page_number": row.get("gold_parsed_page_number"),
                 "gold_page_aggregate_id": row.get("gold_page_aggregate_id"),
             },
@@ -466,6 +516,7 @@ def run_retrieval(
             qid = str(mapping["qid"])
             qa = qa_by_qid[qid]
             question = str(qa.get("question") or "")
+            source_shard = str(qa.get("source_shard") or "unknown")
             gold_page_id = str(mapping["page_aggregate_id"])
             gold_page_number = _as_int(mapping.get("parsed_page_number"), field=f"{qid}.parsed_page_number")
             started = time.perf_counter()
@@ -477,6 +528,7 @@ def run_retrieval(
                     "qid": qid,
                     "doc_id": window.doc_id,
                     "source_doc_id": window.source_doc_id,
+                    "source_shard": source_shard,
                     "question": question,
                     "mode": "bm25",
                     "retrieval_scope": RETRIEVAL_SCOPE,
@@ -513,11 +565,13 @@ def run_retrieval(
             )[:top_k_pages]
             hybrid_latency = (time.perf_counter() - started) * 1000
             hybrid_ranking = [candidate.block.block_id for candidate in hybrid_candidates]
+            hybrid_gold_rank = _first_rank(hybrid_ranking, gold_page_id)
             rows.append(
                 {
                     "qid": qid,
                     "doc_id": window.doc_id,
                     "source_doc_id": window.source_doc_id,
+                    "source_shard": source_shard,
                     "question": question,
                     "mode": "hybrid",
                     "retrieval_scope": RETRIEVAL_SCOPE,
@@ -526,8 +580,9 @@ def run_retrieval(
                     "ranking": hybrid_ranking,
                     "gold_page_aggregate_id": gold_page_id,
                     "gold_parsed_page_number": gold_page_number,
-                    "gold_page_rank": _first_rank(hybrid_ranking, gold_page_id),
+                    "gold_page_rank": hybrid_gold_rank,
                     "latency_ms": hybrid_latency,
+                    "failure_taxonomy": _retrieval_failure_taxonomy(hybrid_gold_rank),
                     "candidates": [
                         _candidate_payload(candidate, final_rank=rank)
                         for rank, candidate in enumerate(hybrid_candidates, start=1)
@@ -699,6 +754,7 @@ def _answer_failure_taxonomy(
     scores: dict[str, Any],
     valid_json: bool,
     format_valid: bool,
+    location_valid: bool,
     gold_page_location_hit: bool,
     final_location_in_evidence: bool,
 ) -> list[str]:
@@ -707,6 +763,8 @@ def _answer_failure_taxonomy(
         labels.append("invalid_json")
     if not format_valid:
         labels.append("format_invalid")
+    if not location_valid:
+        labels.append("location_invalid")
     if not scores["answer_hit"]:
         labels.append("answer_miss")
     if not gold_page_location_hit:
@@ -753,6 +811,7 @@ def build_answer_results_preview(answer_rows: list[dict[str, Any]]) -> list[dict
             {
                 "qid": row.get("qid"),
                 "doc_id": row.get("doc_id"),
+                "source_shard": row.get("source_shard"),
                 "status": row.get("status"),
                 "model_answer": _model_answer(row),
                 "predicted_page": location.get("page"),
@@ -775,6 +834,29 @@ def build_failure_cases(
 ) -> list[dict[str, Any]]:
     preview_by_qid = {record["qid"]: record for record in build_retrieval_preview(retrieval_rows)}
     cases: list[dict[str, Any]] = []
+    for row in retrieval_rows:
+        taxonomy = list(row.get("failure_taxonomy") or [])
+        if not taxonomy or row.get("mode") != "hybrid":
+            continue
+        cases.append(
+            {
+                "qid": row.get("qid"),
+                "doc_id": row.get("doc_id"),
+                "source_shard": row.get("source_shard"),
+                "status": "retrieval_failed",
+                "failure_taxonomy": taxonomy,
+                "gold": {
+                    "parsed_page_number": row.get("gold_parsed_page_number"),
+                    "page_aggregate_id": row.get("gold_page_aggregate_id"),
+                },
+                "gold_page_rank": row.get("gold_page_rank"),
+                "gold_page_in_top_k": row.get("gold_page_rank") is not None,
+                "selected_top_pages": _top_pages(row),
+                "evidence_block_ids": _compact_id_list([]),
+                "answer_metrics": {},
+                "validation": {},
+            }
+        )
     for row in answer_rows:
         taxonomy = list(row.get("failure_taxonomy") or [])
         if not taxonomy:
@@ -786,6 +868,7 @@ def build_failure_cases(
             {
                 "qid": row.get("qid"),
                 "doc_id": row.get("doc_id"),
+                "source_shard": row.get("source_shard"),
                 "status": row.get("status"),
                 "failure_taxonomy": taxonomy,
                 "model_answer": _model_answer(row),
@@ -803,29 +886,40 @@ def build_failure_cases(
 
 
 def summarize_answer_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    completed = [row for row in rows if row.get("status") == "completed"]
-    latencies = [float(row.get("latency_ms") or 0.0) for row in completed]
-    page_location_hit = _mean_bool([row["validation"]["gold_page_location_hit"] for row in completed])
-    return {
-        "sample_count": len(rows),
-        "completed_count": len(completed),
-        "failed_count": len(rows) - len(completed),
-        "normalized_exact_match": _mean_bool([row["answer_metrics"]["normalized_exact_match"] for row in completed]),
-        "answer_hit": _mean_bool([row["answer_metrics"]["answer_hit"] for row in completed]),
-        "token_f1": _mean([float(row["answer_metrics"]["token_f1"]) for row in completed]),
-        "character_f1": _mean([float(row["answer_metrics"]["character_f1"]) for row in completed]),
-        "valid_json_rate": _mean_bool([row["validation"]["valid_json"] for row in completed]),
-        "format_valid_rate": _mean_bool([row["validation"]["format_valid"] for row in completed]),
-        "gold_page_location_hit": page_location_hit,
-        "page_location_hit": page_location_hit,
-        "block_location_hit": _mean_bool([row["validation"].get("block_location_hit", False) for row in completed]),
-        "final_location_in_evidence_rate": _mean_bool(
-            [row["validation"]["final_location_in_evidence"] for row in completed]
-        ),
-        "repair_attempted_rate": _mean_bool([row["validation"]["repair_attempted"] for row in completed]),
-        "repair_success_rate": _mean_bool([row["validation"]["repair_success"] for row in completed]),
-        "latency": _latency(latencies),
-    }
+    def _metrics(items: list[dict[str, Any]]) -> dict[str, Any]:
+        completed = [row for row in items if row.get("status") == "completed"]
+        latencies = [float(row.get("latency_ms") or 0.0) for row in completed]
+        page_location_hit = _mean_bool([row["validation"]["gold_page_location_hit"] for row in completed])
+        return {
+            "sample_count": len(items),
+            "completed_count": len(completed),
+            "failed_count": len(items) - len(completed),
+            "normalized_exact_match": _mean_bool([row["answer_metrics"]["normalized_exact_match"] for row in completed]),
+            "answer_hit": _mean_bool([row["answer_metrics"]["answer_hit"] for row in completed]),
+            "token_f1": _mean([float(row["answer_metrics"]["token_f1"]) for row in completed]),
+            "character_f1": _mean([float(row["answer_metrics"]["character_f1"]) for row in completed]),
+            "valid_json_rate": _mean_bool([row["validation"]["valid_json"] for row in completed]),
+            "format_valid_rate": _mean_bool([row["validation"]["format_valid"] for row in completed]),
+            "gold_page_location_hit": page_location_hit,
+            "page_location_hit": page_location_hit,
+            "block_location_hit": _mean_bool([row["validation"].get("block_location_hit", False) for row in completed]),
+            "final_location_in_evidence_rate": _mean_bool(
+                [row["validation"]["final_location_in_evidence"] for row in completed]
+            ),
+            "repair_attempted_rate": _mean_bool([row["validation"]["repair_attempted"] for row in completed]),
+            "repair_success_rate": _mean_bool([row["validation"]["repair_success"] for row in completed]),
+            "latency": _latency(latencies),
+        }
+
+    by_doc: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    by_shard: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        by_doc[str(row.get("doc_id") or "unknown")].append(row)
+        by_shard[str(row.get("source_shard") or "unknown")].append(row)
+    summary = _metrics(rows)
+    summary["by_doc"] = {doc_id: _metrics(items) for doc_id, items in sorted(by_doc.items())}
+    summary["by_shard"] = {shard: _metrics(items) for shard, items in sorted(by_shard.items())}
+    return summary
 
 
 def _trace_counts(sqlite_path: Path) -> dict[str, int]:
@@ -891,6 +985,7 @@ def run_answer_phase(
                 )
                 valid_json = bool(state.parse_result.get("raw_json_ok") or state.parse_result.get("schema_ok") or state.draft_answer)
                 format_valid = bool(state.format_check.get("success"))
+                location_valid = bool(state.location_check.get("success"))
                 gold_page_location_hit = location_page == gold_page
                 page_location_hit = gold_page_location_hit
                 repair_success = bool(
@@ -903,6 +998,7 @@ def run_answer_phase(
                         "qid": qid,
                         "doc_id": qa.get("doc_id"),
                         "source_doc_id": qa.get("source_doc_id"),
+                        "source_shard": qa.get("source_shard"),
                         "question": qa.get("question"),
                         "status": "completed",
                         "prediction": prediction,
@@ -911,7 +1007,7 @@ def run_answer_phase(
                         "validation": {
                             "valid_json": valid_json,
                             "format_valid": format_valid,
-                            "location_valid": bool(state.location_check.get("success")),
+                            "location_valid": location_valid,
                             "gold_page_location_hit": gold_page_location_hit,
                             "page_location_hit": page_location_hit,
                             "block_location_hit": block_location_hit,
@@ -932,6 +1028,7 @@ def run_answer_phase(
                             scores=scores,
                             valid_json=valid_json,
                             format_valid=format_valid,
+                            location_valid=location_valid,
                             gold_page_location_hit=gold_page_location_hit,
                             final_location_in_evidence=final_location_in_evidence,
                         ),
@@ -942,10 +1039,11 @@ def run_answer_phase(
                     {
                         "qid": qid,
                         "doc_id": qa.get("doc_id"),
+                        "source_shard": qa.get("source_shard"),
                         "status": "failed",
                         "error": f"{type(exc).__name__}: {exc}",
                         "traceback_tail": traceback.format_exc().splitlines()[-12:],
-                        "failure_taxonomy": ["workflow_error"],
+                        "failure_taxonomy": ["generation_failed"],
                     }
                 )
     finally:
@@ -1226,6 +1324,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--sample-root", default=DEFAULT_SAMPLE_ROOT)
     parser.add_argument("--ingestion-root", default=DEFAULT_INGESTION_ROOT)
     parser.add_argument("--doc-id", action="append")
+    parser.add_argument("--doc-id-file")
     parser.add_argument("--output-root", default=DEFAULT_OUTPUT_ROOT)
     parser.add_argument("--run-id")
     parser.add_argument("--force", action="store_true")
