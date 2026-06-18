@@ -615,6 +615,7 @@ def build_fixed_evidence(
             page_record = page_record_lookup[page_id]
             selected_pages.append(
                 {
+                    "rank": page_rank,
                     "retrieval_rank": page_rank,
                     "page_aggregate_id": page_id,
                     "parsed_page_number": page_record.parsed_page_number,
