@@ -606,20 +606,23 @@ Rationale:
 - Hybrid page retrieval improved over BM25 and put every gold page into Top-3
   and Top-5, but the reader still often cited a non-gold page or a similar
   wrong field from selected evidence.
-- The next evidence needed is a compact review artifact showing prediction,
-  retrieval top pages, gold page rank, and selected evidence context, plus a
-  prompt/context update that preserves retrieval rank and page identity for the
-  model.
+- The accepted instrumentation evidence is a compact review artifact showing
+  prediction, retrieval top pages, gold page rank, and selected evidence
+  context.
+- The first attempt to make rank-aware prompt/context the default regressed
+  answer quality, so rank-aware context is retained only as an explicit
+  diagnostic flag.
 
 Constraints:
 
 - Do not change MinerU ingestion, Phase 4A assets, retrieval model choices,
   training data, checkpoints, or AnswerPolicy output schema.
 - Do not add gold labels or reference answers to fixed evidence.
-- Keep child blocks ordered by page retrieval rank, parsed page number, reading
-  order, and block id.
-- Gate 4 remains blocked until the Gate 3A retrieval-only and full GRPO reruns
-  return.
+- Keep fixed evidence child blocks ordered by page retrieval rank, parsed page
+  number, reading order, and block id.
+- Keep retrieval rank/page metadata in fixed evidence artifacts for review, but
+  do not inject it into the default AnswerPolicy prompt/context.
+- Gate 4 remains blocked until the Gate 3A default full GRPO rerun returns.
 
 Current status:
 
@@ -627,9 +630,38 @@ Current status:
 Gate 1 -> accepted
 Gate 2 -> accepted
 Gate 3 server real E2E -> real_model_verified
-Gate 3A failure review/context instrumentation -> implemented
+Gate 3A failure review instrumentation -> accepted
+Gate 3A rank-aware context/prompt -> implemented
 Gate 4 -> blocked
 ```
+
+## 2026-06-18: Gate 3A Rank-Aware Prompt Default Rollback
+
+Decision: preserve Gate 3A instrumentation and fixed-evidence rank metadata,
+but restore the default AnswerPolicy prompt/context shape to Gate 3 behavior.
+Rank-aware prompt/context is available only with `--rank-aware-context`.
+
+Rationale:
+
+- Server artifact checks accepted `retrieval_preview.json`,
+  `answer_results_preview.json`, compact `failure_cases.jsonl`, summary
+  location aliases, and fixed-evidence rank/page metadata.
+- The default rank-aware prompt/context rerun reduced normalized exact match
+  and answer hit from 0.25 to 0.125, while page location quality did not
+  improve.
+- The instrumentation is useful for diagnosis, but changing the default prompt
+  is not accepted as a quality fix.
+
+Constraints:
+
+- Default full E2E must not add rank-aware extraction rules or rank/page
+  metadata to model-facing evidence headers.
+- Fixed evidence may retain retrieval rank, parsed page number, and page
+  aggregate metadata for artifact review.
+- `--rank-aware-context` is a separate diagnostic path and must not be treated
+  as the default Gate 3 path.
+- Do not change retrieval models, checkpoints, MinerU artifacts, or sample
+  scope.
 
 ## 2026-06-18: Phase 4B Gate 3 Page-Level Retrieval and E2E Boundary
 

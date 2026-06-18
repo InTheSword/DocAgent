@@ -17,7 +17,8 @@ Gate 1 -> accepted
 Gate 2 -> accepted
 Gate 3 local implementation -> implemented
 Gate 3 server real E2E -> real_model_verified
-Gate 3A failure review/context instrumentation -> implemented
+Gate 3A failure review instrumentation -> accepted
+Gate 3A rank-aware context/prompt -> implemented
 Gate 4 -> blocked
 CDC -> queued after Phase 4B
 Router/tools -> queued after CDC
@@ -44,8 +45,11 @@ the SQLite JSON path-scan false positive. Gate 3 real E2E completed on AutoDL
 for 3 windows / 25 pages / 8 QA with valid JSON and trace persistence, but
 Reader quality remains under review because the model often selects a non-gold
 page or similar field from the retrieved top-k pages. Gate 3A local
-instrumentation and page-rank-aware context are implemented. Do not mark Gate 3
-or Phase 4B as accepted until the follow-up real E2E review returns.
+instrumentation was accepted after artifact checks. The rank-aware prompt and
+context default changed reader behavior and is now opt-in only via
+`--rank-aware-context`; default full E2E returns to the Gate 3 prompt/context
+shape. Do not mark Gate 3 or Phase 4B as accepted until the follow-up real E2E
+review returns.
 
 ## Phase 4A Accepted
 
@@ -133,7 +137,8 @@ Gate 1 -> accepted
 Gate 2 -> accepted
 Gate 3 local implementation -> implemented
 Gate 3 server real E2E -> real_model_verified
-Gate 3A failure review/context instrumentation -> implemented
+Gate 3A failure review instrumentation -> accepted
+Gate 3A rank-aware context/prompt -> implemented
 Gate 4 -> blocked
 CDC -> queued after Phase 4B
 Router/tools -> queued after CDC

@@ -932,11 +932,12 @@ def build_answer_policy(
     max_prompt_tokens: int,
     max_new_tokens: int,
     allow_mock_backends: bool,
+    rank_aware_context: bool = False,
 ) -> tuple[AnswerPolicy, float]:
     if policy_backend == "heuristic":
         if not allow_mock_backends:
             raise RuntimeError("heuristic AnswerPolicy is only allowed with --allow-mock-backends")
-        return HeuristicAnswerPolicy(), 0.0
+        return HeuristicAnswerPolicy(rank_aware_context=rank_aware_context), 0.0
     if policy_backend != "qwen":
         raise RuntimeError(f"unsupported answer policy backend: {policy_backend}")
     policy = QwenAnswerPolicy(
@@ -948,6 +949,7 @@ def build_answer_policy(
             torch_dtype=torch_dtype,
             max_prompt_tokens=max_prompt_tokens,
             max_new_tokens=max_new_tokens,
+            rank_aware_context=rank_aware_context,
         )
     )
     start = time.perf_counter()

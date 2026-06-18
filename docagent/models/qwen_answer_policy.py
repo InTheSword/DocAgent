@@ -30,6 +30,7 @@ class QwenAnswerPolicyConfig:
     max_chars_per_block: int = 1200
     max_total_chars: int | None = None
     max_reason_chars: int | None = 300
+    rank_aware_context: bool = False
 
 
 class QwenAnswerPolicy:
@@ -67,6 +68,7 @@ class QwenAnswerPolicy:
             append_no_think=self.config.append_no_think,
             max_chars_per_block=self.config.max_chars_per_block,
             max_total_chars=self.config.max_total_chars,
+            rank_aware_context=self.config.rank_aware_context,
         )
         prompt_text = self._render_prompt(tokenizer, bundle.messages)
         prompt_text, cap_truncated = self._cap_prompt(tokenizer, prompt_text)

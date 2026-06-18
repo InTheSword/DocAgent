@@ -295,6 +295,7 @@ def test_full_mock_answer_policy_writes_answer_metrics_and_sqlite_trace(tmp_path
     answer_metrics = json.loads((run_dir / "answer_metrics.json").read_text(encoding="utf-8"))
 
     assert summary["status"] == "success"
+    assert summary["rank_aware_context"] is False
     assert answer_metrics["sample_count"] == 3
     assert answer_metrics["completed_count"] == 3
     assert answer_metrics["valid_json_rate"] == 1.0
@@ -315,7 +316,7 @@ def test_full_mock_answer_policy_writes_answer_metrics_and_sqlite_trace(tmp_path
     assert (run_dir / "summary.md").is_file()
 
 
-def test_context_and_prompt_include_retrieval_page_metadata_without_gold_labels(tmp_path: Path) -> None:
+def test_default_context_keeps_rank_metadata_out_of_prompt_but_not_fixed_evidence(tmp_path: Path) -> None:
     sample_root, ingestion_root, output_root = _fixture(tmp_path)
     args = _args(
         sample_root,
@@ -337,13 +338,30 @@ def test_context_and_prompt_include_retrieval_page_metadata_without_gold_labels(
 
     context = build_evidence_context(question="Where is alpha total?", evidence_blocks=blocks)
     prompt = compile_answer_prompt(question="Where is alpha total?", evidence_blocks=blocks).messages[-1]["content"]
+    rank_context = build_evidence_context(
+        question="Where is alpha total?",
+        evidence_blocks=blocks,
+        rank_aware_context=True,
+    )
+    rank_prompt = compile_answer_prompt(
+        question="Where is alpha total?",
+        evidence_blocks=blocks,
+        rank_aware_context=True,
+    ).messages[-1]["content"]
     serialized = json.dumps(fixed_row, ensure_ascii=False)
 
-    assert context["evidence"][0]["retrieval_rank"] == 1
-    assert context["evidence"][0]["location"]["page_aggregate_id"]
-    assert "retrieval_rank" in prompt
-    assert "page_aggregate_id" in prompt
-    assert "Prefer evidence from pages with higher retrieval rank" in prompt
+    assert context["rank_aware_context"] is False
+    assert "retrieval_rank" not in context["evidence"][0]
+    assert "page_aggregate_id" not in context["evidence"][0]["location"]
+    assert "retrieval_rank" not in prompt
+    assert "page_aggregate_id" not in prompt
+    assert "Prefer evidence from pages with higher retrieval rank" not in prompt
+    assert rank_context["rank_aware_context"] is True
+    assert rank_context["evidence"][0]["retrieval_rank"] == 1
+    assert rank_context["evidence"][0]["location"]["page_aggregate_id"]
+    assert "retrieval_rank" in rank_prompt
+    assert "page_aggregate_id" in rank_prompt
+    assert "Prefer evidence from pages with higher retrieval rank" in rank_prompt
     assert "gold_page" not in serialized
     assert "answers" not in serialized
 
@@ -389,6 +407,31 @@ def test_failure_cases_are_compact_and_include_retrieval_context(tmp_path: Path)
     assert len(json.dumps(first, ensure_ascii=False)) < 5000
 
 
+def test_rank_aware_context_flag_is_explicit(tmp_path: Path) -> None:
+    sample_root, ingestion_root, output_root = _fixture(tmp_path)
+    args = _args(
+        sample_root,
+        ingestion_root,
+        output_root,
+        "--run-id",
+        "rank-aware",
+        "--dense-backend",
+        "hash",
+        "--reranker-backend",
+        "keyword",
+        "--allow-mock-backends",
+        "--retrieval-only",
+        "--rank-aware-context",
+        "--force",
+    )
+
+    summary = run_phase4b_e2e(args)
+    manifest = json.loads((output_root / "rank-aware" / "run_manifest.json").read_text(encoding="utf-8"))
+
+    assert summary["rank_aware_context"] is True
+    assert manifest["rank_aware_context"] is True
+
+
 def test_cli_help_starts() -> None:
     root = Path(__file__).resolve().parents[1]
     result = subprocess.run(
@@ -401,3 +444,4 @@ def test_cli_help_starts() -> None:
     assert result.returncode == 0
     assert "--retrieval-only" in result.stdout
     assert "--allow-mock-backends" in result.stdout
+    assert "--rank-aware-context" in result.stdout

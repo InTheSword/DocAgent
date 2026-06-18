@@ -844,6 +844,7 @@ def run_answer_phase(
     answer_policy: Any,
     sqlite_path: Path,
     max_prompt_tokens: int,
+    rank_aware_context: bool,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     conn = connect(sqlite_path)
     repository = TraceRepository(conn)
@@ -871,6 +872,7 @@ def run_answer_phase(
                     doc_id=str(qa.get("doc_id") or ""),
                     trace_repository=repository,
                     preserve_input_order=True,
+                    rank_aware_context=rank_aware_context,
                 )
                 elapsed = (time.perf_counter() - started) * 1000
                 prediction = state.final_answer if isinstance(state.final_answer, dict) else {}
@@ -1012,6 +1014,7 @@ def build_run_manifest(args: argparse.Namespace, *, run_id: str, windows: list[D
         "max_context_blocks": args.max_context_blocks,
         "max_prompt_tokens": args.max_prompt_tokens,
         "max_new_tokens": args.max_new_tokens,
+        "rank_aware_context": bool(args.rank_aware_context),
         "retrieval": {
             "baseline": "bm25",
             "candidate": "bm25_bge_m3_rrf_reranker" if args.dense_backend == "bge" else "bm25_hash_rrf_keyword",
@@ -1141,6 +1144,7 @@ def run_phase4b_e2e(args: argparse.Namespace) -> dict[str, Any]:
             max_prompt_tokens=args.max_prompt_tokens,
             max_new_tokens=args.max_new_tokens,
             allow_mock_backends=args.allow_mock_backends,
+            rank_aware_context=bool(args.rank_aware_context),
         )
         _stage("running AnswerPolicy")
         answer_rows, answer_metrics = run_answer_phase(
@@ -1149,6 +1153,7 @@ def run_phase4b_e2e(args: argparse.Namespace) -> dict[str, Any]:
             answer_policy=answer_policy,
             sqlite_path=paths["sqlite"],
             max_prompt_tokens=args.max_prompt_tokens,
+            rank_aware_context=bool(args.rank_aware_context),
         )
         write_jsonl(paths["answer_results"], answer_rows)
         _write_json(paths["answer_metrics"], answer_metrics)
@@ -1173,6 +1178,7 @@ def run_phase4b_e2e(args: argparse.Namespace) -> dict[str, Any]:
         "primary_benchmark": False,
         "retrieval_scope": RETRIEVAL_SCOPE,
         "query_rewrite": "none",
+        "rank_aware_context": bool(args.rank_aware_context),
         "document_count": len(windows),
         "page_count": len(page_corpus),
         "qa_count": sum(len(window.qa_records) for window in windows),
@@ -1247,6 +1253,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--qwen-device", default="cuda")
     parser.add_argument("--qwen-torch-dtype", default="bfloat16")
     parser.add_argument("--allow-mock-backends", action="store_true")
+    parser.add_argument("--rank-aware-context", action="store_true")
     return parser.parse_args(argv)
 
 

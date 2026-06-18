@@ -64,6 +64,7 @@ def run_qa_workflow(
     run_id: str | None = None,
     preserve_input_order: bool = False,
     retriever: Retriever | None = None,
+    rank_aware_context: bool = False,
 ) -> QAState:
     if answer_policy is None:
         raise ValueError("answer_policy is required; pass HeuristicAnswerPolicy explicitly for tests or smoke runs")
@@ -139,6 +140,7 @@ def run_qa_workflow(
         question=question,
         task_type=answer_type_hint or "local_fact_qa",
         evidence_blocks=state.retrieved_blocks,
+        rank_aware_context=rank_aware_context,
     )
     _trace(
         state,

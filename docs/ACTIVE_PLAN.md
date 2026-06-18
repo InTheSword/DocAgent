@@ -34,7 +34,8 @@ Gate 1 -> accepted
 Gate 2 -> accepted
 Gate 3 local implementation -> implemented
 Gate 3 server real E2E -> real_model_verified
-Gate 3A failure review/context instrumentation -> implemented
+Gate 3A failure review instrumentation -> accepted
+Gate 3A rank-aware context/prompt -> implemented
 Gate 4 -> blocked
 CDC -> queued after Phase 4B
 Router/tools -> queued after CDC
@@ -56,7 +57,9 @@ evaluation implementation, metrics, or conclusions in this phase.
 - No blocker for the accepted Phase 4A foundation.
 - Gate 3 server real E2E has completed but remains a quality-review target,
   not an accepted expansion signal.
-- Gate 4 waits for Gate 3A failure review and page-rank-aware context results.
+- Gate 4 waits for the Gate 3A default prompt/context rerun. Rank-aware
+  context is opt-in only because the first default prompt change regressed
+  answer quality.
 
 ## Local Validation
 
@@ -86,15 +89,17 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Re-run Gate 3 retrieval-only with the Gate 3A context/review artifacts.
-2. Re-run Gate 3 full GRPO E2E and compare against
+1. Re-run Gate 3 retrieval-only with accepted Gate 3A instrumentation.
+2. Re-run Gate 3 full GRPO E2E with default prompt/context and compare against
    `gate3_mpdocvqa_20260618_155135`.
-3. Keep CDC queued until Phase 4B completes.
+3. Optionally re-run full E2E with `--rank-aware-context` as a separate
+   diagnostic, not as the default path.
+4. Keep CDC queued until Phase 4B completes.
 
 ## Stop Condition
 
 ```text
-Gate 3A local instrumentation/context update committed and pushed
+Gate 3A default prompt/context rollback committed and pushed
 + short AutoDL Gate 3A rerun command blocks provided
 + stop for server result
 ```

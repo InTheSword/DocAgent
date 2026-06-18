@@ -52,6 +52,9 @@ class GenerationError(AnswerPolicyError):
 class HeuristicAnswerPolicy:
     mode = "heuristic"
 
+    def __init__(self, *, rank_aware_context: bool = False) -> None:
+        self.rank_aware_context = rank_aware_context
+
     def generate(
         self,
         *,
@@ -67,6 +70,7 @@ class HeuristicAnswerPolicy:
             evidence_blocks=evidence_blocks,
             tool_results=tool_results,
             answer_type=answer_type,
+            rank_aware_context=self.rank_aware_context,
         )
         prompt_text = fallback_chat_prompt(bundle.messages)
         parsed = heuristic_answer(question, evidence_blocks)

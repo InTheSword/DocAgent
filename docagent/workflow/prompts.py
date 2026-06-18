@@ -21,10 +21,13 @@ SYSTEM_PROMPT = (
 EXTRACTION_RULES_TEXT = (
     "- Use only evidence text from the candidates; do not use outside knowledge or common expansions.\n"
     "- Match the exact question intent before selecting an answer span.\n"
+    "- For tables, lists, and key-value blocks, first match the relevant row, column, label, or relation, then copy the value.\n"
+    "- Do not answer with a neighboring entity, label, heading, total, or abbreviation unless the question asks for it."
+)
+
+RANK_AWARE_EXTRACTION_RULES_TEXT = (
     "- Prefer evidence from pages with higher retrieval rank; use lower-ranked pages only when the question intent fits them better.\n"
     "- If multiple pages contain similar fields, choose the field type requested by the question, such as index, percentage, source, date, or heading.\n"
-    "- For tables, lists, and key-value blocks, first match the relevant row, column, label, or relation, then copy the value.\n"
-    "- Do not answer with a neighboring entity, label, heading, total, or abbreviation unless the question asks for it.\n"
     "- evidence_location must point to the block where the final answer actually comes from."
 )
 
@@ -53,6 +56,7 @@ class PromptBundle:
             "evidence_context_hash": self.evidence_context["evidence_context_hash"],
             "truncation_applied": self.evidence_context["truncation_applied"],
             "evidence_count": len(self.evidence_context["evidence"]),
+            "rank_aware_context": bool(self.evidence_context.get("rank_aware_context")),
         }
 
 
@@ -121,16 +125,18 @@ def centered_evidence_window(text: str, answer: str, limit: int) -> str:
     return compact[left:right].strip(" ,;:-")
 
 
-def build_location_target(block: EvidenceBlock) -> dict[str, Any]:
+def build_location_target(block: EvidenceBlock, *, rank_aware_context: bool = False) -> dict[str, Any]:
     location = block.location.to_dict()
     location["block_id"] = block.block_id
-    retrieval = _retrieval_context(block)
+    retrieval = _retrieval_context(block, enabled=rank_aware_context)
     if retrieval:
         location.update(retrieval)
     return location
 
 
-def _retrieval_context(block: EvidenceBlock) -> dict[str, Any]:
+def _retrieval_context(block: EvidenceBlock, *, enabled: bool) -> dict[str, Any]:
+    if not enabled:
+        return {}
     metadata = block.metadata or {}
     context: dict[str, Any] = {}
     retrieval_rank = metadata.get("retrieval_rank", metadata.get("retrieval_page_rank"))
@@ -145,7 +151,7 @@ def _retrieval_context(block: EvidenceBlock) -> dict[str, Any]:
     return context
 
 
-def _context_location(block: EvidenceBlock) -> dict[str, Any]:
+def _context_location(block: EvidenceBlock, *, rank_aware_context: bool = False) -> dict[str, Any]:
     location = block.location.to_dict()
     payload = {
         "page": location.get("page", block.page_id),
@@ -158,7 +164,7 @@ def _context_location(block: EvidenceBlock) -> dict[str, Any]:
         "slide": location.get("slide"),
         "section": location.get("section") or block.metadata.get("section_title"),
     }
-    payload.update(_retrieval_context(block))
+    payload.update(_retrieval_context(block, enabled=rank_aware_context))
     return payload
 
 
@@ -193,6 +199,7 @@ def build_evidence_context(
     max_chars_per_block: int = 1200,
     answer: str = "",
     gold_block_id: str | None = None,
+    rank_aware_context: bool = False,
 ) -> dict[str, Any]:
     evidence: list[dict[str, Any]] = []
     selected: list[str] = []
@@ -231,8 +238,8 @@ def build_evidence_context(
                 "doc_id": block.doc_id,
                 "block_id": block.block_id,
                 "block_type": _context_block_type(block),
-                **_retrieval_context(block),
-                "location": _context_location(block),
+                **_retrieval_context(block, enabled=rank_aware_context),
+                "location": _context_location(block, rank_aware_context=rank_aware_context),
                 "content": content,
             }
         )
@@ -243,6 +250,7 @@ def build_evidence_context(
     }
     return {
         **payload,
+        "rank_aware_context": rank_aware_context,
         "selected_block_ids": selected,
         "dropped_block_ids": dropped,
         "truncation_applied": truncation_applied,
@@ -257,6 +265,7 @@ def format_evidence_blocks(
     max_total_chars: int | None = None,
     answer: str = "",
     gold_block_id: str | None = None,
+    rank_aware_context: bool = False,
 ) -> str:
     context = build_evidence_context(
         question="",
@@ -265,12 +274,14 @@ def format_evidence_blocks(
         max_chars_per_block=max_chars_per_block,
         answer=answer,
         gold_block_id=gold_block_id,
+        rank_aware_context=rank_aware_context,
     )
     parts: list[str] = []
     by_id = {block.block_id: block for block in blocks}
     for item in context["evidence"]:
         block = by_id[item["block_id"]]
-        location_text = json.dumps(build_location_target(block), ensure_ascii=False)
+        location_target = build_location_target(block, rank_aware_context=rank_aware_context)
+        location_text = json.dumps(location_target, ensure_ascii=False)
         header = f"[{block.block_type.upper()} | block_id={block.block_id} | location={location_text}]"
         parts.append(f"{header}\n{item['content']}")
     return "\n\n".join(parts)
@@ -288,6 +299,7 @@ def compile_answer_prompt(
     max_total_chars: int | None = None,
     answer: str = "",
     gold_block_id: str | None = None,
+    rank_aware_context: bool = False,
 ) -> PromptBundle:
     output_schema = json.dumps(OUTPUT_SCHEMA, ensure_ascii=False)
     context = build_evidence_context(
@@ -298,6 +310,7 @@ def compile_answer_prompt(
         max_chars_per_block=max_chars_per_block,
         answer=answer,
         gold_block_id=gold_block_id,
+        rank_aware_context=rank_aware_context,
     )
     evidence_text = format_evidence_blocks(
         evidence_blocks,
@@ -305,7 +318,11 @@ def compile_answer_prompt(
         max_total_chars=max_total_chars,
         answer=answer,
         gold_block_id=gold_block_id,
+        rank_aware_context=rank_aware_context,
     )
+    extraction_rules = EXTRACTION_RULES_TEXT
+    if rank_aware_context:
+        extraction_rules = f"{EXTRACTION_RULES_TEXT}\n{RANK_AWARE_EXTRACTION_RULES_TEXT}"
     tool_section = ""
     if tool_results:
         tool_text = json.dumps(tool_results, ensure_ascii=False, indent=2)
@@ -323,7 +340,7 @@ def compile_answer_prompt(
         "## Output Contract\n"
         f"Return JSON matching this schema: {output_schema}\n"
         "Rules:\n"
-        f"{EXTRACTION_RULES_TEXT}\n"
+        f"{extraction_rules}\n"
         "- answer must be concise and grounded in the evidence.\n"
         "- evidence_location must be a JSON object copied from one evidence header.\n"
         "- evidence must be the shortest sufficient supporting span or compact table row, no more than 300 characters.\n"
@@ -354,6 +371,7 @@ def build_answer_messages(
     append_no_think: bool = True,
     max_chars_per_block: int = 1200,
     max_total_chars: int | None = None,
+    rank_aware_context: bool = False,
 ) -> list[dict[str, str]]:
     return compile_answer_prompt(
         question=question,
@@ -363,6 +381,7 @@ def build_answer_messages(
         append_no_think=append_no_think,
         max_chars_per_block=max_chars_per_block,
         max_total_chars=max_total_chars,
+        rank_aware_context=rank_aware_context,
     ).messages
 
 
