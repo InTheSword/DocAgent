@@ -31,10 +31,9 @@ Phase 4A implementation -> accepted
 Phase 4B -> active
 Gate 1 local implementation -> implemented
 Gate 1 -> accepted
-Gate 2 4-page -> accepted
-Gate 2 20-page ingestion -> completed
-Gate 2 20-page acceptance -> blocked_by_false_positive_path_scan
-Gate 3 -> blocked_by_gate2
+Gate 2 -> accepted
+Gate 3 local implementation -> implemented
+Gate 3 server real E2E -> not_started
 Gate 4 -> blocked_by_gate3
 CDC -> queued after Phase 4B
 Router/tools -> queued after CDC
@@ -54,10 +53,7 @@ evaluation implementation, metrics, or conclusions in this phase.
 ## Blockers
 
 - No blocker for the accepted Phase 4A foundation.
-- Gate 2 20-page MinerU ingestion, page documents, and QA mapping completed,
-  but acceptance is blocked by a false-positive SQLite JSON path scan that
-  treated OCR `\$34.20` text as a UNC path.
-- Gate 3 waits for Gate 2 representative multi-page ingestion.
+- Gate 3 server real E2E has not started.
 - Gate 4 waits for Gate 3 page-level retrieval and AnswerPolicy E2E.
 
 ## Local Validation
@@ -88,17 +84,16 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Revalidate the existing 20-page Gate 2 artifact for
-   `jrcy0227__558596710c584b02` after the SQLite JSON path scan fix is pushed.
-2. If the revalidation succeeds, continue Gate 2 status handling in the same
-   Codex thread and branch.
+1. Run the Gate 3 server real E2E over the accepted 1/4/20-page windows.
+2. Return compact retrieval/answer/trace summary artifacts before any Gate 4
+   expansion.
 3. Keep CDC queued until Phase 4B completes.
 
 ## Stop Condition
 
 ```text
-SQLite JSON path scan fix committed and pushed
-+ one AutoDL Gate 2 revalidate-existing command provided
+Gate 3 local implementation committed and pushed
++ three short AutoDL Gate 3 command blocks provided
 + stop for server result
 ```
 

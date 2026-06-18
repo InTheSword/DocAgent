@@ -586,9 +586,49 @@ Current status:
 
 ```text
 Gate 1 -> accepted
-Gate 2 4-page -> accepted
-Gate 2 20-page ingestion -> completed
-Gate 2 20-page acceptance -> blocked_by_false_positive_path_scan
-Gate 3 -> blocked_by_gate2
+Gate 2 -> accepted
+Gate 3 local implementation -> implemented
+Gate 3 server real E2E -> not_started
+Gate 4 -> blocked_by_gate3
+```
+
+## 2026-06-18: Phase 4B Gate 3 Page-Level Retrieval and E2E Boundary
+
+Decision: implement Gate 3 as a selected-document-window page retrieval and
+AnswerPolicy regression over the accepted 1/4/20-page MP-DocVQA artifacts.
+
+Rationale:
+
+- The user interaction being modeled is a selected/uploaded document-window QA
+  request, so retrieval is scoped to the QA's own document window.
+- The primary retrieval unit is `page_document`, not arbitrary child blocks.
+- Gold supervision is page-level only and comes from `qa_page_mapping.jsonl`.
+- The necessary comparison is BM25 page retrieval versus Hybrid page retrieval
+  using BGE-M3 dense retrieval, RRF, and the bge reranker. Both modes share the
+  same QA, document-scoped page corpus, query, page IDs, and metrics.
+- AnswerPolicy receives only child EvidenceBlocks from Hybrid top-k pages. The
+  fixed evidence artifact must not contain gold labels or reference answers.
+
+Constraints:
+
+- `query_rewrite=none` for Gate 3.
+- Do not use answer text, gold page labels, or reference answers to select
+  context.
+- Child evidence ordering is deterministic:
+  page retrieval rank, parsed page number, reading order, block id.
+- The server run must stage GPU resources: retrieval models run first, retrieval
+  results and fixed evidence are persisted, retrieval models are released, then
+  Qwen3 GRPO AnswerPolicy is loaded.
+- Server commands for Gate 3 are short foreground Bash blocks for Git sync,
+  environment preflight, and actual evaluation. Do not use `nohup`, `setsid`,
+  background jobs, `tmux`, `kill`, `pkill`, or `exec`.
+
+Current status:
+
+```text
+Gate 1 -> accepted
+Gate 2 -> accepted
+Gate 3 local implementation -> implemented
+Gate 3 server real E2E -> not_started
 Gate 4 -> blocked_by_gate3
 ```

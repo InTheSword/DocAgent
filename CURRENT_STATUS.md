@@ -14,10 +14,9 @@ Phase 4A -> accepted
 Phase 4B -> active
 Gate 1 local implementation -> implemented
 Gate 1 -> accepted
-Gate 2 4-page -> accepted
-Gate 2 20-page ingestion -> completed
-Gate 2 20-page acceptance -> blocked_by_false_positive_path_scan
-Gate 3 -> blocked_by_gate2
+Gate 2 -> accepted
+Gate 3 local implementation -> implemented
+Gate 3 server real E2E -> not_started
 Gate 4 -> blocked_by_gate3
 CDC -> queued after Phase 4B
 Router/tools -> queued after CDC
@@ -39,12 +38,11 @@ Phase 4A sample assets
 ```
 
 Gate 1 single-page live MinerU ingestion is accepted. Gate 2 accepted the
-4-page representative window. The 20-page window completed MinerU parsing,
-EvidenceBlock conversion, page document creation, and QA page mapping, but
-acceptance is blocked by a false-positive portability scan that read serialized
-SQLite JSON and treated OCR `\$34.20` text as a UNC path. Do not mark Gate 2 or
-Phase 4B as accepted until the existing 20-page artifact is revalidated with the
-fixed scanner.
+representative 1/4/20-page windows after existing-artifact revalidation fixed
+the SQLite JSON path-scan false positive. Gate 3 local implementation is
+present for page-level BM25/Hybrid retrieval, fixed evidence construction, and
+mockable AnswerPolicy E2E. Do not mark Gate 3 or Phase 4B as accepted until the
+AutoDL real E2E run returns.
 
 ## Phase 4A Accepted
 
@@ -129,10 +127,9 @@ cross-shard identity design -> implemented_not_yet_multi_shard_validated
 Phase 4B -> active
 Gate 1 local implementation -> implemented
 Gate 1 -> accepted
-Gate 2 4-page -> accepted
-Gate 2 20-page ingestion -> completed
-Gate 2 20-page acceptance -> blocked_by_false_positive_path_scan
-Gate 3 -> blocked_by_gate2
+Gate 2 -> accepted
+Gate 3 local implementation -> implemented
+Gate 3 server real E2E -> not_started
 Gate 4 -> blocked_by_gate3
 CDC -> queued after Phase 4B
 Router/tools -> queued after CDC

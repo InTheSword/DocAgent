@@ -59,10 +59,9 @@ not a full 29-shard rollout.
 | Phase 4B | active | current milestone |
 | Gate 1 local implementation | implemented | runner and fixture tests added locally |
 | Gate 1 | accepted | single-page live MinerU ingestion accepted |
-| Gate 2 4-page | accepted | representative 4-page live MinerU ingestion accepted |
-| Gate 2 20-page ingestion | completed | MinerU, EvidenceBlock, page documents, and QA mapping completed |
-| Gate 2 20-page acceptance | blocked_by_false_positive_path_scan | SQLite JSON path scan misread OCR `\$34.20` text as a UNC path |
-| Gate 3 | blocked_by_gate2 | page-level retrieval and AnswerPolicy E2E waits for Gate 2 |
+| Gate 2 | accepted | representative 1/4/20-page live ingestion accepted |
+| Gate 3 local implementation | implemented | page corpus, BM25/Hybrid retrieval, fixed evidence, AnswerPolicy runner, and fixture tests |
+| Gate 3 server real E2E | not_started | waits for AutoDL run over accepted 1/4/20-page artifacts |
 | Gate 4 | blocked_by_gate3 | 10-20 windows / 30-50 QA waits for Gate 3 |
 | CDC | queued after Phase 4B | do not start during Phase 4B gates |
 | Router/tools | queued after CDC | later phase |
@@ -137,22 +136,21 @@ Phase 4A accepted contract remains:
 
 ## 5. Phase 4B Initial Scope
 
-Gate 1 is accepted. Gate 2 has accepted the representative 4-page window and
-completed MinerU ingestion plus page mapping for the 20-page window:
+Gate 1 and Gate 2 are accepted for the representative windows:
 
 ```text
+baseline windows -> hqvw0217__bc714cf4181a5632, rzbj0037__e09400dd12a9c549, jrcy0227__558596710c584b02
 rzbj0037__e09400dd12a9c549 -> accepted
-jrcy0227__558596710c584b02 -> ingestion completed, acceptance blocked by false-positive path scan
+jrcy0227__558596710c584b02 -> accepted after existing-artifact revalidation
 ```
 
 Gate order remains:
 
 ```text
 Gate 1 -> accepted
-Gate 2 4-page -> accepted
-Gate 2 20-page ingestion -> completed
-Gate 2 20-page acceptance -> blocked_by_false_positive_path_scan
-Gate 3 -> blocked_by_gate2
+Gate 2 -> accepted
+Gate 3 local implementation -> implemented
+Gate 3 server real E2E -> not_started
 Gate 4 -> blocked_by_gate3
 ```
 
@@ -171,7 +169,7 @@ existing urllib PUT upload -> HTTP 403
 independent requests streaming PUT on the same URL/PDF -> HTTP 200
 ```
 
-Current Gate 2 diagnosis:
+Gate 2 final accepted diagnosis:
 
 ```text
 jrcy0227__558596710c584b02 expected/parsed/page_document -> 20/20/20
@@ -179,7 +177,7 @@ qa mapping -> 1/1
 missing image reference -> 0
 no mock fallback -> true
 structure quality -> passed_with_warnings
-persisted absolute path -> false-positive SQLite JSON scan of OCR `\$34.20`
+persisted absolute path -> 0 after SQLite JSON scan fix and existing-artifact revalidation
 ```
 
 The eventual Phase 4B scope remains:
@@ -210,23 +208,24 @@ builder --help
 
 Current server boundary:
 
-- run only the Gate 2 existing-artifact revalidation command supplied by Codex;
-- do not call MinerU during revalidation;
-- do not run retrieval, Qwen, Gate 3, or Gate 4 until Gate 2 returns.
+- run only the Gate 3 real E2E command blocks supplied by Codex;
+- run Git sync, environment preflight, and actual evaluation as three short
+  foreground Bash command blocks;
+- do not run Gate 4 until Gate 3 returns.
 
 Do not:
 
 - print or persist `MINERU_TOKEN`;
 - install packages or modify the stable `docagent` environment;
-- run retrieval or answer models during Gate 2 revalidation;
+- use `nohup`, `setsid`, background `&`, `tmux`, `kill`, `pkill`, or `exec` in
+  user-pasted Gate 3 commands;
+- run all 29 shards or large-scale expansion in Gate 3;
 - create per-gate branches.
 
 ## 8. Next Priorities
 
-1. Revalidate the existing 20-page Gate 2 artifact after the SQLite JSON path
-   scan fix is pushed.
-2. If revalidation succeeds, continue Gate 2 handling in the same thread and
-   branch.
+1. Run Gate 3 server real E2E over the accepted 1/4/20-page artifacts.
+2. If Gate 3 succeeds, record server results before considering Gate 4.
 3. Keep CDC queued after Phase 4B.
 
 ## 9. Stop Condition
@@ -234,7 +233,7 @@ Do not:
 Stop after the following are complete:
 
 ```text
-SQLite JSON path scan fix committed and pushed
-+ one AutoDL Gate 2 revalidate-existing command provided
+Gate 3 local implementation committed and pushed
++ three short AutoDL Gate 3 command blocks provided
 + stop for server result
 ```

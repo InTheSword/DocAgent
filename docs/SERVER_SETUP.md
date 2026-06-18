@@ -149,6 +149,13 @@ Every command group must:
 - write long output under `outputs/logs/`;
 - provide at most one command group per interaction.
 
+For Phase 4B Gate 3, use three short foreground Bash blocks: Git sync,
+environment/data/model preflight, and the actual evaluation. Do not use
+`nohup`, `setsid`, background `&`, `tmux`, `kill`, `pkill`, or `exec` in
+commands the user directly pastes into the server terminal. The evaluation block
+should write full stdout/stderr to logs while printing stage messages and a
+compact final JSON in the foreground.
+
 If a task targets MinerU, explicitly activate the isolated MinerU environment instead of `docagent`.
 
 ## 9. Result-return protocol

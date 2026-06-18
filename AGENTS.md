@@ -187,6 +187,11 @@ Commands must:
 - write long output to files;
 - request only the minimum result needed.
 
+For Phase 4B Gate 3 server evaluation, provide Git sync, environment preflight,
+and real evaluation as three short foreground Bash command blocks. Do not use
+`nohup`, `setsid`, background `&`, `tmux`, `kill`, `pkill`, or `exec` in
+user-pasted commands.
+
 Success response:
 
 ```json
