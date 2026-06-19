@@ -227,6 +227,8 @@ def test_validate_only_loads_doc_ids_from_manifest_file(tmp_path: Path) -> None:
             str(ingestion_root),
             "--output-root",
             str(output_root),
+            "--run-id",
+            "gate4_validate_only",
             "--doc-id-file",
             str(manifest),
             "--validate-only",
@@ -236,6 +238,7 @@ def test_validate_only_loads_doc_ids_from_manifest_file(tmp_path: Path) -> None:
     payload = run_phase4b_e2e(args)
 
     assert payload["status"] == "success"
+    assert payload["gate"] == "Gate 4"
     assert payload["document_count"] == 1
     assert payload["qa_count"] == 1
 
@@ -248,6 +251,8 @@ def test_retrieval_only_writes_doc_scoped_page_metrics_and_fixed_evidence(tmp_pa
         output_root,
         "--run-id",
         "retrieval",
+        "--gate",
+        "Gate 4",
         "--dense-backend",
         "hash",
         "--reranker-backend",
@@ -266,9 +271,12 @@ def test_retrieval_only_writes_doc_scoped_page_metrics_and_fixed_evidence(tmp_pa
     fixed_rows = read_jsonl(run_dir / "fixed_evidence.jsonl")
     page_corpus = read_jsonl(run_dir / "page_corpus.jsonl")
     metrics = json.loads((run_dir / "page_retrieval_metrics.json").read_text(encoding="utf-8"))
+    manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
     empty_pages = [row for row in page_corpus if row["page_text"] == ""]
 
     assert summary["status"] == "success"
+    assert summary["gate"] == "Gate 4"
+    assert manifest["gate"] == "Gate 4"
     assert summary["answer_metrics"]["status"] == "skipped"
     assert summary["resource_plan"]["retrieval_models_released"] is True
     assert summary["resource_plan"]["retrieval_released_before_answer_policy"] is True
@@ -478,3 +486,4 @@ def test_cli_help_starts() -> None:
     assert "--retrieval-only" in result.stdout
     assert "--allow-mock-backends" in result.stdout
     assert "--rank-aware-context" in result.stdout
+    assert "--gate" in result.stdout

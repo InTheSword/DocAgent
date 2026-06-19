@@ -56,7 +56,7 @@ not a full 29-shard rollout.
 | Phase 4A deterministic asset builder | server_validated | help, py_compile, validate-only, build, self-check passed |
 | Phase 4A Linux PDF generation | server_validated | `document.pdf` and manifest checks passed |
 | Phase 4A cross-shard identity design | implemented_not_yet_multi_shard_validated | multi-shard contract implemented, not yet server-validated |
-| Phase 4B | active | current milestone |
+| Phase 4B | accepted | expanded raw-input regression accepted; CDC remains queued |
 | Gate 1 local implementation | implemented | runner and fixture tests added locally |
 | Gate 1 | accepted | single-page live MinerU ingestion accepted |
 | Gate 2 | accepted | representative 1/4/20-page live ingestion accepted |
@@ -66,7 +66,11 @@ not a full 29-shard rollout.
 | Gate 3A rank-aware context/prompt | implemented | opt-in only; default prompt/context restored to Gate 3 behavior |
 | Gate 3A default prompt rollback | accepted | default full E2E restored Gate 3 behavior |
 | Gate 4 local implementation | implemented | expanded sample manifest, manifest doc-id loading, per-shard metrics, and staged commands |
-| Gate 4 server expanded regression | not_started | waits for staged AutoDL execution |
+| Gate 4A sample manifest | accepted | 26 page-window docs / 197 pages / 90 QA from val shards 1-4 |
+| Gate 4B ingestion | accepted | selected windows ingested and validated under `outputs/phase4/mpdocvqa_ingestion` |
+| Gate 4C validate-only | accepted | 26 documents / 197 pages / 90 QA / 90 valid gold mappings, no models loaded |
+| Gate 4C retrieval-only | accepted | BM25 vs Hybrid page retrieval completed; Hybrid Top-5 recall 0.9556 |
+| Gate 4D full GRPO E2E | accepted | 90/90 completed, valid JSON/format 1.0, SQLite trace persisted |
 | CDC | queued after Phase 4B | do not start during Phase 4B gates |
 | Router/tools | queued after CDC | later phase |
 | Demo/closure | final phase | later phase |
@@ -159,7 +163,11 @@ Gate 3A failure review instrumentation -> accepted
 Gate 3A rank-aware context/prompt -> implemented
 Gate 3A default prompt rollback -> accepted
 Gate 4 local implementation -> implemented
-Gate 4 server expanded regression -> not_started
+Gate 4A sample manifest -> accepted
+Gate 4B ingestion -> accepted
+Gate 4C validate-only -> accepted
+Gate 4C retrieval-only -> accepted
+Gate 4D full GRPO E2E -> accepted
 ```
 
 Gate 3 server run `gate3_mpdocvqa_20260618_155135` completed at commit
@@ -209,6 +217,61 @@ Gate 4 expanded scope:
 - run ingestion, validate-only, retrieval-only, and full GRPO E2E as separate
   server phases.
 
+Gate 4 accepted sample:
+
+```text
+sample_root = outputs/phase4/mpdocvqa_raw_gate4_expanded
+ingestion_root = outputs/phase4/mpdocvqa_ingestion
+source_shards = MP-DocVQA val shards 1-4
+document_count = 26
+page_count = 197
+qa_count = 90
+```
+
+Gate 4C retrieval-only accepted result:
+
+```text
+run = outputs/evaluation/phase4b_mpdocvqa_gate4/gate4c_retrieval_only_empty_page_fix
+fixed_evidence_hash = 723160441137a42a3cf3b7775f94ffd6dd681cb15ac67bc2c5d2d0bfdc9feab3
+BM25 Recall@1/3/5 = 0.6111 / 0.8667 / 0.9111
+BM25 MRR = 0.7259
+Hybrid Recall@1/3/5 = 0.7333 / 0.9222 / 0.9556
+Hybrid MRR = 0.8257
+retrieval_gold_miss_top5 = 4
+```
+
+Gate 4D full GRPO E2E accepted result:
+
+```text
+run = outputs/evaluation/phase4b_mpdocvqa_gate4/gate4_full_grpo
+completed_count = 90
+failed_count = 0
+normalized_exact_match = 0.3333
+answer_hit = 0.3444
+token_f1 = 0.3689
+character_f1 = 0.5235
+valid_json_rate = 1.0
+format_valid_rate = 1.0
+gold_page_location_hit = 0.4889
+page_location_hit = 0.4889
+block_location_hit = 0.9667
+final_location_in_evidence_rate = 1.0
+trace_counts.qa_runs = 90
+trace_counts.tool_traces = 613
+failure_taxonomy = answer_miss:59, gold_page_location_miss:46, retrieval_gold_miss_top5:4
+```
+
+Interpretation:
+
+- Gate 4 is an expanded raw-input E2E regression, not a formal benchmark.
+- Flow stability is accepted across deterministic PDFs, MinerU ingestion, page
+  mapping, page retrieval, fixed evidence, GRPO AnswerPolicy, JSON/format
+  validation, and SQLite trace persistence.
+- Hybrid retrieval is usable on this sample, with Top-5 page recall 0.9556.
+- Answer quality is still limited; the main remaining issues are
+  `answer_miss` and `gold_page_location_miss`.
+- `--rank-aware-context` remains diagnostic only and is off by default.
+
 Do not do the following in the first Phase 4B slice:
 
 - full 29-shard restoration;
@@ -247,18 +310,17 @@ Do not:
 
 ## 8. Next Priorities
 
-1. Build Gate 4 expanded sample manifest and raw PDF assets.
-2. Ingest missing selected windows in batches.
-3. Run expanded validate-only, retrieval-only, and full GRPO E2E.
-4. Compare expanded results with `gate3_mpdocvqa_20260618_155135`.
-5. Keep CDC queued after Phase 4B.
+1. Preserve accepted Gate 4 artifacts unless a reproducibility issue is found.
+2. Keep CDC queued until explicitly started.
+3. Use Gate 4 failure taxonomy for later Reader/error-analysis work; do not
+   change retrieval models or AnswerPolicy prompt in this phase.
 
 ## 9. Stop Condition
 
 Stop after the following are complete:
 
 ```text
-Gate 4 local implementation committed and pushed
-+ staged AutoDL Gate 4 command blocks provided
-+ stop for server result
+Gate 4 expanded raw-input regression accepted
++ status documents updated
++ stop before CDC
 ```

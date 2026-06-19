@@ -110,7 +110,26 @@ def _read_json(path: Path) -> Any:
 
 
 def _stage(message: str) -> None:
-    print(f"[phase4b-gate3] {message}", file=sys.stderr, flush=True)
+    print(f"[phase4b-e2e] {message}", file=sys.stderr, flush=True)
+
+
+def _gate(args: argparse.Namespace, *, run_id: str | None = None) -> str:
+    explicit = str(getattr(args, "gate", "") or "").strip()
+    if explicit:
+        return explicit
+    tokens = [
+        run_id,
+        getattr(args, "run_id", None),
+        getattr(args, "output_root", None),
+        getattr(args, "sample_root", None),
+        getattr(args, "doc_id_file", None),
+    ]
+    text = " ".join(str(token or "") for token in tokens).lower()
+    if "gate4" in text or "gate_4" in text or "gate 4" in text:
+        return "Gate 4"
+    if "gate3a" in text or "gate_3a" in text or "gate 3a" in text:
+        return "Gate 3A"
+    return GATE
 
 
 def _run_id() -> str:
@@ -1101,7 +1120,7 @@ def validate_only_payload(args: argparse.Namespace, windows: list[DocumentWindow
         "command": COMMAND,
         "status": "success",
         "phase": PHASE,
-        "gate": GATE,
+        "gate": _gate(args),
         "validate_only": True,
         "document_count": len(windows),
         "page_count": len(page_corpus),
@@ -1118,7 +1137,7 @@ def build_run_manifest(args: argparse.Namespace, *, run_id: str, windows: list[D
     return {
         "command": COMMAND,
         "phase": PHASE,
-        "gate": GATE,
+        "gate": _gate(args, run_id=run_id),
         "run_id": run_id,
         "evaluation_scope": EVALUATION_SCOPE,
         "formal_benchmark": False,
@@ -1192,7 +1211,7 @@ def run_phase4b_e2e(args: argparse.Namespace) -> dict[str, Any]:
         allow_mock_backends=args.allow_mock_backends,
     )
     if dense_encoder is None:
-        raise Phase4BE2EError("Gate 3 hybrid retrieval requires a dense encoder")
+        raise Phase4BE2EError("Phase 4B hybrid retrieval requires a dense encoder")
     retrieval_windows = _retrieval_view_windows(windows)
     all_page_blocks = [block for window in retrieval_windows for block in window.page_blocks]
     dense_index, dense_index_build_ms = build_dense_index_for_corpus(
@@ -1210,7 +1229,7 @@ def run_phase4b_e2e(args: argparse.Namespace) -> dict[str, Any]:
         allow_mock_backends=args.allow_mock_backends,
     )
     if reranker is None:
-        raise Phase4BE2EError("Gate 3 hybrid retrieval requires a reranker")
+        raise Phase4BE2EError("Phase 4B hybrid retrieval requires a reranker")
 
     _stage("running page retrieval")
     retrieval_rows, page_metrics = run_retrieval(
@@ -1288,7 +1307,7 @@ def run_phase4b_e2e(args: argparse.Namespace) -> dict[str, Any]:
         "command": COMMAND,
         "status": "success",
         "phase": PHASE,
-        "gate": GATE,
+        "gate": _gate(args, run_id=run_id),
         "run_id": run_id,
         "evaluation_scope": EVALUATION_SCOPE,
         "formal_benchmark": False,
@@ -1332,20 +1351,21 @@ def _failure_payload(args: argparse.Namespace, exc: Exception) -> dict[str, Any]
         "status": "failed",
         "exit_code": 1,
         "phase": PHASE,
-        "gate": GATE,
+        "gate": _gate(args),
         "exception": f"{type(exc).__name__}: {exc}",
         "traceback_tail": traceback.format_exc().splitlines()[-12:],
     }
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run Phase 4B Gate 3 MP-DocVQA page-level retrieval and E2E.")
+    parser = argparse.ArgumentParser(description="Run Phase 4B MP-DocVQA page-level retrieval and E2E.")
     parser.add_argument("--sample-root", default=DEFAULT_SAMPLE_ROOT)
     parser.add_argument("--ingestion-root", default=DEFAULT_INGESTION_ROOT)
     parser.add_argument("--doc-id", action="append")
     parser.add_argument("--doc-id-file")
     parser.add_argument("--output-root", default=DEFAULT_OUTPUT_ROOT)
     parser.add_argument("--run-id")
+    parser.add_argument("--gate")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--validate-only", action="store_true")
     parser.add_argument("--retrieval-only", action="store_true")

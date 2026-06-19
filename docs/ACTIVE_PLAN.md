@@ -28,7 +28,7 @@ page-window PDF
 Phase 3 historical record -> accepted
 Phase 3 evaluation implementation -> frozen
 Phase 4A implementation -> accepted
-Phase 4B -> active
+Phase 4B -> accepted
 Gate 1 local implementation -> implemented
 Gate 1 -> accepted
 Gate 2 -> accepted
@@ -38,7 +38,11 @@ Gate 3A failure review instrumentation -> accepted
 Gate 3A rank-aware context/prompt -> implemented
 Gate 3A default prompt rollback -> accepted
 Gate 4 local implementation -> implemented
-Gate 4 server expanded regression -> not_started
+Gate 4A sample manifest -> accepted
+Gate 4B ingestion -> accepted
+Gate 4C validate-only -> accepted
+Gate 4C retrieval-only -> accepted
+Gate 4D full GRPO E2E -> accepted
 CDC -> queued after Phase 4B
 Router/tools -> queued after CDC
 Demo/closure -> final phase
@@ -49,9 +53,9 @@ evaluation implementation, metrics, or conclusions in this phase.
 
 ## Allowed Scope
 
-- use a small representative set of accepted MP-DocVQA page-window documents;
-- process only 3-5 windows first, not all 29 shards;
-- prioritize the existing accepted server sample assets;
+- preserve the accepted 26-window / 90-QA Gate 4 expanded regression;
+- do not expand to all 29 shards in Phase 4B;
+- prioritize the accepted server sample and ingestion assets;
 - keep generated assets under ignored `outputs/`.
 
 ## Blockers
@@ -59,8 +63,61 @@ evaluation implementation, metrics, or conclusions in this phase.
 - No blocker for the accepted Phase 4A foundation.
 - Gate 3 real-model E2E and Gate 3A default prompt rollback are accepted for
   the small 3-window regression.
-- Gate 4 now expands raw-input E2E regression; it is not a formal benchmark and
-  does not change the default AnswerPolicy prompt/context.
+- Gate 4 expanded raw-input regression is accepted; it is not a formal
+  benchmark and does not change the default AnswerPolicy prompt/context.
+
+Gate 4 accepted server scope:
+
+```text
+sample_root = outputs/phase4/mpdocvqa_raw_gate4_expanded
+ingestion_root = outputs/phase4/mpdocvqa_ingestion
+document_count = 26
+page_count = 197
+qa_count = 90
+source_shards = MP-DocVQA val shards 1-4
+```
+
+Gate 4C retrieval-only:
+
+```text
+run = outputs/evaluation/phase4b_mpdocvqa_gate4/gate4c_retrieval_only_empty_page_fix
+fixed_evidence_hash = 723160441137a42a3cf3b7775f94ffd6dd681cb15ac67bc2c5d2d0bfdc9feab3
+BM25 Recall@1/3/5 = 0.6111 / 0.8667 / 0.9111
+BM25 MRR = 0.7259
+Hybrid Recall@1/3/5 = 0.7333 / 0.9222 / 0.9556
+Hybrid MRR = 0.8257
+retrieval_gold_miss_top5 = 4
+```
+
+Gate 4D full GRPO E2E:
+
+```text
+run = outputs/evaluation/phase4b_mpdocvqa_gate4/gate4_full_grpo
+completed_count = 90
+failed_count = 0
+normalized_exact_match = 0.3333
+answer_hit = 0.3444
+token_f1 = 0.3689
+character_f1 = 0.5235
+valid_json_rate = 1.0
+format_valid_rate = 1.0
+gold_page_location_hit = 0.4889
+block_location_hit = 0.9667
+final_location_in_evidence_rate = 1.0
+trace_counts.qa_runs = 90
+trace_counts.tool_traces = 613
+failure_taxonomy = answer_miss:59, gold_page_location_miss:46, retrieval_gold_miss_top5:4
+```
+
+Interpretation boundary:
+
+- Gate 4 is an expanded raw-input integration regression, not a formal
+  benchmark.
+- The flow is stable through ingestion, page retrieval, fixed evidence,
+  AnswerPolicy JSON/format validation, and SQLite trace persistence.
+- Hybrid retrieval is usable over the expanded sample (`Top-5 recall=0.9556`).
+- Main remaining issues are Reader `answer_miss` and `gold_page_location_miss`.
+- `--rank-aware-context` remains diagnostic only; default is false.
 
 ## Local Validation
 
@@ -90,20 +147,18 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Build and validate the Gate 4 expanded sample manifest from MP-DocVQA val
-   shards 1-4.
-2. Ingest only missing selected windows, reusing the accepted 3-window baseline
-   artifacts.
-3. Run expanded validate-only, retrieval-only, and full GRPO E2E in separate
-   server phases.
-4. Keep CDC queued until Phase 4B completes.
+1. Keep Phase 4B accepted artifacts unchanged unless a reproducibility issue is
+   reported.
+2. Keep CDC queued until explicitly started.
+3. Use Gate 4 failure taxonomy to guide later Reader/error-analysis work, not
+   a retrieval model change in this phase.
 
 ## Stop Condition
 
 ```text
-Gate 4 local implementation committed and pushed
-+ staged AutoDL Gate 4 command blocks provided
-+ stop for server result
+Gate 4 expanded raw-input regression accepted
++ status documents updated
++ stop before CDC
 ```
 
 ## Phase Documents

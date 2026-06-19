@@ -595,6 +595,60 @@ def test_revalidate_existing_does_not_call_api_and_clears_latex_escape_false_pos
     assert json.loads(stored_payload)["text"] == r"for \$34.20"
 
 
+def test_skip_existing_revalidates_when_current_sample_qa_count_changes(tmp_path: Path) -> None:
+    sample = _sample_root(tmp_path)
+    fake = FakeMinerUApi(page_indices=[0])
+    out = tmp_path / "out"
+    args = _args(str(sample), TARGET_DOC_ID, str(out), "--live-api")
+    initial = run_phase4b_ingestion(args, api_client_factory=lambda: fake)
+    assert initial["status"] == "success"
+    assert initial["qa_count"] == 1
+
+    qa_path = sample / "qa.jsonl"
+    records = read_jsonl(qa_path)
+    records.append({**records[0], "qid": "q2", "raw_question_id": "q2", "question": "What else is on the page?"})
+    write_jsonl(qa_path, records)
+    manifest_path = sample / "documents" / TARGET_DOC_ID / "document_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["qa_count"] = 2
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+
+    def fail_if_called() -> FakeMinerUApi:
+        raise AssertionError("stale skip-existing must revalidate existing artifacts, not call MinerU")
+
+    skip_args = _args(str(sample), TARGET_DOC_ID, str(out), "--gate", "Gate 4", "--skip-existing")
+    payload = run_phase4b_ingestion(skip_args, api_client_factory=fail_if_called)
+    mapping_rows = read_jsonl(out / TARGET_DOC_ID / "qa_page_mapping.jsonl")
+
+    assert payload["status"] == "success"
+    assert payload["gate"] == "Gate 4"
+    assert payload["qa_count"] == 2
+    assert payload["skip_existing"] is False
+    assert payload["revalidated_due_to_existing_mismatch"] is True
+    assert "acceptance_report_qa_count_mismatch" in payload["existing_artifact_check"]["failures"]
+    assert "qa_page_mapping_count_mismatch" in payload["existing_artifact_check"]["failures"]
+    assert len(mapping_rows) == 2
+
+
+def test_skip_existing_reuses_current_artifact_without_api(tmp_path: Path) -> None:
+    sample = _sample_root(tmp_path)
+    fake = FakeMinerUApi(page_indices=[0])
+    out = tmp_path / "out"
+    args = _args(str(sample), TARGET_DOC_ID, str(out), "--live-api")
+    initial = run_phase4b_ingestion(args, api_client_factory=lambda: fake)
+    assert initial["status"] == "success"
+
+    def fail_if_called() -> FakeMinerUApi:
+        raise AssertionError("current skip-existing must not call MinerU")
+
+    skip_args = _args(str(sample), TARGET_DOC_ID, str(out), "--gate", "Gate 4", "--skip-existing")
+    payload = run_phase4b_ingestion(skip_args, api_client_factory=fail_if_called)
+
+    assert payload["status"] == "success"
+    assert payload["skip_existing"] is True
+    assert payload["existing_artifact_check"]["current"] is True
+
+
 def test_api_exception_writes_compact_sanitized_failure(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("MINERU_TOKEN", "secret-token")
     sample = _sample_root(tmp_path)
@@ -625,3 +679,4 @@ def test_cli_help_starts() -> None:
     assert result.returncode == 0
     assert "--sample-root" in result.stdout
     assert "--validate-only" in result.stdout
+    assert "--skip-existing" in result.stdout

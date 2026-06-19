@@ -2,16 +2,16 @@
 
 Updated: 2026-06-19
 
-## Phase 4B Active
+## Phase 4B Accepted
 
-Phase 4A remains accepted. Phase 4B is the active milestone and uses the
-single feature branch `codex/phase4b-mpdocvqa-e2e`.
+Phase 4A remains accepted. Phase 4B expanded raw-input regression is accepted
+on the single feature branch `codex/phase4b-mpdocvqa-e2e`.
 
 Current Phase 4B status:
 
 ```text
 Phase 4A -> accepted
-Phase 4B -> active
+Phase 4B -> accepted
 Gate 1 local implementation -> implemented
 Gate 1 -> accepted
 Gate 2 -> accepted
@@ -21,7 +21,11 @@ Gate 3A failure review instrumentation -> accepted
 Gate 3A rank-aware context/prompt -> implemented
 Gate 3A default prompt rollback -> accepted
 Gate 4 local implementation -> implemented
-Gate 4 server expanded regression -> not_started
+Gate 4A sample manifest -> accepted
+Gate 4B ingestion -> accepted
+Gate 4C validate-only -> accepted
+Gate 4C retrieval-only -> accepted
+Gate 4D full GRPO E2E -> accepted
 CDC -> queued after Phase 4B
 Router/tools -> queued after CDC
 Demo/closure -> final phase
@@ -50,10 +54,66 @@ page or similar field from the retrieved top-k pages. Gate 3A local
 instrumentation was accepted after artifact checks. The rank-aware prompt and
 context default changed reader behavior and is now opt-in only via
 `--rank-aware-context`; default full E2E returns to the Gate 3 prompt/context
-shape. The default rollback server run restored Gate 3 metrics, so Gate 4 is
-unblocked for expanded raw-input E2E regression. Gate 4 is not a formal
-benchmark and should report stability, retrieval, answer, trace, and failure
-distribution over the expanded sample.
+shape. Gate 4 expanded raw-input E2E regression is now accepted. Gate 4 is not
+a formal benchmark and should be read as stability, retrieval, answer, trace,
+and failure distribution evidence over the expanded sample.
+
+Gate 4 accepted sample:
+
+```text
+sample_root = outputs/phase4/mpdocvqa_raw_gate4_expanded
+ingestion_root = outputs/phase4/mpdocvqa_ingestion
+source_shards = MP-DocVQA val shards 1-4
+document_count = 26
+page_count = 197
+qa_count = 90
+```
+
+Gate 4C retrieval-only:
+
+```text
+run = outputs/evaluation/phase4b_mpdocvqa_gate4/gate4c_retrieval_only_empty_page_fix
+fixed_evidence_hash = 723160441137a42a3cf3b7775f94ffd6dd681cb15ac67bc2c5d2d0bfdc9feab3
+BM25 Recall@1/3/5 = 0.6111 / 0.8667 / 0.9111
+BM25 MRR = 0.7259
+Hybrid Recall@1/3/5 = 0.7333 / 0.9222 / 0.9556
+Hybrid MRR = 0.8257
+retrieval_gold_miss_top5 = 4
+```
+
+Gate 4D full GRPO E2E:
+
+```text
+run = outputs/evaluation/phase4b_mpdocvqa_gate4/gate4_full_grpo
+completed_count = 90
+failed_count = 0
+normalized_exact_match = 0.3333
+answer_hit = 0.3444
+token_f1 = 0.3689
+character_f1 = 0.5235
+valid_json_rate = 1.0
+format_valid_rate = 1.0
+gold_page_location_hit = 0.4889
+page_location_hit = 0.4889
+block_location_hit = 0.9667
+final_location_in_evidence_rate = 1.0
+trace_counts.qa_runs = 90
+trace_counts.tool_traces = 613
+failure_taxonomy = answer_miss:59, gold_page_location_miss:46, retrieval_gold_miss_top5:4
+```
+
+Interpretation:
+
+- Gate 4 is an expanded raw-input regression, not a strict independent
+  benchmark.
+- Flow stability is accepted: ingestion, page mapping, page retrieval, fixed
+  evidence, GRPO AnswerPolicy JSON/format validation, and SQLite trace all ran
+  through.
+- Hybrid retrieval is usable on the expanded sample, with Top-5 page recall
+  0.9556.
+- Answer quality remains limited by `answer_miss` and
+  `gold_page_location_miss`.
+- `--rank-aware-context` remains diagnostic only and defaults to false.
 
 ## Phase 4A Accepted
 
@@ -135,7 +195,7 @@ multi-page image restoration -> server_validated
 deterministic document asset builder -> server_validated
 Linux PDF generation -> server_validated
 cross-shard identity design -> implemented_not_yet_multi_shard_validated
-Phase 4B -> active
+Phase 4B -> accepted
 Gate 1 local implementation -> implemented
 Gate 1 -> accepted
 Gate 2 -> accepted
@@ -145,7 +205,11 @@ Gate 3A failure review instrumentation -> accepted
 Gate 3A rank-aware context/prompt -> implemented
 Gate 3A default prompt rollback -> accepted
 Gate 4 local implementation -> implemented
-Gate 4 server expanded regression -> not_started
+Gate 4A sample manifest -> accepted
+Gate 4B ingestion -> accepted
+Gate 4C validate-only -> accepted
+Gate 4C retrieval-only -> accepted
+Gate 4D full GRPO E2E -> accepted
 CDC -> queued after Phase 4B
 Router/tools -> queued after CDC
 Demo/closure -> final phase

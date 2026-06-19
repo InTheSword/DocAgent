@@ -798,6 +798,78 @@ def _read_existing_no_mock_fallback(work_dir: Path) -> bool:
     return bool(payload.get("no_mock_fallback"))
 
 
+def _existing_artifact_check(*, sample: SampleInputs, work_dir: Path) -> dict[str, Any]:
+    expected_qa_count = len(sample.qa_records)
+    report_path = work_dir / "acceptance_report.json"
+    mapping_path = work_dir / "qa_page_mapping.jsonl"
+    failures: list[str] = []
+    report_qa_count: int | None = None
+    mapping_qa_count: int | None = None
+    report_status: str | None = None
+    report_failures: list[Any] = []
+
+    if not report_path.is_file():
+        failures.append("acceptance_report_missing")
+    else:
+        try:
+            report = _read_json(report_path)
+            report_status = str(report.get("status") or "")
+            report_failures = list(report.get("failures") or [])
+            report_qa_count = _as_int(report.get("qa_count"), field="acceptance_report.qa_count")
+        except Exception:
+            failures.append("acceptance_report_invalid")
+        else:
+            if report_status != "success":
+                failures.append("acceptance_report_not_success")
+            if report_failures:
+                failures.append("acceptance_report_has_failures")
+            if report_qa_count != expected_qa_count:
+                failures.append("acceptance_report_qa_count_mismatch")
+
+    if not mapping_path.is_file():
+        failures.append("qa_page_mapping_missing")
+    else:
+        try:
+            mapping_qa_count = len(read_jsonl(mapping_path))
+        except Exception:
+            failures.append("qa_page_mapping_invalid")
+        else:
+            if mapping_qa_count != expected_qa_count:
+                failures.append("qa_page_mapping_count_mismatch")
+
+    return {
+        "current": not failures,
+        "failures": failures,
+        "expected_qa_count": expected_qa_count,
+        "acceptance_report_qa_count": report_qa_count,
+        "qa_page_mapping_count": mapping_qa_count,
+        "acceptance_report_status": report_status,
+    }
+
+
+def _run_skip_existing(
+    *,
+    args: argparse.Namespace,
+    sample: SampleInputs,
+    api_client_factory: Callable[[], Any] | None,
+) -> dict[str, Any]:
+    work_dir = repo_path(args.output_root) / sample.doc_id
+    check = _existing_artifact_check(sample=sample, work_dir=work_dir)
+    if check["current"]:
+        report = _read_json(work_dir / "acceptance_report.json")
+        report["skip_existing"] = True
+        report["existing_artifact_check"] = check
+        return report
+    if work_dir.exists():
+        report = _run_revalidate_existing(args=args, sample=sample)
+        report["skip_existing"] = False
+        report["revalidated_due_to_existing_mismatch"] = True
+        report["existing_artifact_check"] = check
+        _write_json(work_dir / "acceptance_report.json", report)
+        return report
+    return _run_ingestion(args=args, sample=sample, api_client_factory=api_client_factory)
+
+
 def _run_revalidate_existing(*, args: argparse.Namespace, sample: SampleInputs) -> dict[str, Any]:
     _validate_runtime(args, validate_only=False, revalidate_existing=True)
     work_dir = repo_path(args.output_root) / sample.doc_id
@@ -875,6 +947,8 @@ def run_phase4b_ingestion(
         sample = _load_sample_inputs(args)
         if args.validate_only:
             return _validate_only_payload(args, sample)
+        if args.skip_existing:
+            return _run_skip_existing(args=args, sample=sample, api_client_factory=api_client_factory)
         if args.revalidate_existing:
             return _run_revalidate_existing(args=args, sample=sample)
         return _run_ingestion(args=args, sample=sample, api_client_factory=api_client_factory)
@@ -895,6 +969,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--validate-only", action="store_true")
     parser.add_argument("--revalidate-existing", action="store_true")
+    parser.add_argument("--skip-existing", action="store_true")
     return parser.parse_args(argv)
 
 

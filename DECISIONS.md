@@ -592,6 +592,96 @@ Gate 3 server real E2E -> not_started
 Gate 4 -> blocked_by_gate3
 ```
 
+## 2026-06-19: Phase 4B Gate 4 Expanded Regression Accepted
+
+Decision: accept Phase 4B Gate 4 as an expanded MP-DocVQA raw-input E2E
+regression over validation shards 1-4, while keeping it explicitly out of the
+formal benchmark category.
+
+Accepted scope:
+
+```text
+sample_root = outputs/phase4/mpdocvqa_raw_gate4_expanded
+ingestion_root = outputs/phase4/mpdocvqa_ingestion
+document_count = 26
+page_count = 197
+qa_count = 90
+source_shards = MP-DocVQA val shards 1-4
+```
+
+Accepted retrieval-only artifact:
+
+```text
+run = outputs/evaluation/phase4b_mpdocvqa_gate4/gate4c_retrieval_only_empty_page_fix
+fixed_evidence_hash = 723160441137a42a3cf3b7775f94ffd6dd681cb15ac67bc2c5d2d0bfdc9feab3
+BM25 Recall@1/3/5 = 0.6111 / 0.8667 / 0.9111
+BM25 MRR = 0.7259
+Hybrid Recall@1/3/5 = 0.7333 / 0.9222 / 0.9556
+Hybrid MRR = 0.8257
+retrieval_gold_miss_top5 = 4
+```
+
+Accepted full GRPO E2E artifact:
+
+```text
+run = outputs/evaluation/phase4b_mpdocvqa_gate4/gate4_full_grpo
+completed_count = 90
+failed_count = 0
+normalized_exact_match = 0.3333
+answer_hit = 0.3444
+token_f1 = 0.3689
+character_f1 = 0.5235
+valid_json_rate = 1.0
+format_valid_rate = 1.0
+gold_page_location_hit = 0.4889
+page_location_hit = 0.4889
+block_location_hit = 0.9667
+final_location_in_evidence_rate = 1.0
+trace_counts.qa_runs = 90
+trace_counts.tool_traces = 613
+failure_taxonomy = answer_miss:59, gold_page_location_miss:46, retrieval_gold_miss_top5:4
+```
+
+Rationale:
+
+- Gate 4 verifies raw-input system stability across document restoration,
+  live MinerU ingestion, page mapping, page-level retrieval, fixed evidence,
+  GRPO AnswerPolicy execution, validation, and SQLite trace persistence.
+- Hybrid retrieval is usable for the expanded sample; Top-5 page recall is
+  0.9556 and only 4 QA miss the gold page in Top-5.
+- The answer metrics are not high enough to frame this as a quality win.
+  Remaining work is mainly Reader answer selection and page-location behavior,
+  represented by `answer_miss` and `gold_page_location_miss`.
+
+Constraints:
+
+- Gate 4 is not a formal independent benchmark.
+- Do not change retrieval models, AnswerPolicy prompt, checkpoints, or training
+  data as part of Gate 4 acceptance.
+- `--rank-aware-context` remains diagnostic only; default remains false.
+- Future ingestion skip-existing logic must compare current sample QA count
+  with both `acceptance_report.qa_count` and `qa_page_mapping.jsonl` row count
+  before reusing an existing artifact. Mismatches must revalidate or reingest.
+- Future Gate 4 runs must write Gate 4 metadata in summaries/manifests rather
+  than retaining the Gate 3 default label.
+
+Current status:
+
+```text
+Gate 1 -> accepted
+Gate 2 -> accepted
+Gate 3 real-model E2E -> accepted
+Gate 3A instrumentation -> accepted
+Gate 3A default prompt rollback -> accepted
+Gate 4A sample manifest -> accepted
+Gate 4B ingestion -> accepted
+Gate 4C validate-only -> accepted
+Gate 4C retrieval-only -> accepted
+Gate 4D full GRPO E2E -> accepted
+Phase 4B -> accepted
+CDC -> queued
+```
+
 ## 2026-06-18: Phase 4B Gate 3A Failure Review and Page-Rank Context
 
 Decision: keep Gate 3 active after the first real E2E run and add failure
@@ -698,7 +788,13 @@ Gate 3 real-model E2E -> accepted
 Gate 3A instrumentation -> accepted
 Gate 3A default prompt rollback -> accepted
 Gate 4 local implementation -> implemented
-Gate 4 server expanded regression -> not_started
+Gate 4A sample manifest -> accepted
+Gate 4B ingestion -> accepted
+Gate 4C validate-only -> accepted
+Gate 4C retrieval-only -> accepted
+Gate 4D full GRPO E2E -> accepted
+Phase 4B -> accepted
+CDC -> queued
 ```
 
 ## 2026-06-18: Phase 4B Gate 3 Page-Level Retrieval and E2E Boundary
