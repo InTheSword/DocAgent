@@ -371,6 +371,13 @@ def test_structure_quality_passed_with_warnings_can_pass(tmp_path: Path, monkeyp
 def test_json_sqlite_path_scan_ignores_ocr_latex_escapes(tmp_path: Path) -> None:
     work_dir = tmp_path / "work"
     work_dir.mkdir()
+    write_jsonl(
+        work_dir / "evidence_blocks.jsonl",
+        [
+            {"block_id": "jsonl-text-1", "block_type": "text", "text": "/jc"},
+            {"block_id": "jsonl-text-2", "block_type": "text", "text": "$34.20"},
+        ],
+    )
     sqlite_path = work_dir / "docagent.sqlite"
     conn = connect(sqlite_path)
     try:
@@ -388,6 +395,7 @@ def test_json_sqlite_path_scan_ignores_ocr_latex_escapes(tmp_path: Path) -> None
                 json.dumps(
                     {
                         "text": r"Meetings \$34.20",
+                        "ocr_short_slash_token": "/jc",
                         "json_encoded": r"\\$34.20",
                         "semantic_backslash": r"ordinary \ marker",
                     }
@@ -408,6 +416,7 @@ def test_json_sqlite_path_scan_ignores_ocr_latex_escapes(tmp_path: Path) -> None
     assert absolute_hits == []
     assert sensitive_hits == []
     assert r"\\$34.20" in stored_payload
+    assert json.loads(stored_payload)["ocr_short_slash_token"] == "/jc"
 
 
 def test_json_sqlite_path_scan_detects_real_absolute_paths_with_compact_examples(tmp_path: Path) -> None:
@@ -427,7 +436,14 @@ def test_json_sqlite_path_scan_detects_real_absolute_paths_with_compact_examples
                 1,
                 "text",
                 "content",
-                json.dumps({"posix": "/root/data/file.pdf", "win": r"C:\Users\name\file.pdf"}),
+                json.dumps(
+                    {
+                        "posix": "/root/data/file.pdf",
+                        "image_path": "/root/autodl-tmp/images/page.png",
+                        "win_c": r"C:\Users\name\file.pdf",
+                        "win_d": r"D:\Projects\docagent\file.pdf",
+                    }
+                ),
                 json.dumps({"unc": r"\\server\share\file.pdf"}),
             ),
         )
@@ -453,6 +469,7 @@ def test_json_sqlite_path_scan_detects_real_absolute_paths_with_compact_examples
     assert all(set(hit) == {"where", "reason", "value_preview"} for hit in absolute_hits)
     assert all(len(hit["value_preview"]) <= 160 for hit in absolute_hits)
     assert not any("payload_json" in hit["value_preview"] for hit in absolute_hits)
+    assert any(hit["where"].endswith(".image_path") for hit in absolute_hits)
 
 
 def test_invalid_json_sqlite_path_scan_uses_safe_string_fallback(tmp_path: Path) -> None:
@@ -481,8 +498,15 @@ def test_invalid_json_sqlite_path_scan_uses_safe_string_fallback(tmp_path: Path)
 
 def test_absolute_path_detection_is_platform_independent() -> None:
     assert _looks_like_local_absolute_path("/root/data/file.pdf")
+    assert _looks_like_local_absolute_path("/mnt/data/file.pdf")
+    assert _looks_like_local_absolute_path("/home/user/file.pdf")
+    assert _looks_like_local_absolute_path("/tmp/file.pdf")
+    assert _looks_like_local_absolute_path("/var/tmp/file.pdf")
     assert _looks_like_local_absolute_path(r"C:\Users\name\file.pdf")
+    assert _looks_like_local_absolute_path(r"D:\Projects\docagent\file.pdf")
     assert _looks_like_local_absolute_path(r"\\server\share\file.pdf")
+    assert _looks_like_local_absolute_path("file:///root/data/file.pdf")
+    assert not _looks_like_local_absolute_path("/jc")
     assert not _looks_like_local_absolute_path(r"\$34.20")
     assert not _looks_like_local_absolute_path(r"\\$34.20")
     assert not _looks_like_local_absolute_path(r"ordinary \ marker")

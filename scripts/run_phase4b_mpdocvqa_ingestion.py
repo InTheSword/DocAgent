@@ -36,6 +36,7 @@ WINDOWS_DRIVE_PATH_RE = re.compile(r"^[A-Za-z]:[\\/]")
 UNC_PATH_RE = re.compile(r"^\\\\[A-Za-z0-9._-]+[\\/][^\s\\/]+")
 URL_RE = re.compile(r"https?://[^\s\"'<>]+")
 PATH_PREVIEW_LIMIT = 160
+POSIX_LOCAL_ROOTS = ("/root/", "/mnt/", "/home/", "/tmp/", "/var/", "/opt/", "/usr/", "/etc/", "/data/")
 
 
 class Phase4BIngestionError(RuntimeError):
@@ -81,13 +82,17 @@ def _artifact_path(path: Path, work_dir: Path) -> str:
 
 def _absolute_path_reason(value: str) -> str | None:
     stripped = value.strip()
-    if not stripped or "://" in stripped:
+    if not stripped:
+        return None
+    if stripped.lower().startswith("file://"):
+        return "file_uri_absolute_path"
+    if "://" in stripped:
         return None
     if WINDOWS_DRIVE_PATH_RE.match(stripped):
         return "windows_drive_absolute_path"
     if UNC_PATH_RE.match(stripped):
         return "unc_absolute_path"
-    if stripped.startswith("/") and not stripped.startswith("//"):
+    if stripped.startswith(POSIX_LOCAL_ROOTS):
         return "posix_absolute_path"
     return None
 
