@@ -1,5 +1,13 @@
 # Decisions
 
+## Status Vocabulary Note
+
+`DECISIONS.md` is a chronological decision log. The canonical current status
+is maintained in `docs/ACTIVE_PLAN.md` and `CURRENT_STATUS.md` using the
+repository status vocabulary. Older entries may quote transient historical
+phrases such as gate-specific blockers; those snapshots are preserved as
+history and are not the current canonical project state.
+
 ## 2026-06-08: Phase 1 Workflow Integration Scope
 
 Decision: integrate the trained Qwen Answer Policy into the workflow before expanding retrieval or multimodal branches.
@@ -491,9 +499,9 @@ Gate 1 real MinerU smoke -> not_started
 Gate 2 -> blocked_by_gate1
 Gate 3 -> blocked_by_gate2
 Gate 4 -> blocked_by_gate3
-CDC -> queued after Phase 4B
-Router/tools -> queued after CDC
-Demo/closure -> final phase
+CDC -> not_started
+Router/tools -> not_started
+Demo/closure -> not_started
 ```
 
 Rationale:
@@ -679,7 +687,7 @@ Gate 4C validate-only -> accepted
 Gate 4C retrieval-only -> accepted
 Gate 4D full GRPO E2E -> accepted
 Phase 4B -> accepted
-CDC -> queued
+CDC -> not_started
 ```
 
 ## 2026-06-18: Phase 4B Gate 3A Failure Review and Page-Rank Context
@@ -794,7 +802,7 @@ Gate 4C validate-only -> accepted
 Gate 4C retrieval-only -> accepted
 Gate 4D full GRPO E2E -> accepted
 Phase 4B -> accepted
-CDC -> queued
+CDC -> not_started
 ```
 
 ## 2026-06-18: Phase 4B Gate 3 Page-Level Retrieval and E2E Boundary

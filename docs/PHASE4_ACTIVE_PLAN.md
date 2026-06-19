@@ -1,6 +1,7 @@
 # Phase 4 Active Plan
 
-> This file defines the only active Codex milestone.
+> This file records the accepted Phase 4B milestone. The canonical current
+> status and stop condition are in `docs/ACTIVE_PLAN.md`.
 
 ## 1. Historical Checkpoints
 
@@ -52,11 +53,11 @@ not a full 29-shard rollout.
 | Phase 3 evaluation implementation | frozen | historical, unchanged in this phase |
 | Phase 4A raw parquet schema audit | accepted | real shard audit accepted |
 | Phase 4A page-window identity model | accepted | source document vs window identity accepted |
-| Phase 4A image restoration | server_validated | Linux server smoke passed |
-| Phase 4A deterministic asset builder | server_validated | help, py_compile, validate-only, build, self-check passed |
-| Phase 4A Linux PDF generation | server_validated | `document.pdf` and manifest checks passed |
-| Phase 4A cross-shard identity design | implemented_not_yet_multi_shard_validated | multi-shard contract implemented, not yet server-validated |
-| Phase 4B | accepted | expanded raw-input regression accepted; CDC remains queued |
+| Phase 4A image restoration | accepted | Linux server smoke passed |
+| Phase 4A deterministic asset builder | accepted | help, py_compile, validate-only, build, self-check passed |
+| Phase 4A Linux PDF generation | accepted | `document.pdf` and manifest checks passed |
+| Phase 4A cross-shard identity design | implemented | multi-shard contract implemented; full multi-shard validation not started |
+| Phase 4B | accepted | expanded raw-input regression accepted; CDC remains not_started |
 | Gate 1 local implementation | implemented | runner and fixture tests added locally |
 | Gate 1 | accepted | single-page live MinerU ingestion accepted |
 | Gate 2 | accepted | representative 1/4/20-page live ingestion accepted |
@@ -71,9 +72,9 @@ not a full 29-shard rollout.
 | Gate 4C validate-only | accepted | 26 documents / 197 pages / 90 QA / 90 valid gold mappings, no models loaded |
 | Gate 4C retrieval-only | accepted | BM25 vs Hybrid page retrieval completed; Hybrid Top-5 recall 0.9556 |
 | Gate 4D full GRPO E2E | accepted | 90/90 completed, valid JSON/format 1.0, SQLite trace persisted |
-| CDC | queued after Phase 4B | do not start during Phase 4B gates |
-| Router/tools | queued after CDC | later phase |
-| Demo/closure | final phase | later phase |
+| CDC | not_started | do not start during Phase 4B closeout |
+| Router/tools | not_started | later phase |
+| Demo/closure | not_started | later phase |
 
 Phase 4A accepted server input:
 
@@ -181,7 +182,8 @@ E2E path must use the Gate 3 prompt/context shape; `--rank-aware-context` is a
 separate diagnostic flag. The rollback server run restored Gate 3 answer
 metrics, so Gate 4 is unblocked for expanded raw-input E2E regression.
 
-Phase 4B must still use one Codex thread and one feature branch:
+Phase 4B was completed on one feature branch and then fast-forwarded into
+`main`:
 
 ```text
 codex/phase4b-mpdocvqa-e2e
@@ -271,6 +273,11 @@ Interpretation:
 - Answer quality is still limited; the main remaining issues are
   `answer_miss` and `gold_page_location_miss`.
 - `--rank-aware-context` remains diagnostic only and is off by default.
+- Gate 4 artifacts are server-side acceptance outputs. Missing local mirrors
+  under `outputs/phase4/mpdocvqa_raw_gate4_expanded`,
+  `outputs/phase4/mpdocvqa_ingestion`, or
+  `outputs/evaluation/phase4b_mpdocvqa_gate4/` are an environment/artifact sync
+  issue, not missing tracked Phase 4B logic.
 
 Do not do the following in the first Phase 4B slice:
 
@@ -311,7 +318,7 @@ Do not:
 ## 8. Next Priorities
 
 1. Preserve accepted Gate 4 artifacts unless a reproducibility issue is found.
-2. Keep CDC queued until explicitly started.
+2. Keep CDC `not_started` until explicitly started.
 3. Use Gate 4 failure taxonomy for later Reader/error-analysis work; do not
    change retrieval models or AnswerPolicy prompt in this phase.
 

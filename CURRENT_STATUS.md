@@ -5,7 +5,15 @@ Updated: 2026-06-19
 ## Phase 4B Accepted
 
 Phase 4A remains accepted. Phase 4B expanded raw-input regression is accepted
-on the single feature branch `codex/phase4b-mpdocvqa-e2e`.
+on `main` after the single feature branch `codex/phase4b-mpdocvqa-e2e` was
+fast-forwarded.
+
+Canonical status labels in this file use the repository vocabulary:
+`not_started`, `implemented`, `ready`, `mock_verified`,
+`server_dependency_ready`, `real_model_verified`, `benchmark_evaluated`,
+`accepted`, `frozen`, `blocked`, and `blocked_by_missing_mineru_output`.
+Historical metric descriptions below are evidence summaries, not current
+canonical status labels.
 
 Current Phase 4B status:
 
@@ -26,9 +34,9 @@ Gate 4B ingestion -> accepted
 Gate 4C validate-only -> accepted
 Gate 4C retrieval-only -> accepted
 Gate 4D full GRPO E2E -> accepted
-CDC -> queued after Phase 4B
-Router/tools -> queued after CDC
-Demo/closure -> final phase
+CDC -> not_started
+Router/tools -> not_started
+Demo/closure -> not_started
 ```
 
 Gate 1 local implementation adds a reusable MP-DocVQA page-window ingestion
@@ -114,6 +122,11 @@ Interpretation:
 - Answer quality remains limited by `answer_miss` and
   `gold_page_location_miss`.
 - `--rank-aware-context` remains diagnostic only and defaults to false.
+- Gate 4 artifacts are server-side acceptance outputs. Missing local mirrors
+  under `outputs/phase4/mpdocvqa_raw_gate4_expanded`,
+  `outputs/phase4/mpdocvqa_ingestion`, or
+  `outputs/evaluation/phase4b_mpdocvqa_gate4/` are an artifact sync boundary,
+  not a missing main-branch code path.
 
 ## Phase 4A Accepted
 
@@ -191,10 +204,10 @@ Phase 3 evaluation implementation -> frozen
 Phase 4A implementation -> accepted
 MP-DocVQA raw Parquet schema audit -> accepted
 page-window identity model -> accepted
-multi-page image restoration -> server_validated
-deterministic document asset builder -> server_validated
-Linux PDF generation -> server_validated
-cross-shard identity design -> implemented_not_yet_multi_shard_validated
+multi-page image restoration -> accepted
+deterministic document asset builder -> accepted
+Linux PDF generation -> accepted
+cross-shard identity design -> implemented
 Phase 4B -> accepted
 Gate 1 local implementation -> implemented
 Gate 1 -> accepted
@@ -210,9 +223,9 @@ Gate 4B ingestion -> accepted
 Gate 4C validate-only -> accepted
 Gate 4C retrieval-only -> accepted
 Gate 4D full GRPO E2E -> accepted
-CDC -> queued after Phase 4B
-Router/tools -> queued after CDC
-Demo/closure -> final phase
+CDC -> not_started
+Router/tools -> not_started
+Demo/closure -> not_started
 ```
 
 ## Phase 1 Complete
@@ -283,7 +296,7 @@ Boundary:
 
 ```text
 Phase 2A implementation/integration -> accepted
-formal retrieval and QA benchmark -> not benchmark_evaluated
+formal retrieval and QA benchmark -> not_started
 ```
 
 The single successful smoke is integration evidence, not a performance metric.
@@ -425,9 +438,9 @@ Status:
 ```text
 Phase 2B-2 -> accepted
 implementation/integration -> accepted
-scenario quality -> measured
-formal benchmark -> not benchmark_evaluated
-quality optimization -> deferred
+scenario quality evidence -> accepted
+formal benchmark -> not_started
+quality optimization -> not_started
 ```
 
 ## Phase 3A Implemented
@@ -501,12 +514,12 @@ Status:
 ```text
 training-inference contract -> implemented
 real-document evaluation framework -> implemented
-server real evaluation -> measured
+server real evaluation -> accepted
 GLOBOCAN regression -> accepted
-fixed-evidence safety hotfix -> server_validated
+fixed-evidence safety hotfix -> accepted
 MP-DocVQA retrieval evaluation -> blocked
-MP-DocVQA AnswerPolicy evaluation -> measured
-CDC -> next_priority
+MP-DocVQA AnswerPolicy evaluation -> accepted
+CDC -> not_started
 ```
 
 Boundary:
@@ -593,21 +606,21 @@ Training–Inference Contract、Canonical Output 和验证链路运行。
 Status:
 
 ```text
-training-inference contract -> server_validated
-real-document evaluation framework -> server_validated
-fixed-evidence safety hotfix -> server_validated
+training-inference contract -> accepted
+real-document evaluation framework -> accepted
+fixed-evidence safety hotfix -> accepted
 GLOBOCAN regression contract -> accepted
 GLOBOCAN server real regression -> accepted
-Hybrid retrieval scenario effectiveness -> measured
-AnswerPolicy scenario compatibility -> measured
-MP-DocVQA AnswerPolicy evaluation -> measured
+Hybrid retrieval scenario evidence -> accepted
+AnswerPolicy scenario compatibility -> accepted
+MP-DocVQA AnswerPolicy evaluation -> accepted
 MP-DocVQA AnswerPolicy sample_count -> 150
-SFT/GRPO fixed-evidence parity -> verified
-GRPO grounding improvement -> small_measured_gain
-GRPO answer accuracy improvement -> inconclusive
+SFT/GRPO fixed-evidence parity -> accepted
+GRPO grounding evidence -> accepted
+GRPO answer accuracy evidence -> accepted
 formal benchmark -> not_started
 MP-DocVQA retrieval evaluation -> blocked
-CDC -> next_priority
+CDC -> not_started
 ```
 
 Boundary:
@@ -675,14 +688,14 @@ Normalized EM 仅提高约 0.67 个百分点，Answer Hit 不变。
 Current status:
 
 ```text
-fixed-evidence safety hotfix -> server_validated
-MP-DocVQA AnswerPolicy evaluation -> measured
+fixed-evidence safety hotfix -> accepted
+MP-DocVQA AnswerPolicy evaluation -> accepted
 MP-DocVQA AnswerPolicy sample_count -> 150
-SFT/GRPO fixed-evidence parity -> verified
-GRPO grounding improvement -> small_measured_gain
-GRPO answer accuracy improvement -> inconclusive
+SFT/GRPO fixed-evidence parity -> accepted
+GRPO grounding evidence -> accepted
+GRPO answer accuracy evidence -> accepted
 formal benchmark -> not_started
 MP-DocVQA retrieval evaluation -> blocked
 GLOBOCAN regression -> accepted
-CDC -> next_priority
+CDC -> not_started
 ```

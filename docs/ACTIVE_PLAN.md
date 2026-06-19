@@ -43,9 +43,9 @@ Gate 4B ingestion -> accepted
 Gate 4C validate-only -> accepted
 Gate 4C retrieval-only -> accepted
 Gate 4D full GRPO E2E -> accepted
-CDC -> queued after Phase 4B
-Router/tools -> queued after CDC
-Demo/closure -> final phase
+CDC -> not_started
+Router/tools -> not_started
+Demo/closure -> not_started
 ```
 
 Phase 3 is historical and frozen. Phase 4A is accepted. Do not rewrite Phase 3
@@ -121,6 +121,16 @@ Interpretation boundary:
 
 ## Local Validation
 
+Local `main` validation covers code and documentation state. The accepted Gate
+4 artifacts are server-side outputs; the local absence of these ignored paths
+does not indicate missing tracked code:
+
+```text
+outputs/phase4/mpdocvqa_raw_gate4_expanded
+outputs/phase4/mpdocvqa_ingestion
+outputs/evaluation/phase4b_mpdocvqa_gate4/
+```
+
 Phase 4A server acceptance is now recorded from real execution:
 
 ```text
@@ -149,7 +159,7 @@ absolute_path_hit_count = 0
 
 1. Keep Phase 4B accepted artifacts unchanged unless a reproducibility issue is
    reported.
-2. Keep CDC queued until explicitly started.
+2. Keep CDC `not_started` until explicitly started.
 3. Use Gate 4 failure taxonomy to guide later Reader/error-analysis work, not
    a retrieval model change in this phase.
 
@@ -163,7 +173,7 @@ Gate 4 expanded raw-input regression accepted
 
 ## Phase Documents
 
-- `docs/PHASE4_ACTIVE_PLAN.md`: detailed Phase 4A working record.
+- `docs/PHASE4_ACTIVE_PLAN.md`: detailed Phase 4B working record.
 - `docs/PHASE3_ACTIVE_PLAN.md`: completed/historical Phase 3 record.
 - `docs/PHASE2_ACTIVE_PLAN.md`: completed/historical Phase 2 record.
 

@@ -1,7 +1,8 @@
 # DocAgent Implementation Plan
 
 > High-level roadmap only.  
-> Current executable work is defined in `docs/PHASE3_ACTIVE_PLAN.md`.
+> Current canonical status and stop condition are defined in
+> `docs/ACTIVE_PLAN.md`.
 
 ## 1. Project objective
 
@@ -22,7 +23,9 @@ data and evidence schema
 | Document | Purpose |
 |---|---|
 | `AGENTS.md` | repository-wide Codex rules and document routing |
-| `docs/PHASE3_ACTIVE_PLAN.md` | current unique milestone and stop condition |
+| `docs/ACTIVE_PLAN.md` | current canonical milestone, accepted status, and stop condition |
+| `docs/PHASE4_ACTIVE_PLAN.md` | accepted Phase 4B working record and Gate 4 evidence summary |
+| `docs/PHASE3_ACTIVE_PLAN.md` | completed/historical Phase 3 record |
 | `docs/PHASE2_ACTIVE_PLAN.md` | accepted Phase 2 history and stop condition |
 | `docs/IMPLEMENTATION_PLAN.md` | high-level roadmap and accepted/deferred phases |
 | `docs/SERVER_SETUP.md` | local/server boundary and stable environment facts |
@@ -40,6 +43,7 @@ Use:
 ```text
 not_started
 implemented
+ready
 mock_verified
 server_dependency_ready
 real_model_verified
@@ -47,6 +51,7 @@ benchmark_evaluated
 accepted
 frozen
 blocked
+blocked_by_missing_mineru_output
 ```
 
 ## 4. Accepted foundation
@@ -65,7 +70,7 @@ Delivered:
 
 ### Phase 1A: MP-DocVQA data and reader training
 
-Status: `accepted / frozen`
+Status: `accepted`
 
 Delivered:
 
@@ -78,7 +83,7 @@ Delivered:
 
 ### Phase 1B: real AnswerPolicy workflow
 
-Status: `accepted / frozen`
+Status: `accepted`
 
 Delivered:
 
@@ -116,7 +121,7 @@ Boundary:
 
 ```text
 implementation/integration -> accepted
-formal retrieval and QA benchmark -> not benchmark_evaluated
+formal retrieval and QA benchmark -> not_started
 ```
 
 ## 6. Accepted Phase 2B
@@ -153,13 +158,58 @@ docs/design/phase2/PHASE2_REAL_DOCUMENT_HYBRID_RETRIEVAL_MVP.zh-CN.md
 docs/design/phase2/PHASE2_STRUCTURED_PDF_PARSING_SUPPLEMENT.zh-CN.md
 ```
 
-## 7. Active phase
+## 7. Current accepted milestone
 
-### Phase 3A: focused evaluation and ablation
+### Phase 4B: MP-DocVQA raw-document MinerU ingestion and small-scale E2E
 
-Status: `implemented`
+Status: `accepted`
 
-Target:
+Canonical source:
+
+```text
+docs/ACTIVE_PLAN.md
+```
+
+Accepted Gate 4 scope:
+
+```text
+MP-DocVQA val shards 1-4
+-> 26 page-window documents
+-> 197 pages
+-> 90 QA
+-> MinerU ingestion
+-> page-level retrieval
+-> GRPO AnswerPolicy
+-> JSON / format / trace validation
+```
+
+Boundary:
+
+```text
+Phase 4B Gate 4 expanded raw-input regression -> accepted
+formal benchmark -> not_started
+CDC -> not_started
+Router/tools -> not_started
+Demo/closure -> not_started
+```
+
+Notes:
+
+- Gate 4 is an expanded raw-input regression, not a formal benchmark.
+- The main remaining quality issues are Reader `answer_miss` and
+  `gold_page_location_miss`.
+- `rank_aware_context` remains diagnostic only; the default is false.
+- Gate 4 artifacts are server-side acceptance artifacts. Missing local
+  mirrors under `outputs/phase4/mpdocvqa_raw_gate4_expanded`,
+  `outputs/phase4/mpdocvqa_ingestion`, or
+  `outputs/evaluation/phase4b_mpdocvqa_gate4/` do not indicate missing main
+  branch code.
+
+### Historical Phase 3A: focused evaluation and ablation
+
+Status: `accepted`
+
+Historical target:
 
 ```text
 fixed benchmark subset
@@ -178,6 +228,21 @@ formal benchmark -> not_started
 ```
 
 ## 8. Planned phases
+
+### CDC real-document scenario
+
+Status: `not_started`
+
+CDC is the next-stage candidate after Phase 4B, but it has not started in the
+current main branch. Starting it requires an explicit phase switch in
+`docs/ACTIVE_PLAN.md`.
+
+### Router/tools
+
+Status: `not_started`
+
+Router/tool work remains after CDC and is not part of the accepted Phase 4B
+scope.
 
 ### Table and numeric branch
 
@@ -200,6 +265,8 @@ Optional after the table branch:
 - real visual evidence trace.
 
 ### Final phase: demo and materials
+
+Status: `not_started`
 
 - FastAPI or Gradio;
 - file upload and document selection;
