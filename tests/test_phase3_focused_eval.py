@@ -6,13 +6,17 @@ import sys
 from argparse import Namespace
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from docagent.eval.phase3_focused import (
     DEFAULT_SEED,
+    EMPTY_PAGE_DOCUMENT_TEXT,
+    build_dense_index_for_corpus,
     corpus_hash,
     fixed_evidence_hash,
     load_corpus_blocks,
+    normalized_retrieval_blocks,
     qid_hash,
     run_focused_evaluation,
     select_stable_subset,
@@ -83,6 +87,19 @@ def _corpus_records() -> list[dict]:
 
 
 FALSE_POSITIVE_OCR_TEXT = "/ a the / / / the / source:\nhttps://www.industrydocuments.ucsf.edu/docs/sybx0223"
+
+
+class CapturingDenseEncoder:
+    model_id = "capturing-dense"
+
+    def __init__(self, *, rows: int | None = None) -> None:
+        self.rows = rows
+        self.document_texts: list[str] = []
+
+    def encode_documents(self, texts: list[str]) -> np.ndarray:
+        self.document_texts = list(texts)
+        row_count = len(texts) if self.rows is None else self.rows
+        return np.ones((row_count, 2), dtype=np.float32)
 
 
 def _args(tmp_path: Path, input_path: Path, corpus_path: Path | None = None) -> Namespace:
@@ -297,6 +314,50 @@ def test_independent_qa_and_corpus_contract_passes(tmp_path: Path) -> None:
     assert contract.gold_block_coverage["coverage_rate"] == 1.0
     assert contract.corpus_hash == second_contract.corpus_hash
     assert contract.qid_hash == qid_hash(["q_date", "q_total"])
+
+
+def test_dense_index_uses_placeholder_for_empty_retrieval_text_without_dropping_pages(tmp_path: Path) -> None:
+    blocks = [
+        EvidenceBlock.from_dict(_block("doc_empty", "page_1", "Invoice text", page=1, block_type="page")),
+        EvidenceBlock.from_dict(_block("doc_empty", "page_2", "", page=2, block_type="page")),
+    ]
+    encoder = CapturingDenseEncoder()
+
+    dense_index, _elapsed = build_dense_index_for_corpus(
+        blocks=blocks,
+        dense_encoder=encoder,
+        output_dir=tmp_path,
+    )
+    view_blocks = normalized_retrieval_blocks(blocks)
+
+    assert encoder.document_texts == ["Invoice text", EMPTY_PAGE_DOCUMENT_TEXT]
+    assert dense_index is not None
+    assert [block.block_id for block in dense_index.blocks] == ["page_1", "page_2"]
+    assert blocks[1].text == ""
+    assert view_blocks[1].block_id == "page_2"
+    assert view_blocks[1].doc_id == "doc_empty"
+    assert view_blocks[1].page_id == 2
+    assert view_blocks[1].retrieval_text == EMPTY_PAGE_DOCUMENT_TEXT
+
+
+def test_dense_index_row_mismatch_reports_empty_page_diagnostics(tmp_path: Path) -> None:
+    blocks = [
+        EvidenceBlock.from_dict(_block("doc_empty", "page_1", "Invoice text", page=1, block_type="page")),
+        EvidenceBlock.from_dict(_block("doc_empty", "page_2", "", page=2, block_type="page")),
+    ]
+    encoder = CapturingDenseEncoder(rows=1)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        build_dense_index_for_corpus(blocks=blocks, dense_encoder=encoder, output_dir=tmp_path)
+
+    message = str(exc_info.value)
+    assert "corpus_block_count" in message
+    assert "dense_input_text_count" in message
+    assert "embedding_row_count" in message
+    assert "empty_text_count" in message
+    assert "first_empty_page_aggregate_ids" in message
+    assert "page_2" in message
+    assert "doc_empty" in message
 
 
 def _write_regression_manifest(

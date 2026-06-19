@@ -47,6 +47,7 @@ DEFAULT_BGE_MODEL_PATH = "/root/autodl-tmp/models/bge-m3"
 DEFAULT_RERANKER_MODEL_PATH = "/root/autodl-tmp/models/bge-reranker-v2-m3"
 DEFAULT_QWEN_MODEL_PATH = "/root/autodl-tmp/models/Qwen3-1.7B"
 DEFAULT_SEED = "phase3a-focused-eval-v1"
+EMPTY_PAGE_DOCUMENT_TEXT = "[EMPTY_PAGE_DOCUMENT]"
 WINDOWS_ABSOLUTE_RE = re.compile(r"(^|[^A-Za-z0-9])([A-Za-z]:[\\/]|\\\\)")
 SIGNED_URL_RE = re.compile(
     r"(X-Amz-(?:Signature|Credential|Security-Token)=|[?&](?:token|signature|sig)=)",
@@ -255,6 +256,26 @@ def corpus_blocks_by_doc(blocks: list[EvidenceBlock]) -> dict[str, list[Evidence
     for block in blocks:
         grouped.setdefault(block.doc_id, {})[block.block_id] = block
     return {doc_id: list(values.values()) for doc_id, values in grouped.items()}
+
+
+def normalized_retrieval_text(block: EvidenceBlock) -> str:
+    text = str(block.retrieval_text or "").strip()
+    return text if text else EMPTY_PAGE_DOCUMENT_TEXT
+
+
+def normalized_retrieval_block(block: EvidenceBlock) -> EvidenceBlock:
+    if str(block.retrieval_text or "").strip():
+        return block
+    payload = block.to_dict()
+    metadata = dict(payload.get("metadata") or {})
+    metadata.pop("exclude_from_retrieval", None)
+    payload["metadata"] = metadata
+    payload["text"] = EMPTY_PAGE_DOCUMENT_TEXT
+    return EvidenceBlock.from_dict(payload)
+
+
+def normalized_retrieval_blocks(blocks: list[EvidenceBlock]) -> list[EvidenceBlock]:
+    return [normalized_retrieval_block(block) for block in blocks]
 
 
 def page_coverage_report(samples: list[DocAgentSample], corpus_by_doc: dict[str, list[EvidenceBlock]]) -> dict[str, Any]:
@@ -829,10 +850,24 @@ def build_dense_index_for_corpus(
     if dense_encoder is None:
         return None, None
     start = time.perf_counter()
-    embeddings = dense_encoder.encode_documents([block.retrieval_text for block in blocks])
-    if np.asarray(embeddings).shape[0] != len(blocks):
-        raise RuntimeError("dense encoder returned a different number of rows than corpus blocks")
-    dense_index = DenseIndex.build(blocks=blocks, embeddings=np.asarray(embeddings, dtype=np.float32), model_id=dense_encoder.model_id)
+    empty_blocks = [block for block in blocks if not str(block.retrieval_text or "").strip()]
+    dense_input_texts = [normalized_retrieval_text(block) for block in blocks]
+    embeddings = np.asarray(dense_encoder.encode_documents(dense_input_texts), dtype=np.float32)
+    embedding_row_count = int(embeddings.shape[0]) if embeddings.ndim >= 1 else 0
+    if embedding_row_count != len(blocks):
+        diagnostics = {
+            "corpus_block_count": len(blocks),
+            "dense_input_text_count": len(dense_input_texts),
+            "embedding_row_count": embedding_row_count,
+            "empty_text_count": len(empty_blocks),
+            "first_empty_page_aggregate_ids": [block.block_id for block in empty_blocks[:5]],
+            "first_empty_doc_ids": [block.doc_id for block in empty_blocks[:5]],
+        }
+        raise RuntimeError(
+            "dense encoder returned a different number of rows than corpus blocks: "
+            + json.dumps(diagnostics, ensure_ascii=False, sort_keys=True)
+        )
+    dense_index = DenseIndex.build(blocks=blocks, embeddings=embeddings, model_id=dense_encoder.model_id)
     return dense_index, (time.perf_counter() - start) * 1000
 
 

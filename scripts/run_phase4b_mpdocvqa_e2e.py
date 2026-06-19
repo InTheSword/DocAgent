@@ -32,6 +32,7 @@ from docagent.eval.phase3_focused import (
     build_reranker,
     compare_metrics,
     fixed_evidence_hash,
+    normalized_retrieval_blocks,
     release_policy,
     safe_model_label,
 )
@@ -292,6 +293,23 @@ def _page_record_lookup(windows: list[DocumentWindow]) -> dict[str, PageRecord]:
 
 def _qa_records_by_qid(windows: list[DocumentWindow]) -> dict[str, dict[str, Any]]:
     return {str(record.get("qid")): record for window in windows for record in window.qa_records}
+
+
+def _retrieval_view_windows(windows: list[DocumentWindow]) -> list[DocumentWindow]:
+    return [
+        DocumentWindow(
+            doc_id=window.doc_id,
+            source_doc_id=window.source_doc_id,
+            work_dir=window.work_dir,
+            internal_doc_dir=window.internal_doc_dir,
+            page_blocks=normalized_retrieval_blocks(window.page_blocks),
+            child_blocks=window.child_blocks,
+            page_records=window.page_records,
+            qa_mappings=window.qa_mappings,
+            qa_records=window.qa_records,
+        )
+        for window in windows
+    ]
 
 
 def build_page_corpus(windows: list[DocumentWindow]) -> list[dict[str, Any]]:
@@ -1175,7 +1193,8 @@ def run_phase4b_e2e(args: argparse.Namespace) -> dict[str, Any]:
     )
     if dense_encoder is None:
         raise Phase4BE2EError("Gate 3 hybrid retrieval requires a dense encoder")
-    all_page_blocks = [block for window in windows for block in window.page_blocks]
+    retrieval_windows = _retrieval_view_windows(windows)
+    all_page_blocks = [block for window in retrieval_windows for block in window.page_blocks]
     dense_index, dense_index_build_ms = build_dense_index_for_corpus(
         blocks=all_page_blocks,
         dense_encoder=dense_encoder,
@@ -1195,7 +1214,7 @@ def run_phase4b_e2e(args: argparse.Namespace) -> dict[str, Any]:
 
     _stage("running page retrieval")
     retrieval_rows, page_metrics = run_retrieval(
-        windows=windows,
+        windows=retrieval_windows,
         dense_encoder=dense_encoder,
         dense_index=dense_index,
         reranker=reranker,

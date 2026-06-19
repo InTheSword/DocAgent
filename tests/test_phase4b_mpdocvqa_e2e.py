@@ -175,7 +175,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
         ingestion_root,
         doc_id=DOC_B,
         source_doc_id="docB",
-        page_texts=[["Gamma Amount appears in this meeting invoice."]],
+        page_texts=[["Gamma Amount appears in this meeting invoice."], []],
         qa_specs=[qa_records[2]],
     )
     return sample_root, ingestion_root, output_root
@@ -208,7 +208,7 @@ def test_validate_only_loads_gate2_contract_without_models(tmp_path: Path) -> No
     assert payload["status"] == "success"
     assert payload["validate_only"] is True
     assert payload["document_count"] == 2
-    assert payload["page_count"] == 3
+    assert payload["page_count"] == 4
     assert payload["qa_count"] == 3
     assert payload["gold_page_mapping_valid_count"] == 3
     assert payload["models_loaded"] is False
@@ -264,7 +264,9 @@ def test_retrieval_only_writes_doc_scoped_page_metrics_and_fixed_evidence(tmp_pa
     retrieval_rows = read_jsonl(run_dir / "page_retrieval_results.jsonl")
     retrieval_preview = json.loads((run_dir / "retrieval_preview.json").read_text(encoding="utf-8"))["records"]
     fixed_rows = read_jsonl(run_dir / "fixed_evidence.jsonl")
+    page_corpus = read_jsonl(run_dir / "page_corpus.jsonl")
     metrics = json.loads((run_dir / "page_retrieval_metrics.json").read_text(encoding="utf-8"))
+    empty_pages = [row for row in page_corpus if row["page_text"] == ""]
 
     assert summary["status"] == "success"
     assert summary["answer_metrics"]["status"] == "skipped"
@@ -273,6 +275,10 @@ def test_retrieval_only_writes_doc_scoped_page_metrics_and_fixed_evidence(tmp_pa
     assert {row["mode"] for row in retrieval_rows} == {"bm25", "hybrid"}
     assert metrics["bm25"]["sample_count"] == metrics["hybrid"]["sample_count"] == 3
     assert metrics["hybrid"]["recall_at_1"] == 1.0
+    assert len(page_corpus) == 4
+    assert empty_pages
+    assert all(row["doc_id"] == DOC_B for row in empty_pages)
+    assert any(empty_pages[0]["page_aggregate_id"] in row["corpus_page_ids"] for row in retrieval_rows)
     assert retrieval_preview
     assert all(record["hybrid"]["top_pages"] for record in retrieval_preview)
     first_top_page = retrieval_preview[0]["hybrid"]["top_pages"][0]
