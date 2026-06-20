@@ -1,6 +1,43 @@
 # Current Status
 
-Updated: 2026-06-19
+Updated: 2026-06-20
+
+## Phase 4C Implemented Locally
+
+Phase 4C adds an experimental multi-granularity evidence packing path on top
+of the accepted Phase 4B Gate 4 page-level retrieval chain.
+
+Status:
+
+```text
+Phase 4B -> accepted
+Phase 4C local implementation -> implemented
+Phase 4C candidate_spans fixture/mock E2E -> mock_verified
+Phase 4C server Gate 4 A/B -> not_started
+CDC -> not_started
+Router/tools -> not_started
+Demo/closure -> not_started
+```
+
+Implemented boundary:
+
+- default `--evidence-packing page_children` keeps the accepted Phase 4B fixed
+  evidence behavior;
+- experimental `--evidence-packing candidate_spans` builds deterministic,
+  query-aware candidate spans from Hybrid Top-k pages;
+- candidate artifacts and metrics are written separately from answer/gold
+  metrics;
+- candidate artifacts are checked for no gold/answer leakage;
+- retrieval models, AnswerPolicy prompt defaults, checkpoints, and training
+  data are unchanged.
+
+Local verification:
+
+```text
+candidate packing unit tests -> mock_verified
+Phase 4B/4C runner fixture tests -> mock_verified
+real Gate 4 candidate_spans A/B -> not_started
+```
 
 ## Phase 4B Accepted
 

@@ -318,9 +318,39 @@ Do not:
 ## 8. Next Priorities
 
 1. Preserve accepted Gate 4 artifacts unless a reproducibility issue is found.
-2. Keep CDC `not_started` until explicitly started.
-3. Use Gate 4 failure taxonomy for later Reader/error-analysis work; do not
+2. Run Phase 4C `candidate_spans` as an experimental A/B evidence-packing mode
+   against the accepted Gate 4 sample before considering any default change.
+3. Keep CDC `not_started` until explicitly started.
+4. Use Gate 4 failure taxonomy for later Reader/error-analysis work; do not
    change retrieval models or AnswerPolicy prompt in this phase.
+
+## 8.1 Phase 4C Local Evidence Packing Extension
+
+Status:
+
+```text
+Phase 4C local implementation -> implemented
+Phase 4C candidate_spans fixture/mock E2E -> mock_verified
+Phase 4C server Gate 4 A/B -> not_started
+```
+
+Scope:
+
+- default runner behavior remains `--evidence-packing page_children`;
+- `--evidence-packing candidate_spans` is an experimental A/B mode;
+- candidate selection is deterministic and rule-based over Hybrid Top-k pages;
+- no gold answers, gold page ids, or gold mappings are used for candidate
+  selection or candidate artifacts;
+- retrieval models, AnswerPolicy prompt defaults, checkpoints, and training
+  data remain unchanged.
+
+Local artifacts added by candidate mode:
+
+```text
+candidate_evidence.jsonl
+candidate_evidence_preview.json
+candidate_packing_metrics.json
+```
 
 ## 9. Stop Condition
 

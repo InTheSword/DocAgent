@@ -277,6 +277,9 @@ def test_retrieval_only_writes_doc_scoped_page_metrics_and_fixed_evidence(tmp_pa
     assert summary["status"] == "success"
     assert summary["gate"] == "Gate 4"
     assert manifest["gate"] == "Gate 4"
+    assert summary["evidence_packing_mode"] == "page_children"
+    assert "evidence_packing_mode" not in fixed_rows[0]
+    assert not (run_dir / "candidate_evidence.jsonl").exists()
     assert summary["answer_metrics"]["status"] == "skipped"
     assert summary["resource_plan"]["retrieval_models_released"] is True
     assert summary["resource_plan"]["retrieval_released_before_answer_policy"] is True
@@ -307,6 +310,74 @@ def test_retrieval_only_writes_doc_scoped_page_metrics_and_fixed_evidence(tmp_pa
     assert all("\\" not in value and ":" not in value for value in summary["artifact_paths"].values())
 
 
+def test_candidate_spans_retrieval_only_writes_artifacts_and_changes_fixed_evidence(tmp_path: Path) -> None:
+    sample_root, ingestion_root, output_root = _fixture(tmp_path)
+    baseline_args = _args(
+        sample_root,
+        ingestion_root,
+        output_root,
+        "--run-id",
+        "baseline",
+        "--dense-backend",
+        "hash",
+        "--reranker-backend",
+        "keyword",
+        "--allow-mock-backends",
+        "--retrieval-only",
+        "--force",
+    )
+    candidate_args = _args(
+        sample_root,
+        ingestion_root,
+        output_root,
+        "--run-id",
+        "candidate",
+        "--dense-backend",
+        "hash",
+        "--reranker-backend",
+        "keyword",
+        "--allow-mock-backends",
+        "--retrieval-only",
+        "--force",
+        "--evidence-packing",
+        "candidate_spans",
+        "--max-candidate-spans",
+        "2",
+        "--max-candidate-spans-per-page",
+        "1",
+        "--max-candidate-blocks",
+        "4",
+    )
+
+    baseline_summary = run_phase4b_e2e(baseline_args)
+    summary = run_phase4b_e2e(candidate_args)
+    run_dir = output_root / "candidate"
+    fixed_rows = read_jsonl(run_dir / "fixed_evidence.jsonl")
+    candidate_rows = read_jsonl(run_dir / "candidate_evidence.jsonl")
+    candidate_metrics = json.loads((run_dir / "candidate_packing_metrics.json").read_text(encoding="utf-8"))
+    preview = json.loads((run_dir / "candidate_evidence_preview.json").read_text(encoding="utf-8"))["records"]
+    serialized_candidates = json.dumps(candidate_rows, ensure_ascii=False)
+
+    assert summary["status"] == "success"
+    assert summary["answer_metrics"]["status"] == "skipped"
+    assert summary["evidence_packing_mode"] == "candidate_spans"
+    assert summary["fixed_evidence_hash"] != baseline_summary["fixed_evidence_hash"]
+    assert summary["candidate_packing"]["no_gold_leakage"] is True
+    assert candidate_metrics["sample_count"] == 3
+    assert candidate_metrics["no_gold_leakage"] is True
+    assert candidate_metrics["mean_candidate_span_count"] > 0
+    assert preview
+    assert fixed_rows[0]["evidence_packing_mode"] == "candidate_spans"
+    assert fixed_rows[0]["candidate_packing_stats"]["candidate_span_count"] > 0
+    assert candidate_rows[0]["packing_mode"] == "candidate_spans"
+    assert candidate_rows[0]["top_pages"]
+    assert candidate_rows[0]["question_hints"]["keywords"]
+    assert candidate_rows[0]["candidate_spans"]
+    assert "answers" not in serialized_candidates
+    assert "gold_page" not in serialized_candidates
+    assert all("\\" not in value and ":" not in value for value in summary["artifact_paths"].values())
+
+
 def test_full_mock_answer_policy_writes_answer_metrics_and_sqlite_trace(tmp_path: Path) -> None:
     sample_root, ingestion_root, output_root = _fixture(tmp_path)
     args = _args(
@@ -334,6 +405,7 @@ def test_full_mock_answer_policy_writes_answer_metrics_and_sqlite_trace(tmp_path
     answer_metrics = json.loads((run_dir / "answer_metrics.json").read_text(encoding="utf-8"))
 
     assert summary["status"] == "success"
+    assert summary["evidence_packing_mode"] == "page_children"
     assert summary["rank_aware_context"] is False
     assert answer_metrics["sample_count"] == 3
     assert answer_metrics["completed_count"] == 3
@@ -355,6 +427,39 @@ def test_full_mock_answer_policy_writes_answer_metrics_and_sqlite_trace(tmp_path
     assert summary["trace_counts"]["qa_runs"] == 3
     assert summary["artifact_paths"]["sqlite"] == "docagent.sqlite"
     assert (run_dir / "summary.md").is_file()
+
+
+def test_candidate_spans_full_mock_answer_policy_runs(tmp_path: Path) -> None:
+    sample_root, ingestion_root, output_root = _fixture(tmp_path)
+    args = _args(
+        sample_root,
+        ingestion_root,
+        output_root,
+        "--run-id",
+        "candidate-full",
+        "--dense-backend",
+        "hash",
+        "--reranker-backend",
+        "keyword",
+        "--answer-backend",
+        "heuristic",
+        "--qwen-device",
+        "cpu",
+        "--allow-mock-backends",
+        "--force",
+        "--evidence-packing",
+        "candidate_spans",
+    )
+
+    summary = run_phase4b_e2e(args)
+    run_dir = output_root / "candidate-full"
+    answer_metrics = json.loads((run_dir / "answer_metrics.json").read_text(encoding="utf-8"))
+
+    assert summary["status"] == "success"
+    assert summary["evidence_packing_mode"] == "candidate_spans"
+    assert answer_metrics["completed_count"] == 3
+    assert answer_metrics["valid_json_rate"] == 1.0
+    assert (run_dir / "candidate_evidence.jsonl").is_file()
 
 
 def test_default_context_keeps_rank_metadata_out_of_prompt_but_not_fixed_evidence(tmp_path: Path) -> None:
@@ -484,6 +589,8 @@ def test_cli_help_starts() -> None:
 
     assert result.returncode == 0
     assert "--retrieval-only" in result.stdout
+    assert "--evidence-packing" in result.stdout
+    assert "--max-candidate-spans" in result.stdout
     assert "--allow-mock-backends" in result.stdout
     assert "--rank-aware-context" in result.stdout
     assert "--gate" in result.stdout

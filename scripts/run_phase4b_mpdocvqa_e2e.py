@@ -36,6 +36,11 @@ from docagent.eval.phase3_focused import (
     release_policy,
     safe_model_label,
 )
+from docagent.retrieval.evidence_packing import (
+    EvidenceCandidateBuilder,
+    TopPageCandidate,
+    summarize_candidate_packing,
+)
 from docagent.retrieval.bm25_index import BM25Index
 from docagent.retrieval.dense_index import DenseIndex
 from docagent.retrieval.fusion import reciprocal_rank_fusion
@@ -752,7 +757,170 @@ def build_fixed_evidence(
     return records, evidence_by_qid
 
 
-FORBIDDEN_CONTEXT_KEYS = {"answer_page_idx", "answers", "gold_page_id", "gold_page_ordinal", "gold_parsed_page_number"}
+def _top_page_candidates_for_row(row: dict[str, Any], page_record_lookup: dict[str, PageRecord]) -> list[TopPageCandidate]:
+    top_pages: list[TopPageCandidate] = []
+    for index, candidate in enumerate(row.get("candidates") or [], start=1):
+        page_id = str(candidate.get("page_aggregate_id") or "")
+        page_record = page_record_lookup.get(page_id)
+        if page_record is None:
+            continue
+        top_pages.append(
+            TopPageCandidate(
+                page=page_record.parsed_page_number,
+                page_aggregate_id=page_id,
+                retrieval_rank=int(candidate.get("final_rank") or index),
+                retrieval_score=_candidate_score(candidate),
+                child_block_ids=list(page_record.child_block_ids),
+            )
+        )
+    return top_pages
+
+
+def _clone_candidate_block(
+    block: EvidenceBlock,
+    *,
+    page_rank: int,
+    parsed_page_number: int,
+    page_aggregate_id: str,
+    candidate_id: str,
+    candidate_score: float | None,
+) -> EvidenceBlock:
+    cloned = _clone_block_with_context_metadata(
+        block,
+        page_rank=page_rank,
+        parsed_page_number=parsed_page_number,
+        page_aggregate_id=page_aggregate_id,
+    )
+    payload = cloned.to_dict()
+    metadata = dict(payload.get("metadata") or {})
+    metadata.update(
+        {
+            "phase4c_packing_mode": "candidate_spans",
+            "phase4c_candidate_id": candidate_id,
+            "phase4c_candidate_score": candidate_score,
+        }
+    )
+    payload["metadata"] = metadata
+    return EvidenceBlock.from_dict(payload)
+
+
+def build_candidate_span_evidence(
+    *,
+    windows: list[DocumentWindow],
+    retrieval_rows: list[dict[str, Any]],
+    max_candidate_spans: int,
+    max_candidate_spans_per_page: int,
+    candidate_neighbor_window: int,
+    max_candidate_blocks: int,
+    candidate_token_budget: int | None,
+) -> tuple[list[dict[str, Any]], dict[str, list[EvidenceBlock]], list[dict[str, Any]]]:
+    child_lookup = _child_block_lookup(windows)
+    page_record_lookup = _page_record_lookup(windows)
+    qa_by_qid = _qa_records_by_qid(windows)
+    hybrid_rows = {row["qid"]: row for row in retrieval_rows if row["mode"] == "hybrid"}
+    builder = EvidenceCandidateBuilder(
+        max_candidate_spans=max_candidate_spans,
+        max_candidate_spans_per_page=max_candidate_spans_per_page,
+        neighbor_window=candidate_neighbor_window,
+        max_candidate_blocks=max_candidate_blocks,
+        candidate_token_budget=candidate_token_budget,
+    )
+    fixed_records: list[dict[str, Any]] = []
+    evidence_by_qid: dict[str, list[EvidenceBlock]] = {}
+    candidate_records: list[dict[str, Any]] = []
+    for qid, row in sorted(hybrid_rows.items()):
+        qa = qa_by_qid[qid]
+        top_pages = _top_page_candidates_for_row(row, page_record_lookup)
+        candidate_record = builder.build(
+            qid=qid,
+            doc_id=str(row["doc_id"]),
+            question=str(qa.get("question") or ""),
+            top_pages=top_pages,
+            child_lookup=child_lookup,
+        )
+        candidate_records.append(candidate_record)
+
+        blocks: list[EvidenceBlock] = []
+        seen_block_ids: set[str] = set()
+        span_pages: dict[str, list[str]] = defaultdict(list)
+        for span in candidate_record.get("candidate_spans") or []:
+            page_id = str(span.get("page_aggregate_id") or "")
+            page_record = page_record_lookup.get(page_id)
+            if page_record is None:
+                continue
+            span_pages[page_id].append(str(span.get("candidate_id") or ""))
+            for block_id in span.get("block_ids") or []:
+                block_id = str(block_id)
+                if block_id in seen_block_ids or block_id not in child_lookup:
+                    continue
+                blocks.append(
+                    _clone_candidate_block(
+                        child_lookup[block_id],
+                        page_rank=int(span.get("retrieval_page_rank") or 0),
+                        parsed_page_number=page_record.parsed_page_number,
+                        page_aggregate_id=page_id,
+                        candidate_id=str(span.get("candidate_id") or ""),
+                        candidate_score=span.get("score"),
+                    )
+                )
+                seen_block_ids.add(block_id)
+
+        evidence_by_qid[qid] = blocks
+        fixed_records.append(
+            {
+                "qid": qid,
+                "doc_id": row["doc_id"],
+                "source_doc_id": row["source_doc_id"],
+                "question": qa.get("question"),
+                "retrieval_scope": RETRIEVAL_SCOPE,
+                "query_rewrite": "none",
+                "evidence_packing_mode": "candidate_spans",
+                "selected_pages": [
+                    {
+                        "rank": top_page.retrieval_rank,
+                        "retrieval_rank": top_page.retrieval_rank,
+                        "page_aggregate_id": top_page.page_aggregate_id,
+                        "parsed_page_number": top_page.page,
+                        "child_block_count": len(top_page.child_block_ids),
+                        "candidate_span_ids": span_pages.get(top_page.page_aggregate_id, []),
+                    }
+                    for top_page in top_pages
+                ],
+                "max_candidate_spans": max_candidate_spans,
+                "max_candidate_spans_per_page": max_candidate_spans_per_page,
+                "candidate_neighbor_window": candidate_neighbor_window,
+                "max_candidate_blocks": max_candidate_blocks,
+                "candidate_token_budget": candidate_token_budget,
+                "candidate_span_ids": [
+                    str(span.get("candidate_id"))
+                    for span in candidate_record.get("candidate_spans") or []
+                ],
+                "candidate_packing_stats": candidate_record.get("packing_stats") or {},
+                "truncation_applied": False,
+                "dropped_block_count": (candidate_record.get("packing_stats") or {}).get("dropped_block_count", 0),
+                "evidence": [block.to_dict() for block in blocks],
+            }
+        )
+    return fixed_records, evidence_by_qid, candidate_records
+
+
+def _gold_page_aggregate_ids(windows: list[DocumentWindow]) -> dict[str, str]:
+    return {
+        str(mapping["qid"]): str(mapping["page_aggregate_id"])
+        for window in windows
+        for mapping in window.qa_mappings
+    }
+
+
+FORBIDDEN_CONTEXT_KEYS = {
+    "answer_page_idx",
+    "answers",
+    "gold_answers",
+    "gold_page_id",
+    "gold_page_mapping",
+    "gold_page_ordinal",
+    "gold_parsed_page_number",
+}
 
 
 def _gold_leakage_hits(value: Any, *, path: str = "fixed_evidence") -> list[str]:
@@ -1102,6 +1270,7 @@ def write_summary_md(path: Path, summary: dict[str, Any]) -> None:
         f"- Evaluation scope: {summary['evaluation_scope']}",
         f"- Formal benchmark: {str(summary['formal_benchmark']).lower()}",
         f"- Retrieval scope: {summary['retrieval_scope']}",
+        f"- Evidence packing: {summary.get('evidence_packing_mode', 'page_children')}",
         f"- Documents/pages/QA: {summary['document_count']}/{summary['page_count']}/{summary['qa_count']}",
         f"- BM25 Recall@1: {summary['page_retrieval_metrics']['bm25']['recall_at_1']:.4f}",
         f"- Hybrid Recall@1: {summary['page_retrieval_metrics']['hybrid']['recall_at_1']:.4f}",
@@ -1127,6 +1296,7 @@ def validate_only_payload(args: argparse.Namespace, windows: list[DocumentWindow
         "qa_count": sum(len(window.qa_records) for window in windows),
         "gold_page_mapping_valid_count": sum(len(window.qa_mappings) for window in windows),
         "retrieval_scope": RETRIEVAL_SCOPE,
+        "evidence_packing_mode": args.evidence_packing,
         "models_loaded": False,
         "warnings": [],
         "failures": [],
@@ -1147,6 +1317,15 @@ def build_run_manifest(args: argparse.Namespace, *, run_id: str, windows: list[D
         "doc_ids": [window.doc_id for window in windows],
         "top_k_pages": args.top_k_pages,
         "max_context_blocks": args.max_context_blocks,
+        "evidence_packing_mode": args.evidence_packing,
+        "candidate_packing": {
+            "max_candidate_spans": args.max_candidate_spans,
+            "max_candidate_spans_per_page": args.max_candidate_spans_per_page,
+            "candidate_neighbor_window": args.candidate_neighbor_window,
+            "max_candidate_blocks": args.max_candidate_blocks,
+            "candidate_token_budget": args.candidate_token_budget,
+            "write_candidate_evidence": bool(args.write_candidate_evidence),
+        },
         "max_prompt_tokens": args.max_prompt_tokens,
         "max_new_tokens": args.max_new_tokens,
         "rank_aware_context": bool(args.rank_aware_context),
@@ -1197,6 +1376,15 @@ def run_phase4b_e2e(args: argparse.Namespace) -> dict[str, Any]:
         "summary_md": run_dir / "summary.md",
         "sqlite": run_dir / "docagent.sqlite",
     }
+    write_candidate_evidence = args.evidence_packing == "candidate_spans" or bool(args.write_candidate_evidence)
+    if write_candidate_evidence:
+        paths.update(
+            {
+                "candidate_evidence": run_dir / "candidate_evidence.jsonl",
+                "candidate_evidence_preview": run_dir / "candidate_evidence_preview.json",
+                "candidate_packing_metrics": run_dir / "candidate_packing_metrics.json",
+            }
+        )
 
     page_corpus = build_page_corpus(windows)
     write_jsonl(paths["page_corpus"], page_corpus)
@@ -1248,14 +1436,46 @@ def run_phase4b_e2e(args: argparse.Namespace) -> dict[str, Any]:
     retrieval_preview = build_retrieval_preview(retrieval_rows)
     _write_json(paths["retrieval_preview"], {"records": retrieval_preview})
 
-    fixed_records, fixed_evidence_by_qid = build_fixed_evidence(
-        windows=windows,
-        retrieval_rows=retrieval_rows,
-        max_context_blocks=args.max_context_blocks,
-    )
+    candidate_records: list[dict[str, Any]] = []
+    candidate_metrics: dict[str, Any] | None = None
+    if args.evidence_packing == "candidate_spans":
+        fixed_records, fixed_evidence_by_qid, candidate_records = build_candidate_span_evidence(
+            windows=windows,
+            retrieval_rows=retrieval_rows,
+            max_candidate_spans=args.max_candidate_spans,
+            max_candidate_spans_per_page=args.max_candidate_spans_per_page,
+            candidate_neighbor_window=args.candidate_neighbor_window,
+            max_candidate_blocks=args.max_candidate_blocks,
+            candidate_token_budget=args.candidate_token_budget,
+        )
+    else:
+        fixed_records, fixed_evidence_by_qid = build_fixed_evidence(
+            windows=windows,
+            retrieval_rows=retrieval_rows,
+            max_context_blocks=args.max_context_blocks,
+        )
+        if write_candidate_evidence:
+            _unused_fixed, _unused_evidence, candidate_records = build_candidate_span_evidence(
+                windows=windows,
+                retrieval_rows=retrieval_rows,
+                max_candidate_spans=args.max_candidate_spans,
+                max_candidate_spans_per_page=args.max_candidate_spans_per_page,
+                candidate_neighbor_window=args.candidate_neighbor_window,
+                max_candidate_blocks=args.max_candidate_blocks,
+                candidate_token_budget=args.candidate_token_budget,
+            )
     assert_no_gold_leakage(fixed_records)
     fixed_hash = fixed_evidence_hash(fixed_records)
     write_jsonl(paths["fixed_evidence"], fixed_records)
+    if write_candidate_evidence:
+        assert_no_gold_leakage(candidate_records)
+        candidate_metrics = summarize_candidate_packing(
+            candidate_records,
+            gold_page_aggregate_ids=_gold_page_aggregate_ids(windows),
+        )
+        write_jsonl(paths["candidate_evidence"], candidate_records)
+        _write_json(paths["candidate_evidence_preview"], {"records": candidate_records[:3]})
+        _write_json(paths["candidate_packing_metrics"], candidate_metrics)
 
     release_info = release_retrieval_resources(dense_encoder, reranker)
     release_info["retrieval_released_before_answer_policy"] = True
@@ -1314,6 +1534,8 @@ def run_phase4b_e2e(args: argparse.Namespace) -> dict[str, Any]:
         "primary_benchmark": False,
         "retrieval_scope": RETRIEVAL_SCOPE,
         "query_rewrite": "none",
+        "evidence_packing_mode": args.evidence_packing,
+        "candidate_packing": candidate_metrics,
         "rank_aware_context": bool(args.rank_aware_context),
         "document_count": len(windows),
         "page_count": len(page_corpus),
@@ -1371,6 +1593,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--retrieval-only", action="store_true")
     parser.add_argument("--top-k-pages", type=int, default=5)
     parser.add_argument("--max-context-blocks", type=int, default=64)
+    parser.add_argument("--evidence-packing", choices=["page_children", "candidate_spans"], default="page_children")
+    parser.add_argument("--max-candidate-spans", type=int, default=12)
+    parser.add_argument("--max-candidate-spans-per-page", type=int, default=3)
+    parser.add_argument("--candidate-neighbor-window", type=int, default=1)
+    parser.add_argument("--max-candidate-blocks", type=int, default=32)
+    parser.add_argument("--candidate-token-budget", type=int)
+    parser.add_argument("--write-candidate-evidence", action="store_true")
     parser.add_argument("--max-prompt-tokens", type=int, default=4096)
     parser.add_argument("--max-new-tokens", type=int, default=1024)
     parser.add_argument("--bm25-top-n", type=int, default=20)

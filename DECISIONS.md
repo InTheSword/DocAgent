@@ -8,6 +8,35 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-20: Phase 4C Candidate Evidence Packing Boundary
+
+Decision: add query-aware, structure-aware candidate evidence packing as an
+experimental A/B mode named `candidate_spans`, while keeping the accepted
+Phase 4B `page_children` evidence packing as the default.
+
+Rationale:
+
+- Phase 4B Gate 4 showed usable Hybrid Top-5 page recall but low reader answer
+  and gold-page-location quality.
+- The next local change should reduce noisy evidence passed to AnswerPolicy
+  without changing retrieval models, default prompts, checkpoints, training
+  data, or raw-document ingestion.
+- A deterministic rule-based selector is easier to audit for no-gold leakage
+  than an LLM evidence selector at this stage.
+
+Constraints:
+
+- `candidate_spans` may only select from Hybrid Top-k pages for the same QA
+  document window.
+- Candidate selection must not read answers, gold page ids, answer page idx,
+  gold page ordinals, or gold page mappings.
+- Candidate artifacts are separate from metrics artifacts; metrics may use
+  gold page mappings only after candidate artifacts have been built.
+- `page_children` remains the default until a real Gate 4 A/B run justifies a
+  default change.
+- CDC, Demo, model training, retrieval-model changes, and default AnswerPolicy
+  prompt changes remain out of scope.
+
 ## 2026-06-08: Phase 1 Workflow Integration Scope
 
 Decision: integrate the trained Qwen Answer Policy into the workflow before expanding retrieval or multimodal branches.

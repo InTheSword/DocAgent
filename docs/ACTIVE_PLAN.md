@@ -6,19 +6,17 @@
 ## Current Stage
 
 ```text
-Phase 4B: MP-DocVQA raw-document MinerU ingestion and small-scale E2E
+Phase 4C: Multi-granularity evidence packing for MP-DocVQA raw-input E2E
 ```
 
 ## Current Goal
 
 ```text
-page-window PDF
--> MinerU
--> EvidenceBlock
--> page aggregate
--> gold page mapping
--> page-level retrieval
--> AnswerPolicy
+Hybrid page retrieval
+-> Top-k candidate pages
+-> query-aware / structure-aware candidate spans
+-> fixed evidence packet
+-> AnswerPolicy A/B runner
 -> answer / evidence page / trace
 ```
 
@@ -43,6 +41,8 @@ Gate 4B ingestion -> accepted
 Gate 4C validate-only -> accepted
 Gate 4C retrieval-only -> accepted
 Gate 4D full GRPO E2E -> accepted
+Phase 4C local implementation -> implemented
+Phase 4C candidate_spans fixture/mock E2E -> mock_verified
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -162,13 +162,16 @@ absolute_path_hit_count = 0
 2. Keep CDC `not_started` until explicitly started.
 3. Use Gate 4 failure taxonomy to guide later Reader/error-analysis work, not
    a retrieval model change in this phase.
+4. Verify Phase 4C `candidate_spans` against the accepted Gate 4 server
+   artifacts as an A/B run before changing any default behavior.
 
 ## Stop Condition
 
 ```text
-Gate 4 expanded raw-input regression accepted
+Phase 4C local implementation complete
++ targeted/full local validation complete
 + status documents updated
-+ stop before CDC
++ stop before CDC and before any default AnswerPolicy prompt change
 ```
 
 ## Phase Documents
