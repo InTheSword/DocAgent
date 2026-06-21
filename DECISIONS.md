@@ -8,6 +8,46 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-21: Phase 4D-A.3 Case-level Inspection Before Reader
+
+Decision: after the accepted Phase 4D-A.2 server filtering audit, export
+case-level C/D/E failure inspection artifacts before starting Candidate-ID
+Grounded Reader work or continuing broad extraction-rule tuning.
+
+Evidence:
+
+- `candidate_answer_coverage_all = 0.5222`, unchanged from A.1.
+- `candidate_answer_coverage_top1 = 0.2333`, up from 0.2222.
+- `candidate_answer_coverage_top5 = 0.3889`, up from 0.3778.
+- `candidate_answer_coverage_top20 = 0.4556`, down from 0.5000.
+- `topk_retention_ratio = 0.1293`.
+- `topk_numeric_ratio = 0.3902`.
+- Error buckets remained unchanged: `C=22`, `D=21`, `E=14`, `F=29`.
+
+Interpretation:
+
+- A.2 produced a cleaner top-k board, but did not improve all coverage or move
+  C/D/E buckets enough to justify Candidate-ID Reader integration.
+- The next useful work is targeted case inspection to separate candidate span
+  gaps, extraction/normalization gaps, ranking gaps, and Reader selection gaps.
+- Inspection artifacts may contain gold answer debug fields because they are
+  audit/debug reports, not Reader inputs.
+
+Implementation boundary:
+
+- Add an exporter for `failure_inspection_cases.jsonl`, preview, summary, and
+  C/D/E bucket-specific JSONL files.
+- Keep `candidate_answers.jsonl` and `candidate_answers_topk.jsonl` free of
+  gold answer/page fields.
+- Generate diagnosis hints only for analysis and planning.
+
+Constraints:
+
+- Do not modify Reader prompt defaults, AnswerPolicy, retrieval models, MinerU,
+  checkpoints, reward, training split, training data, CDC, Demo, or the global
+  `candidate_spans` default.
+- Do not run full GRPO for Phase 4D-A.3.
+
 ## 2026-06-21: Phase 4D-A.2 Filtering Before Candidate-ID Reader
 
 Decision: after the accepted Phase 4D-A.1 refined server audit, continue with

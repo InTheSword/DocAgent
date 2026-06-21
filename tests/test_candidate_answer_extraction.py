@@ -17,6 +17,7 @@ from docagent.retrieval.candidate_answer_extraction import (
 )
 from docagent.utils.jsonl import read_jsonl, write_jsonl
 from scripts.analyze_phase4d_candidate_answer_coverage import run_phase4d_candidate_answer_coverage
+from scripts.export_phase4d_failure_inspection import run_phase4d_failure_inspection
 
 
 def _span(
@@ -457,6 +458,191 @@ def test_runner_outputs_artifacts_without_answer_results(tmp_path: Path) -> None
     assert (run_dir / "summary.md").is_file()
 
 
+def test_failure_inspection_exports_c_d_e_cases(tmp_path: Path) -> None:
+    run_dir = tmp_path / "a2_run"
+    run_dir.mkdir()
+    candidate_evidence = tmp_path / "candidate_evidence.jsonl"
+    qa_jsonl = tmp_path / "qa.jsonl"
+    answer_results = tmp_path / "answer_results.jsonl"
+    output_root = tmp_path / "inspection"
+    write_jsonl(
+        candidate_evidence,
+        [
+            {
+                "qid": "qc",
+                "doc_id": "doc",
+                "question": "What title is shown?",
+                "question_hints": _hints("heading", "title"),
+                "top_pages": [{"page": 1}],
+                "candidate_spans": [_span("c_c", "Wrong heading", page=1)],
+            },
+            {
+                "qid": "qd",
+                "doc_id": "doc",
+                "question": "In which city is the board located?",
+                "question_hints": _hints("text", "city", "located"),
+                "top_pages": [{"page": 1}],
+                "candidate_spans": [_span("c_d", "The board is located in Springfield city", page=1)],
+            },
+            {
+                "qid": "qe",
+                "doc_id": "doc",
+                "question": "What index is listed?",
+                "question_hints": _hints("numeric", "index"),
+                "top_pages": [{"page": 1}],
+                "candidate_spans": [_span("c_e", "The table shows index (31).", page=1)],
+            },
+        ],
+    )
+    write_jsonl(
+        qa_jsonl,
+        [
+            {"qid": "qc", "doc_id": "doc", "question": "What title is shown?", "answers": ["Annual Report"], "gold_page_ordinal": 1},
+            {"qid": "qd", "doc_id": "doc", "question": "In which city is the board located?", "answers": ["Springfield"], "gold_page_ordinal": 1},
+            {"qid": "qe", "doc_id": "doc", "question": "What index is listed?", "answers": ["31"], "gold_page_ordinal": 1},
+        ],
+    )
+    answer_boards = [
+        {
+            "qid": "qc",
+            "doc_id": "doc",
+            "question": "What title is shown?",
+            "question_hints": _hints("heading", "title"),
+            "candidate_answers": [{"candidate_answer_id": "a0001", "rank": 1, "answer_text": "Wrong heading", "normalized_answer": "wrong heading", "answer_type": "heading", "score": 0.8, "source_candidate_id": "c_c", "extraction_rule": "heading"}],
+        },
+        {
+            "qid": "qd",
+            "doc_id": "doc",
+            "question": "In which city is the board located?",
+            "question_hints": _hints("text", "city", "located"),
+            "candidate_answers": [{"candidate_answer_id": "a0001", "rank": 1, "answer_text": "board", "normalized_answer": "board", "answer_type": "text", "score": 0.5, "source_candidate_id": "c_d", "extraction_rule": "generic"}],
+        },
+        {
+            "qid": "qe",
+            "doc_id": "doc",
+            "question": "What index is listed?",
+            "question_hints": _hints("numeric", "index"),
+            "candidate_answers": [
+                {"candidate_answer_id": "a0001", "rank": 1, "answer_text": "table", "normalized_answer": "table", "answer_type": "text", "score": 0.7, "source_candidate_id": "c_e", "extraction_rule": "generic"},
+                {"candidate_answer_id": "a0002", "rank": 2, "answer_text": "31", "normalized_answer": "31", "answer_type": "index", "score": 0.6, "source_candidate_id": "c_e", "extraction_rule": "parenthesized_index"},
+            ],
+        },
+    ]
+    topk_boards = [
+        {**board, "candidate_answers": [dict(answer, topk_rank=index + 1) for index, answer in enumerate(board["candidate_answers"])]}
+        for board in answer_boards
+    ]
+    write_jsonl(run_dir / "candidate_answers.jsonl", answer_boards)
+    write_jsonl(run_dir / "candidate_answers_topk.jsonl", topk_boards)
+    (run_dir / "candidate_answer_error_buckets.json").write_text(
+        json.dumps(
+            {
+                "records": [
+                    {"qid": "qc", "doc_id": "doc", "bucket": "C", "reason": "gold_answer_not_in_candidate_spans"},
+                    {"qid": "qd", "doc_id": "doc", "bucket": "D", "reason": "gold_answer_in_candidate_spans_but_not_extracted"},
+                    {"qid": "qe", "doc_id": "doc", "bucket": "E", "reason": "gold_answer_in_candidate_answers_but_model_answer_wrong"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    write_jsonl(answer_results, [{"qid": "qe", "answer": "wrong", "answer_metrics": {"answer_hit": False}}])
+
+    summary = run_phase4d_failure_inspection(
+        Namespace(
+            run_dir=run_dir,
+            candidate_evidence=candidate_evidence,
+            qa_jsonl=qa_jsonl,
+            answer_results=answer_results,
+            output_root=output_root,
+            run_id="fixture",
+            buckets="C,D,E",
+            max_cases_per_bucket=999,
+            top_spans=2,
+            top_candidates=2,
+            force=True,
+        )
+    )
+    out_dir = output_root / "fixture"
+    cases = read_jsonl(out_dir / "failure_inspection_cases.jsonl")
+    cases_by_bucket = {case["bucket"]: case for case in cases}
+    preview = json.loads((out_dir / "failure_inspection_preview.json").read_text(encoding="utf-8"))
+
+    assert summary["phase"] == "Phase 4D-A.3"
+    assert summary["bucket_counts"] == {"C": 1, "D": 1, "E": 1}
+    assert summary["diagnosis_counts"] == {"candidate_span_gap": 1, "extraction_rule_gap": 1, "reader_or_candidate_selection_gap": 1}
+    assert summary["recommended_next_action_counts"] == {
+        "candidate_id_reader_or_reranking": 1,
+        "improve_candidate_answer_extraction": 1,
+        "improve_candidate_spans": 1,
+    }
+    assert summary["inspection_contains_gold_for_debug_only"] is True
+    assert summary["candidate_answers_remain_gold_free"] is True
+    assert summary["candidate_answers_topk_remain_gold_free"] is True
+    assert cases_by_bucket["C"]["coverage_flags"]["candidate_span_answer_covered"] is False
+    assert cases_by_bucket["D"]["diagnosis_hints"]["subtype"] == "city_state_location"
+    assert cases_by_bucket["E"]["coverage_flags"]["top5_covered"] is True
+    assert cases_by_bucket["E"]["diagnosis_hints"]["subtype"] == "reader_selection_issue"
+    assert cases_by_bucket["E"]["top_candidate_answers"][1]["matches_gold"] is True
+    assert cases_by_bucket["D"]["top_candidate_spans"][0]["contains_gold_answer"] is True
+    assert "normalized_gold_answers" in cases_by_bucket["D"]["gold_answer_debug"]
+    assert "gold" not in json.dumps(read_jsonl(run_dir / "candidate_answers.jsonl"), ensure_ascii=False).lower()
+    assert len(read_jsonl(out_dir / "bucket_C_cases.jsonl")) == 1
+    assert len(read_jsonl(out_dir / "bucket_D_cases.jsonl")) == 1
+    assert len(read_jsonl(out_dir / "bucket_E_cases.jsonl")) == 1
+    assert preview["records"]
+    assert (out_dir / "failure_inspection_summary.md").is_file()
+
+
+def test_failure_inspection_exports_c_d_without_answer_results(tmp_path: Path) -> None:
+    run_dir = tmp_path / "a2_run"
+    run_dir.mkdir()
+    candidate_evidence = tmp_path / "candidate_evidence.jsonl"
+    qa_jsonl = tmp_path / "qa.jsonl"
+    output_root = tmp_path / "inspection"
+    write_jsonl(
+        candidate_evidence,
+        [
+            {"qid": "qc", "doc_id": "doc", "question": "What title?", "top_pages": [{"page": 1}], "candidate_spans": [_span("c_c", "Wrong", page=1)]},
+            {"qid": "qd", "doc_id": "doc", "question": "What title?", "top_pages": [{"page": 1}], "candidate_spans": [_span("c_d", "Annual Report", page=1)]},
+        ],
+    )
+    write_jsonl(
+        qa_jsonl,
+        [
+            {"qid": "qc", "doc_id": "doc", "question": "What title?", "answers": ["Annual Report"], "gold_page_ordinal": 1},
+            {"qid": "qd", "doc_id": "doc", "question": "What title?", "answers": ["Annual Report"], "gold_page_ordinal": 1},
+        ],
+    )
+    write_jsonl(
+        run_dir / "candidate_answers.jsonl",
+        [
+            {"qid": "qc", "candidate_answers": [{"rank": 1, "answer_text": "Wrong", "normalized_answer": "wrong"}]},
+            {"qid": "qd", "candidate_answers": [{"rank": 1, "answer_text": "Wrong", "normalized_answer": "wrong"}]},
+        ],
+    )
+
+    summary = run_phase4d_failure_inspection(
+        Namespace(
+            run_dir=run_dir,
+            candidate_evidence=candidate_evidence,
+            qa_jsonl=qa_jsonl,
+            answer_results=tmp_path / "missing_answer_results.jsonl",
+            output_root=output_root,
+            run_id="fixture",
+            buckets="C,D,E",
+            max_cases_per_bucket=999,
+            top_spans=1,
+            top_candidates=1,
+            force=True,
+        )
+    )
+
+    assert summary["bucket_counts"] == {"C": 1, "D": 1, "E": 0}
+    assert summary["diagnosis_counts"] == {"candidate_span_gap": 1, "extraction_rule_gap": 1}
+    assert len(read_jsonl(output_root / "fixture" / "bucket_E_cases.jsonl")) == 0
+
+
 def test_cli_help() -> None:
     result = subprocess.run(
         [sys.executable, "scripts/analyze_phase4d_candidate_answer_coverage.py", "--help"],
@@ -472,3 +658,17 @@ def test_cli_help() -> None:
     assert "--candidate-packing-metrics" in result.stdout
     assert "--phase4c-summary" in result.stdout
     assert "--top-k" in result.stdout
+
+    export_result = subprocess.run(
+        [sys.executable, "scripts/export_phase4d_failure_inspection.py", "--help"],
+        cwd=Path.cwd(),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert export_result.returncode == 0
+    assert "--run-dir" in export_result.stdout
+    assert "--candidate-evidence" in export_result.stdout
+    assert "--buckets" in export_result.stdout
+    assert "--top-candidates" in export_result.stdout

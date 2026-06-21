@@ -6,7 +6,7 @@
 ## Current Stage
 
 ```text
-Phase 4D-A.2: Candidate answer filtering / reranking / type-aware top-k board
+Phase 4D-A.3: Case-level failure inspection and targeted fix plan
 ```
 
 ## Current Goal
@@ -19,6 +19,7 @@ Phase 4C candidate_evidence.jsonl
 -> error bucket analysis
 -> extraction/ranking refinement before Candidate-ID Reader
 -> filtering / reranking / type-aware top-k board before Candidate-ID Reader
+-> C/D/E case-level failure inspection before new Reader work
 ```
 
 ## Current Status
@@ -50,7 +51,9 @@ Phase 4D-A server coverage audit -> accepted
 Phase 4D-A.1 local implementation -> implemented
 Phase 4D-A.1 server refined audit -> accepted
 Phase 4D-A.2 local implementation -> implemented
-Phase 4D-A.2 server filtering audit -> not_started
+Phase 4D-A.2 server filtering audit -> accepted
+Phase 4D-A.3 local implementation -> implemented
+Phase 4D-A.3 server failure inspection -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -73,6 +76,9 @@ evaluation implementation, metrics, or conclusions in this phase.
   top-k board artifacts without using Reader or AnswerPolicy.
 - filter and rerank candidate answers for type-aware top-k boards while
   preserving all candidates for audit coverage.
+- export case-level C/D/E failure inspection artifacts for audit and targeted
+  planning only. Inspection artifacts may include gold answers for debugging,
+  but they must not be used as Reader input.
 
 ## Blockers
 
@@ -85,9 +91,12 @@ evaluation implementation, metrics, or conclusions in this phase.
   blocker is candidate answer extraction/ranking quality, not a Reader change.
 - Phase 4D-A.1 server refined audit is accepted. It improved coverage but
   increased candidate noise, so Candidate-ID Reader remains deferred.
-- Phase 4D-A.2 local implementation has no local blocker. The filtering server
-  audit requires server-side Phase 4C artifacts, which may be absent from the
-  local ignored `outputs/` tree.
+- Phase 4D-A.2 server filtering audit is accepted. It cleaned the top-k board
+  but did not improve all coverage or C/D/E buckets enough to enter
+  Candidate-ID Reader.
+- Phase 4D-A.3 local implementation has no local blocker. The inspection
+  server run requires server-side Phase 4C and A.2 artifacts, which may be
+  absent from the local ignored `outputs/` tree.
 
 Gate 4 accepted server scope:
 
@@ -249,6 +258,43 @@ Phase 4D-A.1 interpretation:
 - Do not enter Candidate-ID Grounded Reader yet; optimize filtering, reranking,
   and type-aware top-k boards first.
 
+Phase 4D-A.2 accepted server audit:
+
+```text
+sample_count = 90
+candidate_span_answer_coverage = 0.7444
+candidate_answer_coverage_all = 0.5222
+candidate_answer_coverage_top1 = 0.2333
+candidate_answer_coverage_top3 = 0.3111
+candidate_answer_coverage_top5 = 0.3889
+candidate_answer_coverage_top10 = 0.4333
+candidate_answer_coverage_top20 = 0.4556
+mean_candidate_answer_count = 105.2889
+mean_unique_candidate_answer_count = 52.2333
+mean_ranked_candidate_answer_count = 68.9222
+mean_top20_candidate_answer_count = 13.6111
+mean_topk_numeric_candidate_count = 5.3111
+topk_retention_ratio = 0.1293
+topk_numeric_ratio = 0.3902
+bucket_A = 4
+bucket_B = 0
+bucket_C = 22
+bucket_D = 21
+bucket_E = 14
+bucket_F = 29
+bucket_G = 0
+```
+
+Phase 4D-A.2 interpretation:
+
+- Filtering/reranking made the top-k board cleaner and slightly improved
+  top1/top5 coverage: `top1=0.2333`, `top5=0.3889`.
+- Top20 coverage dropped from 0.5000 to 0.4556, while all coverage stayed at
+  0.5222 and C/D/E buckets did not improve.
+- Do not enter Candidate-ID Grounded Reader yet. The next step is C/D/E
+  case-level failure inspection to identify targeted candidate span,
+  extraction, normalization, ranking, or Reader work.
+
 ## Local Validation
 
 Local `main` validation covers code and documentation state. The accepted Gate
@@ -287,10 +333,10 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Run Phase 4D-A.2 filtering/reranking audit on the server Phase 4C
-   `candidate_spans` artifacts.
-2. Compare all/top-k coverage, top-k numeric ratio, and D/F buckets against the
-   accepted Phase 4D-A.1 audit.
+1. Run Phase 4D-A.3 failure inspection export on the server A.2 run directory.
+2. Review C/D/E case packets to decide whether the next fix should target
+   candidate spans, candidate answer extraction, normalization, ranking, or
+   Reader selection.
 3. Keep `page_children` as the default until more shard and document-type
    validation supports a global default change.
 4. Keep CDC `not_started` until explicitly started.
@@ -298,7 +344,7 @@ absolute_path_hit_count = 0
 ## Stop Condition
 
 ```text
-Phase 4D-A.2 local implementation implemented
+Phase 4D-A.3 local implementation implemented
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

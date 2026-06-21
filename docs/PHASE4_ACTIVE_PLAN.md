@@ -317,8 +317,7 @@ Do not:
 
 ## 8. Next Priorities
 
-1. Run Phase 4D-A.2 filtering/reranking audit on the server Phase 4C
-   `candidate_spans` artifacts.
+1. Run Phase 4D-A.3 failure inspection export on the server A.2 run directory.
 2. Keep Phase 4C `candidate_spans` available as an accepted experimental and
    recommended evidence-packing mode.
 3. Keep CDC `not_started` until explicitly started.
@@ -419,7 +418,9 @@ Phase 4D-A server coverage audit -> accepted
 Phase 4D-A.1 local implementation -> implemented
 Phase 4D-A.1 server refined audit -> accepted
 Phase 4D-A.2 local implementation -> implemented
-Phase 4D-A.2 server filtering audit -> not_started
+Phase 4D-A.2 server filtering audit -> accepted
+Phase 4D-A.3 local implementation -> implemented
+Phase 4D-A.3 server failure inspection -> not_started
 ```
 
 Scope:
@@ -442,9 +443,9 @@ scripts/analyze_phase4d_candidate_answer_coverage.py
 tests/test_candidate_answer_extraction.py
 ```
 
-Phase 4D-A and Phase 4D-A.1 server audits are accepted. The Phase 4D-A.2
-filtering audit is still required before A.2 filtering/ranking results can be
-marked `accepted`.
+Phase 4D-A, Phase 4D-A.1, and Phase 4D-A.2 server audits are accepted. The
+Phase 4D-A.3 failure inspection export is still required before A.3 inspection
+artifacts can be marked `accepted`.
 
 Accepted Phase 4D-A server audit:
 
@@ -545,7 +546,7 @@ Status:
 
 ```text
 Phase 4D-A.2 local implementation -> implemented
-Phase 4D-A.2 server filtering audit -> not_started
+Phase 4D-A.2 server filtering audit -> accepted
 ```
 
 Scope:
@@ -561,12 +562,65 @@ Scope:
 - do not modify Reader prompts, AnswerPolicy integration, retrieval models,
   training, CDC, Demo, or the default evidence-packing mode.
 
+Accepted Phase 4D-A.2 server audit:
+
+```text
+sample_count = 90
+candidate_span_answer_coverage = 0.7444
+candidate_answer_coverage_all = 0.5222
+candidate_answer_coverage_top1 = 0.2333
+candidate_answer_coverage_top3 = 0.3111
+candidate_answer_coverage_top5 = 0.3889
+candidate_answer_coverage_top10 = 0.4333
+candidate_answer_coverage_top20 = 0.4556
+mean_candidate_answer_count = 105.2889
+mean_unique_candidate_answer_count = 52.2333
+mean_ranked_candidate_answer_count = 68.9222
+mean_top20_candidate_answer_count = 13.6111
+mean_topk_numeric_candidate_count = 5.3111
+topk_retention_ratio = 0.1293
+topk_numeric_ratio = 0.3902
+bucket_A = 4
+bucket_B = 0
+bucket_C = 22
+bucket_D = 21
+bucket_E = 14
+bucket_F = 29
+bucket_G = 0
+```
+
+Interpretation:
+
+- A.2 made the top-k board cleaner and slightly improved top1/top5 coverage.
+- A.2 did not improve all coverage or C/D/E buckets enough to enter
+  Candidate-ID Grounded Reader.
+- The next step is case-level failure inspection instead of blind rule tuning.
+
+## 8.5 Phase 4D-A.3 Case-level Failure Inspection
+
+Status:
+
+```text
+Phase 4D-A.3 local implementation -> implemented
+Phase 4D-A.3 server failure inspection -> not_started
+```
+
+Scope:
+
+- export C/D/E failure inspection artifacts from the A.2 run directory;
+- include gold answer debug fields only in inspection artifacts, not in
+  `candidate_answers.jsonl` or `candidate_answers_topk.jsonl`;
+- add automatic diagnosis hints for candidate span gaps, extraction gaps, and
+  Reader/candidate-selection gaps;
+- do not modify Reader prompts, AnswerPolicy integration, retrieval models,
+  training, CDC, Demo, or the default evidence-packing mode.
+
 ## 9. Stop Condition
 
 Stop after the following are complete:
 
 ```text
-Phase 4D-A.2 local implementation implemented
+Phase 4D-A.3 local implementation implemented
 + targeted and regression tests pass
 + status documents updated
 + branch pushed
