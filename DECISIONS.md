@@ -8,6 +8,50 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-21: Phase 4C Candidate Spans Acceptance
+
+Decision: accept Phase 4C `candidate_spans` as an experimental and
+recommended evidence packing mode for the Gate 4 style MP-DocVQA raw-input E2E
+path, while keeping `page_children` as the default.
+
+Evidence:
+
+- Retrieval-only / packing-only completed on the accepted Gate 4 sample:
+  `outputs/evaluation/phase4c_candidate_spans/gate4_candidate_spans_retrieval_only`.
+- Full GRPO E2E completed on the same sample:
+  `outputs/evaluation/phase4c_candidate_spans/gate4_candidate_spans_full_grpo`.
+- Candidate fixed evidence hash:
+  `75a0fcb3f7e0c847d64a767a6a7116ec975a88b7c4ec3c48f54d70bd2f164bba`.
+- Hybrid retrieval metrics stayed unchanged from the Phase 4B Gate 4 baseline:
+  Recall@1/3/5 = 0.7333 / 0.9222 / 0.9556 and MRR = 0.8257.
+- `no_gold_leakage=true`, `gold_page_in_candidate_pages_rate=0.9556`, and
+  `gold_page_has_candidate_span_rate=0.9556`.
+- Full E2E improved normalized exact match from 0.3333 to 0.4111, answer hit
+  from 0.3444 to 0.4556, character F1 from 0.5235 to 0.6341, and
+  gold-page-location hit from 0.4889 to 0.6778.
+- Failure counts improved from `answer_miss=59` to 49 and
+  `gold_page_location_miss=46` to 29, while `retrieval_gold_miss_top5=4`
+  remained unchanged.
+
+Interpretation:
+
+The observed improvement comes from query-aware / structure-aware evidence
+packing between page retrieval and Reader input. It is not evidence that the
+retrieval model improved, that GRPO was retrained, that the AnswerPolicy prompt
+changed, or that the system reached formal benchmark status.
+
+Constraints:
+
+- Keep `--evidence-packing page_children` as the default until additional
+  shard and document-type validation supports a global default change.
+- Do not change retrieval models, default AnswerPolicy prompt, checkpoints,
+  SFT/GRPO training, or gold labels as part of this acceptance.
+- Do not treat Phase 4C as a formal MP-DocVQA benchmark.
+- Do not enter CDC, Demo, productization, TAT-QA, or VLM work from this
+  acceptance alone.
+- Detailed report:
+  `docs/PHASE4C_CANDIDATE_SPANS_REPORT.md`.
+
 ## 2026-06-20: Phase 4C Candidate Evidence Packing Boundary
 
 Decision: add query-aware, structure-aware candidate evidence packing as an

@@ -1,8 +1,8 @@
 # Current Status
 
-Updated: 2026-06-20
+Updated: 2026-06-21
 
-## Phase 4C Implemented Locally
+## Phase 4C Accepted
 
 Phase 4C adds an experimental multi-granularity evidence packing path on top
 of the accepted Phase 4B Gate 4 page-level retrieval chain.
@@ -11,32 +11,64 @@ Status:
 
 ```text
 Phase 4B -> accepted
-Phase 4C local implementation -> implemented
-Phase 4C candidate_spans fixture/mock E2E -> mock_verified
-Phase 4C server Gate 4 A/B -> not_started
+Phase 4C local implementation -> accepted
+Phase 4C server retrieval-only / packing-only -> accepted
+Phase 4C server full GRPO E2E -> accepted
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
 ```
 
-Implemented boundary:
+Accepted boundary:
 
 - default `--evidence-packing page_children` keeps the accepted Phase 4B fixed
   evidence behavior;
-- experimental `--evidence-packing candidate_spans` builds deterministic,
-  query-aware candidate spans from Hybrid Top-k pages;
+- `--evidence-packing candidate_spans` is an accepted experimental and
+  recommended evidence packing mode for the Gate 4 style raw-input E2E path;
 - candidate artifacts and metrics are written separately from answer/gold
   metrics;
-- candidate artifacts are checked for no gold/answer leakage;
+- server retrieval-only / packing-only reached `no_gold_leakage=true`;
 - retrieval models, AnswerPolicy prompt defaults, checkpoints, and training
-  data are unchanged.
+  data are unchanged;
+- Phase 4C is not a formal MP-DocVQA benchmark;
+- setting `candidate_spans` as a global default requires more shard and
+  document-type validation.
 
-Local verification:
+Accepted server artifacts:
 
 ```text
-candidate packing unit tests -> mock_verified
-Phase 4B/4C runner fixture tests -> mock_verified
-real Gate 4 candidate_spans A/B -> not_started
+baseline_run = outputs/evaluation/phase4b_mpdocvqa_gate4/gate4_full_grpo
+candidate_retrieval_only_run = outputs/evaluation/phase4c_candidate_spans/gate4_candidate_spans_retrieval_only
+candidate_full_grpo_run = outputs/evaluation/phase4c_candidate_spans/gate4_candidate_spans_full_grpo
+candidate_fixed_evidence_hash = 75a0fcb3f7e0c847d64a767a6a7116ec975a88b7c4ec3c48f54d70bd2f164bba
+```
+
+Compact A/B result:
+
+| Metric | page_children | candidate_spans | Delta |
+|---|---:|---:|---:|
+| normalized_exact_match | 0.3333 | 0.4111 | +0.0778 |
+| answer_hit | 0.3444 | 0.4556 | +0.1111 |
+| token_f1 | 0.3689 | 0.4628 | +0.0939 |
+| character_f1 | 0.5235 | 0.6341 | +0.1106 |
+| gold_page_location_hit | 0.4889 | 0.6778 | +0.1889 |
+| block_location_hit | 0.9667 | 1.0000 | +0.0333 |
+| answer_miss | 59 | 49 | -10 |
+| gold_page_location_miss | 46 | 29 | -17 |
+| retrieval_gold_miss_top5 | 4 | 4 | 0 |
+
+Interpretation:
+
+Phase 4C shows that query-aware / structure-aware candidate evidence packing
+improves Reader grounding and answer extraction under the same retrieval and
+AnswerPolicy setting. Hybrid retrieval metrics stayed unchanged, so the gain
+comes from reorganizing Reader input evidence rather than retrieval-model
+changes, prompt changes, or retraining.
+
+Detailed report:
+
+```text
+docs/PHASE4C_CANDIDATE_SPANS_REPORT.md
 ```
 
 ## Phase 4B Accepted
@@ -52,7 +84,7 @@ Canonical status labels in this file use the repository vocabulary:
 Historical metric descriptions below are evidence summaries, not current
 canonical status labels.
 
-Current Phase 4B status:
+Current Phase 4 status:
 
 ```text
 Phase 4A -> accepted
@@ -71,6 +103,9 @@ Gate 4B ingestion -> accepted
 Gate 4C validate-only -> accepted
 Gate 4C retrieval-only -> accepted
 Gate 4D full GRPO E2E -> accepted
+Phase 4C local implementation -> accepted
+Phase 4C server retrieval-only / packing-only -> accepted
+Phase 4C server full GRPO E2E -> accepted
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started

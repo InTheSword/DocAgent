@@ -318,31 +318,87 @@ Do not:
 ## 8. Next Priorities
 
 1. Preserve accepted Gate 4 artifacts unless a reproducibility issue is found.
-2. Run Phase 4C `candidate_spans` as an experimental A/B evidence-packing mode
-   against the accepted Gate 4 sample before considering any default change.
+2. Keep Phase 4C `candidate_spans` available as an accepted experimental and
+   recommended evidence-packing mode.
 3. Keep CDC `not_started` until explicitly started.
 4. Use Gate 4 failure taxonomy for later Reader/error-analysis work; do not
    change retrieval models or AnswerPolicy prompt in this phase.
 
-## 8.1 Phase 4C Local Evidence Packing Extension
+## 8.1 Phase 4C Candidate Spans Accepted Result
 
 Status:
 
 ```text
-Phase 4C local implementation -> implemented
-Phase 4C candidate_spans fixture/mock E2E -> mock_verified
-Phase 4C server Gate 4 A/B -> not_started
+Phase 4C local implementation -> accepted
+Phase 4C server retrieval-only / packing-only -> accepted
+Phase 4C server full GRPO E2E -> accepted
 ```
 
 Scope:
 
 - default runner behavior remains `--evidence-packing page_children`;
-- `--evidence-packing candidate_spans` is an experimental A/B mode;
+- `--evidence-packing candidate_spans` is an accepted experimental and
+  recommended evidence packing mode;
 - candidate selection is deterministic and rule-based over Hybrid Top-k pages;
 - no gold answers, gold page ids, or gold mappings are used for candidate
   selection or candidate artifacts;
 - retrieval models, AnswerPolicy prompt defaults, checkpoints, and training
-  data remain unchanged.
+  data remain unchanged;
+- Phase 4C is not a formal MP-DocVQA benchmark;
+- setting `candidate_spans` as a global default requires more shard and
+  document-type validation.
+
+Accepted server artifacts:
+
+```text
+baseline_run = outputs/evaluation/phase4b_mpdocvqa_gate4/gate4_full_grpo
+candidate_retrieval_only_run = outputs/evaluation/phase4c_candidate_spans/gate4_candidate_spans_retrieval_only
+candidate_full_grpo_run = outputs/evaluation/phase4c_candidate_spans/gate4_candidate_spans_full_grpo
+candidate_fixed_evidence_hash = 75a0fcb3f7e0c847d64a767a6a7116ec975a88b7c4ec3c48f54d70bd2f164bba
+```
+
+Candidate packing accepted signal:
+
+```text
+sample_count = 90
+mean_original_block_count = 39.8444
+mean_candidate_span_count = 7.9111
+mean_candidate_block_count = 15.3333
+compression_ratio_blocks = 0.3848
+compression_ratio_tokens = 0.9468
+gold_page_in_candidate_pages_rate = 0.9556
+gold_page_has_candidate_span_rate = 0.9556
+no_gold_leakage = true
+```
+
+A/B outcome:
+
+| Metric | page_children | candidate_spans | Delta |
+|---|---:|---:|---:|
+| normalized_exact_match | 0.3333 | 0.4111 | +0.0778 |
+| answer_hit | 0.3444 | 0.4556 | +0.1111 |
+| token_f1 | 0.3689 | 0.4628 | +0.0939 |
+| character_f1 | 0.5235 | 0.6341 | +0.1106 |
+| gold_page_location_hit | 0.4889 | 0.6778 | +0.1889 |
+| page_location_hit | 0.4889 | 0.6778 | +0.1889 |
+| block_location_hit | 0.9667 | 1.0000 | +0.0333 |
+| answer_miss | 59 | 49 | -10 |
+| gold_page_location_miss | 46 | 29 | -17 |
+| retrieval_gold_miss_top5 | 4 | 4 | 0 |
+
+Interpretation:
+
+Phase 4C 验证了在相同检索结果和相同 AnswerPolicy 条件下，query-aware /
+structure-aware candidate_spans 证据筛选能够降低 Top-k page 展开后的
+block 噪声，改善 Reader 的答案抽取和证据页定位稳定性。Hybrid retrieval
+metrics 与 Phase 4B Gate 4 baseline 保持一致，说明提升不是来自检索模型、
+默认 prompt、AnswerPolicy 或训练改动。
+
+Detailed report:
+
+```text
+docs/PHASE4C_CANDIDATE_SPANS_REPORT.md
+```
 
 Local artifacts added by candidate mode:
 
@@ -358,6 +414,7 @@ Stop after the following are complete:
 
 ```text
 Gate 4 expanded raw-input regression accepted
++ Phase 4C candidate_spans server A/B accepted
 + status documents updated
-+ stop before CDC
++ stop before CDC and before any default AnswerPolicy prompt change
 ```

@@ -41,8 +41,9 @@ Gate 4B ingestion -> accepted
 Gate 4C validate-only -> accepted
 Gate 4C retrieval-only -> accepted
 Gate 4D full GRPO E2E -> accepted
-Phase 4C local implementation -> implemented
-Phase 4C candidate_spans fixture/mock E2E -> mock_verified
+Phase 4C local implementation -> accepted
+Phase 4C server retrieval-only / packing-only -> accepted
+Phase 4C server full GRPO E2E -> accepted
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -119,6 +120,41 @@ Interpretation boundary:
 - Main remaining issues are Reader `answer_miss` and `gold_page_location_miss`.
 - `--rank-aware-context` remains diagnostic only; default is false.
 
+Phase 4C accepted server A/B:
+
+```text
+baseline_run = outputs/evaluation/phase4b_mpdocvqa_gate4/gate4_full_grpo
+candidate_retrieval_only_run = outputs/evaluation/phase4c_candidate_spans/gate4_candidate_spans_retrieval_only
+candidate_full_grpo_run = outputs/evaluation/phase4c_candidate_spans/gate4_candidate_spans_full_grpo
+fixed_evidence_hash = 75a0fcb3f7e0c847d64a767a6a7116ec975a88b7c4ec3c48f54d70bd2f164bba
+```
+
+Phase 4C compact result:
+
+```text
+candidate_spans normalized_exact_match = 0.4111 (+0.0778)
+candidate_spans answer_hit = 0.4556 (+0.1111)
+candidate_spans token_f1 = 0.4628 (+0.0939)
+candidate_spans character_f1 = 0.6341 (+0.1106)
+candidate_spans gold_page_location_hit = 0.6778 (+0.1889)
+candidate_spans block_location_hit = 1.0 (+0.0333)
+answer_miss = 49 (-10)
+gold_page_location_miss = 29 (-17)
+retrieval_gold_miss_top5 = 4 (unchanged)
+```
+
+Phase 4C interpretation:
+
+- Hybrid retrieval metrics are unchanged from the Phase 4B Gate 4 baseline:
+  Hybrid Recall@1/3/5 = 0.7333 / 0.9222 / 0.9556 and MRR = 0.8257.
+- The improvement comes from query-aware / structure-aware evidence packing,
+  not from retrieval model changes, AnswerPolicy prompt changes, or retraining.
+- `candidate_spans` reduced mean selected block count from 39.8444 to 15.3333
+  while preserving `gold_page_has_candidate_span_rate = 0.9556`.
+- `candidate_spans` is accepted as an experimental and recommended evidence
+  packing mode, but it is not yet the global default.
+- Full details are recorded in `docs/PHASE4C_CANDIDATE_SPANS_REPORT.md`.
+
 ## Local Validation
 
 Local `main` validation covers code and documentation state. The accepted Gate
@@ -159,24 +195,26 @@ absolute_path_hit_count = 0
 
 1. Keep Phase 4B accepted artifacts unchanged unless a reproducibility issue is
    reported.
-2. Keep CDC `not_started` until explicitly started.
-3. Use Gate 4 failure taxonomy to guide later Reader/error-analysis work, not
+2. Keep `page_children` as the default until more shard and document-type
+   validation supports a global default change.
+3. Keep CDC `not_started` until explicitly started.
+4. Use Gate 4 failure taxonomy to guide later Reader/error-analysis work, not
    a retrieval model change in this phase.
-4. Verify Phase 4C `candidate_spans` against the accepted Gate 4 server
-   artifacts as an A/B run before changing any default behavior.
 
 ## Stop Condition
 
 ```text
-Phase 4C local implementation complete
-+ targeted/full local validation complete
+Phase 4C local implementation accepted
++ server retrieval-only / packing-only accepted
++ server full GRPO E2E accepted
 + status documents updated
 + stop before CDC and before any default AnswerPolicy prompt change
 ```
 
 ## Phase Documents
 
-- `docs/PHASE4_ACTIVE_PLAN.md`: detailed Phase 4B working record.
+- `docs/PHASE4_ACTIVE_PLAN.md`: detailed Phase 4 working record.
+- `docs/PHASE4C_CANDIDATE_SPANS_REPORT.md`: accepted Phase 4C A/B report.
 - `docs/PHASE3_ACTIVE_PLAN.md`: completed/historical Phase 3 record.
 - `docs/PHASE2_ACTIVE_PLAN.md`: completed/historical Phase 2 record.
 
