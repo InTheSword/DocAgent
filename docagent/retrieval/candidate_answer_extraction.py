@@ -27,6 +27,8 @@ ANSWER_BUCKET_LABELS = {
 }
 
 NUMERIC_TYPES = {"numeric", "percentage", "index"}
+TOP_K_VALUES = (1, 3, 5, 10, 20)
+DEFAULT_TOP_K = 20
 SOURCE_LINE_RE = re.compile(r"^\s*(source|footer|cited)\s*[:\-]\s*(.+?)\s*$", re.IGNORECASE)
 URL_RE = re.compile(r"https?://[^\s<>)]+", re.IGNORECASE)
 USMM_RE = re.compile(r"\bUSMM[^\s,;:)]*", re.IGNORECASE)
@@ -47,13 +49,33 @@ PERCENT_RE = re.compile(
 INDEX_PAREN_RE = re.compile(r"\(\s*(-?\d+(?:,\d{3})*(?:\.\d+)?)\s*\)")
 MONEY_RE = re.compile(r"\$-?\d[\d,]*(?:\.\d+)?")
 NUMBER_RE = re.compile(r"(?<![\w.])-?\d+(?:,\d{3})*(?:\.\d+)?(?![\w.])")
-COLON_VALUE_RE = re.compile(r":\s*([^:\n]{2,80})")
+KEY_VALUE_RE = re.compile(r"^\s*([A-Za-z][A-Za-z0-9 /&().'-]{1,60}?)\s*(?::|\-|--|–|—)\s*([^:\n]{2,100})\s*$")
+COLON_VALUE_RE = re.compile(r":\s*([^:\n]{2,100})")
+QUARTER_RE = re.compile(
+    r"\b(?:Q[1-4](?:\s*FY?\s*\d{2,4})?|[1-4]Q(?:\s*\d{2,4})?|[1-4]Q\d{2}|Q[1-4]FY\d{2}|FY\d{2,4})\b",
+    re.IGNORECASE,
+)
+ORG_SUFFIX_RE = re.compile(
+    r"\b([A-Z][A-Za-z&.'-]*(?:\s+[A-Z][A-Za-z&.'-]*){0,8}\s+"
+    r"(?:Board|Company|Corporation|Corp\.?|Inc\.?|Ltd\.?|Limited|Agency|Association|Authority|Committee|Commission|Department))\b"
+)
+CAPS_PHRASE_RE = re.compile(r"\b([A-Z][A-Z&.'-]{2,}(?:\s+[A-Z][A-Z&.'-]{2,}){1,6})\b")
+ADDRESS_CITY_STATE_RE = re.compile(
+    r"\b([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,3}),\s*"
+    r"([A-Z]{2}|Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming)\b"
+)
+LOCATION_LINE_RE = re.compile(
+    r"\b(?:located in|located at|address|city|state|board located)\b[^:\n\-–—]*(?::|\-|–|—)?\s*([^.\n;]{2,120})",
+    re.IGNORECASE,
+)
 
 
 def extract_candidate_answers(
     question: str,
     question_hints: dict[str, Any] | None,
     candidate_spans: list[dict[str, Any]],
+    *,
+    top_k: int = DEFAULT_TOP_K,
 ) -> dict[str, Any]:
     """Build a deterministic candidate answer board without reading gold data."""
 
@@ -63,18 +85,7 @@ def extract_candidate_answers(
     for span in candidate_spans:
         raw_candidates.extend(_extract_from_span(span=span, hints=hints, target_type=target_type))
 
-    candidates = _dedupe_answers(raw_candidates)
-    candidates.sort(
-        key=lambda item: (
-            -float(item.get("score") or 0.0),
-            str(item.get("source_candidate_id") or ""),
-            str(item.get("answer_type") or ""),
-            str(item.get("answer_text") or ""),
-        )
-    )
-    for index, candidate in enumerate(candidates, start=1):
-        candidate["candidate_answer_id"] = f"a{index:04d}"
-
+    candidates = _rank_candidate_answers(raw_candidates, top_k=top_k)
     stats = _answer_board_stats(candidates, target_type=target_type)
     return {
         "question": question,
@@ -97,15 +108,64 @@ def build_candidate_answer_board(candidate_record: dict[str, Any]) -> dict[str, 
     }
 
 
-def build_candidate_answer_boards(candidate_records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [build_candidate_answer_board(record) for record in candidate_records]
+def build_candidate_answer_boards(candidate_records: list[dict[str, Any]], *, top_k: int = DEFAULT_TOP_K) -> list[dict[str, Any]]:
+    boards: list[dict[str, Any]] = []
+    for record in candidate_records:
+        board = extract_candidate_answers(
+            question=str(record.get("question") or ""),
+            question_hints=record.get("question_hints") or {},
+            candidate_spans=list(record.get("candidate_spans") or []),
+            top_k=top_k,
+        )
+        boards.append(
+            {
+                "qid": str(record.get("qid") or ""),
+                "doc_id": str(record.get("doc_id") or ""),
+                **board,
+            }
+        )
+    return boards
+
+
+def build_topk_candidate_answer_boards(answer_boards: list[dict[str, Any]], *, top_k: int = DEFAULT_TOP_K) -> list[dict[str, Any]]:
+    topk_boards: list[dict[str, Any]] = []
+    for board in answer_boards:
+        candidates = [
+            dict(candidate)
+            for candidate in board.get("candidate_answers") or []
+            if int(candidate.get("rank") or 0) <= top_k
+        ]
+        topk_boards.append(
+            {
+                "qid": board.get("qid"),
+                "doc_id": board.get("doc_id"),
+                "question": board.get("question"),
+                "question_hints": board.get("question_hints") or {},
+                "top_k": top_k,
+                "candidate_answers": candidates,
+                "answer_board_stats": {
+                    **(board.get("answer_board_stats") or {}),
+                    "topk_candidate_answer_count": len(candidates),
+                    "all_candidate_answer_count": len(board.get("candidate_answers") or []),
+                },
+            }
+        )
+    return topk_boards
 
 
 def compute_candidate_answer_coverage(
     candidate_answers: list[dict[str, Any]],
     gold_answers: list[str],
+    *,
+    top_k: int | None = None,
 ) -> dict[str, Any]:
     normalized_gold = [_normalize_answer(answer) for answer in gold_answers if _normalize_answer(answer)]
+    if top_k is not None:
+        candidate_answers = [
+            candidate
+            for position, candidate in enumerate(candidate_answers, start=1)
+            if int(candidate.get("rank") or position) <= top_k
+        ]
     normalized_candidates = [
         str(candidate.get("normalized_answer") or _normalize_answer(candidate.get("answer_text") or ""))
         for candidate in candidate_answers
@@ -120,6 +180,7 @@ def compute_candidate_answer_coverage(
         "first_rank": first_rank,
         "rank_bucket": _rank_bucket(first_rank),
         "candidate_answer_count": len(candidate_answers),
+        "top_k": top_k,
     }
 
 
@@ -138,8 +199,10 @@ def summarize_candidate_answer_coverage(
     by_question_hint: dict[str, list[bool]] = defaultdict(list)
     span_hits: list[bool] = []
     answer_hits: list[bool] = []
+    topk_hits: dict[int, list[bool]] = {top_k: [] for top_k in TOP_K_VALUES}
     candidate_counts: list[float] = []
     unique_counts: list[float] = []
+    top20_counts: list[float] = []
     same_type_distractors: list[float] = []
     numeric_distractors: list[float] = []
     no_candidate_answer_count = 0
@@ -150,8 +213,11 @@ def summarize_candidate_answer_coverage(
         board = boards_by_qid.get(qid, {})
         gold_answers = _qa_answer_list(qa)
         span_hit = candidate_span_contains_answer(candidate_record.get("candidate_spans") or [], gold_answers)
-        coverage = compute_candidate_answer_coverage(board.get("candidate_answers") or [], gold_answers)
+        candidate_answers = board.get("candidate_answers") or []
+        coverage = compute_candidate_answer_coverage(candidate_answers, gold_answers)
         answer_hit = bool(coverage["covered"])
+        for top_k in TOP_K_VALUES:
+            topk_hits[top_k].append(bool(compute_candidate_answer_coverage(candidate_answers, gold_answers, top_k=top_k)["covered"]))
         hint = str((board.get("question_hints") or {}).get("answer_type_hint") or "unknown")
         answer_type = str(qa.get("answer_type") or "unknown")
         stats = board.get("answer_board_stats") or {}
@@ -163,6 +229,7 @@ def summarize_candidate_answer_coverage(
         rank_distribution[str(coverage["rank_bucket"])] += 1
         candidate_counts.append(float(stats.get("candidate_answer_count") or 0.0))
         unique_counts.append(float(stats.get("unique_normalized_answer_count") or 0.0))
+        top20_counts.append(float(min(len(candidate_answers), 20)))
         same_type_distractors.append(float(stats.get("same_type_distractor_count") or 0.0))
         numeric_distractors.append(float(stats.get("numeric_distractor_count") or 0.0))
         if not board.get("candidate_answers"):
@@ -172,11 +239,18 @@ def summarize_candidate_answer_coverage(
         "sample_count": len(qa_records),
         "candidate_span_answer_coverage": _mean_bool(span_hits),
         "candidate_answer_coverage": _mean_bool(answer_hits),
+        "candidate_answer_coverage_all": _mean_bool(answer_hits),
+        "candidate_answer_coverage_top1": _mean_bool(topk_hits[1]),
+        "candidate_answer_coverage_top3": _mean_bool(topk_hits[3]),
+        "candidate_answer_coverage_top5": _mean_bool(topk_hits[5]),
+        "candidate_answer_coverage_top10": _mean_bool(topk_hits[10]),
+        "candidate_answer_coverage_top20": _mean_bool(topk_hits[20]),
         "candidate_answer_coverage_by_answer_type": _group_rates(by_answer_type),
         "candidate_answer_coverage_by_question_hint": _group_rates(by_question_hint),
         "gold_answer_rank_distribution": dict(rank_distribution),
         "mean_candidate_answer_count": _mean(candidate_counts),
         "mean_unique_candidate_answer_count": _mean(unique_counts),
+        "mean_top20_candidate_answer_count": _mean(top20_counts),
         "mean_same_type_distractor_count": _mean(same_type_distractors),
         "mean_numeric_distractor_count": _mean(numeric_distractors),
         "no_candidate_answer_count": no_candidate_answer_count,
@@ -254,8 +328,28 @@ def bucket_candidate_answer_failures(
         "sample_count": len(qa_records),
         "bucket_labels": ANSWER_BUCKET_LABELS,
         "bucket_counts": dict(bucket_counts),
+        "bucket_summary": {
+            "d_samples_potentially_fixed_by_extraction_improvement": bucket_counts["D"],
+            "c_samples_requiring_candidate_span_improvement": bucket_counts["C"],
+            "e_samples_requiring_reader_or_candidate_selection_improvement": bucket_counts["E"],
+        },
         "answer_results_status": "available" if answer_results_available else "unavailable",
         "records": records,
+    }
+
+
+def estimate_bucket_transitions(bucket_summary: dict[str, Any]) -> dict[str, Any]:
+    counts = bucket_summary.get("bucket_counts") or {}
+    d_count = int(counts.get("D") or 0)
+    e_count = int(counts.get("E") or 0)
+    f_count = int(counts.get("F") or 0)
+    return {
+        "assumption": "If extraction improves enough to recover D samples, those samples can move from D into the answer-covered E/F pool before Reader changes.",
+        "d_samples_potentially_fixed_by_extraction_improvement": d_count,
+        "current_answer_covered_pool": e_count + f_count,
+        "estimated_answer_covered_pool_after_d_recovery": e_count + f_count + d_count,
+        "remaining_candidate_span_gap_from_c": int(counts.get("C") or 0),
+        "reader_or_candidate_selection_gap_from_e": e_count,
     }
 
 
@@ -291,6 +385,10 @@ def _extract_from_span(
     candidates: list[dict[str, Any]] = []
     candidates.extend(_extract_source_candidates(text, span=span, hints=hints, target_type=target_type))
     candidates.extend(_extract_heading_candidates(text, span=span, hints=hints, target_type=target_type))
+    candidates.extend(_extract_location_candidates(text, span=span, hints=hints, target_type=target_type))
+    candidates.extend(_extract_quarter_candidates(text, span=span, hints=hints, target_type=target_type))
+    candidates.extend(_extract_organization_candidates(text, span=span, hints=hints, target_type=target_type))
+    candidates.extend(_extract_key_value_candidates(text, span=span, hints=hints, target_type=target_type))
     candidates.extend(_extract_regex_candidates(text, span=span, hints=hints, target_type=target_type))
     candidates.extend(_extract_generic_candidates(text, span=span, hints=hints, target_type=target_type, existing=candidates))
     return candidates
@@ -388,7 +486,7 @@ def _extract_source_candidates(
         if match:
             candidates.append(
                 _make_answer(
-                    stripped[:160],
+                    stripped[:220],
                     answer_type="source",
                     rule="source_line",
                     span=span,
@@ -434,8 +532,26 @@ def _extract_heading_candidates(
 ) -> list[dict[str, Any]]:
     if target_type != "heading" and "heading" not in set(hints.get("field_hints") or []):
         return []
-    first_line = _first_short_line(text, max_words=12, max_chars=90)
-    if not first_line:
+    candidates: list[dict[str, Any]] = []
+    for line in text.splitlines()[:4]:
+        cleaned = line.strip(" .;\t")
+        if not _valid_heading_text(cleaned):
+            continue
+        candidates.append(
+            _make_answer(
+                cleaned,
+                answer_type="heading",
+                rule="heading_short_title",
+                span=span,
+                hints=hints,
+                target_type=target_type,
+                rule_confidence=0.34 + _bbox_top_bonus(span),
+            )
+        )
+    if candidates:
+        return candidates[:2]
+    first_line = _first_short_line(text, max_words=14, max_chars=110)
+    if not _valid_heading_text(first_line):
         return []
     return [
         _make_answer(
@@ -448,6 +564,205 @@ def _extract_heading_candidates(
             rule_confidence=0.26 + _bbox_top_bonus(span),
         )
     ]
+
+
+def _extract_location_candidates(
+    text: str,
+    *,
+    span: dict[str, Any],
+    hints: dict[str, Any],
+    target_type: str,
+) -> list[dict[str, Any]]:
+    field_hints = set(hints.get("field_hints") or [])
+    if target_type != "location" and not (field_hints & {"city", "state", "located", "address"}):
+        return []
+    candidates: list[dict[str, Any]] = []
+    wants_city = "city" in field_hints
+    wants_state = "state" in field_hints
+    for match in ADDRESS_CITY_STATE_RE.finditer(text):
+        city = match.group(1).strip()
+        state = match.group(2).strip()
+        if wants_city or not wants_state:
+            candidates.append(
+                _make_answer(
+                    city,
+                    answer_type="city",
+                    rule="address_city",
+                    span=span,
+                    hints=hints,
+                    target_type=target_type,
+                    rule_confidence=0.3,
+                )
+            )
+        if wants_state or not wants_city:
+            candidates.append(
+                _make_answer(
+                    state,
+                    answer_type="state",
+                    rule="address_state",
+                    span=span,
+                    hints=hints,
+                    target_type=target_type,
+                    rule_confidence=0.3,
+                )
+            )
+    for match in LOCATION_LINE_RE.finditer(text):
+        value = _clean_field_value(match.group(1))
+        if not _valid_short_text(value, max_words=8, max_chars=80):
+            continue
+        candidates.append(
+            _make_answer(
+                value,
+                answer_type="location",
+                rule="location_context_phrase",
+                span=span,
+                hints=hints,
+                target_type=target_type,
+                rule_confidence=0.22,
+            )
+        )
+    return candidates
+
+
+def _extract_quarter_candidates(
+    text: str,
+    *,
+    span: dict[str, Any],
+    hints: dict[str, Any],
+    target_type: str,
+) -> list[dict[str, Any]]:
+    if target_type != "quarter" and "quarter" not in set(hints.get("field_hints") or []):
+        return []
+    candidates: list[dict[str, Any]] = []
+    question_numbers = set(hints.get("numeric_tokens") or [])
+    for match in QUARTER_RE.finditer(text):
+        value = match.group(0).strip()
+        confidence = 0.31
+        if any(token and token in value for token in question_numbers):
+            confidence += 0.08
+        candidates.append(
+            _make_answer(
+                value,
+                answer_type="quarter",
+                rule="quarter_short_form",
+                span=span,
+                hints=hints,
+                target_type=target_type,
+                rule_confidence=confidence,
+            )
+        )
+    return candidates
+
+
+def _extract_organization_candidates(
+    text: str,
+    *,
+    span: dict[str, Any],
+    hints: dict[str, Any],
+    target_type: str,
+) -> list[dict[str, Any]]:
+    field_hints = set(hints.get("field_hints") or [])
+    if target_type != "organization" and not (field_hints & {"organization", "company", "board", "agency", "logo"}):
+        return []
+    candidates: list[dict[str, Any]] = []
+    for match in ORG_SUFFIX_RE.finditer(text):
+        value = match.group(1).strip()
+        if _valid_short_text(value, max_words=10, max_chars=100):
+            candidates.append(
+                _make_answer(
+                    value,
+                    answer_type="organization",
+                    rule="organization_suffix",
+                    span=span,
+                    hints=hints,
+                    target_type=target_type,
+                    rule_confidence=0.29,
+                )
+            )
+    for match in CAPS_PHRASE_RE.finditer(text):
+        value = match.group(1).strip()
+        if _valid_short_text(value.title(), max_words=8, max_chars=90):
+            candidates.append(
+                _make_answer(
+                    value,
+                    answer_type="organization",
+                    rule="uppercase_organization_phrase",
+                    span=span,
+                    hints=hints,
+                    target_type=target_type,
+                    rule_confidence=0.2,
+                )
+            )
+    return candidates
+
+
+def _extract_key_value_candidates(
+    text: str,
+    *,
+    span: dict[str, Any],
+    hints: dict[str, Any],
+    target_type: str,
+) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    keywords = [str(keyword).lower() for keyword in hints.get("keywords") or []]
+    field_hints = set(hints.get("field_hints") or [])
+    for line in text.splitlines():
+        cleaned = line.strip()
+        match = KEY_VALUE_RE.match(cleaned)
+        if not match:
+            candidates.extend(_extract_inline_field_value(cleaned, span=span, hints=hints, target_type=target_type))
+            continue
+        field_name = match.group(1).strip()
+        value = _clean_field_value(match.group(2))
+        if not _valid_short_text(value, max_words=12, max_chars=100):
+            continue
+        if keywords and not _line_matches_question(field_name, cleaned, keywords) and not (field_hints & {"name", "company", "board", "city", "state", "quarter"}):
+            continue
+        candidates.append(
+            _make_answer(
+                value,
+                answer_type=_infer_key_value_answer_type(field_name, value, hints, target_type),
+                rule="key_value_delimited",
+                span=span,
+                hints=hints,
+                target_type=target_type,
+                rule_confidence=0.24,
+            )
+        )
+    return candidates
+
+
+def _extract_inline_field_value(
+    line: str,
+    *,
+    span: dict[str, Any],
+    hints: dict[str, Any],
+    target_type: str,
+) -> list[dict[str, Any]]:
+    keywords = [str(keyword).lower() for keyword in hints.get("keywords") or [] if len(str(keyword)) > 2]
+    if not keywords:
+        return []
+    lowered = line.lower()
+    candidates: list[dict[str, Any]] = []
+    for keyword in keywords:
+        index = lowered.find(keyword)
+        if index < 0:
+            continue
+        tail = line[index + len(keyword) :].strip(" \t:-–—")
+        value = _clean_field_value(tail)
+        if _valid_short_text(value, max_words=10, max_chars=80):
+            candidates.append(
+                _make_answer(
+                    value,
+                    answer_type=_infer_key_value_answer_type(keyword, value, hints, target_type),
+                    rule="key_value_adjacent",
+                    span=span,
+                    hints=hints,
+                    target_type=target_type,
+                    rule_confidence=0.18,
+                )
+            )
+    return candidates
 
 
 def _extract_generic_candidates(
@@ -495,16 +810,17 @@ def _make_answer(
     rule_confidence: float,
 ) -> dict[str, Any]:
     normalized = _normalize_answer(answer_text)
-    field_hint_match = _field_hint_match(answer_type, hints)
-    answer_type_match = _answer_type_match(answer_type, target_type)
-    lexical_context_match = _lexical_context_match(span, hints)
-    candidate_span_score = max(0.0, min(float(span.get("score") or 0.0), 1.0)) * 0.1
     breakdown = {
-        "field_hint_match": field_hint_match,
-        "answer_type_match": answer_type_match,
-        "lexical_context_match": lexical_context_match,
-        "candidate_span_score": candidate_span_score,
-        "rule_confidence": rule_confidence,
+        "source_candidate_score": _source_candidate_score(span),
+        "question_keyword_overlap": _lexical_context_match(span, hints),
+        "answer_type_match": _answer_type_match(answer_type, target_type),
+        "field_hint_match": _field_hint_match(answer_type, hints),
+        "local_context_match": _local_context_match(answer_text, span, hints),
+        "span_rank_bonus": _span_rank_bonus(span),
+        "extraction_rule_priority": rule_confidence,
+        "generic_numeric_penalty": -_generic_numeric_penalty(answer_type, rule, target_type),
+        "duplicate_penalty": 0.0,
+        "long_text_penalty": -_long_text_penalty(answer_text),
     }
     block_ids = [str(block_id) for block_id in (span.get("block_ids") or [])]
     return {
@@ -525,19 +841,32 @@ def _make_answer(
 
 def _normalize_hints(question: str, question_hints: dict[str, Any] | None) -> dict[str, Any]:
     raw = dict(question_hints or {})
+    question_lower = question.lower()
     answer_type_hint = str(raw.get("answer_type_hint") or "unknown")
     keywords = [str(item).lower() for item in raw.get("keywords") or []]
     field_hints = [str(item).lower() for item in raw.get("field_hints") or []]
-    if "index" in question.lower() and "index" not in field_hints:
+    numeric_tokens = [str(item) for item in raw.get("numeric_tokens") or []]
+    numeric_tokens = _unique([*numeric_tokens, *re.findall(r"\b\d{2,4}\b|\b[1-4](?:st|nd|rd|th)?\b", question_lower)])
+    if "index" in question_lower and "index" not in field_hints:
         field_hints.append("index")
-    if "source" in question.lower() and "source" not in field_hints:
+    if "source" in question_lower and "source" not in field_hints:
         field_hints.append("source")
-    if any(term in question.lower() for term in ("heading", "title", "subject")) and "heading" not in field_hints:
+    if any(term in question_lower for term in ("heading", "title", "subject")) and "heading" not in field_hints:
         field_hints.append("heading")
+    for term in ("city", "state", "located", "address"):
+        if term in question_lower and term not in field_hints:
+            field_hints.append(term)
+    if "quarter" in question_lower and "quarter" not in field_hints:
+        field_hints.append("quarter")
+    if any(term in question_lower for term in ("short form", "abbreviation")) and "quarter" not in field_hints:
+        field_hints.append("quarter")
+    for term in ("organization", "company", "board", "agency", "logo", "name"):
+        if term in question_lower and term not in field_hints:
+            field_hints.append(term)
     return {
         "answer_type_hint": answer_type_hint,
         "keywords": _unique(keywords),
-        "numeric_tokens": [str(item) for item in raw.get("numeric_tokens") or []],
+        "numeric_tokens": numeric_tokens,
         "date_tokens": [str(item) for item in raw.get("date_tokens") or []],
         "field_hints": _unique(field_hints),
     }
@@ -548,6 +877,12 @@ def _target_answer_type(hints: dict[str, Any]) -> str:
     answer_type_hint = str(hints.get("answer_type_hint") or "unknown")
     if "index" in field_hints:
         return "index"
+    if field_hints & {"city", "state", "located", "address"}:
+        return "location"
+    if "quarter" in field_hints:
+        return "quarter"
+    if field_hints & {"organization", "company", "board", "agency", "logo"}:
+        return "organization"
     if field_hints & {"percentage", "percent"}:
         return "percentage"
     if answer_type_hint in {"date", "heading", "source", "text"}:
@@ -567,6 +902,14 @@ def _field_hint_match(answer_type: str, hints: dict[str, Any]) -> float:
         return 0.3
     if answer_type == "heading" and "heading" in field_hints:
         return 0.3
+    if answer_type in {"city", "state", "location"} and field_hints & {"city", "state", "located", "address"}:
+        return 0.3
+    if answer_type == "quarter" and "quarter" in field_hints:
+        return 0.3
+    if answer_type == "organization" and field_hints & {"organization", "company", "board", "agency", "logo", "name"}:
+        return 0.28
+    if answer_type == "key_value" and field_hints:
+        return 0.12
     if answer_type == "date" and "date" in field_hints:
         return 0.22
     if answer_type == "numeric" and field_hints & {"total", "amount", "rate", "value"}:
@@ -576,6 +919,12 @@ def _field_hint_match(answer_type: str, hints: dict[str, Any]) -> float:
 
 def _answer_type_match(answer_type: str, target_type: str) -> float:
     if answer_type == target_type:
+        return 0.3
+    if target_type == "location" and answer_type in {"city", "state", "location"}:
+        return 0.28
+    if target_type == "organization" and answer_type == "organization":
+        return 0.3
+    if target_type == "quarter" and answer_type == "quarter":
         return 0.3
     if target_type == "numeric" and answer_type in NUMERIC_TYPES:
         return 0.16
@@ -593,6 +942,60 @@ def _lexical_context_match(span: dict[str, Any], hints: dict[str, Any]) -> float
     return min(hits / max(len(keywords), 1), 1.0) * 0.2
 
 
+def _local_context_match(answer_text: str, span: dict[str, Any], hints: dict[str, Any]) -> float:
+    keywords = [str(keyword).lower() for keyword in hints.get("keywords") or [] if len(str(keyword)) > 2]
+    field_hints = [str(field).lower() for field in hints.get("field_hints") or []]
+    text = str(span.get("text") or "")
+    answer = str(answer_text or "")
+    for line in text.splitlines():
+        if answer and answer not in line:
+            continue
+        lowered = line.lower()
+        if any(keyword in lowered for keyword in keywords):
+            return 0.16
+        if any(field in lowered for field in field_hints):
+            return 0.14
+    return 0.0
+
+
+def _source_candidate_score(span: dict[str, Any]) -> float:
+    try:
+        score = float(span.get("score") or 0.0)
+    except (TypeError, ValueError):
+        score = 0.0
+    return max(0.0, min(score, 1.0)) * 0.35
+
+
+def _span_rank_bonus(span: dict[str, Any]) -> float:
+    try:
+        rank = int(span.get("retrieval_page_rank") or 0)
+    except (TypeError, ValueError):
+        rank = 0
+    if rank <= 0:
+        return 0.0
+    return max(0.0, 0.22 - 0.04 * (rank - 1))
+
+
+def _generic_numeric_penalty(answer_type: str, rule: str, target_type: str) -> float:
+    if answer_type not in NUMERIC_TYPES:
+        return 0.0
+    if rule in {"parenthesized_index", "percentage", "money"}:
+        return 0.0
+    if target_type in {"numeric", "index", "percentage", "quarter"}:
+        return 0.04
+    return 0.18
+
+
+def _long_text_penalty(answer_text: str) -> float:
+    text = str(answer_text or "")
+    word_count = len(normalize_text(text).split())
+    if len(text) > 100 or word_count > 14:
+        return 0.18
+    if len(text) > 70 or word_count > 10:
+        return 0.08
+    return 0.0
+
+
 def _answer_board_stats(candidates: list[dict[str, Any]], *, target_type: str) -> dict[str, Any]:
     distribution = Counter(str(candidate.get("answer_type") or "unknown") for candidate in candidates)
     same_type_count = distribution.get(target_type, 0)
@@ -608,21 +1011,49 @@ def _answer_board_stats(candidates: list[dict[str, Any]], *, target_type: str) -
     }
 
 
-def _dedupe_answers(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    best_by_key: dict[tuple[str, str, str], dict[str, Any]] = {}
-    for candidate in candidates:
+def _rank_candidate_answers(candidates: list[dict[str, Any]], *, top_k: int) -> list[dict[str, Any]]:
+    candidates = [dict(candidate) for candidate in candidates if str(candidate.get("normalized_answer") or "")]
+    normalized_counts: Counter[str] = Counter(str(candidate.get("normalized_answer") or "") for candidate in candidates)
+    seen_by_normalized: Counter[str] = Counter()
+    for candidate in sorted(
+        candidates,
+        key=lambda item: (
+            str(item.get("normalized_answer") or ""),
+            -float(item.get("score") or 0.0),
+            str(item.get("source_candidate_id") or ""),
+        ),
+    ):
         normalized = str(candidate.get("normalized_answer") or "")
-        if not normalized:
+        duplicate_index = seen_by_normalized[normalized]
+        seen_by_normalized[normalized] += 1
+        if normalized_counts[normalized] <= 1:
             continue
-        key = (
-            normalized,
-            str(candidate.get("answer_type") or ""),
-            str(candidate.get("source_candidate_id") or ""),
+        penalty = min(0.08 + duplicate_index * 0.07, 0.35)
+        if duplicate_index == 0:
+            penalty = 0.0
+        breakdown = dict(candidate.get("score_breakdown") or {})
+        breakdown["duplicate_penalty"] = -penalty
+        candidate["score_breakdown"] = {key: round(float(value), 6) for key, value in breakdown.items()}
+        candidate["score"] = round(sum(float(value) for value in breakdown.values()), 6)
+
+    candidates.sort(
+        key=lambda item: (
+            -float(item.get("score") or 0.0),
+            str(item.get("source_candidate_id") or ""),
+            str(item.get("answer_type") or ""),
+            str(item.get("answer_text") or ""),
         )
-        current = best_by_key.get(key)
-        if current is None or float(candidate.get("score") or 0.0) > float(current.get("score") or 0.0):
-            best_by_key[key] = candidate
-    return list(best_by_key.values())
+    )
+    for index, candidate in enumerate(candidates, start=1):
+        candidate["candidate_answer_id"] = f"a{index:04d}"
+        candidate["rank"] = index
+        candidate["is_top_k"] = index <= top_k
+        candidate["is_top1"] = index <= 1
+        candidate["is_top3"] = index <= 3
+        candidate["is_top5"] = index <= 5
+        candidate["is_top10"] = index <= 10
+        candidate["is_top20"] = index <= 20
+    return candidates
 
 
 def _normalize_answer(value: Any) -> str:
@@ -741,6 +1172,16 @@ def _first_short_line(text: str, *, max_words: int, max_chars: int) -> str:
     return ""
 
 
+def _valid_heading_text(value: str) -> bool:
+    text = str(value or "").strip()
+    if not _valid_short_text(text, max_words=14, max_chars=110):
+        return False
+    normalized = normalize_text(text)
+    if NUMBER_RE.fullmatch(text) or normalized in {"page", "table", "figure"}:
+        return False
+    return len(normalized.split()) >= 2 or any(char.isalpha() for char in text)
+
+
 def _valid_short_text(value: str, *, max_words: int = 12, max_chars: int = 90) -> bool:
     text = str(value or "").strip()
     if not text or len(text) > max_chars:
@@ -750,6 +1191,41 @@ def _valid_short_text(value: str, *, max_words: int = 12, max_chars: int = 90) -
         return False
     stopwords = {"a", "an", "and", "as", "at", "by", "for", "from", "in", "is", "of", "on", "or", "the", "to", "with"}
     return any(word not in stopwords for word in words)
+
+
+def _clean_field_value(value: str) -> str:
+    text = str(value or "").strip(" \t.;")
+    text = re.split(r"\s{2,}|\t|<|>", text, maxsplit=1)[0]
+    return text.strip(" \t.;")
+
+
+def _line_matches_question(field_name: str, line: str, keywords: list[str]) -> bool:
+    field = field_name.lower()
+    lowered = line.lower()
+    return any(keyword in field or keyword in lowered for keyword in keywords)
+
+
+def _infer_key_value_answer_type(field_name: str, value: str, hints: dict[str, Any], target_type: str) -> str:
+    field = str(field_name or "").lower()
+    if "quarter" in field or QUARTER_RE.search(value):
+        return "quarter"
+    if PERCENT_RE.search(value):
+        return "percentage"
+    if NUMBER_RE.search(value):
+        return "numeric"
+    if target_type in {"location", "quarter", "organization", "heading", "source"}:
+        return target_type
+    if "city" in field:
+        return "city"
+    if "state" in field:
+        return "state"
+    if any(term in field for term in ("company", "board", "organization", "agency", "name")):
+        return "organization"
+    if any(term in field for term in ("date", "year")):
+        return "date"
+    if set(hints.get("field_hints") or []) & {"company", "board", "organization", "agency", "name"}:
+        return "organization"
+    return "key_value"
 
 
 def _covered_by_existing(value: str, candidates: list[dict[str, Any]]) -> bool:

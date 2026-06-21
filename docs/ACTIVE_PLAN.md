@@ -6,7 +6,7 @@
 ## Current Stage
 
 ```text
-Phase 4D-A: Candidate answer coverage audit for Phase 4C candidate_spans
+Phase 4D-A.1: Candidate answer extraction and ranking refinement
 ```
 
 ## Current Goal
@@ -17,6 +17,7 @@ Phase 4C candidate_evidence.jsonl
 -> candidate answer board artifacts
 -> coverage / rank / distractor metrics
 -> error bucket analysis
+-> extraction/ranking refinement before Candidate-ID Reader
 ```
 
 ## Current Status
@@ -44,7 +45,9 @@ Phase 4C local implementation -> accepted
 Phase 4C server retrieval-only / packing-only -> accepted
 Phase 4C server full GRPO E2E -> accepted
 Phase 4D-A local implementation -> implemented
-Phase 4D-A server coverage audit -> not_started
+Phase 4D-A server coverage audit -> accepted
+Phase 4D-A.1 local implementation -> implemented
+Phase 4D-A.1 server refined audit -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -63,6 +66,8 @@ evaluation implementation, metrics, or conclusions in this phase.
   existing Phase 4C candidate_spans outputs.
 - use QA gold answers only for coverage metrics and error buckets, not for
   candidate answer extraction or candidate answer artifacts.
+- refine candidate answer extraction, ranking, top-k metrics, and limited
+  top-k board artifacts without using Reader or AnswerPolicy.
 
 ## Blockers
 
@@ -71,9 +76,11 @@ evaluation implementation, metrics, or conclusions in this phase.
   the small 3-window regression.
 - Gate 4 expanded raw-input regression is accepted; it is not a formal
   benchmark and does not change the default AnswerPolicy prompt/context.
-- Phase 4D-A local implementation has no local blocker. The real coverage audit
-  requires server-side Phase 4C artifacts, which may be absent from the local
-  ignored `outputs/` tree.
+- Phase 4D-A server coverage audit is accepted. Its result shows that the next
+  blocker is candidate answer extraction/ranking quality, not a Reader change.
+- Phase 4D-A.1 local implementation has no local blocker. The refined server
+  audit requires server-side Phase 4C artifacts, which may be absent from the
+  local ignored `outputs/` tree.
 
 Gate 4 accepted server scope:
 
@@ -163,6 +170,34 @@ Phase 4C interpretation:
   packing mode, but it is not yet the global default.
 - Full details are recorded in `docs/PHASE4C_CANDIDATE_SPANS_REPORT.md`.
 
+Phase 4D-A accepted server audit:
+
+```text
+sample_count = 90
+candidate_span_answer_coverage = 0.7444
+candidate_answer_coverage = 0.4556
+mean_candidate_answer_count = 79.5889
+mean_unique_candidate_answer_count = 49.9889
+mean_same_type_distractor_count = 22.7444
+mean_numeric_distractor_count = 60.4444
+no_candidate_answer_count = 0
+candidate_answer_no_gold_leakage = true
+bucket_A_retrieval_gold_miss_top5 = 4
+bucket_C_gold_answer_not_in_candidate_spans = 22
+bucket_D_gold_answer_in_candidate_spans_but_not_extracted = 25
+bucket_E_gold_answer_in_candidate_answers_but_model_answer_wrong = 13
+bucket_F_gold_answer_in_candidate_answers_and_model_answer_correct = 26
+```
+
+Phase 4D-A interpretation:
+
+- Do not enter Candidate-ID Grounded Reader directly from this result.
+- The immediate bottleneck is candidate answer extraction / normalization /
+  ranking noise: 25 samples have the gold answer in candidate spans but not in
+  extracted candidate answers, and average candidate answer count is 79.5889.
+- 22 samples still require candidate span improvement.
+- 13 answer-covered samples require later Reader or candidate-selection work.
+
 ## Local Validation
 
 Local `main` validation covers code and documentation state. The accepted Gate
@@ -201,10 +236,10 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Run Phase 4D-A coverage audit on the server Phase 4C `candidate_spans`
-   artifacts.
-2. Interpret whether remaining misses are evidence coverage, extraction, Reader
-   selection, or distractor/ranking issues.
+1. Run Phase 4D-A.1 refined candidate answer audit on the server Phase 4C
+   `candidate_spans` artifacts.
+2. Compare all/top-k candidate answer coverage and rank distribution against
+   the accepted Phase 4D-A audit.
 3. Keep `page_children` as the default until more shard and document-type
    validation supports a global default change.
 4. Keep CDC `not_started` until explicitly started.
@@ -212,7 +247,7 @@ absolute_path_hit_count = 0
 ## Stop Condition
 
 ```text
-Phase 4D-A local implementation implemented
+Phase 4D-A.1 local implementation implemented
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

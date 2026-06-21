@@ -7,6 +7,7 @@ from argparse import Namespace
 from pathlib import Path
 
 from docagent.retrieval.candidate_answer_extraction import (
+    build_topk_candidate_answer_boards,
     bucket_candidate_answer_failures,
     candidate_answer_artifact_has_gold_leakage,
     candidate_span_contains_answer,
@@ -98,10 +99,80 @@ def test_typed_extraction_rules_no_gold_and_index_priority() -> None:
     assert any(candidate["answer_type"] == "text" and "acme corporation" in candidate["normalized_answer"] for candidate in text_board["candidate_answers"])
 
 
+def test_phase4d_a1_extraction_rules_for_headings_locations_quarters_and_entities() -> None:
+    heading_board = extract_candidate_answers(
+        "What is the heading of this page?",
+        _hints("heading", "heading"),
+        [_span("h1", "Consolidated Statements of Operations\n2024\nOther values", bbox=[0, 20, 100, 40])],
+    )
+    city_board = extract_candidate_answers(
+        "In which city is the board?",
+        _hints("text", "city", "board", "located"),
+        [_span("l1", "The board is located at 100 Main Street, Springfield, IL 62701.")],
+    )
+    state_board = extract_candidate_answers(
+        "In which state is the board located?",
+        _hints("text", "state", "board", "located"),
+        [_span("l2", "Board located: 100 Main Street, Springfield, Illinois 62701.")],
+    )
+    quarter_board = extract_candidate_answers(
+        "What is the short form used for 3rd quarter of 2002?",
+        _hints("text", "quarter"),
+        [_span("q1", "Results for the third quarter are labeled 3Q02 and Q3FY02 in this table.")],
+    )
+    key_value_board = extract_candidate_answers(
+        "What is the contract number?",
+        {"answer_type_hint": "text", "keywords": ["contract", "number"], "numeric_tokens": [], "date_tokens": [], "field_hints": ["number"]},
+        [_span("kv1", "Contract Number - AB-12345\nAmount: $8,000")],
+    )
+    organization_board = extract_candidate_answers(
+        "What is the name of the board mentioned in the logo?",
+        _hints("text", "name", "board", "logo"),
+        [_span("o1", "STATE WATER RESOURCES CONTROL BOARD\nCalifornia Environmental Protection Agency")],
+    )
+    source_board = extract_candidate_answers(
+        "What source is cited in the footer?",
+        _hints("source", "source"),
+        [_span("s1", "Source: Annual Report of the Board, Appendix A, page 42, accessed March 2024.")],
+    )
+
+    assert heading_board["candidate_answers"][0]["answer_text"] == "Consolidated Statements of Operations"
+    assert heading_board["candidate_answers"][0]["answer_type"] == "heading"
+    assert any(candidate["answer_type"] == "city" and "springfield" in candidate["normalized_answer"] for candidate in city_board["candidate_answers"])
+    assert any(candidate["answer_type"] == "state" and "illinois" in candidate["normalized_answer"] for candidate in state_board["candidate_answers"])
+    assert any(candidate["answer_type"] == "quarter" and candidate["normalized_answer"] in {"3q02", "q3fy02"} for candidate in quarter_board["candidate_answers"])
+    assert any(candidate["answer_text"] == "AB-12345" for candidate in key_value_board["candidate_answers"])
+    assert any(candidate["answer_type"] == "organization" and "board" in candidate["normalized_answer"] for candidate in organization_board["candidate_answers"])
+    assert source_board["candidate_answers"][0]["answer_text"].startswith("Source: Annual Report of the Board")
+    assert "page 42" in source_board["candidate_answers"][0]["answer_text"]
+
+
+def test_ranking_duplicate_and_generic_numeric_penalties() -> None:
+    board = extract_candidate_answers(
+        "What is the company name?",
+        _hints("text", "company", "name"),
+        [
+            _span("c1", "Company: Acme Corporation\nReference number: 12345", score=0.9),
+            _span("c2", "Company: Acme Corporation", page=2, score=0.1),
+        ],
+    )
+    candidates = board["candidate_answers"]
+    acme = [candidate for candidate in candidates if candidate["normalized_answer"] == "acme corporation"]
+    generic_number = next(candidate for candidate in candidates if candidate["normalized_answer"] == "12345")
+
+    assert [candidate["rank"] for candidate in candidates] == list(range(1, len(candidates) + 1))
+    assert candidates[0]["normalized_answer"] == "acme corporation"
+    assert acme[0]["score_breakdown"]["duplicate_penalty"] == 0.0
+    assert acme[1]["score_breakdown"]["duplicate_penalty"] < 0.0
+    assert generic_number["score_breakdown"]["generic_numeric_penalty"] < 0.0
+    assert generic_number["rank"] > candidates[0]["rank"]
+    assert candidates[0]["is_top_k"] is True
+
+
 def test_coverage_rank_distribution_and_distractor_metrics() -> None:
     q1_candidates = [
-        {"normalized_answer": "2.5%", "answer_text": "2.5%", "answer_type": "percentage"},
-        {"normalized_answer": "31", "answer_text": "31", "answer_type": "index"},
+        {"normalized_answer": "2.5%", "answer_text": "2.5%", "answer_type": "percentage", "rank": 1},
+        {"normalized_answer": "31", "answer_text": "31", "answer_type": "index", "rank": 2},
     ]
     coverage = compute_candidate_answer_coverage(q1_candidates, ["31"])
 
@@ -110,6 +181,8 @@ def test_coverage_rank_distribution_and_distractor_metrics() -> None:
     assert coverage["covered"] is True
     assert coverage["first_rank"] == 2
     assert coverage["rank_bucket"] == "rank_2"
+    assert compute_candidate_answer_coverage(q1_candidates, ["31"], top_k=1)["covered"] is False
+    assert compute_candidate_answer_coverage(q1_candidates, ["31"], top_k=3)["covered"] is True
 
     candidate_records = [
         {"qid": "q1", "candidate_spans": [_span("c1", "Share of segment is 2.5% (31)")]},
@@ -151,14 +224,25 @@ def test_coverage_rank_distribution_and_distractor_metrics() -> None:
 
     assert metrics["candidate_span_answer_coverage"] == 0.5
     assert metrics["candidate_answer_coverage"] == 0.5
+    assert metrics["candidate_answer_coverage_all"] == 0.5
+    assert metrics["candidate_answer_coverage_top1"] == 0.0
+    assert metrics["candidate_answer_coverage_top3"] == 0.5
+    assert metrics["candidate_answer_coverage_top5"] == 0.5
+    assert metrics["candidate_answer_coverage_top10"] == 0.5
+    assert metrics["candidate_answer_coverage_top20"] == 0.5
     assert metrics["gold_answer_rank_distribution"]["rank_2"] == 1
     assert metrics["gold_answer_rank_distribution"]["missing"] == 1
     assert metrics["mean_candidate_answer_count"] == 1.0
     assert metrics["mean_unique_candidate_answer_count"] == 1.0
+    assert metrics["mean_top20_candidate_answer_count"] == 1.0
     assert metrics["mean_same_type_distractor_count"] == 0.5
     assert metrics["mean_numeric_distractor_count"] == 0.5
     assert metrics["no_candidate_answer_count"] == 1
     assert metrics["candidate_answer_no_gold_leakage"] is True
+
+    topk_boards = build_topk_candidate_answer_boards(answer_boards, top_k=1)
+    assert len(topk_boards[0]["candidate_answers"]) == 1
+    assert len(answer_boards[0]["candidate_answers"]) == 2
 
 
 def test_error_buckets_cover_a_to_f() -> None:
@@ -246,13 +330,17 @@ def test_runner_outputs_artifacts_without_answer_results(tmp_path: Path) -> None
             phase4c_summary=phase4c_summary,
             output_root=output_root,
             run_id="fixture",
+            top_k=1,
             force=True,
         )
     )
     run_dir = output_root / "fixture"
     boards = read_jsonl(run_dir / "candidate_answers.jsonl")
+    topk_boards = read_jsonl(run_dir / "candidate_answers_topk.jsonl")
     preview = json.loads((run_dir / "candidate_answers_preview.json").read_text(encoding="utf-8"))
+    topk_preview = json.loads((run_dir / "candidate_answers_topk_preview.json").read_text(encoding="utf-8"))
     metrics = json.loads((run_dir / "candidate_answer_coverage_metrics.json").read_text(encoding="utf-8"))
+    transition = json.loads((run_dir / "bucket_transition_estimate.json").read_text(encoding="utf-8"))
 
     assert summary["status"] == "success"
     assert summary["error_buckets"]["answer_results_status"] == "unavailable"
@@ -260,12 +348,20 @@ def test_runner_outputs_artifacts_without_answer_results(tmp_path: Path) -> None
     assert summary["phase4c_context"]["candidate_packing_metrics_status"] == "available"
     assert summary["phase4c_context"]["phase4c_evidence_packing_mode"] == "candidate_spans"
     assert summary["artifact_paths"]["candidate_answers"] == "candidate_answers.jsonl"
+    assert summary["artifact_paths"]["candidate_answers_topk"] == "candidate_answers_topk.jsonl"
+    assert summary["top_k"] == 1
     assert "\\" not in json.dumps(summary["artifact_paths"])
     assert boards[0]["candidate_answers"][0]["answer_type"] == "index"
+    assert len(topk_boards[0]["candidate_answers"]) == 1
+    assert len(boards[0]["candidate_answers"]) > len(topk_boards[0]["candidate_answers"])
     assert candidate_answer_artifact_has_gold_leakage(boards) is False
+    assert candidate_answer_artifact_has_gold_leakage(topk_boards) is False
     assert "gold_page" not in json.dumps(boards, ensure_ascii=False)
     assert "gold_page" not in json.dumps(preview, ensure_ascii=False)
+    assert "gold_page" not in json.dumps(topk_preview, ensure_ascii=False)
     assert metrics["candidate_answer_coverage"] == 1.0
+    assert "candidate_answer_coverage_top1" in metrics
+    assert transition["d_samples_potentially_fixed_by_extraction_improvement"] == 0
     assert (run_dir / "summary.md").is_file()
 
 
@@ -283,3 +379,4 @@ def test_cli_help() -> None:
     assert "--qa-jsonl" in result.stdout
     assert "--candidate-packing-metrics" in result.stdout
     assert "--phase4c-summary" in result.stdout
+    assert "--top-k" in result.stdout

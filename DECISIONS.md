@@ -8,6 +8,47 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-21: Phase 4D-A.1 Refinement Before Candidate-ID Reader
+
+Decision: after the Phase 4D-A server audit, refine candidate answer extraction,
+normalization, ranking, and top-k coverage metrics before starting any
+Candidate-ID Grounded Reader work.
+
+Evidence:
+
+- `candidate_span_answer_coverage = 0.7444`.
+- `candidate_answer_coverage = 0.4556`.
+- `mean_candidate_answer_count = 79.5889`.
+- `mean_unique_candidate_answer_count = 49.9889`.
+- Error buckets: `A=4`, `C=22`, `D=25`, `E=13`, `F=26`.
+- `candidate_answer_no_gold_leakage = true`.
+
+Interpretation:
+
+- The immediate bottleneck is not Reader prompt design.
+- `D=25` means many answers are present in candidate spans but not extracted as
+  candidate answers.
+- `C=22` means candidate span coverage still needs later improvement.
+- The candidate answer board is too noisy for direct Reader use without ranking
+  and top-k analysis.
+
+Implementation boundary:
+
+- Improve heading/title, city/state/location, quarter short-form,
+  key-value/field-value, organization/company/board, and source/footer
+  extraction.
+- Preserve all candidate answers while adding ranking scores, duplicate
+  penalties, generic numeric penalties, top-k flags, and top-k artifacts.
+- Add all/top1/top3/top5/top10/top20 coverage metrics and bucket transition
+  estimates.
+
+Constraints:
+
+- Do not modify Reader prompt defaults, AnswerPolicy, retrieval models, MinerU,
+  checkpoints, reward, training split, training data, CDC, Demo, or the global
+  `candidate_spans` default.
+- Do not run full GRPO for Phase 4D-A.1.
+
 ## 2026-06-21: Phase 4D-A Candidate Answer Coverage Audit Boundary
 
 Decision: implement a deterministic candidate answer coverage audit before

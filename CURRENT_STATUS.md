@@ -2,6 +2,74 @@
 
 Updated: 2026-06-21
 
+## Phase 4D-A.1 Local Implementation
+
+Phase 4D-A server audit is accepted and shows that the immediate next bottleneck
+is candidate answer extraction/ranking, not a Reader prompt or AnswerPolicy
+integration change.
+
+Status:
+
+```text
+Phase 4B -> accepted
+Phase 4C local implementation -> accepted
+Phase 4C server retrieval-only / packing-only -> accepted
+Phase 4C server full GRPO E2E -> accepted
+Phase 4D-A local implementation -> implemented
+Phase 4D-A server coverage audit -> accepted
+Phase 4D-A.1 local implementation -> implemented
+Phase 4D-A.1 server refined audit -> not_started
+CDC -> not_started
+Router/tools -> not_started
+Demo/closure -> not_started
+```
+
+Phase 4D-A accepted server audit:
+
+```text
+sample_count = 90
+candidate_span_answer_coverage = 0.7444
+candidate_answer_coverage = 0.4556
+mean_candidate_answer_count = 79.5889
+mean_unique_candidate_answer_count = 49.9889
+mean_same_type_distractor_count = 22.7444
+mean_numeric_distractor_count = 60.4444
+no_candidate_answer_count = 0
+candidate_answer_no_gold_leakage = true
+bucket_A_retrieval_gold_miss_top5 = 4
+bucket_C_gold_answer_not_in_candidate_spans = 22
+bucket_D_gold_answer_in_candidate_spans_but_not_extracted = 25
+bucket_E_gold_answer_in_candidate_answers_but_model_answer_wrong = 13
+bucket_F_gold_answer_in_candidate_answers_and_model_answer_correct = 26
+```
+
+Interpretation:
+
+- Do not enter Candidate-ID Grounded Reader directly from this result.
+- Improve candidate answer extraction, normalization, ranking, and top-k
+  coverage metrics first.
+- `D=25` is the main extraction-improvement opportunity.
+- `C=22` still requires candidate span improvement.
+- `E=13` remains later Reader or candidate-selection work.
+
+Phase 4D-A.1 implemented boundary:
+
+- heading/title, city/state/location, quarter short-form, key-value,
+  organization/company/board, and source/footer extraction improvements;
+- rank, top-k flags, duplicate penalty, generic numeric penalty, and long-text
+  penalty on candidate answers;
+- all/top1/top3/top5/top10/top20 coverage metrics;
+- limited top-k board artifacts for future Candidate-ID Reader design;
+- `bucket_transition_estimate.json` for D-bucket extraction-improvement
+  potential.
+
+Unchanged boundary:
+
+- Reader prompts, AnswerPolicy, retrieval models, MinerU, checkpoints, reward,
+  training data, CDC, Demo, and global `candidate_spans` default remain
+  unchanged.
+- Phase 4D-A.1 server refined audit has not yet run.
+
 ## Phase 4D-A Local Implementation
 
 Phase 4D-A adds an audit layer after the accepted Phase 4C
@@ -17,7 +85,9 @@ Phase 4C local implementation -> accepted
 Phase 4C server retrieval-only / packing-only -> accepted
 Phase 4C server full GRPO E2E -> accepted
 Phase 4D-A local implementation -> implemented
-Phase 4D-A server coverage audit -> not_started
+Phase 4D-A server coverage audit -> accepted
+Phase 4D-A.1 local implementation -> implemented
+Phase 4D-A.1 server refined audit -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -41,8 +111,8 @@ Unchanged boundary:
   mode, not a global default;
 - Reader prompts, AnswerPolicy, retrieval models, MinerU, checkpoints, reward,
   training data, CDC, and Demo remain unchanged;
-- Phase 4D-A server coverage audit has not yet run, so coverage metrics are not
-  accepted server results.
+- Phase 4D-A server coverage audit is accepted; Phase 4D-A.1 refined server
+  audit has not yet run.
 
 ## Phase 4C Accepted
 
@@ -57,7 +127,9 @@ Phase 4C local implementation -> accepted
 Phase 4C server retrieval-only / packing-only -> accepted
 Phase 4C server full GRPO E2E -> accepted
 Phase 4D-A local implementation -> implemented
-Phase 4D-A server coverage audit -> not_started
+Phase 4D-A server coverage audit -> accepted
+Phase 4D-A.1 local implementation -> implemented
+Phase 4D-A.1 server refined audit -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -151,7 +223,9 @@ Phase 4C local implementation -> accepted
 Phase 4C server retrieval-only / packing-only -> accepted
 Phase 4C server full GRPO E2E -> accepted
 Phase 4D-A local implementation -> implemented
-Phase 4D-A server coverage audit -> not_started
+Phase 4D-A server coverage audit -> accepted
+Phase 4D-A.1 local implementation -> implemented
+Phase 4D-A.1 server refined audit -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started

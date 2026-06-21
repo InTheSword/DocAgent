@@ -13,7 +13,9 @@ if str(REPO_ROOT) not in sys.path:
 from docagent.retrieval.candidate_answer_extraction import (
     bucket_candidate_answer_failures,
     build_candidate_answer_boards,
+    build_topk_candidate_answer_boards,
     candidate_answer_artifact_has_gold_leakage,
+    estimate_bucket_transitions,
     summarize_candidate_answer_coverage,
 )
 from docagent.utils.jsonl import read_jsonl, write_jsonl
@@ -29,6 +31,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--phase4c-summary", type=Path)
     parser.add_argument("--output-root", required=True, type=Path)
     parser.add_argument("--run-id", required=True)
+    parser.add_argument("--top-k", type=int, default=20)
     parser.add_argument("--force", action="store_true")
     return parser.parse_args(argv)
 
@@ -46,7 +49,9 @@ def run_phase4d_candidate_answer_coverage(args: argparse.Namespace) -> dict[str,
         raise FileExistsError(f"Output directory exists; pass --force to overwrite: {run_dir}")
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    answer_boards = build_candidate_answer_boards(candidate_records)
+    top_k = max(1, int(args.top_k))
+    answer_boards = build_candidate_answer_boards(candidate_records, top_k=top_k)
+    topk_answer_boards = build_topk_candidate_answer_boards(answer_boards, top_k=top_k)
     no_gold_leakage = not candidate_answer_artifact_has_gold_leakage(answer_boards)
     metrics = summarize_candidate_answer_coverage(
         candidate_records=candidate_records,
@@ -60,19 +65,26 @@ def run_phase4d_candidate_answer_coverage(args: argparse.Namespace) -> dict[str,
         page_retrieval_rows=page_retrieval_rows,
         answer_results=answer_results,
     )
+    transition_estimate = estimate_bucket_transitions(buckets)
 
     paths = {
         "candidate_answers": run_dir / "candidate_answers.jsonl",
         "candidate_answers_preview": run_dir / "candidate_answers_preview.json",
+        "candidate_answers_topk": run_dir / "candidate_answers_topk.jsonl",
+        "candidate_answers_topk_preview": run_dir / "candidate_answers_topk_preview.json",
         "candidate_answer_coverage_metrics": run_dir / "candidate_answer_coverage_metrics.json",
         "candidate_answer_error_buckets": run_dir / "candidate_answer_error_buckets.json",
+        "bucket_transition_estimate": run_dir / "bucket_transition_estimate.json",
         "summary": run_dir / "summary.json",
         "summary_md": run_dir / "summary.md",
     }
     write_jsonl(paths["candidate_answers"], answer_boards)
     _write_json(paths["candidate_answers_preview"], {"records": [_preview_board(board) for board in answer_boards[:3]]})
+    write_jsonl(paths["candidate_answers_topk"], topk_answer_boards)
+    _write_json(paths["candidate_answers_topk_preview"], {"records": [_preview_board(board) for board in topk_answer_boards[:3]]})
     _write_json(paths["candidate_answer_coverage_metrics"], metrics)
     _write_json(paths["candidate_answer_error_buckets"], buckets)
+    _write_json(paths["bucket_transition_estimate"], transition_estimate)
 
     summary = {
         "phase": "Phase 4D-A",
@@ -87,18 +99,26 @@ def run_phase4d_candidate_answer_coverage(args: argparse.Namespace) -> dict[str,
         "does_not_modify_reader": True,
         "does_not_run_answer_policy": True,
         "does_not_train": True,
+        "top_k": top_k,
         "no_gold_leakage_in_candidate_answers": no_gold_leakage,
         "artifact_paths": {key: _relative_to(paths[key], run_dir) for key in paths},
         "metrics": {
             "sample_count": metrics["sample_count"],
             "candidate_span_answer_coverage": metrics["candidate_span_answer_coverage"],
             "candidate_answer_coverage": metrics["candidate_answer_coverage"],
+            "candidate_answer_coverage_all": metrics["candidate_answer_coverage_all"],
+            "candidate_answer_coverage_top1": metrics["candidate_answer_coverage_top1"],
+            "candidate_answer_coverage_top3": metrics["candidate_answer_coverage_top3"],
+            "candidate_answer_coverage_top5": metrics["candidate_answer_coverage_top5"],
+            "candidate_answer_coverage_top10": metrics["candidate_answer_coverage_top10"],
+            "candidate_answer_coverage_top20": metrics["candidate_answer_coverage_top20"],
             "no_candidate_answer_count": metrics["no_candidate_answer_count"],
             "candidate_answer_no_gold_leakage": metrics["candidate_answer_no_gold_leakage"],
         },
         "error_buckets": {
             "answer_results_status": buckets["answer_results_status"],
             "bucket_counts": buckets["bucket_counts"],
+            "bucket_summary": buckets["bucket_summary"],
         },
         "phase4c_context": {
             "candidate_packing_metrics_status": "available" if candidate_packing_metrics is not None else "unavailable",
@@ -180,7 +200,9 @@ def _summary_markdown(summary: dict[str, Any]) -> str:
             f"- sample_count: {metrics['sample_count']}",
             f"- candidate_span_answer_coverage: {metrics['candidate_span_answer_coverage']:.4f}",
             f"- candidate_answer_coverage: {metrics['candidate_answer_coverage']:.4f}",
+            f"- candidate_answer_coverage_top20: {metrics['candidate_answer_coverage_top20']:.4f}",
             f"- no_gold_leakage_in_candidate_answers: {summary['no_gold_leakage_in_candidate_answers']}",
+            f"- top_k: {summary['top_k']}",
             f"- answer_results_status: {summary['error_buckets']['answer_results_status']}",
             f"- bucket_counts: {json.dumps(bucket_counts, sort_keys=True)}",
             "",

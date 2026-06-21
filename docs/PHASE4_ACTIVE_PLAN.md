@@ -317,8 +317,8 @@ Do not:
 
 ## 8. Next Priorities
 
-1. Run Phase 4D-A candidate answer coverage audit on the server Phase 4C
-   `candidate_spans` artifacts.
+1. Run Phase 4D-A.1 refined candidate answer coverage audit on the server
+   Phase 4C `candidate_spans` artifacts.
 2. Keep Phase 4C `candidate_spans` available as an accepted experimental and
    recommended evidence-packing mode.
 3. Keep CDC `not_started` until explicitly started.
@@ -415,7 +415,9 @@ Status:
 
 ```text
 Phase 4D-A local implementation -> implemented
-Phase 4D-A server coverage audit -> not_started
+Phase 4D-A server coverage audit -> accepted
+Phase 4D-A.1 local implementation -> implemented
+Phase 4D-A.1 server refined audit -> not_started
 ```
 
 Scope:
@@ -438,15 +440,66 @@ scripts/analyze_phase4d_candidate_answer_coverage.py
 tests/test_candidate_answer_extraction.py
 ```
 
-Server-side Phase 4D-A real audit is still required before any Phase 4D-A
-coverage result can be marked `accepted`.
+Phase 4D-A server audit is accepted. The refined Phase 4D-A.1 server audit is
+still required before A.1 coverage/ranking results can be marked `accepted`.
+
+Accepted Phase 4D-A server audit:
+
+```text
+sample_count = 90
+candidate_span_answer_coverage = 0.7444
+candidate_answer_coverage = 0.4556
+mean_candidate_answer_count = 79.5889
+mean_unique_candidate_answer_count = 49.9889
+mean_same_type_distractor_count = 22.7444
+mean_numeric_distractor_count = 60.4444
+no_candidate_answer_count = 0
+candidate_answer_no_gold_leakage = true
+bucket_A_retrieval_gold_miss_top5 = 4
+bucket_C_gold_answer_not_in_candidate_spans = 22
+bucket_D_gold_answer_in_candidate_spans_but_not_extracted = 25
+bucket_E_gold_answer_in_candidate_answers_but_model_answer_wrong = 13
+bucket_F_gold_answer_in_candidate_answers_and_model_answer_correct = 26
+```
+
+Interpretation:
+
+- Do not enter Candidate-ID Grounded Reader directly from Phase 4D-A.
+- Primary next work is candidate answer extraction, normalization, ranking, and
+  top-k coverage analysis.
+- The `D=25` bucket is potentially addressable by extraction improvement.
+- The `C=22` bucket still requires candidate span improvement.
+- The `E=13` bucket represents later Reader or candidate-selection work.
+
+## 8.3 Phase 4D-A.1 Candidate Answer Extraction and Ranking Refinement
+
+Status:
+
+```text
+Phase 4D-A.1 local implementation -> implemented
+Phase 4D-A.1 server refined audit -> not_started
+```
+
+Scope:
+
+- refine heading/title, city/state/location, quarter short-form,
+  key-value/field-value, organization/company/board, and source/footer
+  extraction rules;
+- preserve all candidate answers while assigning rank, top-k flags, and score
+  breakdowns with duplicate, generic numeric, and long-text penalties;
+- add all/top1/top3/top5/top10/top20 candidate answer coverage metrics;
+- add `candidate_answers_topk.jsonl`,
+  `candidate_answers_topk_preview.json`, and
+  `bucket_transition_estimate.json`;
+- do not modify Reader prompts, AnswerPolicy integration, retrieval models,
+  training, CDC, Demo, or the default evidence-packing mode.
 
 ## 9. Stop Condition
 
 Stop after the following are complete:
 
 ```text
-Phase 4D-A local implementation implemented
+Phase 4D-A.1 local implementation implemented
 + targeted and regression tests pass
 + status documents updated
 + branch pushed
