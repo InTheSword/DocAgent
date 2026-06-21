@@ -6,18 +6,17 @@
 ## Current Stage
 
 ```text
-Phase 4C: Multi-granularity evidence packing for MP-DocVQA raw-input E2E
+Phase 4D-A: Candidate answer coverage audit for Phase 4C candidate_spans
 ```
 
 ## Current Goal
 
 ```text
-Hybrid page retrieval
--> Top-k candidate pages
--> query-aware / structure-aware candidate spans
--> fixed evidence packet
--> AnswerPolicy A/B runner
--> answer / evidence page / trace
+Phase 4C candidate_evidence.jsonl
+-> deterministic typed candidate answer extraction
+-> candidate answer board artifacts
+-> coverage / rank / distractor metrics
+-> error bucket analysis
 ```
 
 ## Current Status
@@ -44,6 +43,8 @@ Gate 4D full GRPO E2E -> accepted
 Phase 4C local implementation -> accepted
 Phase 4C server retrieval-only / packing-only -> accepted
 Phase 4C server full GRPO E2E -> accepted
+Phase 4D-A local implementation -> implemented
+Phase 4D-A server coverage audit -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -58,6 +59,10 @@ evaluation implementation, metrics, or conclusions in this phase.
 - do not expand to all 29 shards in Phase 4B;
 - prioritize the accepted server sample and ingestion assets;
 - keep generated assets under ignored `outputs/`.
+- implement deterministic candidate answer extraction and audit artifacts from
+  existing Phase 4C candidate_spans outputs.
+- use QA gold answers only for coverage metrics and error buckets, not for
+  candidate answer extraction or candidate answer artifacts.
 
 ## Blockers
 
@@ -66,6 +71,9 @@ evaluation implementation, metrics, or conclusions in this phase.
   the small 3-window regression.
 - Gate 4 expanded raw-input regression is accepted; it is not a formal
   benchmark and does not change the default AnswerPolicy prompt/context.
+- Phase 4D-A local implementation has no local blocker. The real coverage audit
+  requires server-side Phase 4C artifacts, which may be absent from the local
+  ignored `outputs/` tree.
 
 Gate 4 accepted server scope:
 
@@ -193,22 +201,23 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Keep Phase 4B accepted artifacts unchanged unless a reproducibility issue is
-   reported.
-2. Keep `page_children` as the default until more shard and document-type
+1. Run Phase 4D-A coverage audit on the server Phase 4C `candidate_spans`
+   artifacts.
+2. Interpret whether remaining misses are evidence coverage, extraction, Reader
+   selection, or distractor/ranking issues.
+3. Keep `page_children` as the default until more shard and document-type
    validation supports a global default change.
-3. Keep CDC `not_started` until explicitly started.
-4. Use Gate 4 failure taxonomy to guide later Reader/error-analysis work, not
-   a retrieval model change in this phase.
+4. Keep CDC `not_started` until explicitly started.
 
 ## Stop Condition
 
 ```text
-Phase 4C local implementation accepted
-+ server retrieval-only / packing-only accepted
-+ server full GRPO E2E accepted
+Phase 4D-A local implementation implemented
++ targeted and regression tests pass
 + status documents updated
-+ stop before CDC and before any default AnswerPolicy prompt change
++ branch pushed
++ stop before Reader prompt changes, AnswerPolicy integration, training, CDC, Demo,
+   and any global `candidate_spans` default change
 ```
 
 ## Phase Documents

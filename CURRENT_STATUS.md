@@ -2,6 +2,48 @@
 
 Updated: 2026-06-21
 
+## Phase 4D-A Local Implementation
+
+Phase 4D-A adds an audit layer after the accepted Phase 4C
+`candidate_spans` evidence packing path. It extracts typed candidate answers
+from candidate spans and measures whether gold answers are covered by spans,
+extracted answers, ranks, and error buckets.
+
+Status:
+
+```text
+Phase 4B -> accepted
+Phase 4C local implementation -> accepted
+Phase 4C server retrieval-only / packing-only -> accepted
+Phase 4C server full GRPO E2E -> accepted
+Phase 4D-A local implementation -> implemented
+Phase 4D-A server coverage audit -> not_started
+CDC -> not_started
+Router/tools -> not_started
+Demo/closure -> not_started
+```
+
+Implemented boundary:
+
+- deterministic rule-based extraction for date, percentage, index, source,
+  heading, numeric, and short text candidates;
+- candidate answer board artifacts and preview;
+- coverage metrics for candidate spans, candidate answers, rank distribution,
+  and distractor counts;
+- error buckets A-G separating retrieval miss, span coverage miss, extraction
+  miss, Reader wrong, Reader correct, and unclear cases;
+- automatic no-gold-leakage checks for candidate answer artifacts.
+
+Unchanged boundary:
+
+- default `--evidence-packing page_children` remains unchanged;
+- Phase 4C `candidate_spans` remains an accepted experimental and recommended
+  mode, not a global default;
+- Reader prompts, AnswerPolicy, retrieval models, MinerU, checkpoints, reward,
+  training data, CDC, and Demo remain unchanged;
+- Phase 4D-A server coverage audit has not yet run, so coverage metrics are not
+  accepted server results.
+
 ## Phase 4C Accepted
 
 Phase 4C adds an experimental multi-granularity evidence packing path on top
@@ -14,6 +56,8 @@ Phase 4B -> accepted
 Phase 4C local implementation -> accepted
 Phase 4C server retrieval-only / packing-only -> accepted
 Phase 4C server full GRPO E2E -> accepted
+Phase 4D-A local implementation -> implemented
+Phase 4D-A server coverage audit -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -106,6 +150,8 @@ Gate 4D full GRPO E2E -> accepted
 Phase 4C local implementation -> accepted
 Phase 4C server retrieval-only / packing-only -> accepted
 Phase 4C server full GRPO E2E -> accepted
+Phase 4D-A local implementation -> implemented
+Phase 4D-A server coverage audit -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started

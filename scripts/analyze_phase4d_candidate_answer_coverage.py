@@ -1,0 +1,201 @@
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from docagent.retrieval.candidate_answer_extraction import (
+    bucket_candidate_answer_failures,
+    build_candidate_answer_boards,
+    candidate_answer_artifact_has_gold_leakage,
+    summarize_candidate_answer_coverage,
+)
+from docagent.utils.jsonl import read_jsonl, write_jsonl
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Analyze Phase 4D-A candidate answer coverage.")
+    parser.add_argument("--candidate-evidence", required=True, type=Path)
+    parser.add_argument("--qa-jsonl", required=True, type=Path)
+    parser.add_argument("--answer-results", type=Path)
+    parser.add_argument("--page-retrieval-results", type=Path)
+    parser.add_argument("--candidate-packing-metrics", type=Path)
+    parser.add_argument("--phase4c-summary", type=Path)
+    parser.add_argument("--output-root", required=True, type=Path)
+    parser.add_argument("--run-id", required=True)
+    parser.add_argument("--force", action="store_true")
+    return parser.parse_args(argv)
+
+
+def run_phase4d_candidate_answer_coverage(args: argparse.Namespace) -> dict[str, Any]:
+    candidate_records = read_jsonl(args.candidate_evidence)
+    qa_records = read_jsonl(args.qa_jsonl)
+    answer_results = _read_optional_jsonl(args.answer_results)
+    page_retrieval_rows = _read_optional_jsonl(args.page_retrieval_results)
+    candidate_packing_metrics = _read_optional_json(args.candidate_packing_metrics)
+    phase4c_summary = _read_optional_json(args.phase4c_summary)
+
+    run_dir = args.output_root / args.run_id
+    if run_dir.exists() and any(run_dir.iterdir()) and not args.force:
+        raise FileExistsError(f"Output directory exists; pass --force to overwrite: {run_dir}")
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    answer_boards = build_candidate_answer_boards(candidate_records)
+    no_gold_leakage = not candidate_answer_artifact_has_gold_leakage(answer_boards)
+    metrics = summarize_candidate_answer_coverage(
+        candidate_records=candidate_records,
+        answer_boards=answer_boards,
+        qa_records=qa_records,
+    )
+    buckets = bucket_candidate_answer_failures(
+        candidate_records=candidate_records,
+        answer_boards=answer_boards,
+        qa_records=qa_records,
+        page_retrieval_rows=page_retrieval_rows,
+        answer_results=answer_results,
+    )
+
+    paths = {
+        "candidate_answers": run_dir / "candidate_answers.jsonl",
+        "candidate_answers_preview": run_dir / "candidate_answers_preview.json",
+        "candidate_answer_coverage_metrics": run_dir / "candidate_answer_coverage_metrics.json",
+        "candidate_answer_error_buckets": run_dir / "candidate_answer_error_buckets.json",
+        "summary": run_dir / "summary.json",
+        "summary_md": run_dir / "summary.md",
+    }
+    write_jsonl(paths["candidate_answers"], answer_boards)
+    _write_json(paths["candidate_answers_preview"], {"records": [_preview_board(board) for board in answer_boards[:3]]})
+    _write_json(paths["candidate_answer_coverage_metrics"], metrics)
+    _write_json(paths["candidate_answer_error_buckets"], buckets)
+
+    summary = {
+        "phase": "Phase 4D-A",
+        "task": "candidate_answer_coverage_audit",
+        "status": "success",
+        "input_candidate_evidence": _path_for_summary(args.candidate_evidence),
+        "input_qa_jsonl": _path_for_summary(args.qa_jsonl),
+        "input_answer_results": _optional_path_for_summary(args.answer_results),
+        "input_page_retrieval_results": _optional_path_for_summary(args.page_retrieval_results),
+        "input_candidate_packing_metrics": _optional_path_for_summary(args.candidate_packing_metrics),
+        "input_phase4c_summary": _optional_path_for_summary(args.phase4c_summary),
+        "does_not_modify_reader": True,
+        "does_not_run_answer_policy": True,
+        "does_not_train": True,
+        "no_gold_leakage_in_candidate_answers": no_gold_leakage,
+        "artifact_paths": {key: _relative_to(paths[key], run_dir) for key in paths},
+        "metrics": {
+            "sample_count": metrics["sample_count"],
+            "candidate_span_answer_coverage": metrics["candidate_span_answer_coverage"],
+            "candidate_answer_coverage": metrics["candidate_answer_coverage"],
+            "no_candidate_answer_count": metrics["no_candidate_answer_count"],
+            "candidate_answer_no_gold_leakage": metrics["candidate_answer_no_gold_leakage"],
+        },
+        "error_buckets": {
+            "answer_results_status": buckets["answer_results_status"],
+            "bucket_counts": buckets["bucket_counts"],
+        },
+        "phase4c_context": {
+            "candidate_packing_metrics_status": "available" if candidate_packing_metrics is not None else "unavailable",
+            "phase4c_summary_status": "available" if phase4c_summary is not None else "unavailable",
+            "candidate_packing_sample_count": (candidate_packing_metrics or {}).get("sample_count"),
+            "phase4c_evidence_packing_mode": (phase4c_summary or {}).get("evidence_packing_mode"),
+            "phase4c_fixed_evidence_hash": (phase4c_summary or {}).get("fixed_evidence_hash"),
+        },
+    }
+    _write_json(paths["summary"], summary)
+    paths["summary_md"].write_text(_summary_markdown(summary), encoding="utf-8")
+    return summary
+
+
+def _read_optional_jsonl(path: Path | None) -> list[dict[str, Any]] | None:
+    if path is None or not path.exists():
+        return None
+    return read_jsonl(path)
+
+
+def _read_optional_json(path: Path | None) -> dict[str, Any] | None:
+    if path is None or not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8-sig"))
+
+
+def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _preview_board(board: dict[str, Any]) -> dict[str, Any]:
+    preview = {
+        "qid": board.get("qid"),
+        "doc_id": board.get("doc_id"),
+        "question": board.get("question"),
+        "question_hints": board.get("question_hints") or {},
+        "candidate_answers": [],
+        "answer_board_stats": board.get("answer_board_stats") or {},
+    }
+    for answer in (board.get("candidate_answers") or [])[:5]:
+        item = dict(answer)
+        item["evidence_text"] = _truncate(str(item.get("evidence_text") or ""), limit=220)
+        preview["candidate_answers"].append(item)
+    return preview
+
+
+def _truncate(text: str, *, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3].rstrip() + "..."
+
+
+def _path_for_summary(path: Path) -> str:
+    return _relative_to(path, Path.cwd())
+
+
+def _optional_path_for_summary(path: Path | None) -> str | None:
+    if path is None:
+        return None
+    return _path_for_summary(path)
+
+
+def _relative_to(path: Path, root: Path) -> str:
+    try:
+        return path.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def _summary_markdown(summary: dict[str, Any]) -> str:
+    metrics = summary["metrics"]
+    bucket_counts = summary["error_buckets"]["bucket_counts"]
+    return "\n".join(
+        [
+            "# Phase 4D-A Candidate Answer Coverage Audit",
+            "",
+            f"- status: {summary['status']}",
+            f"- sample_count: {metrics['sample_count']}",
+            f"- candidate_span_answer_coverage: {metrics['candidate_span_answer_coverage']:.4f}",
+            f"- candidate_answer_coverage: {metrics['candidate_answer_coverage']:.4f}",
+            f"- no_gold_leakage_in_candidate_answers: {summary['no_gold_leakage_in_candidate_answers']}",
+            f"- answer_results_status: {summary['error_buckets']['answer_results_status']}",
+            f"- bucket_counts: {json.dumps(bucket_counts, sort_keys=True)}",
+            "",
+            "This audit does not modify Reader prompts, run AnswerPolicy, train models, or change retrieval.",
+            "",
+        ]
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    summary = run_phase4d_candidate_answer_coverage(args)
+    print(json.dumps({"status": summary["status"], "summary": summary["artifact_paths"]["summary"]}, ensure_ascii=False))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

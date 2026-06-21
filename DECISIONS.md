@@ -8,6 +8,38 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-21: Phase 4D-A Candidate Answer Coverage Audit Boundary
+
+Decision: implement a deterministic candidate answer coverage audit before
+changing Reader prompts, AnswerPolicy protocol, retrieval models, or training.
+
+Rationale:
+
+- Phase 4C showed that query-aware / structure-aware `candidate_spans` improves
+  Reader input quality while retrieval metrics stayed unchanged.
+- Remaining misses need to be separated into evidence coverage, answer
+  extraction, Reader selection, and distractor/ranking issues before introducing
+  another Reader or prompt change.
+- A rule-based audit can be validated for no-gold leakage and can run over
+  existing Phase 4C artifacts without rerunning full GRPO.
+
+Implementation boundary:
+
+- Extract typed candidate answers from Phase 4C `candidate_spans`.
+- Write candidate answer board artifacts separately from metrics and buckets.
+- Use gold answers only for coverage metrics and error bucket analysis.
+- Keep `candidate_answers.jsonl` and preview free of gold answer/page fields.
+
+Constraints:
+
+- Do not modify Reader prompt defaults, AnswerPolicy, retrieval models, MinerU,
+  checkpoints, SFT/GRPO reward, training split, or training data in Phase 4D-A.
+- Do not make `candidate_spans` the global default.
+- Do not enter CDC, Demo, TAT-QA, VLM, or full server E2E from this audit
+  implementation alone.
+- Server coverage audit results are required before Phase 4D-A can be marked
+  `accepted`.
+
 ## 2026-06-21: Phase 4C Candidate Spans Acceptance
 
 Decision: accept Phase 4C `candidate_spans` as an experimental and

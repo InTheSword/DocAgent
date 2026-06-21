@@ -317,7 +317,8 @@ Do not:
 
 ## 8. Next Priorities
 
-1. Preserve accepted Gate 4 artifacts unless a reproducibility issue is found.
+1. Run Phase 4D-A candidate answer coverage audit on the server Phase 4C
+   `candidate_spans` artifacts.
 2. Keep Phase 4C `candidate_spans` available as an accepted experimental and
    recommended evidence-packing mode.
 3. Keep CDC `not_started` until explicitly started.
@@ -408,13 +409,47 @@ candidate_evidence_preview.json
 candidate_packing_metrics.json
 ```
 
+## 8.2 Phase 4D-A Candidate Answer Coverage Audit
+
+Status:
+
+```text
+Phase 4D-A local implementation -> implemented
+Phase 4D-A server coverage audit -> not_started
+```
+
+Scope:
+
+- add deterministic typed candidate answer extraction over Phase 4C
+  `candidate_spans`;
+- write `candidate_answers.jsonl`, `candidate_answers_preview.json`,
+  `candidate_answer_coverage_metrics.json`,
+  `candidate_answer_error_buckets.json`, `summary.json`, and `summary.md`;
+- use gold answers only for coverage metrics and bucket analysis;
+- keep `candidate_answers.jsonl` and preview free of gold answer/page fields;
+- do not modify Reader prompts, AnswerPolicy, retrieval models, MinerU,
+  checkpoints, training data, or default `candidate_spans` behavior.
+
+Local implementation:
+
+```text
+docagent/retrieval/candidate_answer_extraction.py
+scripts/analyze_phase4d_candidate_answer_coverage.py
+tests/test_candidate_answer_extraction.py
+```
+
+Server-side Phase 4D-A real audit is still required before any Phase 4D-A
+coverage result can be marked `accepted`.
+
 ## 9. Stop Condition
 
 Stop after the following are complete:
 
 ```text
-Gate 4 expanded raw-input regression accepted
-+ Phase 4C candidate_spans server A/B accepted
+Phase 4D-A local implementation implemented
++ targeted and regression tests pass
 + status documents updated
-+ stop before CDC and before any default AnswerPolicy prompt change
++ branch pushed
++ stop before CDC, Demo, Reader prompt changes, AnswerPolicy integration,
+   training, and any global `candidate_spans` default change
 ```
