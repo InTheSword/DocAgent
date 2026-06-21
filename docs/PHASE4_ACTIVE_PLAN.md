@@ -317,8 +317,8 @@ Do not:
 
 ## 8. Next Priorities
 
-1. Run Phase 4D-A.1 refined candidate answer coverage audit on the server
-   Phase 4C `candidate_spans` artifacts.
+1. Run Phase 4D-A.2 filtering/reranking audit on the server Phase 4C
+   `candidate_spans` artifacts.
 2. Keep Phase 4C `candidate_spans` available as an accepted experimental and
    recommended evidence-packing mode.
 3. Keep CDC `not_started` until explicitly started.
@@ -417,7 +417,9 @@ Status:
 Phase 4D-A local implementation -> implemented
 Phase 4D-A server coverage audit -> accepted
 Phase 4D-A.1 local implementation -> implemented
-Phase 4D-A.1 server refined audit -> not_started
+Phase 4D-A.1 server refined audit -> accepted
+Phase 4D-A.2 local implementation -> implemented
+Phase 4D-A.2 server filtering audit -> not_started
 ```
 
 Scope:
@@ -440,8 +442,9 @@ scripts/analyze_phase4d_candidate_answer_coverage.py
 tests/test_candidate_answer_extraction.py
 ```
 
-Phase 4D-A server audit is accepted. The refined Phase 4D-A.1 server audit is
-still required before A.1 coverage/ranking results can be marked `accepted`.
+Phase 4D-A and Phase 4D-A.1 server audits are accepted. The Phase 4D-A.2
+filtering audit is still required before A.2 filtering/ranking results can be
+marked `accepted`.
 
 Accepted Phase 4D-A server audit:
 
@@ -477,7 +480,7 @@ Status:
 
 ```text
 Phase 4D-A.1 local implementation -> implemented
-Phase 4D-A.1 server refined audit -> not_started
+Phase 4D-A.1 server refined audit -> accepted
 ```
 
 Scope:
@@ -494,12 +497,76 @@ Scope:
 - do not modify Reader prompts, AnswerPolicy integration, retrieval models,
   training, CDC, Demo, or the default evidence-packing mode.
 
+Accepted Phase 4D-A.1 server audit:
+
+```text
+sample_count = 90
+candidate_span_answer_coverage = 0.7444
+candidate_answer_coverage = 0.5222
+candidate_answer_coverage_all = 0.5222
+candidate_answer_coverage_top1 = 0.2222
+candidate_answer_coverage_top3 = 0.3333
+candidate_answer_coverage_top5 = 0.3778
+candidate_answer_coverage_top10 = 0.4556
+candidate_answer_coverage_top20 = 0.5000
+mean_candidate_answer_count = 105.2889
+mean_unique_candidate_answer_count = 52.2333
+mean_top20_candidate_answer_count = 17.5222
+mean_same_type_distractor_count = 26.0556
+mean_numeric_distractor_count = 73.7444
+rank_1 = 20
+rank_2 = 7
+rank_3 = 3
+rank_4_5 = 4
+rank_6_10 = 7
+rank_gt10 = 6
+missing = 43
+bucket_A = 4
+bucket_B = 0
+bucket_C = 22
+bucket_D = 21
+bucket_E = 14
+bucket_F = 29
+bucket_G = 0
+candidate_answer_no_gold_leakage = true
+```
+
+Interpretation:
+
+- A.1 improved candidate answer coverage from 0.4556 to 0.5222, reduced
+  `D=25` to 21, increased `F=26` to 29, and improved `rank_1=10` to 20.
+- A.1 also increased noise: mean candidate answer count rose from 79.5889 to
+  105.2889 and numeric distractors rose from 60.4444 to 73.7444.
+- Candidate-ID Grounded Reader remains deferred.
+
+## 8.4 Phase 4D-A.2 Candidate Answer Filtering / Reranking / Type-aware Top-k
+
+Status:
+
+```text
+Phase 4D-A.2 local implementation -> implemented
+Phase 4D-A.2 server filtering audit -> not_started
+```
+
+Scope:
+
+- preserve all candidates for `candidate_answer_coverage_all`;
+- add top-k eligibility, filter reasons, and stronger penalties for generic
+  numeric, type mismatch, duplicate, near-duplicate, long text, and noisy text;
+- select `candidate_answers_topk.jsonl` through type-aware top-k selection,
+  not simple global truncation;
+- limit numeric candidates for heading/source/text/location/name questions
+  while retaining numeric/index/percentage candidates for numeric questions;
+- add top-k filtering metrics and `refinement_comparison.json`;
+- do not modify Reader prompts, AnswerPolicy integration, retrieval models,
+  training, CDC, Demo, or the default evidence-packing mode.
+
 ## 9. Stop Condition
 
 Stop after the following are complete:
 
 ```text
-Phase 4D-A.1 local implementation implemented
+Phase 4D-A.2 local implementation implemented
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

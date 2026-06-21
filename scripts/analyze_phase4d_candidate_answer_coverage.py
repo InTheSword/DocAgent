@@ -21,6 +21,19 @@ from docagent.retrieval.candidate_answer_extraction import (
 from docagent.utils.jsonl import read_jsonl, write_jsonl
 
 
+A1_REFINED_BASELINE = {
+    "candidate_answer_coverage_all": 0.5222,
+    "candidate_answer_coverage_top1": 0.2222,
+    "candidate_answer_coverage_top5": 0.3778,
+    "candidate_answer_coverage_top20": 0.5000,
+    "mean_candidate_answer_count": 105.2889,
+    "mean_unique_candidate_answer_count": 52.2333,
+    "mean_numeric_distractor_count": 73.7444,
+    "bucket_D": 21,
+    "bucket_F": 29,
+}
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Analyze Phase 4D-A candidate answer coverage.")
     parser.add_argument("--candidate-evidence", required=True, type=Path)
@@ -56,6 +69,7 @@ def run_phase4d_candidate_answer_coverage(args: argparse.Namespace) -> dict[str,
     metrics = summarize_candidate_answer_coverage(
         candidate_records=candidate_records,
         answer_boards=answer_boards,
+        topk_answer_boards=topk_answer_boards,
         qa_records=qa_records,
     )
     buckets = bucket_candidate_answer_failures(
@@ -66,6 +80,7 @@ def run_phase4d_candidate_answer_coverage(args: argparse.Namespace) -> dict[str,
         answer_results=answer_results,
     )
     transition_estimate = estimate_bucket_transitions(buckets)
+    refinement_comparison = _build_refinement_comparison(metrics, buckets)
 
     paths = {
         "candidate_answers": run_dir / "candidate_answers.jsonl",
@@ -75,6 +90,7 @@ def run_phase4d_candidate_answer_coverage(args: argparse.Namespace) -> dict[str,
         "candidate_answer_coverage_metrics": run_dir / "candidate_answer_coverage_metrics.json",
         "candidate_answer_error_buckets": run_dir / "candidate_answer_error_buckets.json",
         "bucket_transition_estimate": run_dir / "bucket_transition_estimate.json",
+        "refinement_comparison": run_dir / "refinement_comparison.json",
         "summary": run_dir / "summary.json",
         "summary_md": run_dir / "summary.md",
     }
@@ -85,6 +101,7 @@ def run_phase4d_candidate_answer_coverage(args: argparse.Namespace) -> dict[str,
     _write_json(paths["candidate_answer_coverage_metrics"], metrics)
     _write_json(paths["candidate_answer_error_buckets"], buckets)
     _write_json(paths["bucket_transition_estimate"], transition_estimate)
+    _write_json(paths["refinement_comparison"], refinement_comparison)
 
     summary = {
         "phase": "Phase 4D-A",
@@ -112,6 +129,12 @@ def run_phase4d_candidate_answer_coverage(args: argparse.Namespace) -> dict[str,
             "candidate_answer_coverage_top5": metrics["candidate_answer_coverage_top5"],
             "candidate_answer_coverage_top10": metrics["candidate_answer_coverage_top10"],
             "candidate_answer_coverage_top20": metrics["candidate_answer_coverage_top20"],
+            "mean_ranked_candidate_answer_count": metrics["mean_ranked_candidate_answer_count"],
+            "mean_topk_unique_candidate_answer_count": metrics["mean_topk_unique_candidate_answer_count"],
+            "mean_topk_numeric_candidate_count": metrics["mean_topk_numeric_candidate_count"],
+            "mean_topk_same_type_distractor_count": metrics["mean_topk_same_type_distractor_count"],
+            "topk_retention_ratio": metrics["topk_retention_ratio"],
+            "topk_numeric_ratio": metrics["topk_numeric_ratio"],
             "no_candidate_answer_count": metrics["no_candidate_answer_count"],
             "candidate_answer_no_gold_leakage": metrics["candidate_answer_no_gold_leakage"],
         },
@@ -148,6 +171,32 @@ def _read_optional_json(path: Path | None) -> dict[str, Any] | None:
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _build_refinement_comparison(metrics: dict[str, Any], buckets: dict[str, Any]) -> dict[str, Any]:
+    current = {
+        "candidate_answer_coverage_all": metrics.get("candidate_answer_coverage_all"),
+        "candidate_answer_coverage_top1": metrics.get("candidate_answer_coverage_top1"),
+        "candidate_answer_coverage_top5": metrics.get("candidate_answer_coverage_top5"),
+        "candidate_answer_coverage_top20": metrics.get("candidate_answer_coverage_top20"),
+        "mean_candidate_answer_count": metrics.get("mean_candidate_answer_count"),
+        "mean_unique_candidate_answer_count": metrics.get("mean_unique_candidate_answer_count"),
+        "mean_numeric_distractor_count": metrics.get("mean_numeric_distractor_count"),
+        "bucket_D": (buckets.get("bucket_counts") or {}).get("D"),
+        "bucket_F": (buckets.get("bucket_counts") or {}).get("F"),
+    }
+    deltas = {
+        key: (current[key] - A1_REFINED_BASELINE[key])
+        for key in A1_REFINED_BASELINE
+        if isinstance(current.get(key), (int, float))
+    }
+    return {
+        "baseline_name": "Phase 4D-A.1 refined server audit",
+        "baseline": A1_REFINED_BASELINE,
+        "current": current,
+        "delta_vs_baseline": deltas,
+        "interpretation_hint": "Positive coverage deltas are improvements; negative count/distractor deltas indicate less candidate noise.",
+    }
 
 
 def _preview_board(board: dict[str, Any]) -> dict[str, Any]:

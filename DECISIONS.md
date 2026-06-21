@@ -8,6 +8,47 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-21: Phase 4D-A.2 Filtering Before Candidate-ID Reader
+
+Decision: after the accepted Phase 4D-A.1 refined server audit, continue with
+candidate answer filtering, reranking, and a type-aware top-k board before
+starting Candidate-ID Grounded Reader work.
+
+Evidence:
+
+- `candidate_answer_coverage_all = 0.5222`, up from 0.4556.
+- `candidate_answer_coverage_top1 = 0.2222`, up from 0.1111 implied by the
+  previous `rank_1=10/90`.
+- `candidate_answer_coverage_top5 = 0.3778`.
+- `candidate_answer_coverage_top20 = 0.5000`.
+- `mean_candidate_answer_count = 105.2889`, up from 79.5889.
+- `mean_unique_candidate_answer_count = 52.2333`, up from 49.9889.
+- `mean_numeric_distractor_count = 73.7444`, up from 60.4444.
+- Error buckets: `D=21`, `F=29`.
+
+Interpretation:
+
+- A.1 extraction improvements worked, but the candidate board became noisier.
+- Top-k candidate coverage and numeric flooding are now the main bottlenecks
+  before any Candidate-ID Reader input format should be designed.
+- All candidate answers must remain available for coverage audit, while the
+  future Reader-facing board should use a separate filtered top-k artifact.
+
+Implementation boundary:
+
+- Preserve `candidate_answers.jsonl` as the full audit artifact.
+- Produce `candidate_answers_topk.jsonl` through type-aware selection instead
+  of simple global rank truncation.
+- Add top-k filtering metrics and a `refinement_comparison.json` artifact
+  against the accepted A.1 baseline.
+
+Constraints:
+
+- Do not modify Reader prompt defaults, AnswerPolicy, retrieval models, MinerU,
+  checkpoints, reward, training split, training data, CDC, Demo, or the global
+  `candidate_spans` default.
+- Do not run full GRPO for Phase 4D-A.2.
+
 ## 2026-06-21: Phase 4D-A.1 Refinement Before Candidate-ID Reader
 
 Decision: after the Phase 4D-A server audit, refine candidate answer extraction,

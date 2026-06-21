@@ -169,6 +169,89 @@ def test_ranking_duplicate_and_generic_numeric_penalties() -> None:
     assert candidates[0]["is_top_k"] is True
 
 
+def test_phase4d_a2_type_mismatch_index_and_percentage_ranking() -> None:
+    heading_board = extract_candidate_answers(
+        "What is the heading of this page?",
+        _hints("heading", "heading"),
+        [_span("h1", "Annual Governance Report\nPage 12\nTable 3\n2024", score=0.8, bbox=[0, 20, 100, 40])],
+    )
+    numeric_candidates = [candidate for candidate in heading_board["candidate_answers"] if candidate["answer_type"] in {"numeric", "date"}]
+
+    assert heading_board["candidate_answers"][0]["normalized_answer"] == "annual governance report"
+    assert all(candidate["score_breakdown"]["type_mismatch_penalty"] < 0.0 for candidate in numeric_candidates)
+
+    index_board = extract_candidate_answers(
+        "What index share is shown?",
+        _hints("numeric", "index", "share"),
+        [_span("i1", "Segment share was 2.5% (31) and page 12.")],
+    )
+    percentage_board = extract_candidate_answers(
+        "What percentage is shown?",
+        _hints("numeric", "percentage", "percent"),
+        [_span("p1", "The value is 2.5% and the table number is 31.")],
+    )
+
+    assert index_board["candidate_answers"][0]["answer_type"] == "index"
+    assert index_board["candidate_answers"][0]["normalized_answer"] == "31"
+    assert percentage_board["candidate_answers"][0]["answer_type"] == "percentage"
+    assert percentage_board["candidate_answers"][0]["normalized_answer"] == "2.5%"
+
+
+def test_phase4d_a2_type_aware_topk_deduplicates_and_limits_numeric_noise() -> None:
+    numeric_candidates = [
+        {
+            "candidate_answer_id": f"a{i:04d}",
+            "answer_text": str(i),
+            "normalized_answer": str(i),
+            "answer_type": "numeric",
+            "score": 1.0 - i * 0.001,
+            "rank": i,
+            "eligible_for_topk": True,
+        }
+        for i in range(1, 31)
+    ]
+    board = {
+        "qid": "q_heading",
+        "doc_id": "doc",
+        "question": "What is the heading?",
+        "question_hints": _hints("heading", "heading"),
+        "candidate_answers": [
+            *numeric_candidates,
+            {
+                "candidate_answer_id": "a1000",
+                "answer_text": "Annual Governance Report",
+                "normalized_answer": "annual governance report",
+                "answer_type": "heading",
+                "score": 0.9,
+                "rank": 31,
+                "eligible_for_topk": True,
+            },
+            {
+                "candidate_answer_id": "a1001",
+                "answer_text": "Annual  Governance Report.",
+                "normalized_answer": "annual governance report",
+                "answer_type": "heading",
+                "score": 0.89,
+                "rank": 32,
+                "eligible_for_topk": True,
+            },
+        ],
+        "answer_board_stats": {"candidate_answer_count": 32, "unique_normalized_answer_count": 31},
+    }
+
+    topk_board = build_topk_candidate_answer_boards([board], top_k=20)[0]
+    topk_candidates = topk_board["candidate_answers"]
+    numeric_count = sum(1 for candidate in topk_candidates if candidate["answer_type"] in {"numeric", "percentage", "index"})
+
+    assert len(topk_candidates) <= 20
+    assert numeric_count <= 3
+    assert len({candidate["normalized_answer"] for candidate in topk_candidates}) == len(topk_candidates)
+    assert [candidate["topk_rank"] for candidate in topk_candidates] == list(range(1, len(topk_candidates) + 1))
+    assert any(candidate["normalized_answer"] == "annual governance report" for candidate in topk_candidates)
+    assert topk_board["answer_board_stats"]["topk_numeric_candidate_count"] == numeric_count
+    assert topk_board["answer_board_stats"]["topk_unique_candidate_answer_count"] == len(topk_candidates)
+
+
 def test_coverage_rank_distribution_and_distractor_metrics() -> None:
     q1_candidates = [
         {"normalized_answer": "2.5%", "answer_text": "2.5%", "answer_type": "percentage", "rank": 1},
@@ -216,9 +299,11 @@ def test_coverage_rank_distribution_and_distractor_metrics() -> None:
         {"qid": "q1", "answers": ["31"], "answer_type": "extractive"},
         {"qid": "q2", "answers": ["Acme"], "answer_type": "extractive"},
     ]
+    topk_boards = build_topk_candidate_answer_boards(answer_boards, top_k=20)
     metrics = summarize_candidate_answer_coverage(
         candidate_records=candidate_records,
         answer_boards=answer_boards,
+        topk_answer_boards=topk_boards,
         qa_records=qa_records,
     )
 
@@ -237,11 +322,12 @@ def test_coverage_rank_distribution_and_distractor_metrics() -> None:
     assert metrics["mean_top20_candidate_answer_count"] == 1.0
     assert metrics["mean_same_type_distractor_count"] == 0.5
     assert metrics["mean_numeric_distractor_count"] == 0.5
+    assert metrics["topk_retention_ratio"] == 1.0
+    assert metrics["topk_numeric_ratio"] == 1.0
     assert metrics["no_candidate_answer_count"] == 1
     assert metrics["candidate_answer_no_gold_leakage"] is True
 
-    topk_boards = build_topk_candidate_answer_boards(answer_boards, top_k=1)
-    assert len(topk_boards[0]["candidate_answers"]) == 1
+    assert len(topk_boards[0]["candidate_answers"]) == 2
     assert len(answer_boards[0]["candidate_answers"]) == 2
 
 
@@ -341,6 +427,7 @@ def test_runner_outputs_artifacts_without_answer_results(tmp_path: Path) -> None
     topk_preview = json.loads((run_dir / "candidate_answers_topk_preview.json").read_text(encoding="utf-8"))
     metrics = json.loads((run_dir / "candidate_answer_coverage_metrics.json").read_text(encoding="utf-8"))
     transition = json.loads((run_dir / "bucket_transition_estimate.json").read_text(encoding="utf-8"))
+    comparison = json.loads((run_dir / "refinement_comparison.json").read_text(encoding="utf-8"))
 
     assert summary["status"] == "success"
     assert summary["error_buckets"]["answer_results_status"] == "unavailable"
@@ -361,7 +448,12 @@ def test_runner_outputs_artifacts_without_answer_results(tmp_path: Path) -> None
     assert "gold_page" not in json.dumps(topk_preview, ensure_ascii=False)
     assert metrics["candidate_answer_coverage"] == 1.0
     assert "candidate_answer_coverage_top1" in metrics
+    assert "mean_ranked_candidate_answer_count" in metrics
+    assert metrics["mean_topk_unique_candidate_answer_count"] == 1.0
+    assert 0.0 <= metrics["topk_numeric_ratio"] <= 1.0
     assert transition["d_samples_potentially_fixed_by_extraction_improvement"] == 0
+    assert comparison["baseline"]["candidate_answer_coverage_all"] == 0.5222
+    assert "delta_vs_baseline" in comparison
     assert (run_dir / "summary.md").is_file()
 
 

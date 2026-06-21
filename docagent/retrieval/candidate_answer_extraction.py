@@ -49,7 +49,7 @@ PERCENT_RE = re.compile(
 INDEX_PAREN_RE = re.compile(r"\(\s*(-?\d+(?:,\d{3})*(?:\.\d+)?)\s*\)")
 MONEY_RE = re.compile(r"\$-?\d[\d,]*(?:\.\d+)?")
 NUMBER_RE = re.compile(r"(?<![\w.])-?\d+(?:,\d{3})*(?:\.\d+)?(?![\w.])")
-KEY_VALUE_RE = re.compile(r"^\s*([A-Za-z][A-Za-z0-9 /&().'-]{1,60}?)\s*(?::|\-|--|–|—)\s*([^:\n]{2,100})\s*$")
+KEY_VALUE_RE = re.compile(r"^\s*([A-Za-z][A-Za-z0-9 /&().'-]{1,60}?)\s*(?::|-|--|\u2013|\u2014)\s*([^:\n]{2,100})\s*$")
 COLON_VALUE_RE = re.compile(r":\s*([^:\n]{2,100})")
 QUARTER_RE = re.compile(
     r"\b(?:Q[1-4](?:\s*FY?\s*\d{2,4})?|[1-4]Q(?:\s*\d{2,4})?|[1-4]Q\d{2}|Q[1-4]FY\d{2}|FY\d{2,4})\b",
@@ -65,7 +65,7 @@ ADDRESS_CITY_STATE_RE = re.compile(
     r"([A-Z]{2}|Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming)\b"
 )
 LOCATION_LINE_RE = re.compile(
-    r"\b(?:located in|located at|address|city|state|board located)\b[^:\n\-–—]*(?::|\-|–|—)?\s*([^.\n;]{2,120})",
+    r"\b(?:located in|located at|address|city|state|board located)\b[^:\n\-\u2013\u2014]*(?::|-|\u2013|\u2014)?\s*([^.\n;]{2,120})",
     re.IGNORECASE,
 )
 
@@ -85,7 +85,7 @@ def extract_candidate_answers(
     for span in candidate_spans:
         raw_candidates.extend(_extract_from_span(span=span, hints=hints, target_type=target_type))
 
-    candidates = _rank_candidate_answers(raw_candidates, top_k=top_k)
+    candidates = _rank_candidate_answers(raw_candidates, top_k=top_k, target_type=target_type)
     stats = _answer_board_stats(candidates, target_type=target_type)
     return {
         "question": question,
@@ -130,11 +130,9 @@ def build_candidate_answer_boards(candidate_records: list[dict[str, Any]], *, to
 def build_topk_candidate_answer_boards(answer_boards: list[dict[str, Any]], *, top_k: int = DEFAULT_TOP_K) -> list[dict[str, Any]]:
     topk_boards: list[dict[str, Any]] = []
     for board in answer_boards:
-        candidates = [
-            dict(candidate)
-            for candidate in board.get("candidate_answers") or []
-            if int(candidate.get("rank") or 0) <= top_k
-        ]
+        target_type = _target_answer_type(board.get("question_hints") or {})
+        candidates = _select_type_aware_topk(board.get("candidate_answers") or [], target_type=target_type, top_k=top_k)
+        ranked_count = sum(1 for candidate in board.get("candidate_answers") or [] if candidate.get("eligible_for_topk"))
         topk_boards.append(
             {
                 "qid": board.get("qid"),
@@ -145,8 +143,12 @@ def build_topk_candidate_answer_boards(answer_boards: list[dict[str, Any]], *, t
                 "candidate_answers": candidates,
                 "answer_board_stats": {
                     **(board.get("answer_board_stats") or {}),
+                    "ranked_candidate_answer_count": ranked_count,
                     "topk_candidate_answer_count": len(candidates),
                     "all_candidate_answer_count": len(board.get("candidate_answers") or []),
+                    "topk_unique_candidate_answer_count": len({candidate.get("normalized_answer") for candidate in candidates}),
+                    "topk_numeric_candidate_count": sum(1 for candidate in candidates if candidate.get("answer_type") in NUMERIC_TYPES),
+                    "topk_same_type_distractor_count": _same_type_distractor_count(candidates, target_type=target_type),
                 },
             }
         )
@@ -164,7 +166,7 @@ def compute_candidate_answer_coverage(
         candidate_answers = [
             candidate
             for position, candidate in enumerate(candidate_answers, start=1)
-            if int(candidate.get("rank") or position) <= top_k
+            if int(candidate.get("topk_rank") or candidate.get("rank") or position) <= top_k
         ]
     normalized_candidates = [
         str(candidate.get("normalized_answer") or _normalize_answer(candidate.get("answer_text") or ""))
@@ -189,9 +191,11 @@ def summarize_candidate_answer_coverage(
     candidate_records: list[dict[str, Any]],
     answer_boards: list[dict[str, Any]],
     qa_records: list[dict[str, Any]],
+    topk_answer_boards: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     records_by_qid = {str(record.get("qid")): record for record in candidate_records}
     boards_by_qid = {str(board.get("qid")): board for board in answer_boards}
+    topk_boards_by_qid = {str(board.get("qid")): board for board in (topk_answer_boards or [])}
     rank_distribution = Counter(
         {"rank_1": 0, "rank_2": 0, "rank_3": 0, "rank_4_5": 0, "rank_6_10": 0, "rank_gt10": 0, "missing": 0}
     )
@@ -203,21 +207,30 @@ def summarize_candidate_answer_coverage(
     candidate_counts: list[float] = []
     unique_counts: list[float] = []
     top20_counts: list[float] = []
+    ranked_counts: list[float] = []
+    topk_unique_counts: list[float] = []
+    topk_numeric_counts: list[float] = []
+    topk_same_type_distractors: list[float] = []
     same_type_distractors: list[float] = []
     numeric_distractors: list[float] = []
+    total_candidate_count = 0
+    total_topk_count = 0
+    total_topk_numeric_count = 0
     no_candidate_answer_count = 0
 
     for qa in qa_records:
         qid = str(qa.get("qid"))
         candidate_record = records_by_qid.get(qid, {})
         board = boards_by_qid.get(qid, {})
+        topk_board = topk_boards_by_qid.get(qid, {})
         gold_answers = _qa_answer_list(qa)
         span_hit = candidate_span_contains_answer(candidate_record.get("candidate_spans") or [], gold_answers)
         candidate_answers = board.get("candidate_answers") or []
+        topk_answers = topk_board.get("candidate_answers") or candidate_answers
         coverage = compute_candidate_answer_coverage(candidate_answers, gold_answers)
         answer_hit = bool(coverage["covered"])
         for top_k in TOP_K_VALUES:
-            topk_hits[top_k].append(bool(compute_candidate_answer_coverage(candidate_answers, gold_answers, top_k=top_k)["covered"]))
+            topk_hits[top_k].append(bool(compute_candidate_answer_coverage(topk_answers, gold_answers, top_k=top_k)["covered"]))
         hint = str((board.get("question_hints") or {}).get("answer_type_hint") or "unknown")
         answer_type = str(qa.get("answer_type") or "unknown")
         stats = board.get("answer_board_stats") or {}
@@ -229,9 +242,19 @@ def summarize_candidate_answer_coverage(
         rank_distribution[str(coverage["rank_bucket"])] += 1
         candidate_counts.append(float(stats.get("candidate_answer_count") or 0.0))
         unique_counts.append(float(stats.get("unique_normalized_answer_count") or 0.0))
-        top20_counts.append(float(min(len(candidate_answers), 20)))
+        topk_stats = topk_board.get("answer_board_stats") or {}
+        topk_count = len(topk_answers[:20])
+        top20_counts.append(float(topk_count))
+        ranked_counts.append(float(topk_stats.get("ranked_candidate_answer_count") or sum(1 for candidate in candidate_answers if candidate.get("eligible_for_topk"))))
+        topk_unique_counts.append(float(topk_stats.get("topk_unique_candidate_answer_count") or len({candidate.get("normalized_answer") for candidate in topk_answers})))
+        topk_numeric_count = int(topk_stats.get("topk_numeric_candidate_count") or sum(1 for candidate in topk_answers if candidate.get("answer_type") in NUMERIC_TYPES))
+        topk_numeric_counts.append(float(topk_numeric_count))
+        topk_same_type_distractors.append(float(topk_stats.get("topk_same_type_distractor_count") or _same_type_distractor_count(topk_answers, target_type=_target_answer_type(board.get("question_hints") or {}))))
         same_type_distractors.append(float(stats.get("same_type_distractor_count") or 0.0))
         numeric_distractors.append(float(stats.get("numeric_distractor_count") or 0.0))
+        total_candidate_count += len(candidate_answers)
+        total_topk_count += len(topk_answers)
+        total_topk_numeric_count += topk_numeric_count
         if not board.get("candidate_answers"):
             no_candidate_answer_count += 1
 
@@ -250,9 +273,15 @@ def summarize_candidate_answer_coverage(
         "gold_answer_rank_distribution": dict(rank_distribution),
         "mean_candidate_answer_count": _mean(candidate_counts),
         "mean_unique_candidate_answer_count": _mean(unique_counts),
+        "mean_ranked_candidate_answer_count": _mean(ranked_counts),
         "mean_top20_candidate_answer_count": _mean(top20_counts),
+        "mean_topk_unique_candidate_answer_count": _mean(topk_unique_counts),
+        "mean_topk_numeric_candidate_count": _mean(topk_numeric_counts),
+        "mean_topk_same_type_distractor_count": _mean(topk_same_type_distractors),
         "mean_same_type_distractor_count": _mean(same_type_distractors),
         "mean_numeric_distractor_count": _mean(numeric_distractors),
+        "topk_retention_ratio": total_topk_count / max(total_candidate_count, 1),
+        "topk_numeric_ratio": total_topk_numeric_count / max(total_topk_count, 1),
         "no_candidate_answer_count": no_candidate_answer_count,
         "candidate_answer_no_gold_leakage": not candidate_answer_artifact_has_gold_leakage(answer_boards),
     }
@@ -818,9 +847,11 @@ def _make_answer(
         "local_context_match": _local_context_match(answer_text, span, hints),
         "span_rank_bonus": _span_rank_bonus(span),
         "extraction_rule_priority": rule_confidence,
-        "generic_numeric_penalty": -_generic_numeric_penalty(answer_type, rule, target_type),
+        "generic_numeric_penalty": -_generic_numeric_penalty(answer_text, answer_type, rule, target_type, span, hints),
+        "type_mismatch_penalty": -_type_mismatch_penalty(answer_text, answer_type, target_type),
         "duplicate_penalty": 0.0,
         "long_text_penalty": -_long_text_penalty(answer_text),
+        "noisy_text_penalty": -_noisy_text_penalty(answer_text),
     }
     block_ids = [str(block_id) for block_id in (span.get("block_ids") or [])]
     return {
@@ -958,6 +989,38 @@ def _local_context_match(answer_text: str, span: dict[str, Any], hints: dict[str
     return 0.0
 
 
+def _numeric_has_local_context(answer_text: str, span: dict[str, Any], hints: dict[str, Any]) -> bool:
+    keywords = [str(keyword).lower() for keyword in hints.get("keywords") or [] if len(str(keyword)) > 2]
+    field_hints = [str(field).lower() for field in hints.get("field_hints") or []]
+    answer = str(answer_text or "")
+    for line in str(span.get("text") or "").splitlines():
+        if answer and answer not in line:
+            continue
+        lowered = line.lower()
+        if any(keyword in lowered for keyword in keywords):
+            return True
+        if any(field in lowered for field in field_hints):
+            return True
+        if any(term in lowered for term in ("total", "amount", "rate", "share", "index", "percent", "value")):
+            return True
+    return False
+
+
+def _looks_like_page_year_or_sequence(normalized: str, span: dict[str, Any]) -> bool:
+    if not re.fullmatch(r"-?\d+(?:\.\d+)?", normalized or ""):
+        return False
+    try:
+        number = float(normalized)
+    except ValueError:
+        return False
+    text = str(span.get("text") or "").lower()
+    if number.is_integer() and 1900 <= int(number) <= 2100:
+        return True
+    if number.is_integer() and 0 <= int(number) <= 300 and any(term in text for term in ("page", "table", "figure", "row", "item", "no.", "number")):
+        return True
+    return False
+
+
 def _source_candidate_score(span: dict[str, Any]) -> float:
     try:
         score = float(span.get("score") or 0.0)
@@ -976,14 +1039,46 @@ def _span_rank_bonus(span: dict[str, Any]) -> float:
     return max(0.0, 0.22 - 0.04 * (rank - 1))
 
 
-def _generic_numeric_penalty(answer_type: str, rule: str, target_type: str) -> float:
+def _generic_numeric_penalty(
+    answer_text: str,
+    answer_type: str,
+    rule: str,
+    target_type: str,
+    span: dict[str, Any],
+    hints: dict[str, Any],
+) -> float:
     if answer_type not in NUMERIC_TYPES:
         return 0.0
     if rule in {"parenthesized_index", "percentage", "money"}:
         return 0.0
+    normalized = _normalize_answer(answer_text)
+    penalty = 0.0
+    if _looks_like_page_year_or_sequence(normalized, span):
+        penalty += 0.22
+    if not _numeric_has_local_context(answer_text, span, hints):
+        penalty += 0.2
     if target_type in {"numeric", "index", "percentage", "quarter"}:
-        return 0.04
-    return 0.18
+        return min(penalty + 0.04, 0.32)
+    return min(penalty + 0.25, 0.6)
+
+
+def _type_mismatch_penalty(answer_text: str, answer_type: str, target_type: str) -> float:
+    if target_type == "unknown":
+        return 0.0
+    if answer_type == target_type:
+        return 0.0
+    if target_type == "location" and answer_type in {"city", "state", "location"}:
+        return 0.0
+    if target_type == "numeric" and answer_type in NUMERIC_TYPES:
+        return 0.0
+    if target_type == "percentage" and answer_type != "percentage":
+        return 0.3 if answer_type in NUMERIC_TYPES else 0.12
+    if target_type == "index" and answer_type in NUMERIC_TYPES:
+        normalized = _normalize_answer(answer_text)
+        return 0.0 if re.fullmatch(r"-?\d+(?:\.\d+)?", normalized) else 0.16
+    if target_type in {"heading", "source", "text", "location", "organization"} and answer_type in NUMERIC_TYPES:
+        return 0.34
+    return 0.1
 
 
 def _long_text_penalty(answer_text: str) -> float:
@@ -996,6 +1091,23 @@ def _long_text_penalty(answer_text: str) -> float:
     return 0.0
 
 
+def _noisy_text_penalty(answer_text: str) -> float:
+    text = str(answer_text or "").strip()
+    if not text:
+        return 0.3
+    normalized = normalize_text(text)
+    alpha_num_count = sum(1 for char in text if char.isalnum())
+    if alpha_num_count == 0:
+        return 0.3
+    if alpha_num_count / max(len(text), 1) < 0.45:
+        return 0.18
+    if len(normalized) <= 1:
+        return 0.2
+    if re.fullmatch(r"[a-z]\d?|[ivx]+", normalized):
+        return 0.14
+    return 0.0
+
+
 def _answer_board_stats(candidates: list[dict[str, Any]], *, target_type: str) -> dict[str, Any]:
     distribution = Counter(str(candidate.get("answer_type") or "unknown") for candidate in candidates)
     same_type_count = distribution.get(target_type, 0)
@@ -1005,13 +1117,14 @@ def _answer_board_stats(candidates: list[dict[str, Any]], *, target_type: str) -
     return {
         "candidate_answer_count": len(candidates),
         "unique_normalized_answer_count": len({candidate.get("normalized_answer") for candidate in candidates}),
+        "ranked_candidate_answer_count": sum(1 for candidate in candidates if candidate.get("eligible_for_topk")),
         "answer_type_distribution": dict(sorted(distribution.items())),
         "same_type_distractor_count": max(same_type_count - 1, 0),
         "numeric_distractor_count": max(numeric_count - 1, 0),
     }
 
 
-def _rank_candidate_answers(candidates: list[dict[str, Any]], *, top_k: int) -> list[dict[str, Any]]:
+def _rank_candidate_answers(candidates: list[dict[str, Any]], *, top_k: int, target_type: str) -> list[dict[str, Any]]:
     candidates = [dict(candidate) for candidate in candidates if str(candidate.get("normalized_answer") or "")]
     normalized_counts: Counter[str] = Counter(str(candidate.get("normalized_answer") or "") for candidate in candidates)
     seen_by_normalized: Counter[str] = Counter()
@@ -1036,6 +1149,16 @@ def _rank_candidate_answers(candidates: list[dict[str, Any]], *, top_k: int) -> 
         candidate["score_breakdown"] = {key: round(float(value), 6) for key, value in breakdown.items()}
         candidate["score"] = round(sum(float(value) for value in breakdown.values()), 6)
 
+    for candidate in candidates:
+        filter_reasons = _candidate_filter_reasons(candidate, target_type=target_type)
+        candidate["filter_reasons"] = filter_reasons
+        candidate["eligible_for_topk"] = not any(reason.startswith("drop:") for reason in filter_reasons)
+        if filter_reasons:
+            breakdown = dict(candidate.get("score_breakdown") or {})
+            breakdown["filter_penalty"] = -_filter_penalty(filter_reasons)
+            candidate["score_breakdown"] = {key: round(float(value), 6) for key, value in breakdown.items()}
+            candidate["score"] = round(sum(float(value) for value in breakdown.values()), 6)
+
     candidates.sort(
         key=lambda item: (
             -float(item.get("score") or 0.0),
@@ -1053,7 +1176,123 @@ def _rank_candidate_answers(candidates: list[dict[str, Any]], *, top_k: int) -> 
         candidate["is_top5"] = index <= 5
         candidate["is_top10"] = index <= 10
         candidate["is_top20"] = index <= 20
+        candidate["ranked_candidate_rank"] = sum(1 for item in candidates[:index] if item.get("eligible_for_topk")) if candidate.get("eligible_for_topk") else None
     return candidates
+
+
+def _select_type_aware_topk(candidates: list[dict[str, Any]], *, target_type: str, top_k: int) -> list[dict[str, Any]]:
+    quota = _topk_numeric_quota(target_type, top_k)
+    selected: list[dict[str, Any]] = []
+    seen_keys: set[str] = set()
+    numeric_count = 0
+    sorted_candidates = sorted(candidates, key=lambda item: (-float(item.get("score") or 0.0), int(item.get("rank") or 10**9)))
+
+    for candidate in sorted_candidates:
+        if len(selected) >= top_k:
+            break
+        if not candidate.get("eligible_for_topk"):
+            continue
+        answer_type = str(candidate.get("answer_type") or "")
+        if answer_type in NUMERIC_TYPES and numeric_count >= quota:
+            continue
+        key = _near_duplicate_key(candidate)
+        if key in seen_keys:
+            continue
+        item = dict(candidate)
+        selected.append(item)
+        seen_keys.add(key)
+        if answer_type in NUMERIC_TYPES:
+            numeric_count += 1
+
+    if len(selected) < top_k:
+        for candidate in sorted_candidates:
+            if len(selected) >= top_k:
+                break
+            key = _near_duplicate_key(candidate)
+            if key in seen_keys or _severe_noise(candidate):
+                continue
+            answer_type = str(candidate.get("answer_type") or "")
+            if answer_type in NUMERIC_TYPES and numeric_count >= quota:
+                continue
+            item = dict(candidate)
+            selected.append(item)
+            seen_keys.add(key)
+            if answer_type in NUMERIC_TYPES:
+                numeric_count += 1
+
+    for index, candidate in enumerate(selected, start=1):
+        candidate["topk_rank"] = index
+        candidate["is_top_k"] = True
+        candidate["is_top1"] = index <= 1
+        candidate["is_top3"] = index <= 3
+        candidate["is_top5"] = index <= 5
+        candidate["is_top10"] = index <= 10
+        candidate["is_top20"] = index <= 20
+    return selected
+
+
+def _topk_numeric_quota(target_type: str, top_k: int) -> int:
+    if target_type in {"numeric", "index", "percentage", "date", "quarter"}:
+        return top_k
+    if target_type == "unknown":
+        return min(6, top_k)
+    return min(3, top_k)
+
+
+def _candidate_filter_reasons(candidate: dict[str, Any], *, target_type: str) -> list[str]:
+    reasons: list[str] = []
+    answer_type = str(candidate.get("answer_type") or "")
+    score = float(candidate.get("score") or 0.0)
+    breakdown = candidate.get("score_breakdown") or {}
+    if answer_type in NUMERIC_TYPES and target_type not in {"numeric", "index", "percentage", "date", "quarter", "unknown"}:
+        if score < 0.55 or float(breakdown.get("local_context_match") or 0.0) <= 0.0:
+            reasons.append("drop:generic_numeric_type_mismatch")
+        else:
+            reasons.append("downrank:numeric_type_mismatch")
+    if target_type == "percentage" and answer_type in NUMERIC_TYPES and answer_type != "percentage":
+        reasons.append("drop:non_percentage_numeric")
+    if target_type == "index" and answer_type in NUMERIC_TYPES and str(candidate.get("extraction_rule")) != "parenthesized_index":
+        reasons.append("downrank:non_parenthesized_index_numeric")
+    if float(breakdown.get("long_text_penalty") or 0.0) < -0.15:
+        reasons.append("downrank:long_text")
+    if float(breakdown.get("noisy_text_penalty") or 0.0) < -0.15:
+        reasons.append("drop:noisy_fragment")
+    if answer_type in NUMERIC_TYPES and float(breakdown.get("generic_numeric_penalty") or 0.0) < -0.4:
+        reasons.append("drop:weak_numeric_context")
+    return reasons
+
+
+def _filter_penalty(reasons: list[str]) -> float:
+    penalty = 0.0
+    for reason in reasons:
+        penalty += 0.45 if reason.startswith("drop:") else 0.18
+    return min(penalty, 1.0)
+
+
+def _near_duplicate_key(candidate: dict[str, Any]) -> str:
+    normalized = str(candidate.get("normalized_answer") or "")
+    compact = re.sub(r"[^a-z0-9]+", "", normalized.lower())
+    return compact or normalized
+
+
+def _severe_noise(candidate: dict[str, Any]) -> bool:
+    reasons = candidate.get("filter_reasons") or []
+    return any(str(reason).startswith("drop:noisy") for reason in reasons)
+
+
+def _same_type_distractor_count(candidates: list[dict[str, Any]], *, target_type: str) -> int:
+    if not candidates:
+        return 0
+    if target_type == "location":
+        count = sum(1 for candidate in candidates if candidate.get("answer_type") in {"city", "state", "location"})
+    elif target_type == "numeric":
+        count = sum(1 for candidate in candidates if candidate.get("answer_type") in NUMERIC_TYPES)
+    elif target_type == "unknown":
+        distribution = Counter(str(candidate.get("answer_type") or "unknown") for candidate in candidates)
+        count = max(distribution.values()) if distribution else 0
+    else:
+        count = sum(1 for candidate in candidates if candidate.get("answer_type") == target_type)
+    return max(count - 1, 0)
 
 
 def _normalize_answer(value: Any) -> str:
