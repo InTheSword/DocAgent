@@ -23,6 +23,13 @@ from docagent.utils.jsonl import read_jsonl, write_jsonl
 
 
 INSPECTION_BUCKETS = ("C", "D", "E")
+TRUE_FAILURE_ACTION_KEYS = (
+    "improve_candidate_spans",
+    "improve_candidate_answer_extraction",
+    "candidate_id_reader_or_reranking",
+    "normalization_or_metric_fix",
+    "no_action_final_answer_already_correct",
+)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -99,31 +106,40 @@ def run_phase4d_failure_inspection(args: argparse.Namespace) -> dict[str, Any]:
         )
         selected_counts[bucket] += 1
 
+    refined_cases = [_build_refined_case(case) for case in cases]
     paths = {
         "failure_inspection_cases": output_dir / "failure_inspection_cases.jsonl",
         "failure_inspection_preview": output_dir / "failure_inspection_preview.json",
         "failure_inspection_summary": output_dir / "failure_inspection_summary.json",
         "failure_inspection_summary_md": output_dir / "failure_inspection_summary.md",
+        "failure_inspection_refined_cases": output_dir / "failure_inspection_refined_cases.jsonl",
+        "failure_inspection_refined_summary": output_dir / "failure_inspection_refined_summary.json",
+        "failure_inspection_refined_summary_md": output_dir / "failure_inspection_refined_summary.md",
         "bucket_C_cases": output_dir / "bucket_C_cases.jsonl",
         "bucket_D_cases": output_dir / "bucket_D_cases.jsonl",
         "bucket_E_cases": output_dir / "bucket_E_cases.jsonl",
     }
     write_jsonl(paths["failure_inspection_cases"], cases)
+    write_jsonl(paths["failure_inspection_refined_cases"], refined_cases)
     for bucket in INSPECTION_BUCKETS:
         write_jsonl(paths[f"bucket_{bucket}_cases"], [case for case in cases if case.get("bucket") == bucket])
 
     summary = _build_summary(
         args=args,
         cases=cases,
+        refined_cases=refined_cases,
         requested_buckets=requested_buckets,
         answer_boards=answer_boards,
         topk_boards=topk_boards,
         paths=paths,
         output_dir=output_dir,
     )
+    refined_summary = _build_refined_summary(summary)
     _write_json(paths["failure_inspection_preview"], _build_preview(cases))
     _write_json(paths["failure_inspection_summary"], summary)
+    _write_json(paths["failure_inspection_refined_summary"], refined_summary)
     paths["failure_inspection_summary_md"].write_text(_summary_markdown(summary), encoding="utf-8")
+    paths["failure_inspection_refined_summary_md"].write_text(_refined_summary_markdown(refined_summary), encoding="utf-8")
     return summary
 
 
@@ -261,6 +277,85 @@ def _diagnose_case(
         "subtype": subtype,
         "notes": notes,
     }
+
+
+def _build_refined_case(case: dict[str, Any]) -> dict[str, Any]:
+    prediction = case.get("phase4c_prediction") or {}
+    flags = case.get("coverage_flags") or {}
+    diagnosis = case.get("diagnosis_hints") or {}
+    gold_debug = case.get("gold_answer_debug") or {}
+    normalized_gold = [str(answer) for answer in (gold_debug.get("normalized_gold_answers") or [])]
+    refined_source, refined_action = _refined_attribution(
+        prediction=prediction,
+        coverage_flags=flags,
+        normalized_gold=normalized_gold,
+    )
+    return {
+        "qid": case.get("qid"),
+        "bucket": case.get("bucket"),
+        "question": case.get("question"),
+        "phase4c_answer_hit": bool(prediction.get("answer_hit")),
+        "phase4c_normalized_answer": prediction.get("normalized_answer") or "",
+        "candidate_span_answer_covered": bool(flags.get("candidate_span_answer_covered")),
+        "candidate_answer_covered": bool(flags.get("candidate_answer_covered")),
+        "top1_covered": bool(flags.get("top1_covered")),
+        "top5_covered": bool(flags.get("top5_covered")),
+        "top20_covered": bool(flags.get("top20_covered")),
+        "original_likely_failure_source": diagnosis.get("likely_failure_source"),
+        "original_recommended_next_action": diagnosis.get("recommended_next_action"),
+        "refined_failure_source": refined_source,
+        "refined_recommended_action": refined_action,
+        "true_failure_action": _true_failure_action_bucket(refined_source, refined_action),
+    }
+
+
+def _refined_attribution(
+    *,
+    prediction: dict[str, Any],
+    coverage_flags: dict[str, Any],
+    normalized_gold: list[str],
+) -> tuple[str, str]:
+    if bool(prediction.get("answer_hit")):
+        return "no_final_failure", "no_action_final_answer_already_correct"
+    if _prediction_overlaps_gold(str(prediction.get("normalized_answer") or ""), normalized_gold):
+        return "normalization_or_metric_gap", "inspect_answer_normalization"
+
+    span_covered = bool(coverage_flags.get("candidate_span_answer_covered"))
+    answer_covered = bool(coverage_flags.get("candidate_answer_covered"))
+    top5_covered = bool(coverage_flags.get("top5_covered"))
+    top20_covered = bool(coverage_flags.get("top20_covered"))
+    if not span_covered and not answer_covered:
+        return "candidate_span_or_normalization_gap", "inspect_candidate_spans_or_normalization"
+    if span_covered and not answer_covered:
+        return "extraction_rule_gap", "improve_candidate_answer_extraction"
+    if answer_covered and top5_covered:
+        return "reader_selection_gap", "candidate_id_reader_or_deterministic_selection"
+    if answer_covered and top20_covered:
+        return "candidate_ranking_gap", "improve_candidate_answer_ranking"
+    if answer_covered:
+        return "topk_filtering_gap", "improve_type_aware_topk_filtering"
+    return "unclassified", "manual_inspection"
+
+
+def _prediction_overlaps_gold(normalized_prediction: str, normalized_gold: list[str]) -> bool:
+    prediction = str(normalized_prediction or "").strip()
+    if not prediction:
+        return False
+    return any(gold and (prediction in gold or gold in prediction) for gold in normalized_gold)
+
+
+def _true_failure_action_bucket(refined_source: str, refined_action: str) -> str:
+    if refined_action == "no_action_final_answer_already_correct":
+        return "no_action_final_answer_already_correct"
+    if refined_source == "normalization_or_metric_gap":
+        return "normalization_or_metric_fix"
+    if refined_source == "extraction_rule_gap":
+        return "improve_candidate_answer_extraction"
+    if refined_source == "candidate_span_or_normalization_gap":
+        return "improve_candidate_spans"
+    if refined_source in {"reader_selection_gap", "candidate_ranking_gap", "topk_filtering_gap"}:
+        return "candidate_id_reader_or_reranking"
+    return "candidate_id_reader_or_reranking"
 
 
 def _candidate_span_gap_subtype(*, qa: dict[str, Any], candidate_record: dict[str, Any], notes: list[str]) -> str:
@@ -411,6 +506,7 @@ def _build_summary(
     *,
     args: argparse.Namespace,
     cases: list[dict[str, Any]],
+    refined_cases: list[dict[str, Any]],
     requested_buckets: list[str],
     answer_boards: list[dict[str, Any]],
     topk_boards: list[dict[str, Any]],
@@ -427,15 +523,24 @@ def _build_summary(
         diagnosis_counts[str(diagnosis.get("likely_failure_source") or "unknown")] += 1
         action_counts[str(diagnosis.get("recommended_next_action") or "unknown")] += 1
         subtype_counts[str(diagnosis.get("subtype") or "unknown")] += 1
+    refined_source_counts = Counter(str(case.get("refined_failure_source") or "unknown") for case in refined_cases)
+    refined_action_counts = Counter(str(case.get("refined_recommended_action") or "unknown") for case in refined_cases)
+    true_action_counts = Counter({key: 0 for key in TRUE_FAILURE_ACTION_KEYS})
+    true_action_counts.update(str(case.get("true_failure_action") or "candidate_id_reader_or_reranking") for case in refined_cases)
     return {
-        "phase": "Phase 4D-A.3",
+        "phase": "Phase 4D-A.3.1",
         "task": "case_level_failure_inspection",
         "status": "success",
         "source_run_dir": _path_for_summary(args.run_dir),
         "bucket_counts": dict(bucket_counts),
+        "bucket_answer_hit_breakdown": _bucket_answer_hit_breakdown(cases, requested_buckets),
+        "bucket_candidate_coverage_breakdown": _bucket_candidate_coverage_breakdown(cases, requested_buckets),
         "diagnosis_counts": dict(sorted(diagnosis_counts.items())),
         "recommended_next_action_counts": dict(sorted(action_counts.items())),
         "diagnosis_subtype_counts": dict(sorted(subtype_counts.items())),
+        "refined_failure_source_counts": dict(sorted(refined_source_counts.items())),
+        "refined_recommended_action_counts": dict(sorted(refined_action_counts.items())),
+        "true_failure_action_counts": dict(sorted(true_action_counts.items())),
         "case_count": len(cases),
         "requested_buckets": requested_buckets,
         "max_cases_per_bucket": int(args.max_cases_per_bucket),
@@ -450,6 +555,74 @@ def _build_summary(
         "does_not_run_answer_policy": True,
         "does_not_train": True,
     }
+
+
+def _build_refined_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "phase": "Phase 4D-A.3.1",
+        "task": "failure_inspection_summary_refinement",
+        "status": summary["status"],
+        "source_run_dir": summary["source_run_dir"],
+        "case_count": summary["case_count"],
+        "bucket_counts": summary["bucket_counts"],
+        "bucket_answer_hit_breakdown": summary["bucket_answer_hit_breakdown"],
+        "bucket_candidate_coverage_breakdown": summary["bucket_candidate_coverage_breakdown"],
+        "refined_failure_source_counts": summary["refined_failure_source_counts"],
+        "refined_recommended_action_counts": summary["refined_recommended_action_counts"],
+        "true_failure_action_counts": summary["true_failure_action_counts"],
+        "inspection_contains_gold_for_debug_only": summary["inspection_contains_gold_for_debug_only"],
+        "inspection_artifacts_must_not_be_reader_input": summary["inspection_artifacts_must_not_be_reader_input"],
+        "does_not_modify_reader": summary["does_not_modify_reader"],
+        "does_not_run_answer_policy": summary["does_not_run_answer_policy"],
+        "does_not_train": summary["does_not_train"],
+        "artifact_paths": {
+            "failure_inspection_refined_cases": summary["artifact_paths"]["failure_inspection_refined_cases"],
+            "failure_inspection_refined_summary": summary["artifact_paths"]["failure_inspection_refined_summary"],
+            "failure_inspection_refined_summary_md": summary["artifact_paths"]["failure_inspection_refined_summary_md"],
+        },
+    }
+
+
+def _bucket_answer_hit_breakdown(cases: list[dict[str, Any]], buckets: list[str]) -> dict[str, dict[str, int]]:
+    breakdown = {
+        bucket: {"total": 0, "final_answer_hit_true": 0, "final_answer_hit_false": 0}
+        for bucket in buckets
+    }
+    for case in cases:
+        bucket = str(case.get("bucket") or "")
+        if bucket not in breakdown:
+            continue
+        breakdown[bucket]["total"] += 1
+        hit_key = "final_answer_hit_true" if (case.get("phase4c_prediction") or {}).get("answer_hit") else "final_answer_hit_false"
+        breakdown[bucket][hit_key] += 1
+    return breakdown
+
+
+def _bucket_candidate_coverage_breakdown(cases: list[dict[str, Any]], buckets: list[str]) -> dict[str, dict[str, int]]:
+    breakdown = {
+        bucket: {
+            "candidate_answer_covered_true": 0,
+            "candidate_answer_covered_false": 0,
+            "top1_covered_true": 0,
+            "top5_covered_true": 0,
+            "top20_covered_true": 0,
+        }
+        for bucket in buckets
+    }
+    for case in cases:
+        bucket = str(case.get("bucket") or "")
+        if bucket not in breakdown:
+            continue
+        flags = case.get("coverage_flags") or {}
+        answer_key = "candidate_answer_covered_true" if flags.get("candidate_answer_covered") else "candidate_answer_covered_false"
+        breakdown[bucket][answer_key] += 1
+        if flags.get("top1_covered"):
+            breakdown[bucket]["top1_covered_true"] += 1
+        if flags.get("top5_covered"):
+            breakdown[bucket]["top5_covered_true"] += 1
+        if flags.get("top20_covered"):
+            breakdown[bucket]["top20_covered_true"] += 1
+    return breakdown
 
 
 def _build_preview(cases: list[dict[str, Any]]) -> dict[str, Any]:
@@ -467,19 +640,42 @@ def _build_preview(cases: list[dict[str, Any]]) -> dict[str, Any]:
 def _summary_markdown(summary: dict[str, Any]) -> str:
     return "\n".join(
         [
-            "# Phase 4D-A.3 Failure Inspection",
+            "# Phase 4D-A.3.1 Failure Inspection",
             "",
             f"- status: {summary['status']}",
             f"- case_count: {summary['case_count']}",
             f"- bucket_counts: {json.dumps(summary['bucket_counts'], sort_keys=True)}",
+            f"- bucket_answer_hit_breakdown: {json.dumps(summary['bucket_answer_hit_breakdown'], sort_keys=True)}",
+            f"- bucket_candidate_coverage_breakdown: {json.dumps(summary['bucket_candidate_coverage_breakdown'], sort_keys=True)}",
             f"- diagnosis_counts: {json.dumps(summary['diagnosis_counts'], sort_keys=True)}",
             f"- recommended_next_action_counts: {json.dumps(summary['recommended_next_action_counts'], sort_keys=True)}",
+            f"- refined_failure_source_counts: {json.dumps(summary['refined_failure_source_counts'], sort_keys=True)}",
+            f"- true_failure_action_counts: {json.dumps(summary['true_failure_action_counts'], sort_keys=True)}",
             f"- inspection_contains_gold_for_debug_only: {summary['inspection_contains_gold_for_debug_only']}",
             f"- inspection_artifacts_must_not_be_reader_input: {summary['inspection_artifacts_must_not_be_reader_input']}",
             f"- candidate_answers_remain_gold_free: {summary['candidate_answers_remain_gold_free']}",
             f"- candidate_answers_topk_remain_gold_free: {summary['candidate_answers_topk_remain_gold_free']}",
             "",
             "This report is for audit and debugging only. It does not modify Reader prompts, run AnswerPolicy, train models, or change retrieval.",
+            "",
+        ]
+    )
+
+
+def _refined_summary_markdown(summary: dict[str, Any]) -> str:
+    return "\n".join(
+        [
+            "# Phase 4D-A.3.1 Refined Failure Inspection Summary",
+            "",
+            f"- status: {summary['status']}",
+            f"- case_count: {summary['case_count']}",
+            f"- bucket_counts: {json.dumps(summary['bucket_counts'], sort_keys=True)}",
+            f"- refined_failure_source_counts: {json.dumps(summary['refined_failure_source_counts'], sort_keys=True)}",
+            f"- refined_recommended_action_counts: {json.dumps(summary['refined_recommended_action_counts'], sort_keys=True)}",
+            f"- true_failure_action_counts: {json.dumps(summary['true_failure_action_counts'], sort_keys=True)}",
+            f"- inspection_contains_gold_for_debug_only: {summary['inspection_contains_gold_for_debug_only']}",
+            "",
+            "This refined summary combines bucket labels, final answer hit, candidate answer coverage, and top-k coverage for action attribution only.",
             "",
         ]
     )

@@ -568,14 +568,22 @@ def test_failure_inspection_exports_c_d_e_cases(tmp_path: Path) -> None:
     cases_by_bucket = {case["bucket"]: case for case in cases}
     preview = json.loads((out_dir / "failure_inspection_preview.json").read_text(encoding="utf-8"))
 
-    assert summary["phase"] == "Phase 4D-A.3"
+    assert summary["phase"] == "Phase 4D-A.3.1"
     assert summary["bucket_counts"] == {"C": 1, "D": 1, "E": 1}
+    assert summary["bucket_answer_hit_breakdown"]["E"]["final_answer_hit_false"] == 1
+    assert summary["bucket_candidate_coverage_breakdown"]["E"]["top5_covered_true"] == 1
     assert summary["diagnosis_counts"] == {"candidate_span_gap": 1, "extraction_rule_gap": 1, "reader_or_candidate_selection_gap": 1}
     assert summary["recommended_next_action_counts"] == {
         "candidate_id_reader_or_reranking": 1,
         "improve_candidate_answer_extraction": 1,
         "improve_candidate_spans": 1,
     }
+    assert summary["refined_failure_source_counts"] == {
+        "candidate_span_or_normalization_gap": 1,
+        "extraction_rule_gap": 1,
+        "reader_selection_gap": 1,
+    }
+    assert summary["true_failure_action_counts"]["candidate_id_reader_or_reranking"] == 1
     assert summary["inspection_contains_gold_for_debug_only"] is True
     assert summary["candidate_answers_remain_gold_free"] is True
     assert summary["candidate_answers_topk_remain_gold_free"] is True
@@ -592,6 +600,113 @@ def test_failure_inspection_exports_c_d_e_cases(tmp_path: Path) -> None:
     assert len(read_jsonl(out_dir / "bucket_E_cases.jsonl")) == 1
     assert preview["records"]
     assert (out_dir / "failure_inspection_summary.md").is_file()
+    assert (out_dir / "failure_inspection_refined_summary.json").is_file()
+    assert (out_dir / "failure_inspection_refined_summary.md").is_file()
+    assert read_jsonl(out_dir / "failure_inspection_refined_cases.jsonl")[2]["refined_failure_source"] == "reader_selection_gap"
+
+
+def test_failure_inspection_refined_action_attribution_matrix(tmp_path: Path) -> None:
+    run_dir = tmp_path / "a2_run"
+    run_dir.mkdir()
+    candidate_evidence = tmp_path / "candidate_evidence.jsonl"
+    qa_jsonl = tmp_path / "qa.jsonl"
+    answer_results = tmp_path / "answer_results.jsonl"
+    output_root = tmp_path / "inspection"
+
+    records = [
+        ("q_ok", "C", "wrong span", [{"answer_text": "wrong", "normalized_answer": "wrong", "rank": 1}], [{"answer_text": "wrong", "normalized_answer": "wrong", "rank": 1, "topk_rank": 1}], "Gold", True),
+        ("q_span", "C", "wrong span", [{"answer_text": "wrong", "normalized_answer": "wrong", "rank": 1}], [{"answer_text": "wrong", "normalized_answer": "wrong", "rank": 1, "topk_rank": 1}], "wrong", False),
+        ("q_extract", "D", "gold value", [{"answer_text": "wrong", "normalized_answer": "wrong", "rank": 1}], [{"answer_text": "wrong", "normalized_answer": "wrong", "rank": 1, "topk_rank": 1}], "wrong", False),
+        ("q_reader", "E", "gold value", [{"answer_text": "gold", "normalized_answer": "gold", "rank": 1}], [{"answer_text": "gold", "normalized_answer": "gold", "rank": 1, "topk_rank": 1}], "wrong", False),
+        (
+            "q_rank",
+            "E",
+            "gold value",
+            [{"answer_text": f"wrong {i}", "normalized_answer": f"wrong {i}", "rank": i} for i in range(1, 6)] + [{"answer_text": "gold", "normalized_answer": "gold", "rank": 6}],
+            [{"answer_text": f"wrong {i}", "normalized_answer": f"wrong {i}", "rank": i, "topk_rank": i} for i in range(1, 6)] + [{"answer_text": "gold", "normalized_answer": "gold", "rank": 6, "topk_rank": 6}],
+            "wrong",
+            False,
+        ),
+        ("q_topk", "E", "gold value", [{"answer_text": "gold", "normalized_answer": "gold", "rank": 21}], [{"answer_text": "wrong", "normalized_answer": "wrong", "rank": 1, "topk_rank": 1}], "wrong", False),
+        ("q_norm", "C", "wrong span", [{"answer_text": "wrong", "normalized_answer": "wrong", "rank": 1}], [{"answer_text": "wrong", "normalized_answer": "wrong", "rank": 1, "topk_rank": 1}], "Gold Extra", False),
+    ]
+    write_jsonl(
+        candidate_evidence,
+        [
+            {
+                "qid": qid,
+                "doc_id": "doc",
+                "question": f"Question {qid}?",
+                "top_pages": [{"page": 1}],
+                "candidate_spans": [_span(f"c_{qid}", span_text, page=1)],
+            }
+            for qid, _, span_text, _, _, _, _ in records
+        ],
+    )
+    write_jsonl(
+        qa_jsonl,
+        [
+            {"qid": qid, "doc_id": "doc", "question": f"Question {qid}?", "answers": ["gold"], "gold_page_ordinal": 1}
+            for qid, *_ in records
+        ],
+    )
+    write_jsonl(
+        run_dir / "candidate_answers.jsonl",
+        [
+            {"qid": qid, "doc_id": "doc", "question": f"Question {qid}?", "candidate_answers": candidates}
+            for qid, _, _, candidates, _, _, _ in records
+        ],
+    )
+    write_jsonl(
+        run_dir / "candidate_answers_topk.jsonl",
+        [
+            {"qid": qid, "doc_id": "doc", "question": f"Question {qid}?", "candidate_answers": topk_candidates}
+            for qid, _, _, _, topk_candidates, _, _ in records
+        ],
+    )
+    (run_dir / "candidate_answer_error_buckets.json").write_text(
+        json.dumps({"records": [{"qid": qid, "doc_id": "doc", "bucket": bucket, "reason": "fixture"} for qid, bucket, *_ in records]}),
+        encoding="utf-8",
+    )
+    write_jsonl(
+        answer_results,
+        [{"qid": qid, "answer": answer, "answer_metrics": {"answer_hit": answer_hit}} for qid, _, _, _, _, answer, answer_hit in records],
+    )
+
+    summary = run_phase4d_failure_inspection(
+        Namespace(
+            run_dir=run_dir,
+            candidate_evidence=candidate_evidence,
+            qa_jsonl=qa_jsonl,
+            answer_results=answer_results,
+            output_root=output_root,
+            run_id="fixture",
+            buckets="C,D,E",
+            max_cases_per_bucket=999,
+            top_spans=1,
+            top_candidates=20,
+            force=True,
+        )
+    )
+    refined_cases = {case["qid"]: case for case in read_jsonl(output_root / "fixture" / "failure_inspection_refined_cases.jsonl")}
+    refined_summary = json.loads((output_root / "fixture" / "failure_inspection_refined_summary.json").read_text(encoding="utf-8"))
+
+    assert refined_cases["q_ok"]["refined_recommended_action"] == "no_action_final_answer_already_correct"
+    assert refined_cases["q_span"]["refined_failure_source"] == "candidate_span_or_normalization_gap"
+    assert refined_cases["q_extract"]["refined_failure_source"] == "extraction_rule_gap"
+    assert refined_cases["q_reader"]["refined_failure_source"] == "reader_selection_gap"
+    assert refined_cases["q_rank"]["refined_failure_source"] == "candidate_ranking_gap"
+    assert refined_cases["q_topk"]["refined_failure_source"] == "topk_filtering_gap"
+    assert refined_cases["q_norm"]["refined_failure_source"] == "normalization_or_metric_gap"
+    assert summary["bucket_answer_hit_breakdown"]["C"] == {"total": 3, "final_answer_hit_true": 1, "final_answer_hit_false": 2}
+    assert summary["true_failure_action_counts"] == {
+        "candidate_id_reader_or_reranking": 3,
+        "improve_candidate_answer_extraction": 1,
+        "improve_candidate_spans": 1,
+        "no_action_final_answer_already_correct": 1,
+        "normalization_or_metric_fix": 1,
+    }
+    assert refined_summary["true_failure_action_counts"] == summary["true_failure_action_counts"]
 
 
 def test_failure_inspection_exports_c_d_without_answer_results(tmp_path: Path) -> None:

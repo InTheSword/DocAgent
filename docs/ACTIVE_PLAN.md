@@ -6,7 +6,7 @@
 ## Current Stage
 
 ```text
-Phase 4D-A.3: Case-level failure inspection and targeted fix plan
+Phase 4D-A.3.1: Failure inspection summary refinement
 ```
 
 ## Current Goal
@@ -20,6 +20,7 @@ Phase 4C candidate_evidence.jsonl
 -> extraction/ranking refinement before Candidate-ID Reader
 -> filtering / reranking / type-aware top-k board before Candidate-ID Reader
 -> C/D/E case-level failure inspection before new Reader work
+-> refined action attribution from final-answer hit and candidate/top-k coverage
 ```
 
 ## Current Status
@@ -53,7 +54,9 @@ Phase 4D-A.1 server refined audit -> accepted
 Phase 4D-A.2 local implementation -> implemented
 Phase 4D-A.2 server filtering audit -> accepted
 Phase 4D-A.3 local implementation -> implemented
-Phase 4D-A.3 server failure inspection -> not_started
+Phase 4D-A.3 server failure inspection -> accepted
+Phase 4D-A.3.1 local implementation -> implemented
+Phase 4D-A.3.1 server refined summary -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -79,6 +82,8 @@ evaluation implementation, metrics, or conclusions in this phase.
 - export case-level C/D/E failure inspection artifacts for audit and targeted
   planning only. Inspection artifacts may include gold answers for debugging,
   but they must not be used as Reader input.
+- refine inspection summary attribution by combining candidate bucket, final
+  answer hit, candidate-answer coverage, and top-k coverage.
 
 ## Blockers
 
@@ -94,8 +99,10 @@ evaluation implementation, metrics, or conclusions in this phase.
 - Phase 4D-A.2 server filtering audit is accepted. It cleaned the top-k board
   but did not improve all coverage or C/D/E buckets enough to enter
   Candidate-ID Reader.
-- Phase 4D-A.3 local implementation has no local blocker. The inspection
-  server run requires server-side Phase 4C and A.2 artifacts, which may be
+- Phase 4D-A.3 server inspection is accepted. It showed that C/D/E buckets mix
+  candidate-layer gaps and final-answer failures.
+- Phase 4D-A.3.1 local implementation has no local blocker. The refined
+  summary server run requires server-side Phase 4D-A.3 artifacts, which may be
   absent from the local ignored `outputs/` tree.
 
 Gate 4 accepted server scope:
@@ -295,6 +302,28 @@ Phase 4D-A.2 interpretation:
   case-level failure inspection to identify targeted candidate span,
   extraction, normalization, ranking, or Reader work.
 
+Phase 4D-A.3 accepted server inspection:
+
+```text
+artifacts = failure_inspection_cases.jsonl,
+            bucket_C_cases.jsonl,
+            bucket_D_cases.jsonl,
+            bucket_E_cases.jsonl,
+            failure_inspection_summary.json,
+            failure_inspection_summary.md
+```
+
+Phase 4D-A.3 inspection interpretation:
+
+- C/D/E buckets are candidate-layer diagnostics, not equivalent to final QA
+  failures.
+- Some C/D samples have `phase4c_prediction.answer_hit = true` and should not
+  be counted as primary repair targets.
+- True next-action attribution must combine bucket, final answer hit,
+  candidate-answer coverage, and top-k coverage.
+- Phase 4D-A.3.1 refines the summary/action attribution while still avoiding
+  Reader prompt, AnswerPolicy, training, CDC, and Demo changes.
+
 ## Local Validation
 
 Local `main` validation covers code and documentation state. The accepted Gate
@@ -333,8 +362,9 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Run Phase 4D-A.3 failure inspection export on the server A.2 run directory.
-2. Review C/D/E case packets to decide whether the next fix should target
+1. Run Phase 4D-A.3.1 refined inspection summary on the server A.3 inspection
+   run directory.
+2. Review refined action counts to decide whether the next fix should target
    candidate spans, candidate answer extraction, normalization, ranking, or
    Reader selection.
 3. Keep `page_children` as the default until more shard and document-type
@@ -344,7 +374,7 @@ absolute_path_hit_count = 0
 ## Stop Condition
 
 ```text
-Phase 4D-A.3 local implementation implemented
+Phase 4D-A.3.1 local implementation implemented
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

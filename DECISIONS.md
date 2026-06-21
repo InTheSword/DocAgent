@@ -8,6 +8,44 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-22: Phase 4D-A.3.1 Refined Action Attribution
+
+Decision: after the accepted Phase 4D-A.3 server inspection, refine the
+failure inspection summary before starting Candidate-ID Grounded Reader work.
+
+Evidence:
+
+- Inspection artifacts showed that C/D/E buckets are candidate-layer
+  diagnostics, not equivalent to final QA failures.
+- Some C and D examples already had `phase4c_prediction.answer_hit = true`.
+- Some E examples had the gold answer at top rank but the final answer was
+  wrong, indicating Reader/candidate selection rather than candidate coverage.
+
+Interpretation:
+
+- Bucket labels alone overstate the number of primary candidate-layer repair
+  targets.
+- Action attribution should combine bucket, final answer hit, candidate answer
+  coverage, top-k coverage, and simple normalization-overlap checks.
+- Final-answer-correct cases should be separated into a no-action bucket for
+  current QA behavior.
+
+Implementation boundary:
+
+- Add refined cases and refined summary artifacts to the existing failure
+  inspection exporter.
+- Keep inspection/refined artifacts audit-only; they may contain gold debug but
+  must not become Reader input.
+- Keep `candidate_answers.jsonl` and `candidate_answers_topk.jsonl` free of
+  gold answer/page fields.
+
+Constraints:
+
+- Do not modify Reader prompt defaults, AnswerPolicy, retrieval models, MinerU,
+  checkpoints, reward, training split, training data, CDC, Demo, or the global
+  `candidate_spans` default.
+- Do not run full GRPO for Phase 4D-A.3.1.
+
 ## 2026-06-21: Phase 4D-A.3 Case-level Inspection Before Reader
 
 Decision: after the accepted Phase 4D-A.2 server filtering audit, export

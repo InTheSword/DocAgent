@@ -317,7 +317,8 @@ Do not:
 
 ## 8. Next Priorities
 
-1. Run Phase 4D-A.3 failure inspection export on the server A.2 run directory.
+1. Run Phase 4D-A.3.1 refined inspection summary on the server A.3 inspection
+   run directory.
 2. Keep Phase 4C `candidate_spans` available as an accepted experimental and
    recommended evidence-packing mode.
 3. Keep CDC `not_started` until explicitly started.
@@ -420,7 +421,9 @@ Phase 4D-A.1 server refined audit -> accepted
 Phase 4D-A.2 local implementation -> implemented
 Phase 4D-A.2 server filtering audit -> accepted
 Phase 4D-A.3 local implementation -> implemented
-Phase 4D-A.3 server failure inspection -> not_started
+Phase 4D-A.3 server failure inspection -> accepted
+Phase 4D-A.3.1 local implementation -> implemented
+Phase 4D-A.3.1 server refined summary -> not_started
 ```
 
 Scope:
@@ -443,9 +446,9 @@ scripts/analyze_phase4d_candidate_answer_coverage.py
 tests/test_candidate_answer_extraction.py
 ```
 
-Phase 4D-A, Phase 4D-A.1, and Phase 4D-A.2 server audits are accepted. The
-Phase 4D-A.3 failure inspection export is still required before A.3 inspection
-artifacts can be marked `accepted`.
+Phase 4D-A through Phase 4D-A.3 server audits are accepted. The Phase
+4D-A.3.1 refined summary export is still required before A.3.1 refined action
+attribution can be marked `accepted`.
 
 Accepted Phase 4D-A server audit:
 
@@ -602,7 +605,7 @@ Status:
 
 ```text
 Phase 4D-A.3 local implementation -> implemented
-Phase 4D-A.3 server failure inspection -> not_started
+Phase 4D-A.3 server failure inspection -> accepted
 ```
 
 Scope:
@@ -615,12 +618,52 @@ Scope:
 - do not modify Reader prompts, AnswerPolicy integration, retrieval models,
   training, CDC, Demo, or the default evidence-packing mode.
 
+Accepted Phase 4D-A.3 server inspection:
+
+```text
+artifacts = failure_inspection_cases.jsonl,
+            bucket_C_cases.jsonl,
+            bucket_D_cases.jsonl,
+            bucket_E_cases.jsonl,
+            failure_inspection_summary.json,
+            failure_inspection_summary.md
+```
+
+Interpretation:
+
+- C/D/E buckets are candidate-layer diagnostics, not equivalent to final QA
+  failures.
+- Some C/D cases are already final-answer correct and should not be counted as
+  primary repair targets.
+- The next attribution layer must combine bucket, final answer hit,
+  candidate-answer coverage, and top-k coverage.
+
+## 8.6 Phase 4D-A.3.1 Failure Inspection Summary Refinement
+
+Status:
+
+```text
+Phase 4D-A.3.1 local implementation -> implemented
+Phase 4D-A.3.1 server refined summary -> not_started
+```
+
+Scope:
+
+- add refined C/D/E summary breakdowns by final answer hit and candidate/top-k
+  coverage;
+- add refined cases and refined summary artifacts;
+- map cases to refined actions such as no-action, candidate span gap,
+  extraction gap, Reader selection gap, ranking gap, top-k filtering gap, and
+  normalization/metric gap;
+- do not modify Reader prompts, AnswerPolicy integration, retrieval models,
+  training, CDC, Demo, or the default evidence-packing mode.
+
 ## 9. Stop Condition
 
 Stop after the following are complete:
 
 ```text
-Phase 4D-A.3 local implementation implemented
+Phase 4D-A.3.1 local implementation implemented
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

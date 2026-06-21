@@ -1,14 +1,14 @@
 # Current Status
 
-Updated: 2026-06-21
+Updated: 2026-06-22
 
-## Phase 4D-A.3 Local Implementation
+## Phase 4D-A.3.1 Local Implementation
 
-Phase 4D-A.2 server filtering audit is accepted. It made the top-k board
-cleaner, but did not improve all coverage or C/D/E buckets enough to enter
-Candidate-ID Grounded Reader. The immediate next step is case-level C/D/E
-failure inspection, not another Reader prompt or AnswerPolicy integration
-change.
+Phase 4D-A.3 server inspection is accepted. It showed that C/D/E buckets are
+candidate-layer diagnostics and can include final-answer-correct cases. The
+immediate next step is refined action attribution from bucket, final answer hit,
+candidate-answer coverage, and top-k coverage, not a Reader prompt or
+AnswerPolicy integration change.
 
 Status:
 
@@ -24,7 +24,9 @@ Phase 4D-A.1 server refined audit -> accepted
 Phase 4D-A.2 local implementation -> implemented
 Phase 4D-A.2 server filtering audit -> accepted
 Phase 4D-A.3 local implementation -> implemented
-Phase 4D-A.3 server failure inspection -> not_started
+Phase 4D-A.3 server failure inspection -> accepted
+Phase 4D-A.3.1 local implementation -> implemented
+Phase 4D-A.3.1 server refined summary -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -141,12 +143,33 @@ Phase 4D-A.3 implemented boundary:
 - add automatic diagnosis hints for candidate span, extraction, and
   Reader/candidate-selection gaps.
 
+Phase 4D-A.3 accepted server inspection:
+
+```text
+artifacts = failure_inspection_cases.jsonl,
+            bucket_C_cases.jsonl,
+            bucket_D_cases.jsonl,
+            bucket_E_cases.jsonl,
+            failure_inspection_summary.json,
+            failure_inspection_summary.md
+```
+
+Phase 4D-A.3.1 implemented boundary:
+
+- add `bucket_answer_hit_breakdown` and
+  `bucket_candidate_coverage_breakdown` to `failure_inspection_summary.json`;
+- add `true_failure_action_counts`;
+- add `failure_inspection_refined_cases.jsonl`,
+  `failure_inspection_refined_summary.json`, and
+  `failure_inspection_refined_summary.md`;
+- keep refined artifacts audit-only and out of Reader input.
+
 Unchanged boundary:
 
 - Reader prompts, AnswerPolicy, retrieval models, MinerU, checkpoints, reward,
   training data, CDC, Demo, and global `candidate_spans` default remain
   unchanged.
-- Phase 4D-A.3 server failure inspection has not yet run.
+- Phase 4D-A.3.1 server refined summary has not yet run.
 
 ## Phase 4D-A Local Implementation
 
@@ -169,7 +192,9 @@ Phase 4D-A.1 server refined audit -> accepted
 Phase 4D-A.2 local implementation -> implemented
 Phase 4D-A.2 server filtering audit -> accepted
 Phase 4D-A.3 local implementation -> implemented
-Phase 4D-A.3 server failure inspection -> not_started
+Phase 4D-A.3 server failure inspection -> accepted
+Phase 4D-A.3.1 local implementation -> implemented
+Phase 4D-A.3.1 server refined summary -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -193,8 +218,8 @@ Unchanged boundary:
   mode, not a global default;
 - Reader prompts, AnswerPolicy, retrieval models, MinerU, checkpoints, reward,
   training data, CDC, and Demo remain unchanged;
-- Phase 4D-A through Phase 4D-A.2 server audits are accepted; Phase 4D-A.3
-  server failure inspection has not yet run.
+- Phase 4D-A through Phase 4D-A.3 server audits are accepted; Phase 4D-A.3.1
+  server refined summary has not yet run.
 
 ## Phase 4C Accepted
 
@@ -215,7 +240,9 @@ Phase 4D-A.1 server refined audit -> accepted
 Phase 4D-A.2 local implementation -> implemented
 Phase 4D-A.2 server filtering audit -> accepted
 Phase 4D-A.3 local implementation -> implemented
-Phase 4D-A.3 server failure inspection -> not_started
+Phase 4D-A.3 server failure inspection -> accepted
+Phase 4D-A.3.1 local implementation -> implemented
+Phase 4D-A.3.1 server refined summary -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -315,7 +342,9 @@ Phase 4D-A.1 server refined audit -> accepted
 Phase 4D-A.2 local implementation -> implemented
 Phase 4D-A.2 server filtering audit -> accepted
 Phase 4D-A.3 local implementation -> implemented
-Phase 4D-A.3 server failure inspection -> not_started
+Phase 4D-A.3 server failure inspection -> accepted
+Phase 4D-A.3.1 local implementation -> implemented
+Phase 4D-A.3.1 server refined summary -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
