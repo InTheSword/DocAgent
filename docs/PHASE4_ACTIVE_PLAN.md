@@ -317,8 +317,8 @@ Do not:
 
 ## 8. Next Priorities
 
-1. Run Phase 4D-A.4 candidate span / normalization gap final review on the
-   server A.3.1 refined inspection run directory.
+1. Validate Phase 4D-B1 by regenerating candidate span artifacts and rerunning
+   A.2/A.3.1/A.4 diagnostics on the server.
 2. Keep Phase 4C `candidate_spans` available as an accepted experimental and
    recommended evidence-packing mode.
 3. Keep CDC `not_started` until explicitly started.
@@ -648,6 +648,10 @@ Status:
 ```text
 Phase 4D-A.3.1 local implementation -> implemented
 Phase 4D-A.3.1 server refined summary -> accepted
+Phase 4D-A.4 local implementation -> implemented
+Phase 4D-A.4 server final gap review -> accepted
+Phase 4D-B1 local implementation -> implemented
+Phase 4D-B1 server validation -> not_started
 ```
 
 Scope:
@@ -691,7 +695,7 @@ Status:
 
 ```text
 Phase 4D-A.4 local implementation -> implemented
-Phase 4D-A.4 server final gap review -> not_started
+Phase 4D-A.4 server final gap review -> accepted
 ```
 
 Scope:
@@ -720,12 +724,60 @@ Decision gate:
 - Do not proceed to Candidate-ID Reader unless reader-selection gaps become
   dominant after candidate coverage issues are resolved.
 
+Accepted Phase 4D-A.4 server final diagnostic:
+
+```text
+total_candidate_span_or_normalization_gap = 21
+normalization_or_metric_gap = 0
+candidate_span_selection_gap = 5
+candidate_span_partial_context_gap = 5
+table_or_index_span_gap = 10
+page_number_or_content_lookup_gap = 1
+ocr_or_parsing_gap = 0
+unclear_mixed_gap = 0
+```
+
+Interpretation:
+
+- A.4 is the final diagnostic split for the 90-sample probe.
+- `table_or_index_span_gap = 10` is the dominant concentrated subtype with a
+  generic repair path.
+- The only allowed next repair is a narrow generic table/index candidate span
+  selection fix.
+
+## 8.8 Phase 4D-B1 Generic Table / Index Candidate Span Selection Fix
+
+Status:
+
+```text
+Phase 4D-B1 local implementation -> implemented
+Phase 4D-B1 server validation -> not_started
+```
+
+Scope:
+
+- add generic table/index question hint detection for index/share/rate/segment,
+  percentage/percent/%, table/row/column, and field/value wording;
+- add table/index span scoring bonuses for field-label overlap, percent
+  values, parenthesized index values, field-value rows, table/list-like rows,
+  and same-line label/value/parenthesized-index evidence;
+- retain table/index neighbor context by including current rows, adjacent rows,
+  and table header-like blocks when generic table/index signals are present;
+- add table/index diagnostics to candidate packing metrics.
+
+Constraints:
+
+- Do not add qid-, document-, title-, entity-, or answer-specific rules.
+- Do not modify Reader prompts, AnswerPolicy integration, retrieval models,
+  training, CDC, Demo, or the default evidence-packing mode.
+- Candidate-ID Reader remains postponed.
+
 ## 9. Stop Condition
 
 Stop after the following are complete:
 
 ```text
-Phase 4D-A.4 local implementation implemented
+Phase 4D-B1 local implementation implemented
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

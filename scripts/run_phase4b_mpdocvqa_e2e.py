@@ -912,6 +912,18 @@ def _gold_page_aggregate_ids(windows: list[DocumentWindow]) -> dict[str, str]:
     }
 
 
+def _gold_answers_by_qid(windows: list[DocumentWindow]) -> dict[str, list[str]]:
+    answers_by_qid: dict[str, list[str]] = {}
+    for window in windows:
+        for qa in window.qa_records:
+            answers = qa.get("answers")
+            if isinstance(answers, list):
+                answers_by_qid[str(qa.get("qid"))] = [str(answer) for answer in answers]
+            elif answers:
+                answers_by_qid[str(qa.get("qid"))] = [str(answers)]
+    return answers_by_qid
+
+
 FORBIDDEN_CONTEXT_KEYS = {
     "answer_page_idx",
     "answers",
@@ -1472,6 +1484,7 @@ def run_phase4b_e2e(args: argparse.Namespace) -> dict[str, Any]:
         candidate_metrics = summarize_candidate_packing(
             candidate_records,
             gold_page_aggregate_ids=_gold_page_aggregate_ids(windows),
+            gold_answers_by_qid=_gold_answers_by_qid(windows),
         )
         write_jsonl(paths["candidate_evidence"], candidate_records)
         _write_json(paths["candidate_evidence_preview"], {"records": candidate_records[:3]})

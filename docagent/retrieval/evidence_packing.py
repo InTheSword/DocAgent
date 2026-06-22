@@ -10,7 +10,12 @@ from docagent.schemas import EvidenceBlock
 
 ANSWER_TYPE_HINTS = {"numeric", "date", "heading", "source", "text", "unknown"}
 FIELD_HINT_TERMS = {
+    "%",
+    "column",
+    "field",
     "index",
+    "row",
+    "segment",
     "percentage",
     "percent",
     "rate",
@@ -22,6 +27,8 @@ FIELD_HINT_TERMS = {
     "amount",
     "page",
     "signature",
+    "table",
+    "value",
 }
 STOPWORDS = {
     "a",
@@ -75,7 +82,24 @@ DATE_RE = re.compile(
 )
 NUMERIC_RE = re.compile(r"\b\d+\s*-\s*\d+\b|\(\s*\d+(?:\.\d+)?\s*\)|\b\d+(?:\.\d+)?\s*%?|\b\d+(?:\.\d+)?\b")
 PERCENT_RE = re.compile(r"(?:\d+(?:\.\d+)?\s*%|\bpercent(?:age)?\b)", re.IGNORECASE)
+PAREN_INDEX_RE = re.compile(r"\(\s*\d+(?:\.\d+)?\s*\)")
+FIELD_VALUE_RE = re.compile(r"\b[a-z][a-z0-9 /&().,-]{1,80}\s*[:\-]\s*[^:\n]{1,80}", re.IGNORECASE)
 ABSOLUTE_PATH_RE = re.compile(r"^(?:[a-zA-Z]:/|/|\\\\|//)")
+TABLE_INDEX_HINT_TERMS = {
+    "%",
+    "column",
+    "field",
+    "index",
+    "percentage",
+    "percent",
+    "rate",
+    "row",
+    "segment",
+    "share",
+    "table",
+    "value",
+}
+TABLE_INDEX_TEXT_TERMS = TABLE_INDEX_HINT_TERMS - {"%"}
 
 
 @dataclass(frozen=True)
@@ -93,6 +117,7 @@ class QuestionHint:
             "numeric_tokens": list(self.numeric_tokens),
             "date_tokens": list(self.date_tokens),
             "field_hints": list(self.field_hints),
+            "table_index_hint": _is_table_index_question(self),
         }
 
 
@@ -124,6 +149,10 @@ class CandidateSpan:
     score_breakdown: dict[str, float]
     matched_terms: list[str]
     detected_values: list[str]
+    table_index_candidate: bool = False
+    table_index_field_value_pattern: bool = False
+    table_index_parenthesized_index: bool = False
+    table_index_neighbor_context_added_count: int = 0
     source: str = "rule_candidate_builder"
 
     def to_dict(self) -> dict[str, Any]:
@@ -145,6 +174,10 @@ class CandidateSpan:
             "score_breakdown": {key: round(value, 6) for key, value in self.score_breakdown.items()},
             "matched_terms": list(self.matched_terms),
             "detected_values": list(self.detected_values),
+            "table_index_candidate": self.table_index_candidate,
+            "table_index_field_value_pattern": self.table_index_field_value_pattern,
+            "table_index_parenthesized_index": self.table_index_parenthesized_index,
+            "table_index_neighbor_context_added_count": self.table_index_neighbor_context_added_count,
             "source": self.source,
         }
 
@@ -175,6 +208,7 @@ def parse_question_hints(question: str) -> QuestionHint:
     field_hints = [term for term in sorted(FIELD_HINT_TERMS) if term in tokens or term in text]
     numeric_tokens = _unique(NUMERIC_RE.findall(question))
     date_tokens = _unique(DATE_RE.findall(question))
+    table_index_question = _is_table_index_text(text)
 
     if any(term in text for term in ("date", "when", "year", "month", "day")) or date_tokens:
         answer_type_hint = "date"
@@ -182,7 +216,7 @@ def parse_question_hints(question: str) -> QuestionHint:
         answer_type_hint = "heading"
     elif any(term in text for term in ("source", "cited", "bottom", "footer")):
         answer_type_hint = "source"
-    elif any(term in text for term in ("how many", "amount", "total", "number", "index", "percentage", "percent", "rate", "value")):
+    elif table_index_question or any(term in text for term in ("how many", "amount", "total", "number")):
         answer_type_hint = "numeric"
     elif any(term in text for term in ("name", "company", "organization", "what is")):
         answer_type_hint = "text"
@@ -215,6 +249,7 @@ def summarize_candidate_packing(
     records: list[dict[str, Any]],
     *,
     gold_page_aggregate_ids: dict[str, str] | None = None,
+    gold_answers_by_qid: dict[str, list[str]] | None = None,
 ) -> dict[str, Any]:
     stats = [record.get("packing_stats") or {} for record in records]
     top_pages_by_qid = {
@@ -247,6 +282,21 @@ def summarize_candidate_packing(
         gold_page_aggregate_ids[qid] in candidate_pages_by_qid.get(qid, set())
         for qid in gold_qids
     ]
+    table_index_qids = [
+        str(record.get("qid"))
+        for record in records
+        if ((record.get("packing_stats") or {}).get("table_index_question_count") or 0) > 0
+    ]
+    table_index_answer_hits = [
+        _candidate_spans_contain_answer(record.get("candidate_spans") or [], gold_answers_by_qid[str(record.get("qid"))])
+        for record in records
+        if str(record.get("qid")) in table_index_qids and gold_answers_by_qid and str(record.get("qid")) in gold_answers_by_qid
+    ]
+    table_index_top_field_values = [
+        bool((record.get("packing_stats") or {}).get("table_index_top_span_contains_field_value_rate"))
+        for record in records
+        if str(record.get("qid")) in table_index_qids
+    ]
     return {
         "sample_count": len(records),
         "mean_original_page_count": _mean(_values("original_page_count")),
@@ -262,6 +312,12 @@ def summarize_candidate_packing(
         "candidate_span_count_distribution": _distribution([len(record.get("candidate_spans") or []) for record in records]),
         "gold_page_in_candidate_pages_rate": _mean_bool(gold_in_candidate_pages),
         "gold_page_has_candidate_span_rate": _mean_bool(gold_has_candidate_span),
+        "table_index_question_count": len(table_index_qids),
+        "table_index_candidate_span_count": int(sum(_values("table_index_candidate_span_count"))),
+        "table_index_candidate_span_answer_coverage": _mean_bool(table_index_answer_hits) if gold_answers_by_qid is not None else None,
+        "table_index_top_span_contains_field_value_rate": _mean_bool(table_index_top_field_values),
+        "table_index_neighbor_context_added_count": int(sum(_values("table_index_neighbor_context_added_count"))),
+        "table_index_parenthesized_index_span_count": int(sum(_values("table_index_parenthesized_index_span_count"))),
         "no_gold_leakage": not candidate_artifact_has_gold_leakage(records),
     }
 
@@ -318,6 +374,8 @@ class EvidenceCandidateBuilder:
             )
 
         span_dicts = [span.to_dict() for span in spans]
+        table_index_spans = [span for span in span_dicts if span.get("table_index_candidate")]
+        table_index_top_span_has_field_value = bool(span_dicts and span_dicts[0].get("table_index_field_value_pattern"))
         unique_candidate_blocks = _unique(
             block_id
             for span in span_dicts
@@ -349,6 +407,11 @@ class EvidenceCandidateBuilder:
                 "dropped_block_count": max(len(set(original_block_ids)) - len(unique_candidate_blocks), 0),
                 "estimated_prompt_tokens_before": estimate_prompt_tokens(before_text),
                 "estimated_prompt_tokens_after": estimate_prompt_tokens(after_text),
+                "table_index_question_count": 1 if _is_table_index_question(hints) else 0,
+                "table_index_candidate_span_count": len(table_index_spans),
+                "table_index_top_span_contains_field_value_rate": 1.0 if table_index_top_span_has_field_value else 0.0,
+                "table_index_neighbor_context_added_count": sum(int(span.get("table_index_neighbor_context_added_count") or 0) for span in table_index_spans),
+                "table_index_parenthesized_index_span_count": sum(1 for span in table_index_spans if span.get("table_index_parenthesized_index")),
             },
         }
 
@@ -371,6 +434,7 @@ class EvidenceCandidateBuilder:
             numeric_bonus += 0.25
         if detected_values and hints.answer_type_hint in {"numeric", "date"}:
             numeric_bonus += 0.12
+        table_index_bonus = _table_index_bonus(hints, text, lowered, block)
         block_type_bonus = _block_type_bonus(block)
         page_rank_bonus = max(0.0, 0.18 - 0.03 * max(top_page.retrieval_rank - 1, 0))
         boilerplate_penalty = _boilerplate_penalty(hints, lowered, block)
@@ -380,6 +444,7 @@ class EvidenceCandidateBuilder:
             "field_hint_bonus": field_hint_bonus,
             "answer_type_bonus": answer_type_bonus,
             "numeric_bonus": numeric_bonus,
+            "table_index_bonus": table_index_bonus,
             "block_type_bonus": block_type_bonus,
             "page_rank_bonus": page_rank_bonus,
             "boilerplate_penalty": boilerplate_penalty,
@@ -423,6 +488,7 @@ class EvidenceCandidateBuilder:
                 primary=item.block,
                 page_blocks=page_blocks.get(page_id, []),
                 selected_block_ids=selected_block_ids,
+                hints=hints,
             )
             if not block_ids:
                 continue
@@ -432,6 +498,7 @@ class EvidenceCandidateBuilder:
                 scored=item,
                 block_ids=block_ids,
                 child_lookup=child_lookup,
+                hints=hints,
             )
             span_tokens = estimate_prompt_tokens(candidate.text)
             if self.candidate_token_budget and estimated_tokens + span_tokens > self.candidate_token_budget and spans:
@@ -474,6 +541,7 @@ class EvidenceCandidateBuilder:
                     "field_hint_bonus": 0.0,
                     "answer_type_bonus": 0.0,
                     "numeric_bonus": 0.0,
+                    "table_index_bonus": 0.0,
                     "block_type_bonus": _block_type_bonus(fallback),
                     "page_rank_bonus": max(0.0, 0.18 - 0.03 * max(top_page.retrieval_rank - 1, 0)),
                     "boilerplate_penalty": 0.0,
@@ -487,6 +555,7 @@ class EvidenceCandidateBuilder:
                 primary=fallback,
                 page_blocks=blocks,
                 selected_block_ids=selected_block_ids,
+                hints=None,
             )
             if not block_ids:
                 continue
@@ -497,6 +566,7 @@ class EvidenceCandidateBuilder:
                     scored=scored,
                     block_ids=block_ids,
                     child_lookup=child_lookup,
+                    hints=None,
                 )
             )
             selected_primary_ids.add(fallback.block_id)
@@ -510,18 +580,29 @@ class EvidenceCandidateBuilder:
         primary: EvidenceBlock,
         page_blocks: list[EvidenceBlock],
         selected_block_ids: set[str],
+        hints: QuestionHint | None,
     ) -> list[str]:
         ordered = sorted(page_blocks, key=lambda block: (_reading_order(block), block.block_id))
         primary_index = next((index for index, block in enumerate(ordered) if block.block_id == primary.block_id), None)
         if primary_index is None:
             return []
-        start = max(0, primary_index - self.neighbor_window)
-        end = min(len(ordered), primary_index + self.neighbor_window + 1)
+        effective_window = self.neighbor_window
+        if hints and _is_table_index_question(hints) and _has_table_index_row_signal(_block_match_text(primary), primary):
+            effective_window = max(effective_window, 1)
+        start = max(0, primary_index - effective_window)
+        end = min(len(ordered), primary_index + effective_window + 1)
         candidate_ids: list[str] = []
+        if hints and _is_table_index_question(hints):
+            for block in reversed(ordered[max(0, primary_index - 3):primary_index]):
+                if _is_table_header_like(block, hints):
+                    candidate_ids.append(block.block_id)
+                    break
         remaining = max(self.max_candidate_blocks - len(selected_block_ids), 0)
         for block in ordered[start:end]:
             if len(candidate_ids) >= remaining:
                 break
+            if block.block_id in candidate_ids:
+                continue
             if block.block_id in selected_block_ids and block.block_id != primary.block_id:
                 continue
             candidate_ids.append(block.block_id)
@@ -537,6 +618,7 @@ class EvidenceCandidateBuilder:
         scored: _ScoredBlock,
         block_ids: list[str],
         child_lookup: dict[str, EvidenceBlock],
+        hints: QuestionHint | None,
     ) -> CandidateSpan:
         blocks = [child_lookup[block_id] for block_id in block_ids if block_id in child_lookup]
         primary = scored.block
@@ -545,6 +627,7 @@ class EvidenceCandidateBuilder:
         table_html = primary.table_html or next((block.table_html for block in blocks if block.table_html), None)
         image_path = _relative_posix_or_none(primary.image_path or next((block.image_path for block in blocks if block.image_path), None))
         visual_summary = primary.visual_summary or next((block.visual_summary for block in blocks if block.visual_summary), None)
+        table_index_candidate = bool(hints and _is_table_index_question(hints) and _has_table_index_row_signal(text, primary))
         return CandidateSpan(
             candidate_id=f"c{index:04d}",
             doc_id=doc_id,
@@ -563,6 +646,10 @@ class EvidenceCandidateBuilder:
             score_breakdown=scored.score_breakdown,
             matched_terms=scored.matched_terms,
             detected_values=scored.detected_values,
+            table_index_candidate=table_index_candidate,
+            table_index_field_value_pattern=bool(table_index_candidate and _has_field_value_pattern(text)),
+            table_index_parenthesized_index=bool(table_index_candidate and PAREN_INDEX_RE.search(text)),
+            table_index_neighbor_context_added_count=max(len(block_ids) - 1, 0) if table_index_candidate else 0,
         )
 
 
@@ -609,6 +696,27 @@ def _field_hint_bonus(hints: QuestionHint, lowered_text: str, block: EvidenceBlo
     return min(bonus, 0.45)
 
 
+def _table_index_bonus(hints: QuestionHint, text: str, lowered_text: str, block: EvidenceBlock) -> float:
+    if not _is_table_index_question(hints):
+        return 0.0
+    bonus = 0.0
+    if set(hints.keywords).intersection(set(TOKEN_RE.findall(lowered_text))):
+        bonus += 0.12
+    if PERCENT_RE.search(text):
+        bonus += 0.18
+    if PAREN_INDEX_RE.search(text):
+        bonus += 0.22
+    if _has_field_value_pattern(text):
+        bonus += 0.18
+    if _is_table_or_list_like_row(text, block):
+        bonus += 0.16
+    if _line_has_label_value_and_parenthesized_index(text, hints):
+        bonus += 0.28
+    if block.block_type == "table":
+        bonus += 0.12
+    return min(bonus, 0.85)
+
+
 def _answer_type_bonus(hints: QuestionHint, lowered_text: str, block: EvidenceBlock) -> float:
     if hints.answer_type_hint == "numeric":
         return 0.18 if NUMERIC_RE.search(lowered_text) else 0.0
@@ -621,6 +729,70 @@ def _answer_type_bonus(hints: QuestionHint, lowered_text: str, block: EvidenceBl
     if hints.answer_type_hint == "text":
         return 0.05 if lowered_text.strip() else 0.0
     return 0.0
+
+
+def _is_table_index_question(hints: QuestionHint) -> bool:
+    return bool(set(hints.field_hints) & TABLE_INDEX_HINT_TERMS)
+
+
+def _is_table_index_text(text: str) -> bool:
+    lowered = str(text or "").lower()
+    tokens = set(TOKEN_RE.findall(lowered))
+    return bool(tokens & TABLE_INDEX_TEXT_TERMS or "%" in lowered)
+
+
+def _has_table_index_row_signal(text: str, block: EvidenceBlock) -> bool:
+    lowered = str(text or "").lower()
+    return bool(
+        block.block_type == "table"
+        or _is_table_index_text(lowered)
+        or PERCENT_RE.search(text)
+        or PAREN_INDEX_RE.search(text)
+        or _has_field_value_pattern(text)
+    )
+
+
+def _has_field_value_pattern(text: str) -> bool:
+    return FIELD_VALUE_RE.search(str(text or "")) is not None
+
+
+def _is_table_or_list_like_row(text: str, block: EvidenceBlock) -> bool:
+    if block.block_type == "table":
+        return True
+    lowered_type = str(block.metadata.get("raw_mineru_type") or "").lower()
+    if any(term in lowered_type for term in ("table", "row", "list")):
+        return True
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    if any(_has_field_value_pattern(line) for line in lines):
+        return True
+    return any(PERCENT_RE.search(line) and PAREN_INDEX_RE.search(line) for line in lines)
+
+
+def _line_has_label_value_and_parenthesized_index(text: str, hints: QuestionHint) -> bool:
+    hint_terms = set(hints.keywords) | (set(hints.field_hints) & TABLE_INDEX_HINT_TERMS)
+    for line in str(text or "").splitlines() or [str(text or "")]:
+        lowered = line.lower()
+        if not PAREN_INDEX_RE.search(line):
+            continue
+        if not (PERCENT_RE.search(line) or NUMERIC_RE.search(line)):
+            continue
+        if hint_terms.intersection(set(TOKEN_RE.findall(lowered))):
+            return True
+    return False
+
+
+def _is_table_header_like(block: EvidenceBlock, hints: QuestionHint) -> bool:
+    text = _block_match_text(block).lower()
+    if not text:
+        return False
+    raw_type = str(block.metadata.get("raw_mineru_type") or "").lower()
+    if "header" in raw_type:
+        return True
+    hint_terms = set(hints.keywords) | (set(hints.field_hints) & TABLE_INDEX_HINT_TERMS)
+    text_tokens = set(TOKEN_RE.findall(text))
+    if len(hint_terms.intersection(text_tokens)) >= 2 and not NUMERIC_RE.search(text):
+        return True
+    return any(term in text_tokens for term in ("table", "segment", "share", "rate", "index", "percentage", "percent"))
 
 
 def _block_type_bonus(block: EvidenceBlock) -> float:
@@ -675,6 +847,19 @@ def _relative_posix_or_none(value: str | None) -> str | None:
     if "://" in text or ABSOLUTE_PATH_RE.match(text):
         return None
     return text
+
+
+def _candidate_spans_contain_answer(candidate_spans: list[dict[str, Any]], answers: list[str]) -> bool:
+    text = _normalize_for_coverage("\n".join(str(span.get("text") or "") for span in candidate_spans))
+    if not text:
+        return False
+    return any(answer and answer in text for answer in (_normalize_for_coverage(item) for item in answers))
+
+
+def _normalize_for_coverage(text: str) -> str:
+    normalized = str(text or "").lower()
+    normalized = re.sub(r"[^a-z0-9.%]+", " ", normalized)
+    return re.sub(r"\s+", " ", normalized).strip()
 
 
 def _distribution(values: list[int]) -> dict[str, int]:

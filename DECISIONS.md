@@ -8,6 +8,47 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-22: Phase 4D-B1 Generic Table / Index Candidate Span Fix
+
+Decision: after the accepted Phase 4D-A.4 final diagnostic, implement exactly
+one narrow generic repair: table/index candidate span selection.
+
+Evidence:
+
+- A.4 split 21 `candidate_span_or_normalization_gap` cases.
+- `table_or_index_span_gap = 10` was the dominant subtype.
+- Other subtypes were smaller: `candidate_span_selection_gap = 5`,
+  `candidate_span_partial_context_gap = 5`,
+  `page_number_or_content_lookup_gap = 1`,
+  `normalization_or_metric_gap = 0`, `ocr_or_parsing_gap = 0`, and
+  `unclear_mixed_gap = 0`.
+
+Interpretation:
+
+- A.4 is the final diagnostic stage for the 90-sample probe.
+- The table/index gap is concentrated enough to justify one generic fix.
+- Candidate-ID Reader remains postponed because candidate coverage issues still
+  dominate the next action.
+
+Implementation boundary:
+
+- Add generic table/index question detection for index/share/rate/segment,
+  percentage/percent/%, table/row/column, and field/value wording.
+- Add scoring bonuses for field-label overlap, percentage values,
+  parenthesized index values, field-value rows, table/list-like rows, and
+  same-line label/value/parenthesized-index evidence.
+- Preserve table/index row context by keeping adjacent rows and table
+  header-like blocks.
+- Add aggregate table/index candidate span diagnostics.
+
+Constraints:
+
+- Do not add qid-, document-, title-, entity-, or answer-specific rules.
+- Do not modify Reader prompts, AnswerPolicy, retrieval models, MinerU,
+  checkpoints, reward, training split, training data, CDC, Demo, or the global
+  `candidate_spans` default.
+- Do not run full GRPO for Phase 4D-B1.
+
 ## 2026-06-22: Phase 4D-A.4 Final Candidate Span / Normalization Gap Split
 
 Decision: after the accepted Phase 4D-A.3.1 server refined inspection, split

@@ -2,13 +2,13 @@
 
 Updated: 2026-06-22
 
-## Phase 4D-A.4 Local Implementation
+## Phase 4D-B1 Local Implementation
 
-Phase 4D-A.3.1 server refined inspection is accepted. It showed that
-`candidate_span_or_normalization_gap = 21` is the largest refined failure
-source, but that category is still too coarse for a repair decision. Phase
-4D-A.4 is the final diagnostic split for this 90-sample probe before deciding
-between one narrow generic fix and broader unseen validation.
+Phase 4D-A.4 final diagnostic is accepted and is the final diagnostic split
+for this 90-sample probe. It showed `table_or_index_span_gap = 10` as the
+dominant concentrated subtype inside the 21
+`candidate_span_or_normalization_gap` cases. Phase 4D-B1 implements the single
+allowed narrow generic repair: table/index candidate span selection.
 
 Status:
 
@@ -28,7 +28,9 @@ Phase 4D-A.3 server failure inspection -> accepted
 Phase 4D-A.3.1 local implementation -> implemented
 Phase 4D-A.3.1 server refined summary -> accepted
 Phase 4D-A.4 local implementation -> implemented
-Phase 4D-A.4 server final gap review -> not_started
+Phase 4D-A.4 server final gap review -> accepted
+Phase 4D-B1 local implementation -> implemented
+Phase 4D-B1 server validation -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -206,12 +208,37 @@ Phase 4D-A.4 decision boundary:
   validation coverage.
 - Candidate-ID Reader remains postponed.
 
+Phase 4D-A.4 accepted server final diagnostic:
+
+```text
+total_candidate_span_or_normalization_gap = 21
+normalization_or_metric_gap = 0
+candidate_span_selection_gap = 5
+candidate_span_partial_context_gap = 5
+table_or_index_span_gap = 10
+page_number_or_content_lookup_gap = 1
+ocr_or_parsing_gap = 0
+unclear_mixed_gap = 0
+```
+
+Phase 4D-B1 implemented boundary:
+
+- add generic table/index question hint detection;
+- add table/index span scoring bonuses for field-label overlap, percentage
+  values, parenthesized index values, field-value rows, table/list-like rows,
+  and same-line label/value/parenthesized-index evidence;
+- retain table/index neighbor context, including adjacent rows and table
+  header-like blocks;
+- add aggregate diagnostics for table/index candidate span counts, answer
+  coverage, top-span field-value presence, neighbor context, and
+  parenthesized-index span counts.
+
 Unchanged boundary:
 
 - Reader prompts, AnswerPolicy, retrieval models, MinerU, checkpoints, reward,
   training data, CDC, Demo, and global `candidate_spans` default remain
   unchanged.
-- Phase 4D-A.4 server final gap review has not yet run.
+- Phase 4D-B1 server validation has not yet run.
 
 ## Phase 4D-A Local Implementation
 
@@ -238,7 +265,9 @@ Phase 4D-A.3 server failure inspection -> accepted
 Phase 4D-A.3.1 local implementation -> implemented
 Phase 4D-A.3.1 server refined summary -> accepted
 Phase 4D-A.4 local implementation -> implemented
-Phase 4D-A.4 server final gap review -> not_started
+Phase 4D-A.4 server final gap review -> accepted
+Phase 4D-B1 local implementation -> implemented
+Phase 4D-B1 server validation -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -288,7 +317,9 @@ Phase 4D-A.3 server failure inspection -> accepted
 Phase 4D-A.3.1 local implementation -> implemented
 Phase 4D-A.3.1 server refined summary -> accepted
 Phase 4D-A.4 local implementation -> implemented
-Phase 4D-A.4 server final gap review -> not_started
+Phase 4D-A.4 server final gap review -> accepted
+Phase 4D-B1 local implementation -> implemented
+Phase 4D-B1 server validation -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -392,7 +423,9 @@ Phase 4D-A.3 server failure inspection -> accepted
 Phase 4D-A.3.1 local implementation -> implemented
 Phase 4D-A.3.1 server refined summary -> accepted
 Phase 4D-A.4 local implementation -> implemented
-Phase 4D-A.4 server final gap review -> not_started
+Phase 4D-A.4 server final gap review -> accepted
+Phase 4D-B1 local implementation -> implemented
+Phase 4D-B1 server validation -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
