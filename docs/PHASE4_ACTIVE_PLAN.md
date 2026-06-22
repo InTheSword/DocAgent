@@ -317,8 +317,8 @@ Do not:
 
 ## 8. Next Priorities
 
-1. Run Phase 4D-A.3.1 refined inspection summary on the server A.3 inspection
-   run directory.
+1. Run Phase 4D-A.4 candidate span / normalization gap final review on the
+   server A.3.1 refined inspection run directory.
 2. Keep Phase 4C `candidate_spans` available as an accepted experimental and
    recommended evidence-packing mode.
 3. Keep CDC `not_started` until explicitly started.
@@ -423,7 +423,9 @@ Phase 4D-A.2 server filtering audit -> accepted
 Phase 4D-A.3 local implementation -> implemented
 Phase 4D-A.3 server failure inspection -> accepted
 Phase 4D-A.3.1 local implementation -> implemented
-Phase 4D-A.3.1 server refined summary -> not_started
+Phase 4D-A.3.1 server refined summary -> accepted
+Phase 4D-A.4 local implementation -> implemented
+Phase 4D-A.4 server final gap review -> not_started
 ```
 
 Scope:
@@ -446,9 +448,10 @@ scripts/analyze_phase4d_candidate_answer_coverage.py
 tests/test_candidate_answer_extraction.py
 ```
 
-Phase 4D-A through Phase 4D-A.3 server audits are accepted. The Phase
-4D-A.3.1 refined summary export is still required before A.3.1 refined action
-attribution can be marked `accepted`.
+Phase 4D-A through Phase 4D-A.3.1 server audits are accepted. Phase 4D-A.3.1
+showed `candidate_span_or_normalization_gap = 21` as the largest refined
+failure source, so Phase 4D-A.4 is the final diagnostic subtype split before
+any repair decision.
 
 Accepted Phase 4D-A server audit:
 
@@ -644,7 +647,7 @@ Status:
 
 ```text
 Phase 4D-A.3.1 local implementation -> implemented
-Phase 4D-A.3.1 server refined summary -> not_started
+Phase 4D-A.3.1 server refined summary -> accepted
 ```
 
 Scope:
@@ -658,15 +661,74 @@ Scope:
 - do not modify Reader prompts, AnswerPolicy integration, retrieval models,
   training, CDC, Demo, or the default evidence-packing mode.
 
+Accepted Phase 4D-A.3.1 server refined inspection:
+
+```text
+candidate_span_or_normalization_gap = 21
+extraction_rule_gap = 10
+no_final_failure = 11
+normalization_or_metric_gap = 5
+reader_selection_gap = 7
+topk_filtering_gap = 3
+inspect_candidate_spans_or_normalization = 21
+improve_candidate_answer_extraction = 10
+candidate_id_reader_or_deterministic_selection = 7
+improve_type_aware_topk_filtering = 3
+inspect_answer_normalization = 5
+no_action_final_answer_already_correct = 11
+```
+
+Interpretation:
+
+- `candidate_span_or_normalization_gap` is the largest refined source, but it
+  mixes true span miss, normalization/metric issues, table/index structure,
+  page/content lookup, partial context, and OCR/parsing boundaries.
+- Candidate-ID Reader remains postponed while candidate coverage gaps dominate.
+
+## 8.7 Phase 4D-A.4 Candidate Span / Normalization Gap Final Review
+
+Status:
+
+```text
+Phase 4D-A.4 local implementation -> implemented
+Phase 4D-A.4 server final gap review -> not_started
+```
+
+Scope:
+
+- filter A.3.1 refined cases where
+  `refined_failure_source = candidate_span_or_normalization_gap`;
+- export `candidate_span_gap_cases.jsonl`,
+  `candidate_span_gap_preview.json`, `candidate_span_gap_summary.json`, and
+  `candidate_span_gap_summary.md`;
+- assign only final diagnostic subtypes:
+  `normalization_or_metric_gap`, `candidate_span_selection_gap`,
+  `candidate_span_partial_context_gap`, `table_or_index_span_gap`,
+  `page_number_or_content_lookup_gap`, `ocr_or_parsing_gap`, and
+  `unclear_mixed_gap`;
+- keep `should_not_patch_specific_qid = true` for every case;
+- do not modify candidate span logic, candidate answer extraction logic,
+  Reader prompts, AnswerPolicy integration, retrieval models, training, CDC,
+  Demo, or the default evidence-packing mode.
+
+Decision gate:
+
+- If one subtype dominates and has a generic repair path, implement one narrow
+  generic fix.
+- If subtypes are dispersed, stop tuning the 90-sample probe and run the same
+  diagnostics on a larger unseen validation sample.
+- Do not proceed to Candidate-ID Reader unless reader-selection gaps become
+  dominant after candidate coverage issues are resolved.
+
 ## 9. Stop Condition
 
 Stop after the following are complete:
 
 ```text
-Phase 4D-A.3.1 local implementation implemented
+Phase 4D-A.4 local implementation implemented
 + targeted and regression tests pass
 + status documents updated
 + branch pushed
 + stop before CDC, Demo, Reader prompt changes, AnswerPolicy integration,
-   training, and any global `candidate_spans` default change
+   training, per-qid repairs, and any global `candidate_spans` default change
 ```

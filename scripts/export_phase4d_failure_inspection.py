@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -30,14 +31,34 @@ TRUE_FAILURE_ACTION_KEYS = (
     "normalization_or_metric_fix",
     "no_action_final_answer_already_correct",
 )
+GAP_SUBTYPES = (
+    "normalization_or_metric_gap",
+    "candidate_span_selection_gap",
+    "candidate_span_partial_context_gap",
+    "table_or_index_span_gap",
+    "page_number_or_content_lookup_gap",
+    "ocr_or_parsing_gap",
+    "unclear_mixed_gap",
+)
+GAP_RECOMMENDED_ACTIONS = {
+    "normalization_or_metric_gap": "inspect_answer_normalization",
+    "candidate_span_selection_gap": "improve_candidate_spans",
+    "candidate_span_partial_context_gap": "improve_candidate_span_neighbor_context",
+    "table_or_index_span_gap": "improve_table_index_span_selection",
+    "page_number_or_content_lookup_gap": "improve_page_number_content_lookup",
+    "ocr_or_parsing_gap": "inspect_ocr_or_parsing",
+    "unclear_mixed_gap": "manual_review_required",
+}
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Export Phase 4D-A.3 case-level failure inspection artifacts.")
-    parser.add_argument("--run-dir", required=True, type=Path)
-    parser.add_argument("--candidate-evidence", required=True, type=Path)
-    parser.add_argument("--qa-jsonl", required=True, type=Path)
+    parser.add_argument("--run-dir", type=Path)
+    parser.add_argument("--candidate-evidence", type=Path)
+    parser.add_argument("--qa-jsonl", type=Path)
     parser.add_argument("--answer-results", type=Path)
+    parser.add_argument("--candidate-span-gap-review", action="store_true")
+    parser.add_argument("--source-refined-run-dir", type=Path)
     parser.add_argument("--output-root", required=True, type=Path)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--buckets", default="C,D,E")
@@ -49,6 +70,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def run_phase4d_failure_inspection(args: argparse.Namespace) -> dict[str, Any]:
+    if args.run_dir is None or args.candidate_evidence is None or args.qa_jsonl is None:
+        raise ValueError("--run-dir, --candidate-evidence, and --qa-jsonl are required unless --candidate-span-gap-review is set")
     requested_buckets = _parse_buckets(str(args.buckets))
     max_cases_per_bucket = max(0, int(args.max_cases_per_bucket))
     top_spans = max(0, int(args.top_spans))
@@ -140,6 +163,42 @@ def run_phase4d_failure_inspection(args: argparse.Namespace) -> dict[str, Any]:
     _write_json(paths["failure_inspection_refined_summary"], refined_summary)
     paths["failure_inspection_summary_md"].write_text(_summary_markdown(summary), encoding="utf-8")
     paths["failure_inspection_refined_summary_md"].write_text(_refined_summary_markdown(refined_summary), encoding="utf-8")
+    return summary
+
+
+def run_phase4d_candidate_span_gap_review(args: argparse.Namespace) -> dict[str, Any]:
+    if args.source_refined_run_dir is None:
+        raise ValueError("--source-refined-run-dir is required with --candidate-span-gap-review")
+    source_dir = args.source_refined_run_dir
+    refined_cases = read_jsonl(source_dir / "failure_inspection_refined_cases.jsonl")
+    detailed_cases = _read_optional_jsonl(source_dir / "failure_inspection_cases.jsonl") or []
+    detailed_by_qid = {str(case.get("qid")): case for case in detailed_cases}
+    output_dir = args.output_root / args.run_id
+    if output_dir.exists() and any(output_dir.iterdir()) and not args.force:
+        raise FileExistsError(f"Output directory exists; pass --force to overwrite: {output_dir}")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    target_cases = [
+        _build_candidate_span_gap_case(refined_case, detailed_by_qid.get(str(refined_case.get("qid")), {}))
+        for refined_case in refined_cases
+        if str(refined_case.get("refined_failure_source") or "") == "candidate_span_or_normalization_gap"
+    ]
+    paths = {
+        "candidate_span_gap_cases": output_dir / "candidate_span_gap_cases.jsonl",
+        "candidate_span_gap_preview": output_dir / "candidate_span_gap_preview.json",
+        "candidate_span_gap_summary": output_dir / "candidate_span_gap_summary.json",
+        "candidate_span_gap_summary_md": output_dir / "candidate_span_gap_summary.md",
+    }
+    write_jsonl(paths["candidate_span_gap_cases"], target_cases)
+    _write_json(paths["candidate_span_gap_preview"], _candidate_span_gap_preview(target_cases))
+    summary = _build_candidate_span_gap_summary(
+        source_dir=source_dir,
+        cases=target_cases,
+        paths=paths,
+        output_dir=output_dir,
+    )
+    _write_json(paths["candidate_span_gap_summary"], summary)
+    paths["candidate_span_gap_summary_md"].write_text(_candidate_span_gap_summary_markdown(summary), encoding="utf-8")
     return summary
 
 
@@ -356,6 +415,167 @@ def _true_failure_action_bucket(refined_source: str, refined_action: str) -> str
     if refined_source in {"reader_selection_gap", "candidate_ranking_gap", "topk_filtering_gap"}:
         return "candidate_id_reader_or_reranking"
     return "candidate_id_reader_or_reranking"
+
+
+def _build_candidate_span_gap_case(refined_case: dict[str, Any], detailed_case: dict[str, Any]) -> dict[str, Any]:
+    qid = str(refined_case.get("qid") or detailed_case.get("qid") or "")
+    question = str(refined_case.get("question") or detailed_case.get("question") or "")
+    gold_debug = detailed_case.get("gold_answer_debug") or {}
+    normalized_gold = [str(answer) for answer in (gold_debug.get("normalized_gold_answers") or [])]
+    gold_preview = [str(answer) for answer in (gold_debug.get("gold_answer_forms_preview") or [])]
+    prediction = detailed_case.get("phase4c_prediction") or {}
+    normalized_prediction = str(refined_case.get("phase4c_normalized_answer") or prediction.get("normalized_answer") or "")
+    top_spans = list(detailed_case.get("top_candidate_spans") or [])
+    subtype = _candidate_span_gap_subtype_a4(
+        question=question,
+        normalized_gold=normalized_gold,
+        gold_preview=gold_preview,
+        normalized_prediction=normalized_prediction,
+        top_spans=top_spans,
+    )
+    return {
+        "qid": qid,
+        "bucket": refined_case.get("bucket"),
+        "question": question,
+        "phase4c_answer_hit": bool(refined_case.get("phase4c_answer_hit")),
+        "phase4c_normalized_answer": normalized_prediction,
+        "candidate_span_answer_covered": bool(refined_case.get("candidate_span_answer_covered")),
+        "candidate_answer_covered": bool(refined_case.get("candidate_answer_covered")),
+        "top1_covered": bool(refined_case.get("top1_covered")),
+        "top5_covered": bool(refined_case.get("top5_covered")),
+        "top20_covered": bool(refined_case.get("top20_covered")),
+        "original_likely_failure_source": refined_case.get("original_likely_failure_source"),
+        "refined_failure_source": refined_case.get("refined_failure_source"),
+        "refined_recommended_action": refined_case.get("refined_recommended_action"),
+        "gap_subtype": subtype,
+        "recommended_next_action": GAP_RECOMMENDED_ACTIONS[subtype],
+        "is_generic_fix_candidate": subtype != "unclear_mixed_gap",
+        "should_not_patch_specific_qid": True,
+        "gold_answer_debug": {
+            "normalized_gold_answers": normalized_gold,
+            "gold_answer_forms_preview": gold_preview[:5],
+        },
+        "top_candidate_spans": top_spans[:5],
+    }
+
+
+def _candidate_span_gap_subtype_a4(
+    *,
+    question: str,
+    normalized_gold: list[str],
+    gold_preview: list[str],
+    normalized_prediction: str,
+    top_spans: list[dict[str, Any]],
+) -> str:
+    span_text = " ".join(str(span.get("text_preview") or span.get("text") or "") for span in top_spans)
+    joined_gold = " ".join([*normalized_gold, *gold_preview])
+    normalized_span = _normalize_answer(span_text)
+    normalized_question = _normalize_answer(question)
+    if not question or not normalized_gold:
+        return "unclear_mixed_gap"
+    if _normalization_or_metric_gap(normalized_prediction, normalized_gold):
+        return "normalization_or_metric_gap"
+    combined = " ".join([normalized_question, _normalize_answer(joined_gold), normalized_span])
+    if _has_page_lookup_signal(combined):
+        return "page_number_or_content_lookup_gap"
+    if _has_table_index_signal(combined):
+        return "table_or_index_span_gap"
+    if _has_partial_context_signal(normalized_question, normalized_gold, normalized_span):
+        return "candidate_span_partial_context_gap"
+    if _has_question_context_signal(normalized_question, normalized_span):
+        return "ocr_or_parsing_gap"
+    if top_spans:
+        return "candidate_span_selection_gap"
+    return "unclear_mixed_gap"
+
+
+def _normalization_or_metric_gap(normalized_prediction: str, normalized_gold: list[str]) -> bool:
+    prediction = str(normalized_prediction or "").strip()
+    if _prediction_overlaps_gold(prediction, normalized_gold):
+        return True
+    prediction_numbers = _number_set(prediction)
+    if prediction_numbers and any(prediction_numbers == _number_set(gold) for gold in normalized_gold):
+        return True
+    prediction_tokens = _content_tokens(prediction)
+    return any(_token_overlap_ratio(prediction_tokens, _content_tokens(gold)) >= 0.75 for gold in normalized_gold)
+
+
+def _has_page_lookup_signal(text: str) -> bool:
+    return any(
+        phrase in text
+        for phrase in (
+            "page number",
+            "which page",
+            "what page",
+            "mentioned on which page",
+            "content",
+            "chapter",
+            "section",
+        )
+    )
+
+
+def _has_table_index_signal(text: str) -> bool:
+    if any(term in text for term in ("index", "share", "rate", "segment", "table", "row", "column", "percentage", "percent")):
+        return True
+    return re.search(r"\(\s*\d+(?:\.\d+)?\s*\)", text) is not None
+
+
+def _has_partial_context_signal(normalized_question: str, normalized_gold: list[str], normalized_span: str) -> bool:
+    if not normalized_span:
+        return False
+    gold_tokens = set().union(*(_content_tokens(gold) for gold in normalized_gold))
+    if gold_tokens and gold_tokens.intersection(_content_tokens(normalized_span)):
+        return True
+    if _number_set(" ".join(normalized_gold)).intersection(_number_set(normalized_span)):
+        return True
+    question_tokens = _content_tokens(normalized_question)
+    return bool(question_tokens.intersection(_content_tokens(normalized_span))) and any(sep in normalized_span for sep in (":", "-", "located", "total", "name"))
+
+
+def _has_question_context_signal(normalized_question: str, normalized_span: str) -> bool:
+    question_tokens = _content_tokens(normalized_question)
+    span_tokens = _content_tokens(normalized_span)
+    return len(question_tokens.intersection(span_tokens)) >= 2
+
+
+def _number_set(text: str) -> set[str]:
+    values: set[str] = set()
+    for match in re.findall(r"-?\d+(?:\.\d+)?", str(text or "")):
+        try:
+            number = float(match)
+        except ValueError:
+            continue
+        values.add(str(int(number)) if number.is_integer() else str(number))
+    return values
+
+
+def _content_tokens(text: str) -> set[str]:
+    stopwords = {
+        "a",
+        "an",
+        "and",
+        "are",
+        "for",
+        "in",
+        "is",
+        "of",
+        "on",
+        "or",
+        "the",
+        "to",
+        "what",
+        "which",
+        "who",
+        "with",
+    }
+    return {token for token in str(text or "").split() if len(token) > 2 and token not in stopwords}
+
+
+def _token_overlap_ratio(left: set[str], right: set[str]) -> float:
+    if not left or not right:
+        return 0.0
+    return len(left.intersection(right)) / max(min(len(left), len(right)), 1)
 
 
 def _candidate_span_gap_subtype(*, qa: dict[str, Any], candidate_record: dict[str, Any], notes: list[str]) -> str:
@@ -637,6 +857,89 @@ def _build_preview(cases: list[dict[str, Any]]) -> dict[str, Any]:
     return {"records": [case for bucket in sorted(by_bucket) for case in by_bucket[bucket]]}
 
 
+def _candidate_span_gap_preview(cases: list[dict[str, Any]]) -> dict[str, Any]:
+    records: list[dict[str, Any]] = []
+    by_subtype: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for case in cases:
+        subtype = str(case.get("gap_subtype") or "unclear_mixed_gap")
+        if len(by_subtype[subtype]) >= 2:
+            continue
+        item = dict(case)
+        item["top_candidate_spans"] = item.get("top_candidate_spans", [])[:2]
+        by_subtype[subtype].append(item)
+    for subtype in GAP_SUBTYPES:
+        records.extend(by_subtype.get(subtype, []))
+    return {"records": records}
+
+
+def _build_candidate_span_gap_summary(
+    *,
+    source_dir: Path,
+    cases: list[dict[str, Any]],
+    paths: dict[str, Path],
+    output_dir: Path,
+) -> dict[str, Any]:
+    subtype_counts = Counter({subtype: 0 for subtype in GAP_SUBTYPES})
+    action_counts = Counter({action: 0 for action in GAP_RECOMMENDED_ACTIONS.values()})
+    for case in cases:
+        subtype = str(case.get("gap_subtype") or "unclear_mixed_gap")
+        action = str(case.get("recommended_next_action") or GAP_RECOMMENDED_ACTIONS["unclear_mixed_gap"])
+        subtype_counts[subtype] += 1
+        action_counts[action] += 1
+    return {
+        "phase": "Phase 4D-A.4",
+        "task": "candidate_span_normalization_gap_final_review",
+        "status": "success",
+        "source_refined_run_dir": _path_for_summary(source_dir),
+        "total_candidate_span_or_normalization_gap": len(cases),
+        "gap_subtype_counts": {subtype: subtype_counts[subtype] for subtype in GAP_SUBTYPES},
+        "recommended_next_action_counts": {
+            action: action_counts[action]
+            for action in (
+                "inspect_answer_normalization",
+                "improve_candidate_spans",
+                "improve_candidate_span_neighbor_context",
+                "improve_table_index_span_selection",
+                "improve_page_number_content_lookup",
+                "inspect_ocr_or_parsing",
+                "manual_review_required",
+            )
+        },
+        "decision_guidance": {
+            "candidate_id_reader_should_remain_postponed": True,
+            "allow_next_repair_only_if_generic_pattern_concentrated": True,
+            "stop_after_this_diagnostic_stage": True,
+        },
+        "artifact_paths": {key: _relative_to(path, output_dir) for key, path in paths.items()},
+        "does_not_modify_reader": True,
+        "does_not_run_answer_policy": True,
+        "does_not_train": True,
+    }
+
+
+def _candidate_span_gap_summary_markdown(summary: dict[str, Any]) -> str:
+    return "\n".join(
+        [
+            "# Phase 4D-A.4 Candidate Span / Normalization Gap Final Review",
+            "",
+            f"- status: {summary['status']}",
+            f"- source_refined_run_dir: {summary['source_refined_run_dir']}",
+            f"- total_candidate_span_or_normalization_gap: {summary['total_candidate_span_or_normalization_gap']}",
+            f"- gap_subtype_counts: {json.dumps(summary['gap_subtype_counts'], sort_keys=True)}",
+            f"- recommended_next_action_counts: {json.dumps(summary['recommended_next_action_counts'], sort_keys=True)}",
+            "",
+            "## Decision Gate",
+            "",
+            "If one subtype dominates and has a generic repair path, implement one narrow generic fix.",
+            "If subtypes are dispersed, stop tuning on the 90-sample probe and run the same diagnostics on a larger unseen validation sample.",
+            "Do not proceed to Candidate-ID Reader unless reader_selection_gap becomes dominant after candidate coverage issues are resolved.",
+            "",
+            "This diagnostic split is for audit and planning only. It does not modify Reader prompts, run AnswerPolicy, train models, or change candidate span / answer extraction logic.",
+            "",
+        ]
+    )
+
+
 def _summary_markdown(summary: dict[str, Any]) -> str:
     return "\n".join(
         [
@@ -769,6 +1072,10 @@ def _safe_float(value: Any) -> float | None:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    if args.candidate_span_gap_review:
+        summary = run_phase4d_candidate_span_gap_review(args)
+        print(json.dumps({"status": summary["status"], "summary": summary["artifact_paths"]["candidate_span_gap_summary"]}, ensure_ascii=False))
+        return 0
     summary = run_phase4d_failure_inspection(args)
     print(json.dumps({"status": summary["status"], "summary": summary["artifact_paths"]["failure_inspection_summary"]}, ensure_ascii=False))
     return 0

@@ -8,6 +8,48 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-22: Phase 4D-A.4 Final Candidate Span / Normalization Gap Split
+
+Decision: after the accepted Phase 4D-A.3.1 server refined inspection, split
+`candidate_span_or_normalization_gap` into final diagnostic subtypes before any
+candidate-span or normalization repair.
+
+Evidence:
+
+- A.3.1 showed `candidate_span_or_normalization_gap = 21`, the largest refined
+  failure source.
+- Other refined sources were smaller: `extraction_rule_gap = 10`,
+  `reader_selection_gap = 7`, `normalization_or_metric_gap = 5`, and
+  `topk_filtering_gap = 3`.
+- The coarse gap can mix true span selection misses, normalization/metric
+  issues, table/index structure, page/content lookup, partial context, and
+  OCR/parsing boundaries.
+
+Interpretation:
+
+- Candidate-ID Reader remains postponed while candidate coverage gaps dominate.
+- A.4 is the final diagnostic split for this 90-sample probe.
+- After A.4, the project should implement one narrow generic fix only if one
+  subtype dominates and has a generic repair path; otherwise it should stop
+  tuning this probe and run the same diagnostics on a larger unseen validation
+  sample.
+
+Implementation boundary:
+
+- Export `candidate_span_gap_cases.jsonl`,
+  `candidate_span_gap_preview.json`, `candidate_span_gap_summary.json`, and
+  `candidate_span_gap_summary.md`.
+- Keep every case marked `should_not_patch_specific_qid = true`.
+- Do not patch specific qids, documents, or answers.
+
+Constraints:
+
+- Do not modify candidate span main logic, candidate answer extraction main
+  logic, Reader prompts, AnswerPolicy, retrieval models, MinerU, checkpoints,
+  reward, training split, training data, CDC, Demo, or the global
+  `candidate_spans` default.
+- Do not run full GRPO for Phase 4D-A.4.
+
 ## 2026-06-22: Phase 4D-A.3.1 Refined Action Attribution
 
 Decision: after the accepted Phase 4D-A.3 server inspection, refine the

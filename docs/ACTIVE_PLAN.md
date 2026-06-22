@@ -6,7 +6,7 @@
 ## Current Stage
 
 ```text
-Phase 4D-A.3.1: Failure inspection summary refinement
+Phase 4D-A.4: Candidate span / normalization gap final review
 ```
 
 ## Current Goal
@@ -21,6 +21,7 @@ Phase 4C candidate_evidence.jsonl
 -> filtering / reranking / type-aware top-k board before Candidate-ID Reader
 -> C/D/E case-level failure inspection before new Reader work
 -> refined action attribution from final-answer hit and candidate/top-k coverage
+-> final subtype split for candidate_span_or_normalization_gap before any repair
 ```
 
 ## Current Status
@@ -56,7 +57,9 @@ Phase 4D-A.2 server filtering audit -> accepted
 Phase 4D-A.3 local implementation -> implemented
 Phase 4D-A.3 server failure inspection -> accepted
 Phase 4D-A.3.1 local implementation -> implemented
-Phase 4D-A.3.1 server refined summary -> not_started
+Phase 4D-A.3.1 server refined summary -> accepted
+Phase 4D-A.4 local implementation -> implemented
+Phase 4D-A.4 server final gap review -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -84,6 +87,8 @@ evaluation implementation, metrics, or conclusions in this phase.
   but they must not be used as Reader input.
 - refine inspection summary attribution by combining candidate bucket, final
   answer hit, candidate-answer coverage, and top-k coverage.
+- split `candidate_span_or_normalization_gap` into final diagnostic subtypes
+  for audit and decision guidance only.
 
 ## Blockers
 
@@ -101,9 +106,12 @@ evaluation implementation, metrics, or conclusions in this phase.
   Candidate-ID Reader.
 - Phase 4D-A.3 server inspection is accepted. It showed that C/D/E buckets mix
   candidate-layer gaps and final-answer failures.
-- Phase 4D-A.3.1 local implementation has no local blocker. The refined
-  summary server run requires server-side Phase 4D-A.3 artifacts, which may be
-  absent from the local ignored `outputs/` tree.
+- Phase 4D-A.3.1 server refined inspection is accepted. Its largest refined
+  failure source is `candidate_span_or_normalization_gap = 21`, which is still
+  too coarse for a repair decision.
+- Phase 4D-A.4 local implementation has no local blocker. The final gap review
+  server run requires server-side A.3.1 refined artifacts, which may be absent
+  from the local ignored `outputs/` tree.
 
 Gate 4 accepted server scope:
 
@@ -324,6 +332,47 @@ Phase 4D-A.3 inspection interpretation:
 - Phase 4D-A.3.1 refines the summary/action attribution while still avoiding
   Reader prompt, AnswerPolicy, training, CDC, and Demo changes.
 
+Phase 4D-A.3.1 accepted server refined inspection:
+
+```text
+candidate_span_or_normalization_gap = 21
+extraction_rule_gap = 10
+no_final_failure = 11
+normalization_or_metric_gap = 5
+reader_selection_gap = 7
+topk_filtering_gap = 3
+inspect_candidate_spans_or_normalization = 21
+improve_candidate_answer_extraction = 10
+candidate_id_reader_or_deterministic_selection = 7
+improve_type_aware_topk_filtering = 3
+inspect_answer_normalization = 5
+no_action_final_answer_already_correct = 11
+```
+
+Phase 4D-A.4 implemented boundary:
+
+- filter A.3.1 refined cases where
+  `refined_failure_source = candidate_span_or_normalization_gap`;
+- export `candidate_span_gap_cases.jsonl`,
+  `candidate_span_gap_preview.json`, `candidate_span_gap_summary.json`, and
+  `candidate_span_gap_summary.md`;
+- assign only the allowed final subtypes:
+  `normalization_or_metric_gap`, `candidate_span_selection_gap`,
+  `candidate_span_partial_context_gap`, `table_or_index_span_gap`,
+  `page_number_or_content_lookup_gap`, `ocr_or_parsing_gap`, and
+  `unclear_mixed_gap`;
+- keep every case marked `should_not_patch_specific_qid = true`.
+
+Phase 4D-A.4 decision boundary:
+
+- No per-qid, per-document, or answer-specific repair is allowed.
+- After A.4, implement one narrow generic fix only if one subtype dominates
+  and has a generic repair path.
+- If subtypes are dispersed, stop tuning this 90-sample probe and run the same
+  diagnostics on a larger unseen validation sample.
+- Candidate-ID Reader remains postponed unless reader-selection gaps become
+  dominant after candidate coverage issues are resolved.
+
 ## Local Validation
 
 Local `main` validation covers code and documentation state. The accepted Gate
@@ -362,11 +411,11 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Run Phase 4D-A.3.1 refined inspection summary on the server A.3 inspection
-   run directory.
-2. Review refined action counts to decide whether the next fix should target
-   candidate spans, candidate answer extraction, normalization, ranking, or
-   Reader selection.
+1. Run Phase 4D-A.4 candidate span / normalization gap final review on the
+   server A.3.1 refined inspection run directory.
+2. Review subtype counts. If one subtype dominates and has a generic repair
+   path, implement one narrow generic fix; otherwise stop tuning this
+   90-sample probe and expand validation coverage.
 3. Keep `page_children` as the default until more shard and document-type
    validation supports a global default change.
 4. Keep CDC `not_started` until explicitly started.
@@ -374,12 +423,12 @@ absolute_path_hit_count = 0
 ## Stop Condition
 
 ```text
-Phase 4D-A.3.1 local implementation implemented
+Phase 4D-A.4 local implementation implemented
 + targeted and regression tests pass
 + status documents updated
 + branch pushed
 + stop before Reader prompt changes, AnswerPolicy integration, training, CDC, Demo,
-   and any global `candidate_spans` default change
+   per-qid repairs, and any global `candidate_spans` default change
 ```
 
 ## Phase Documents

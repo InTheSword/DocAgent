@@ -2,13 +2,13 @@
 
 Updated: 2026-06-22
 
-## Phase 4D-A.3.1 Local Implementation
+## Phase 4D-A.4 Local Implementation
 
-Phase 4D-A.3 server inspection is accepted. It showed that C/D/E buckets are
-candidate-layer diagnostics and can include final-answer-correct cases. The
-immediate next step is refined action attribution from bucket, final answer hit,
-candidate-answer coverage, and top-k coverage, not a Reader prompt or
-AnswerPolicy integration change.
+Phase 4D-A.3.1 server refined inspection is accepted. It showed that
+`candidate_span_or_normalization_gap = 21` is the largest refined failure
+source, but that category is still too coarse for a repair decision. Phase
+4D-A.4 is the final diagnostic split for this 90-sample probe before deciding
+between one narrow generic fix and broader unseen validation.
 
 Status:
 
@@ -26,7 +26,9 @@ Phase 4D-A.2 server filtering audit -> accepted
 Phase 4D-A.3 local implementation -> implemented
 Phase 4D-A.3 server failure inspection -> accepted
 Phase 4D-A.3.1 local implementation -> implemented
-Phase 4D-A.3.1 server refined summary -> not_started
+Phase 4D-A.3.1 server refined summary -> accepted
+Phase 4D-A.4 local implementation -> implemented
+Phase 4D-A.4 server final gap review -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -164,12 +166,52 @@ Phase 4D-A.3.1 implemented boundary:
   `failure_inspection_refined_summary.md`;
 - keep refined artifacts audit-only and out of Reader input.
 
+Phase 4D-A.3.1 accepted server refined inspection:
+
+```text
+candidate_span_or_normalization_gap = 21
+extraction_rule_gap = 10
+no_final_failure = 11
+normalization_or_metric_gap = 5
+reader_selection_gap = 7
+topk_filtering_gap = 3
+inspect_candidate_spans_or_normalization = 21
+improve_candidate_answer_extraction = 10
+candidate_id_reader_or_deterministic_selection = 7
+improve_type_aware_topk_filtering = 3
+inspect_answer_normalization = 5
+no_action_final_answer_already_correct = 11
+```
+
+Phase 4D-A.4 implemented boundary:
+
+- export only statistics, subtype labels, preview, summary, and decision
+  guidance for `candidate_span_or_normalization_gap` cases;
+- write `candidate_span_gap_cases.jsonl`,
+  `candidate_span_gap_preview.json`, `candidate_span_gap_summary.json`, and
+  `candidate_span_gap_summary.md`;
+- split cases into the allowed subtypes:
+  `normalization_or_metric_gap`, `candidate_span_selection_gap`,
+  `candidate_span_partial_context_gap`, `table_or_index_span_gap`,
+  `page_number_or_content_lookup_gap`, `ocr_or_parsing_gap`, and
+  `unclear_mixed_gap`;
+- mark all cases `should_not_patch_specific_qid = true`.
+
+Phase 4D-A.4 decision boundary:
+
+- No per-qid or per-document repairs are allowed.
+- If one subtype dominates and has a generic repair path, implement one narrow
+  generic fix.
+- If subtypes are dispersed, stop tuning this 90-sample probe and expand
+  validation coverage.
+- Candidate-ID Reader remains postponed.
+
 Unchanged boundary:
 
 - Reader prompts, AnswerPolicy, retrieval models, MinerU, checkpoints, reward,
   training data, CDC, Demo, and global `candidate_spans` default remain
   unchanged.
-- Phase 4D-A.3.1 server refined summary has not yet run.
+- Phase 4D-A.4 server final gap review has not yet run.
 
 ## Phase 4D-A Local Implementation
 
@@ -194,7 +236,9 @@ Phase 4D-A.2 server filtering audit -> accepted
 Phase 4D-A.3 local implementation -> implemented
 Phase 4D-A.3 server failure inspection -> accepted
 Phase 4D-A.3.1 local implementation -> implemented
-Phase 4D-A.3.1 server refined summary -> not_started
+Phase 4D-A.3.1 server refined summary -> accepted
+Phase 4D-A.4 local implementation -> implemented
+Phase 4D-A.4 server final gap review -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -242,7 +286,9 @@ Phase 4D-A.2 server filtering audit -> accepted
 Phase 4D-A.3 local implementation -> implemented
 Phase 4D-A.3 server failure inspection -> accepted
 Phase 4D-A.3.1 local implementation -> implemented
-Phase 4D-A.3.1 server refined summary -> not_started
+Phase 4D-A.3.1 server refined summary -> accepted
+Phase 4D-A.4 local implementation -> implemented
+Phase 4D-A.4 server final gap review -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -344,7 +390,9 @@ Phase 4D-A.2 server filtering audit -> accepted
 Phase 4D-A.3 local implementation -> implemented
 Phase 4D-A.3 server failure inspection -> accepted
 Phase 4D-A.3.1 local implementation -> implemented
-Phase 4D-A.3.1 server refined summary -> not_started
+Phase 4D-A.3.1 server refined summary -> accepted
+Phase 4D-A.4 local implementation -> implemented
+Phase 4D-A.4 server final gap review -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started

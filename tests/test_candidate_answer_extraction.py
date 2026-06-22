@@ -17,7 +17,7 @@ from docagent.retrieval.candidate_answer_extraction import (
 )
 from docagent.utils.jsonl import read_jsonl, write_jsonl
 from scripts.analyze_phase4d_candidate_answer_coverage import run_phase4d_candidate_answer_coverage
-from scripts.export_phase4d_failure_inspection import run_phase4d_failure_inspection
+from scripts.export_phase4d_failure_inspection import run_phase4d_candidate_span_gap_review, run_phase4d_failure_inspection
 
 
 def _span(
@@ -758,6 +758,124 @@ def test_failure_inspection_exports_c_d_without_answer_results(tmp_path: Path) -
     assert len(read_jsonl(output_root / "fixture" / "bucket_E_cases.jsonl")) == 0
 
 
+def test_candidate_span_gap_review_exports_subtypes_and_summary(tmp_path: Path) -> None:
+    source_dir = tmp_path / "gate4_failure_inspection_a2_refined"
+    output_root = tmp_path / "inspection"
+    source_dir.mkdir()
+    refined_rows = [
+        {"qid": "q_norm", "bucket": "C", "question": "In which city is the board?", "phase4c_normalized_answer": "nashville tennessee", "refined_failure_source": "candidate_span_or_normalization_gap"},
+        {"qid": "q_select", "bucket": "C", "question": "What is the company name?", "phase4c_normalized_answer": "wrong", "refined_failure_source": "candidate_span_or_normalization_gap"},
+        {"qid": "q_partial", "bucket": "C", "question": "In which city is the board located?", "phase4c_normalized_answer": "wrong", "refined_failure_source": "candidate_span_or_normalization_gap"},
+        {"qid": "q_table", "bucket": "C", "question": "What segment share index is shown?", "phase4c_normalized_answer": "wrong", "refined_failure_source": "candidate_span_or_normalization_gap"},
+        {"qid": "q_page", "bucket": "C", "question": "Mention the page number of the content Trimegestone.", "phase4c_normalized_answer": "wrong", "refined_failure_source": "candidate_span_or_normalization_gap"},
+        {"qid": "q_ocr", "bucket": "C", "question": "What is the filing status code?", "phase4c_normalized_answer": "wrong", "refined_failure_source": "candidate_span_or_normalization_gap"},
+        {"qid": "q_unclear", "bucket": "C", "question": "", "phase4c_normalized_answer": "wrong", "refined_failure_source": "candidate_span_or_normalization_gap"},
+        {"qid": "q_reader", "bucket": "E", "question": "Reader case", "phase4c_normalized_answer": "wrong", "refined_failure_source": "reader_selection_gap"},
+    ]
+    detail_rows = [
+        {
+            "qid": "q_norm",
+            "question": "In which city is the board?",
+            "gold_answer_debug": {"normalized_gold_answers": ["nashville"], "gold_answer_forms_preview": ["Nashville"]},
+            "phase4c_prediction": {"normalized_answer": "nashville tennessee", "answer_hit": False},
+            "top_candidate_spans": [{"text_preview": "Board mailing address"}],
+        },
+        {
+            "qid": "q_select",
+            "question": "What is the company name?",
+            "gold_answer_debug": {"normalized_gold_answers": ["acme corporation"], "gold_answer_forms_preview": ["Acme Corporation"]},
+            "phase4c_prediction": {"normalized_answer": "wrong", "answer_hit": False},
+            "top_candidate_spans": [{"text_preview": "Random appendix notes"}],
+        },
+        {
+            "qid": "q_partial",
+            "question": "In which city is the board located?",
+            "gold_answer_debug": {"normalized_gold_answers": ["nashville tennessee"], "gold_answer_forms_preview": ["Nashville, Tennessee"]},
+            "phase4c_prediction": {"normalized_answer": "wrong", "answer_hit": False},
+            "top_candidate_spans": [{"text_preview": "The board is located in Nashville"}],
+        },
+        {
+            "qid": "q_table",
+            "question": "What segment share index is shown?",
+            "gold_answer_debug": {"normalized_gold_answers": ["31"], "gold_answer_forms_preview": ["31"]},
+            "phase4c_prediction": {"normalized_answer": "wrong", "answer_hit": False},
+            "top_candidate_spans": [{"text_preview": "Segment table share (30)"}],
+        },
+        {
+            "qid": "q_page",
+            "question": "Mention the page number of the content Trimegestone.",
+            "gold_answer_debug": {"normalized_gold_answers": ["12"], "gold_answer_forms_preview": ["12"]},
+            "phase4c_prediction": {"normalized_answer": "wrong", "answer_hit": False},
+            "top_candidate_spans": [{"text_preview": "Trimegestone content listing"}],
+        },
+        {
+            "qid": "q_ocr",
+            "question": "What is the filing status code?",
+            "gold_answer_debug": {"normalized_gold_answers": ["approved"], "gold_answer_forms_preview": ["Approved"]},
+            "phase4c_prediction": {"normalized_answer": "wrong", "answer_hit": False},
+            "top_candidate_spans": [{"text_preview": "Filing status code appears in scanned header"}],
+        },
+    ]
+    write_jsonl(source_dir / "failure_inspection_refined_cases.jsonl", refined_rows)
+    write_jsonl(source_dir / "failure_inspection_cases.jsonl", detail_rows)
+
+    summary = run_phase4d_candidate_span_gap_review(
+        Namespace(
+            source_refined_run_dir=source_dir,
+            output_root=output_root,
+            run_id="fixture",
+            force=True,
+        )
+    )
+    out_dir = output_root / "fixture"
+    cases = {case["qid"]: case for case in read_jsonl(out_dir / "candidate_span_gap_cases.jsonl")}
+    preview = json.loads((out_dir / "candidate_span_gap_preview.json").read_text(encoding="utf-8"))
+
+    assert set(cases) == {"q_norm", "q_select", "q_partial", "q_table", "q_page", "q_ocr", "q_unclear"}
+    assert cases["q_norm"]["gap_subtype"] == "normalization_or_metric_gap"
+    assert cases["q_select"]["gap_subtype"] == "candidate_span_selection_gap"
+    assert cases["q_partial"]["gap_subtype"] == "candidate_span_partial_context_gap"
+    assert cases["q_table"]["gap_subtype"] == "table_or_index_span_gap"
+    assert cases["q_page"]["gap_subtype"] == "page_number_or_content_lookup_gap"
+    assert cases["q_ocr"]["gap_subtype"] == "ocr_or_parsing_gap"
+    assert cases["q_unclear"]["gap_subtype"] == "unclear_mixed_gap"
+    assert all(case["should_not_patch_specific_qid"] is True for case in cases.values())
+    assert cases["q_unclear"]["is_generic_fix_candidate"] is False
+    assert summary["phase"] == "Phase 4D-A.4"
+    assert summary["task"] == "candidate_span_normalization_gap_final_review"
+    assert summary["status"] == "success"
+    assert summary["total_candidate_span_or_normalization_gap"] == 7
+    assert summary["gap_subtype_counts"] == {
+        "normalization_or_metric_gap": 1,
+        "candidate_span_selection_gap": 1,
+        "candidate_span_partial_context_gap": 1,
+        "table_or_index_span_gap": 1,
+        "page_number_or_content_lookup_gap": 1,
+        "ocr_or_parsing_gap": 1,
+        "unclear_mixed_gap": 1,
+    }
+    assert summary["recommended_next_action_counts"] == {
+        "inspect_answer_normalization": 1,
+        "improve_candidate_spans": 1,
+        "improve_candidate_span_neighbor_context": 1,
+        "improve_table_index_span_selection": 1,
+        "improve_page_number_content_lookup": 1,
+        "inspect_ocr_or_parsing": 1,
+        "manual_review_required": 1,
+    }
+    assert summary["decision_guidance"] == {
+        "candidate_id_reader_should_remain_postponed": True,
+        "allow_next_repair_only_if_generic_pattern_concentrated": True,
+        "stop_after_this_diagnostic_stage": True,
+    }
+    assert summary["does_not_modify_reader"] is True
+    assert summary["does_not_run_answer_policy"] is True
+    assert summary["does_not_train"] is True
+    assert preview["records"]
+    assert (out_dir / "candidate_span_gap_summary.json").is_file()
+    assert "Decision Gate" in (out_dir / "candidate_span_gap_summary.md").read_text(encoding="utf-8")
+
+
 def test_cli_help() -> None:
     result = subprocess.run(
         [sys.executable, "scripts/analyze_phase4d_candidate_answer_coverage.py", "--help"],
@@ -787,3 +905,5 @@ def test_cli_help() -> None:
     assert "--candidate-evidence" in export_result.stdout
     assert "--buckets" in export_result.stdout
     assert "--top-candidates" in export_result.stdout
+    assert "--candidate-span-gap-review" in export_result.stdout
+    assert "--source-refined-run-dir" in export_result.stdout
