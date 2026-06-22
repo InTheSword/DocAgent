@@ -436,18 +436,33 @@ baseline sample_count = 90
 b1 sample_count = 9
 ```
 
-Phase 4D-B1.1 implemented boundary:
+Phase 4D-B1.1 accepted boundary:
 
 - when no explicit `--doc-id` or `--doc-id-file` is provided, infer the loaded
   document scope from the active `sample_root/qa.jsonl` instead of falling back
   to the three historical default documents;
-- keep table/index enhancements as per-question scoring/context behavior only;
+- keep `candidate_evidence_count == qa_count`,
+  `candidate_evidence_qid_set == qa_jsonl_qid_set`, and
+  `candidate_packing_metrics.sample_count == qa_count`;
+- keep `candidate_evidence_completeness` in summary and
+  `candidate_packing_metrics.json`;
 - preserve original candidate_spans fallback behavior for non-table/index
   questions;
-- add `candidate_evidence_completeness` to summary and
-  `candidate_packing_metrics.json`;
 - fail before writing candidate evidence if candidate record count or qid set
   does not match the loaded QA qid set.
+
+Phase 4D-B1.2 closeout:
+
+- B1.1 server validation restored completeness with 90 QA records, 90
+  candidate evidence records, exact qid-set match, and no gold leakage.
+- B1 table/index enhancement is not accepted as a default improvement: it only
+  reduced `table_or_index_span_gap` from 10 to 8, did not improve overall
+  candidate answer coverage, and shifted `page_number_or_content_lookup_gap`
+  from 1 to 4.
+- Table/index scoring and neighbor-context enhancement are disabled by default
+  and kept only behind the experimental `--enable-table-index-packing` flag.
+- A.4 remains the final diagnostic split for the 90-sample probe. No further
+  per-case tuning on this probe is allowed.
 
 ## Local Validation
 
@@ -487,27 +502,24 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Re-run Phase 4D-B1.1 server validation and confirm
-   `candidate_evidence_completeness.qid_set_match = true` with 90 candidate
-   evidence records.
-2. Then rerun A.2/A.3.1/A.4 diagnostics and compare against A.4 before counts:
-   `table_or_index_span_gap = 10`,
-   `candidate_span_selection_gap = 5`,
-   `candidate_span_partial_context_gap = 5`, and
-   `page_number_or_content_lookup_gap = 1`.
-3. Keep `page_children` as the default until more shard and document-type
+1. Run larger unseen validation with the accepted pipeline and existing
+   diagnostics.
+2. Keep `page_children` as the default until more shard and document-type
    validation supports a global default change.
+3. Keep Candidate-ID Reader postponed until reader-selection failures dominate
+   after candidate coverage issues are resolved.
 4. Keep CDC `not_started` until explicitly started.
 
 ## Stop Condition
 
 ```text
-Phase 4D-B1.1 local implementation implemented
+Phase 4D-B1.2 local implementation implemented
 + targeted and regression tests pass
 + status documents updated
 + branch pushed
-+ stop before Reader prompt changes, AnswerPolicy integration, training, CDC, Demo,
-   per-qid repairs, and any global `candidate_spans` default change
++ stop before Reader prompt changes, AnswerPolicy integration, training, CDC,
+   Demo, per-qid repairs, further 90-sample probe tuning, and any global
+   `candidate_spans` default change
 ```
 
 ## Phase Documents

@@ -257,7 +257,7 @@ Root cause:
   documents, instead of inferring all document windows from the active
   expanded `sample_root/qa.jsonl`.
 
-Phase 4D-B1.1 implemented boundary:
+Phase 4D-B1.1 accepted boundary:
 
 - infer doc scope from `sample_root/qa.jsonl` when no explicit doc scope is
   provided;
@@ -267,12 +267,41 @@ Phase 4D-B1.1 implemented boundary:
 - fail before writing candidate evidence if candidate records do not exactly
   match the loaded QA qid set.
 
+Phase 4D-B1.1 server validation:
+
+```text
+candidate_evidence_completeness.qa_count = 90
+candidate_evidence_completeness.candidate_evidence_count = 90
+candidate_evidence_completeness.qid_set_match = true
+candidate_evidence_completeness.missing_qid_count = 0
+candidate_evidence_completeness.extra_qid_count = 0
+candidate_span_answer_coverage = 0.7444
+candidate_answer_coverage_all = 0.5222
+candidate_answer_coverage_top20 = 0.4556
+candidate_answer_no_gold_leakage = true
+```
+
+Phase 4D-B1.2 closeout:
+
+- B1 table/index enhancement failed acceptance on the 90-sample probe: it
+  reduced `table_or_index_span_gap` only from 10 to 8, did not improve overall
+  candidate coverage, and shifted `page_number_or_content_lookup_gap` from 1
+  to 4.
+- The B1.1 completeness fix is retained.
+- Table/index scoring and neighbor-context enhancement are disabled by default
+  and kept experimental behind `--enable-table-index-packing`.
+- A.4 remains the final diagnostic split for the 90-sample probe. No further
+  per-case tuning on this probe is allowed.
+- Next step: larger unseen validation using the accepted pipeline and existing
+  diagnostics.
+- Candidate-ID Reader remains postponed.
+
 Unchanged boundary:
 
 - Reader prompts, AnswerPolicy, retrieval models, MinerU, checkpoints, reward,
   training data, CDC, Demo, and global `candidate_spans` default remain
   unchanged.
-- Phase 4D-B1.1 server validation has not yet run.
+- Phase 4D-B1.1 server validation is accepted.
 
 ## Phase 4D-A Local Implementation
 

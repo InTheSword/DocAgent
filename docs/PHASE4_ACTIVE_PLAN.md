@@ -654,7 +654,8 @@ Phase 4D-A.4 server final gap review -> accepted
 Phase 4D-B1 local implementation -> implemented
 Phase 4D-B1 server validation -> blocked
 Phase 4D-B1.1 local implementation -> implemented
-Phase 4D-B1.1 server validation -> not_started
+Phase 4D-B1.1 server validation -> accepted
+Phase 4D-B1.2 local implementation -> implemented
 ```
 
 Scope:
@@ -805,7 +806,7 @@ Status:
 
 ```text
 Phase 4D-B1.1 local implementation -> implemented
-Phase 4D-B1.1 server validation -> not_started
+Phase 4D-B1.1 server validation -> accepted
 ```
 
 Scope:
@@ -827,15 +828,56 @@ Acceptance requirement:
 - `candidate_packing_metrics.sample_count == qa_count`;
 - no gold leakage remains true.
 
+Server validation result:
+
+```text
+candidate_evidence_completeness.qa_count = 90
+candidate_evidence_completeness.candidate_evidence_count = 90
+candidate_evidence_completeness.qid_set_match = true
+candidate_evidence_completeness.missing_qid_count = 0
+candidate_evidence_completeness.extra_qid_count = 0
+candidate_span_answer_coverage = 0.7444
+candidate_answer_coverage_all = 0.5222
+candidate_answer_coverage_top20 = 0.4556
+candidate_answer_no_gold_leakage = true
+```
+
+## 8.10 Phase 4D-B1.2 B1 Closeout
+
+Status:
+
+```text
+Phase 4D-B1.2 local implementation -> implemented
+Phase 4D-B1.2 server validation -> not_started
+```
+
+Decision:
+
+- The B1.1 completeness fix is accepted and retained.
+- The B1 table/index enhancement is not accepted as a default improvement.
+- The enhancement only reduced `table_or_index_span_gap` from 10 to 8, did not
+  improve overall candidate coverage, and shifted
+  `page_number_or_content_lookup_gap` from 1 to 4.
+- Table/index scoring and neighbor-context enhancement are disabled by default
+  and kept experimental behind `--enable-table-index-packing`.
+- Diagnostics remain additive and include
+  `table_index_enhancement_enabled`.
+- A.4 is the final diagnostic split for the 90-sample probe; no further
+  per-case tuning on this probe is allowed.
+- The next action is larger unseen validation with the accepted pipeline and
+  diagnostics.
+- Candidate-ID Reader remains postponed.
+
 ## 9. Stop Condition
 
 Stop after the following are complete:
 
 ```text
-Phase 4D-B1.1 local implementation implemented
+Phase 4D-B1.2 local implementation implemented
 + targeted and regression tests pass
 + status documents updated
 + branch pushed
 + stop before CDC, Demo, Reader prompt changes, AnswerPolicy integration,
-   training, per-qid repairs, and any global `candidate_spans` default change
+   training, per-qid repairs, further 90-sample probe tuning, and any global
+   `candidate_spans` default change
 ```

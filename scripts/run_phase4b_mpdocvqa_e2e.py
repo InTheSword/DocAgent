@@ -830,6 +830,7 @@ def build_candidate_span_evidence(
     candidate_neighbor_window: int,
     max_candidate_blocks: int,
     candidate_token_budget: int | None,
+    enable_table_index_packing: bool = False,
 ) -> tuple[list[dict[str, Any]], dict[str, list[EvidenceBlock]], list[dict[str, Any]]]:
     child_lookup = _child_block_lookup(windows)
     page_record_lookup = _page_record_lookup(windows)
@@ -841,6 +842,7 @@ def build_candidate_span_evidence(
         neighbor_window=candidate_neighbor_window,
         max_candidate_blocks=max_candidate_blocks,
         candidate_token_budget=candidate_token_budget,
+        enable_table_index_packing=enable_table_index_packing,
     )
     fixed_records: list[dict[str, Any]] = []
     evidence_by_qid: dict[str, list[EvidenceBlock]] = {}
@@ -1392,6 +1394,7 @@ def build_run_manifest(args: argparse.Namespace, *, run_id: str, windows: list[D
             "max_candidate_blocks": args.max_candidate_blocks,
             "candidate_token_budget": args.candidate_token_budget,
             "write_candidate_evidence": bool(args.write_candidate_evidence),
+            "enable_table_index_packing": bool(args.enable_table_index_packing),
         },
         "max_prompt_tokens": args.max_prompt_tokens,
         "max_new_tokens": args.max_new_tokens,
@@ -1515,6 +1518,7 @@ def run_phase4b_e2e(args: argparse.Namespace) -> dict[str, Any]:
             candidate_neighbor_window=args.candidate_neighbor_window,
             max_candidate_blocks=args.max_candidate_blocks,
             candidate_token_budget=args.candidate_token_budget,
+            enable_table_index_packing=bool(args.enable_table_index_packing),
         )
     else:
         fixed_records, fixed_evidence_by_qid = build_fixed_evidence(
@@ -1531,6 +1535,7 @@ def run_phase4b_e2e(args: argparse.Namespace) -> dict[str, Any]:
                 candidate_neighbor_window=args.candidate_neighbor_window,
                 max_candidate_blocks=args.max_candidate_blocks,
                 candidate_token_budget=args.candidate_token_budget,
+                enable_table_index_packing=bool(args.enable_table_index_packing),
             )
     assert_no_gold_leakage(fixed_records)
     fixed_hash = fixed_evidence_hash(fixed_records)
@@ -1672,6 +1677,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--candidate-neighbor-window", type=int, default=1)
     parser.add_argument("--max-candidate-blocks", type=int, default=32)
     parser.add_argument("--candidate-token-budget", type=int)
+    parser.add_argument("--enable-table-index-packing", action="store_true")
     parser.add_argument("--write-candidate-evidence", action="store_true")
     parser.add_argument("--max-prompt-tokens", type=int, default=4096)
     parser.add_argument("--max-new-tokens", type=int, default=1024)

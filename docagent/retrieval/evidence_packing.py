@@ -312,6 +312,7 @@ def summarize_candidate_packing(
         "candidate_span_count_distribution": _distribution([len(record.get("candidate_spans") or []) for record in records]),
         "gold_page_in_candidate_pages_rate": _mean_bool(gold_in_candidate_pages),
         "gold_page_has_candidate_span_rate": _mean_bool(gold_has_candidate_span),
+        "table_index_enhancement_enabled": any(bool(item.get("table_index_enhancement_enabled")) for item in stats),
         "table_index_question_count": len(table_index_qids),
         "table_index_candidate_span_count": int(sum(_values("table_index_candidate_span_count"))),
         "table_index_candidate_span_answer_coverage": _mean_bool(table_index_answer_hits) if gold_answers_by_qid is not None else None,
@@ -331,12 +332,14 @@ class EvidenceCandidateBuilder:
         neighbor_window: int = 1,
         max_candidate_blocks: int = 32,
         candidate_token_budget: int | None = None,
+        enable_table_index_packing: bool = False,
     ) -> None:
         self.max_candidate_spans = max(1, max_candidate_spans)
         self.max_candidate_spans_per_page = max(1, max_candidate_spans_per_page)
         self.neighbor_window = max(0, neighbor_window)
         self.max_candidate_blocks = max(1, max_candidate_blocks)
         self.candidate_token_budget = candidate_token_budget
+        self.enable_table_index_packing = enable_table_index_packing
 
     def build(
         self,
@@ -407,6 +410,7 @@ class EvidenceCandidateBuilder:
                 "dropped_block_count": max(len(set(original_block_ids)) - len(unique_candidate_blocks), 0),
                 "estimated_prompt_tokens_before": estimate_prompt_tokens(before_text),
                 "estimated_prompt_tokens_after": estimate_prompt_tokens(after_text),
+                "table_index_enhancement_enabled": self.enable_table_index_packing,
                 "table_index_question_count": 1 if _is_table_index_question(hints) else 0,
                 "table_index_candidate_span_count": len(table_index_spans),
                 "table_index_top_span_contains_field_value_rate": 1.0 if table_index_top_span_has_field_value else 0.0,
@@ -434,7 +438,7 @@ class EvidenceCandidateBuilder:
             numeric_bonus += 0.25
         if detected_values and hints.answer_type_hint in {"numeric", "date"}:
             numeric_bonus += 0.12
-        table_index_bonus = _table_index_bonus(hints, text, lowered, block)
+        table_index_bonus = _table_index_bonus(hints, text, lowered, block) if self.enable_table_index_packing else 0.0
         block_type_bonus = _block_type_bonus(block)
         page_rank_bonus = max(0.0, 0.18 - 0.03 * max(top_page.retrieval_rank - 1, 0))
         boilerplate_penalty = _boilerplate_penalty(hints, lowered, block)
@@ -587,12 +591,17 @@ class EvidenceCandidateBuilder:
         if primary_index is None:
             return []
         effective_window = self.neighbor_window
-        if hints and _is_table_index_question(hints) and _has_table_index_row_signal(_block_match_text(primary), primary):
+        table_index_enhancement = bool(
+            self.enable_table_index_packing
+            and hints
+            and _is_table_index_question(hints)
+        )
+        if table_index_enhancement and _has_table_index_row_signal(_block_match_text(primary), primary):
             effective_window = max(effective_window, 1)
         start = max(0, primary_index - effective_window)
         end = min(len(ordered), primary_index + effective_window + 1)
         candidate_ids: list[str] = []
-        if hints and _is_table_index_question(hints):
+        if table_index_enhancement:
             for block in reversed(ordered[max(0, primary_index - 3):primary_index]):
                 if _is_table_header_like(block, hints):
                     candidate_ids.append(block.block_id)

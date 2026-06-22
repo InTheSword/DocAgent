@@ -365,6 +365,7 @@ def test_candidate_spans_retrieval_only_writes_artifacts_and_changes_fixed_evide
     fixed_rows = read_jsonl(run_dir / "fixed_evidence.jsonl")
     candidate_rows = read_jsonl(run_dir / "candidate_evidence.jsonl")
     candidate_metrics = json.loads((run_dir / "candidate_packing_metrics.json").read_text(encoding="utf-8"))
+    manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
     preview = json.loads((run_dir / "candidate_evidence_preview.json").read_text(encoding="utf-8"))["records"]
     serialized_candidates = json.dumps(candidate_rows, ensure_ascii=False)
 
@@ -373,6 +374,8 @@ def test_candidate_spans_retrieval_only_writes_artifacts_and_changes_fixed_evide
     assert summary["evidence_packing_mode"] == "candidate_spans"
     assert summary["fixed_evidence_hash"] != baseline_summary["fixed_evidence_hash"]
     assert summary["candidate_packing"]["no_gold_leakage"] is True
+    assert summary["candidate_packing"]["table_index_enhancement_enabled"] is False
+    assert manifest["candidate_packing"]["enable_table_index_packing"] is False
     assert summary["candidate_evidence_completeness"] == {
         "qa_count": 3,
         "candidate_evidence_count": 3,
@@ -385,6 +388,7 @@ def test_candidate_spans_retrieval_only_writes_artifacts_and_changes_fixed_evide
         "duplicate_candidate_qids_preview": [],
     }
     assert candidate_metrics["sample_count"] == 3
+    assert candidate_metrics["table_index_enhancement_enabled"] is False
     assert candidate_metrics["table_index_question_count"] == 0
     assert candidate_metrics["candidate_evidence_completeness"]["qid_set_match"] is True
     assert candidate_metrics["no_gold_leakage"] is True
@@ -438,7 +442,44 @@ def test_candidate_spans_without_doc_scope_infers_all_qa_docs(tmp_path: Path) ->
     assert len(candidate_rows) == 3
     assert {row["qid"] for row in candidate_rows} == {"q_alpha", "q_beta", "q_gamma"}
     assert candidate_metrics["sample_count"] == 3
+    assert candidate_metrics["table_index_enhancement_enabled"] is False
     assert candidate_metrics["candidate_evidence_completeness"]["qid_set_match"] is True
+
+
+def test_candidate_spans_table_index_packing_flag_marks_experimental_metrics(tmp_path: Path) -> None:
+    sample_root, ingestion_root, output_root = _fixture(tmp_path)
+    args = parse_args(
+        [
+            "--sample-root",
+            str(sample_root),
+            "--ingestion-root",
+            str(ingestion_root),
+            "--output-root",
+            str(output_root),
+            "--run-id",
+            "candidate_table_index_enabled",
+            "--dense-backend",
+            "hash",
+            "--reranker-backend",
+            "keyword",
+            "--allow-mock-backends",
+            "--retrieval-only",
+            "--force",
+            "--evidence-packing",
+            "candidate_spans",
+            "--enable-table-index-packing",
+        ]
+    )
+
+    summary = run_phase4b_e2e(args)
+    run_dir = output_root / "candidate_table_index_enabled"
+    candidate_metrics = json.loads((run_dir / "candidate_packing_metrics.json").read_text(encoding="utf-8"))
+    manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
+
+    assert summary["candidate_packing"]["table_index_enhancement_enabled"] is True
+    assert candidate_metrics["table_index_enhancement_enabled"] is True
+    assert manifest["candidate_packing"]["enable_table_index_packing"] is True
+    assert summary["candidate_evidence_completeness"]["qid_set_match"] is True
 
 
 def test_candidate_evidence_completeness_fails_on_missing_qid(tmp_path: Path) -> None:
@@ -675,6 +716,7 @@ def test_cli_help_starts() -> None:
     assert "--retrieval-only" in result.stdout
     assert "--evidence-packing" in result.stdout
     assert "--max-candidate-spans" in result.stdout
+    assert "--enable-table-index-packing" in result.stdout
     assert "--allow-mock-backends" in result.stdout
     assert "--rank-aware-context" in result.stdout
     assert "--gate" in result.stdout

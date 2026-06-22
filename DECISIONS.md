@@ -8,6 +8,47 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-22: Phase 4D-B1.2 Disable Table / Index Enhancement by Default
+
+Decision: retain the Phase 4D-B1.1 candidate evidence completeness fix, but do
+not accept the B1 table/index scoring and neighbor-context enhancement as a
+default `candidate_spans` behavior.
+
+Evidence:
+
+- B1.1 server validation restored candidate evidence completeness:
+  `qa_count = 90`, `candidate_evidence_count = 90`, `qid_set_match = true`,
+  `missing_qid_count = 0`, and `extra_qid_count = 0`.
+- Overall coverage did not improve:
+  `candidate_span_answer_coverage = 0.7444`,
+  `candidate_answer_coverage_all = 0.5222`, and
+  `candidate_answer_coverage_top20 = 0.4556`.
+- The table/index enhancement reduced `table_or_index_span_gap` only from 10
+  to 8 and shifted `page_number_or_content_lookup_gap` from 1 to 4.
+
+Implementation boundary:
+
+- Keep candidate evidence completeness checks and metrics.
+- Disable table/index scoring bonus and table/index neighbor-context expansion
+  by default.
+- Keep the enhancement only behind the experimental
+  `--enable-table-index-packing` flag.
+- Continue writing table/index diagnostics with
+  `table_index_enhancement_enabled`.
+
+Next action:
+
+- Stop further per-case tuning on the 90-sample probe.
+- Run larger unseen validation using the accepted pipeline and diagnostics.
+- Keep Candidate-ID Reader postponed until reader-selection failures dominate
+  after candidate coverage issues are resolved.
+
+Constraints:
+
+- Do not modify Reader prompts, AnswerPolicy integration, retrieval models,
+  checkpoints, reward, training split, training data, CDC, Demo, or the global
+  `candidate_spans` default.
+
 ## 2026-06-22: Phase 4D-B1.1 Candidate Evidence Completeness Regression Fix
 
 Decision: block B1 diagnostics until candidate evidence completeness is

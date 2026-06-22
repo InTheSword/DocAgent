@@ -96,13 +96,7 @@ def test_candidate_builder_prioritizes_index_percentage_source_and_heading() -> 
     assert heading_packet["candidate_spans"][0]["primary_block_id"] == "heading"
 
 
-def test_phase4d_b1_table_index_scoring_context_and_diagnostics() -> None:
-    hints = parse_question_hints("What is the index of the segment share rate?")
-
-    assert hints.answer_type_hint == "numeric"
-    assert hints.to_dict()["table_index_hint"] is True
-    assert {"index", "segment", "share", "rate"}.issubset(set(hints.field_hints))
-
+def test_phase4d_b1_table_index_enhancement_is_disabled_by_default() -> None:
     blocks = {
         "header": _block("header", "Segment Share Rate Index", order=1, metadata={"raw_mineru_type": "table_header"}),
         "row": _block("row", "Share of Segment: 4.1% (241)", order=2, metadata={"raw_mineru_type": "table_row"}),
@@ -122,6 +116,42 @@ def test_phase4d_b1_table_index_scoring_context_and_diagnostics() -> None:
         top_pages=[_top_page("header", "row", "neighbor", "noise")],
         child_lookup=blocks,
     )
+    metrics = summarize_candidate_packing([packet])
+
+    assert packet["packing_stats"]["table_index_enhancement_enabled"] is False
+    assert metrics["table_index_enhancement_enabled"] is False
+    assert packet["question_hints"]["table_index_hint"] is True
+    assert all(span["score_breakdown"]["table_index_bonus"] == 0.0 for span in packet["candidate_spans"])
+    assert all(len(span["block_ids"]) == 1 for span in packet["candidate_spans"])
+
+
+def test_phase4d_b1_table_index_scoring_context_and_diagnostics_when_enabled() -> None:
+    hints = parse_question_hints("What is the index of the segment share rate?")
+
+    assert hints.answer_type_hint == "numeric"
+    assert hints.to_dict()["table_index_hint"] is True
+    assert {"index", "segment", "share", "rate"}.issubset(set(hints.field_hints))
+
+    blocks = {
+        "header": _block("header", "Segment Share Rate Index", order=1, metadata={"raw_mineru_type": "table_header"}),
+        "row": _block("row", "Share of Segment: 4.1% (241)", order=2, metadata={"raw_mineru_type": "table_row"}),
+        "neighbor": _block("neighbor", "Previous segment share: 0.9% (53)", order=3, metadata={"raw_mineru_type": "table_row"}),
+        "noise": _block("noise", "Company overview without table values", order=4),
+    }
+    builder = EvidenceCandidateBuilder(
+        max_candidate_spans=2,
+        max_candidate_spans_per_page=2,
+        neighbor_window=0,
+        max_candidate_blocks=4,
+        enable_table_index_packing=True,
+    )
+    packet = builder.build(
+        qid="q_table",
+        doc_id="doc",
+        question="What is the index of the segment share rate?",
+        top_pages=[_top_page("header", "row", "neighbor", "noise")],
+        child_lookup=blocks,
+    )
     first = packet["candidate_spans"][0]
     metrics = summarize_candidate_packing(
         [packet],
@@ -130,6 +160,8 @@ def test_phase4d_b1_table_index_scoring_context_and_diagnostics() -> None:
     )
 
     assert first["primary_block_id"] == "row"
+    assert packet["packing_stats"]["table_index_enhancement_enabled"] is True
+    assert metrics["table_index_enhancement_enabled"] is True
     assert first["table_index_candidate"] is True
     assert first["table_index_field_value_pattern"] is True
     assert first["table_index_parenthesized_index"] is True
@@ -163,6 +195,7 @@ def test_phase4d_b1_non_table_question_keeps_table_index_inactive() -> None:
     )
 
     assert packet["question_hints"]["table_index_hint"] is False
+    assert packet["packing_stats"]["table_index_enhancement_enabled"] is False
     assert packet["candidate_spans"][0]["primary_block_id"] == "name"
     assert packet["candidate_spans"][0]["table_index_candidate"] is False
     assert packet["packing_stats"]["table_index_candidate_span_count"] == 0
@@ -216,6 +249,7 @@ def test_image_table_fallback_metrics_and_no_gold_leakage() -> None:
     assert any(span["block_types"] == ["image"] for span in packet["candidate_spans"])
     assert any("table" in span["block_types"] for span in packet["candidate_spans"])
     assert metrics["sample_count"] == 1
+    assert metrics["table_index_enhancement_enabled"] is False
     assert metrics["gold_page_in_candidate_pages_rate"] == 1.0
     assert metrics["gold_page_has_candidate_span_rate"] == 1.0
     assert metrics["no_gold_leakage"] is True
