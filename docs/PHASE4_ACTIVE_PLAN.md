@@ -317,14 +317,14 @@ Do not:
 
 ## 8. Next Priorities
 
-1. Validate Phase 4D-B1.1 by regenerating candidate span artifacts and
-   confirming full 90-QA candidate_evidence completeness before rerunning
-   A.2/A.3.1/A.4 diagnostics.
-2. Keep Phase 4C `candidate_spans` available as an accepted experimental and
-   recommended evidence-packing mode.
+1. Run Phase 4D-C expanded unseen validation with the accepted/default
+   `candidate_spans` pipeline.
+2. Keep B1 table/index scoring/context enhancement disabled by default and
+   available only through `--enable-table-index-packing` as experimental.
 3. Keep CDC `not_started` until explicitly started.
-4. Use Gate 4 failure taxonomy for later Reader/error-analysis work; do not
-   change retrieval models or AnswerPolicy prompt in this phase.
+4. Keep Candidate-ID Reader postponed until expanded unseen diagnostics show
+   reader-selection failures dominate after candidate coverage issues are
+   resolved.
 
 ## 8.1 Phase 4C Candidate Spans Accepted Result
 
@@ -426,7 +426,7 @@ Phase 4D-A.3 server failure inspection -> accepted
 Phase 4D-A.3.1 local implementation -> implemented
 Phase 4D-A.3.1 server refined summary -> accepted
 Phase 4D-A.4 local implementation -> implemented
-Phase 4D-A.4 server final gap review -> not_started
+Phase 4D-A.4 server final gap review -> accepted
 ```
 
 Scope:
@@ -652,10 +652,11 @@ Phase 4D-A.3.1 server refined summary -> accepted
 Phase 4D-A.4 local implementation -> implemented
 Phase 4D-A.4 server final gap review -> accepted
 Phase 4D-B1 local implementation -> implemented
-Phase 4D-B1 server validation -> blocked
 Phase 4D-B1.1 local implementation -> implemented
 Phase 4D-B1.1 server validation -> accepted
 Phase 4D-B1.2 local implementation -> implemented
+Phase 4D-B1.3 default pipeline sanity -> accepted
+Phase 4D-C expanded unseen validation -> not_started
 ```
 
 Scope:
@@ -755,9 +756,10 @@ Status:
 
 ```text
 Phase 4D-B1 local implementation -> implemented
-Phase 4D-B1 server validation -> blocked
 Phase 4D-B1.1 local implementation -> implemented
-Phase 4D-B1.1 server validation -> not_started
+Phase 4D-B1.1 server validation -> accepted
+Phase 4D-B1.2 closeout -> implemented
+Phase 4D-B1.3 default pipeline sanity -> accepted
 ```
 
 Scope:
@@ -770,6 +772,8 @@ Scope:
 - retain table/index neighbor context by including current rows, adjacent rows,
   and table header-like blocks when generic table/index signals are present;
 - add table/index diagnostics to candidate packing metrics.
+- default candidate_spans does not enable this enhancement; the enhancement is
+  experimental behind `--enable-table-index-packing`.
 
 Constraints:
 
@@ -799,6 +803,8 @@ Interpretation:
 - Root cause is runner scope selection: without explicit `--doc-id` or
   `--doc-id-file`, the runner fell back to the three historical default
   documents instead of the active sample `qa.jsonl` doc set.
+- B1.1 restored completeness, but B1 table/index enhancement was not accepted
+  as a default improvement.
 
 ## 8.9 Phase 4D-B1.1 Candidate Evidence Completeness Regression Fix
 
@@ -813,8 +819,7 @@ Scope:
 
 - infer document scope from `sample_root/qa.jsonl` when no explicit doc scope
   is provided;
-- preserve B1 table/index behavior only as scoring/context enhancement for
-  matching questions;
+- preserve the accepted candidate evidence completeness behavior;
 - keep original candidate_spans fallback behavior for non-table/index
   questions;
 - add candidate evidence completeness checks before artifact writing;
@@ -848,7 +853,7 @@ Status:
 
 ```text
 Phase 4D-B1.2 local implementation -> implemented
-Phase 4D-B1.2 server validation -> not_started
+Phase 4D-B1.3 default pipeline sanity -> accepted
 ```
 
 Decision:
@@ -868,12 +873,95 @@ Decision:
   diagnostics.
 - Candidate-ID Reader remains postponed.
 
+Accepted Phase 4D-B1.3 server sanity:
+
+```text
+candidate_evidence_completeness.qa_count = 90
+candidate_evidence_completeness.candidate_evidence_count = 90
+candidate_evidence_completeness.qid_set_match = true
+candidate_evidence_completeness.missing_qid_count = 0
+candidate_evidence_completeness.extra_qid_count = 0
+candidate_evidence_completeness.duplicate_candidate_qid_count = 0
+table_index_enhancement_enabled = false
+candidate_span_answer_coverage = 0.7444444444444445
+candidate_answer_coverage_all = 0.5222222222222223
+candidate_answer_coverage_top1 = 0.23333333333333334
+candidate_answer_coverage_top5 = 0.3888888888888889
+candidate_answer_coverage_top20 = 0.45555555555555555
+candidate_answer_no_gold_leakage = true
+completeness_ok = true
+table_index_enhancement_default_disabled_ok = true
+coverage_matches_phase4c_baseline = true
+accepted = true
+```
+
+Interpretation:
+
+- The default `candidate_spans` path reproduced the Phase 4C baseline.
+- `--enable-table-index-packing` remains experimental only.
+- Candidate evidence completeness checks stay in the accepted default path.
+- The 90-sample probe is closed to further tuning.
+
+## 8.11 Phase 4D-C Expanded Unseen Validation with Accepted Default Pipeline
+
+Status:
+
+```text
+Phase 4D-C expanded unseen validation -> not_started
+```
+
+Goal:
+
+- validate candidate evidence completeness on more unseen MP-DocVQA validation
+  samples;
+- measure retrieval recall;
+- measure `candidate_span_answer_coverage`;
+- measure `candidate_answer_coverage_all` and top-k coverage;
+- inspect failure attribution distribution;
+- check whether table/index gaps remain stable outside the 90-sample probe;
+- decide whether Candidate-ID Reader should remain postponed.
+
+Default pipeline:
+
+```text
+evidence_packing = candidate_spans
+rank_aware_context = false
+table_index_enhancement_enabled = false
+enable_table_index_packing = false
+no Candidate-ID Reader
+no full GRPO training
+no prompt tuning
+```
+
+First unseen validation target:
+
+- MP-DocVQA validation shards 5-8;
+- 200-300 QA;
+- preserve page-count bucket coverage;
+- do not run all 29 validation shards at once.
+
+Validation stages:
+
+1. Step A: expanded sample manifest.
+2. Step B: ingest missing windows if needed.
+3. Step C: retrieval-only + candidate_spans.
+4. Step D: candidate answer diagnostics.
+5. Step E: failure attribution diagnostics.
+6. Step F: optional full E2E only if retrieval and diagnostics are stable.
+
+Resource notes:
+
+- manifest and diagnostics: CPU;
+- retrieval-only: GPU required because it loads BGE-M3 and the reranker;
+- full E2E: GPU required because it loads Qwen3 and the GRPO adapter.
+
 ## 9. Stop Condition
 
 Stop after the following are complete:
 
 ```text
-Phase 4D-B1.2 local implementation implemented
+Phase 4D-B1.3 server sanity accepted
++ Phase 4D-C plan documented
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

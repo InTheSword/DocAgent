@@ -2,13 +2,12 @@
 
 Updated: 2026-06-22
 
-## Phase 4D-B1.1 Local Implementation
+## Phase 4D-B1.3 Accepted / Phase 4D-C Next
 
-Phase 4D-B1 server sanity triage found a candidate evidence completeness
-regression: B1 generated only 9 `candidate_evidence.jsonl` rows for the
-90-QA Gate 4 probe. B1 diagnostics are invalid until completeness is restored.
-Phase 4D-B1.1 restores full loaded-QA candidate evidence output and adds
-fail-fast qid completeness checks.
+Phase 4D-B1.3 default pipeline sanity is accepted. The default
+`candidate_spans` path reproduces the accepted Phase 4C baseline with
+`table_index_enhancement_enabled = false`. The 90-sample probe is closed to
+further tuning. The next phase is Phase 4D-C expanded unseen validation.
 
 Status:
 
@@ -30,13 +29,49 @@ Phase 4D-A.3.1 server refined summary -> accepted
 Phase 4D-A.4 local implementation -> implemented
 Phase 4D-A.4 server final gap review -> accepted
 Phase 4D-B1 local implementation -> implemented
-Phase 4D-B1 server validation -> blocked
 Phase 4D-B1.1 local implementation -> implemented
-Phase 4D-B1.1 server validation -> not_started
+Phase 4D-B1.1 server validation -> accepted
+Phase 4D-B1.2 closeout -> implemented
+Phase 4D-B1.3 default pipeline sanity -> accepted
+Phase 4D-C expanded unseen validation -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
 ```
+
+Phase 4D-B1.3 accepted server sanity:
+
+```text
+candidate_evidence_completeness.qa_count = 90
+candidate_evidence_completeness.candidate_evidence_count = 90
+candidate_evidence_completeness.qid_set_match = true
+candidate_evidence_completeness.missing_qid_count = 0
+candidate_evidence_completeness.extra_qid_count = 0
+candidate_evidence_completeness.duplicate_candidate_qid_count = 0
+table_index_enhancement_enabled = false
+candidate_span_answer_coverage = 0.7444444444444445
+candidate_answer_coverage_all = 0.5222222222222223
+candidate_answer_coverage_top1 = 0.23333333333333334
+candidate_answer_coverage_top5 = 0.3888888888888889
+candidate_answer_coverage_top20 = 0.45555555555555555
+candidate_answer_no_gold_leakage = true
+completeness_ok = true
+table_index_enhancement_default_disabled_ok = true
+coverage_matches_phase4c_baseline = true
+accepted = true
+```
+
+Current conclusion:
+
+- Phase 4C `candidate_spans` is accepted.
+- Phase 4D-A diagnostics and failure attribution tooling are accepted as
+  diagnostic infrastructure.
+- Phase 4D-B1.1 candidate evidence completeness fix is accepted and retained.
+- Phase 4D-B1 table/index enhancement is not accepted as default; it remains
+  experimental behind `--enable-table-index-packing`.
+- Phase 4D-B1.3 default pipeline sanity is accepted.
+- Candidate-ID Reader remains postponed.
+- Phase 4D-C expanded unseen validation is next.
 
 Phase 4D-A accepted server audit:
 
@@ -330,9 +365,11 @@ Phase 4D-A.3.1 server refined summary -> accepted
 Phase 4D-A.4 local implementation -> implemented
 Phase 4D-A.4 server final gap review -> accepted
 Phase 4D-B1 local implementation -> implemented
-Phase 4D-B1 server validation -> blocked
 Phase 4D-B1.1 local implementation -> implemented
-Phase 4D-B1.1 server validation -> not_started
+Phase 4D-B1.1 server validation -> accepted
+Phase 4D-B1.2 closeout -> implemented
+Phase 4D-B1.3 default pipeline sanity -> accepted
+Phase 4D-C expanded unseen validation -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -356,8 +393,8 @@ Unchanged boundary:
   mode, not a global default;
 - Reader prompts, AnswerPolicy, retrieval models, MinerU, checkpoints, reward,
   training data, CDC, and Demo remain unchanged;
-- Phase 4D-A through Phase 4D-A.3 server audits are accepted; Phase 4D-A.3.1
-  server refined summary has not yet run.
+- Phase 4D-A diagnostics and failure attribution tooling through Phase
+  4D-A.4 are accepted as diagnostic infrastructure.
 
 ## Phase 4C Accepted
 
@@ -384,9 +421,11 @@ Phase 4D-A.3.1 server refined summary -> accepted
 Phase 4D-A.4 local implementation -> implemented
 Phase 4D-A.4 server final gap review -> accepted
 Phase 4D-B1 local implementation -> implemented
-Phase 4D-B1 server validation -> blocked
 Phase 4D-B1.1 local implementation -> implemented
-Phase 4D-B1.1 server validation -> not_started
+Phase 4D-B1.1 server validation -> accepted
+Phase 4D-B1.2 closeout -> implemented
+Phase 4D-B1.3 default pipeline sanity -> accepted
+Phase 4D-C expanded unseen validation -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -492,9 +531,11 @@ Phase 4D-A.3.1 server refined summary -> accepted
 Phase 4D-A.4 local implementation -> implemented
 Phase 4D-A.4 server final gap review -> accepted
 Phase 4D-B1 local implementation -> implemented
-Phase 4D-B1 server validation -> blocked
 Phase 4D-B1.1 local implementation -> implemented
-Phase 4D-B1.1 server validation -> not_started
+Phase 4D-B1.1 server validation -> accepted
+Phase 4D-B1.2 closeout -> implemented
+Phase 4D-B1.3 default pipeline sanity -> accepted
+Phase 4D-C expanded unseen validation -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started

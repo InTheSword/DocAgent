@@ -6,7 +6,7 @@
 ## Current Stage
 
 ```text
-Phase 4D-B1.1: Candidate evidence completeness regression fix
+Phase 4D-C: Expanded Unseen Validation with Accepted Default Pipeline
 ```
 
 ## Current Goal
@@ -24,6 +24,8 @@ Phase 4C candidate_evidence.jsonl
 -> final subtype split for candidate_span_or_normalization_gap before any repair
 -> one narrow generic table/index candidate span selection fix
 -> candidate_evidence completeness regression fix before B1 metrics can be used
+-> close 90-sample probe tuning after default pipeline sanity
+-> expanded unseen validation with the accepted default pipeline
 ```
 
 ## Current Status
@@ -63,9 +65,11 @@ Phase 4D-A.3.1 server refined summary -> accepted
 Phase 4D-A.4 local implementation -> implemented
 Phase 4D-A.4 server final gap review -> accepted
 Phase 4D-B1 local implementation -> implemented
-Phase 4D-B1 server validation -> blocked
 Phase 4D-B1.1 local implementation -> implemented
-Phase 4D-B1.1 server validation -> not_started
+Phase 4D-B1.1 server validation -> accepted
+Phase 4D-B1.2 closeout -> implemented
+Phase 4D-B1.3 default pipeline sanity -> accepted
+Phase 4D-C expanded unseen validation -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -95,10 +99,11 @@ evaluation implementation, metrics, or conclusions in this phase.
   answer hit, candidate-answer coverage, and top-k coverage.
 - split `candidate_span_or_normalization_gap` into final diagnostic subtypes
   for audit and decision guidance only.
-- implement one narrow generic table/index candidate span selection fix after
-  A.4 showed `table_or_index_span_gap` is the dominant subtype.
-- restore complete `candidate_evidence.jsonl` output and fail fast if
-  candidate evidence qids do not match the loaded QA qids.
+- preserve the accepted default `candidate_spans` path for expanded unseen
+  validation.
+- keep B1 table/index scoring/context enhancement disabled by default and
+  available only through the experimental `--enable-table-index-packing` flag.
+- do not continue tuning the 90-sample probe.
 
 ## Blockers
 
@@ -122,11 +127,12 @@ evaluation implementation, metrics, or conclusions in this phase.
 - Phase 4D-A.4 final diagnostic is accepted. It confirmed
   `table_or_index_span_gap = 10` as the dominant generic subtype inside the
   21 `candidate_span_or_normalization_gap` cases.
-- Phase 4D-B1 server validation is blocked by a completeness regression:
-  B1 `candidate_evidence.jsonl` contained only 9 QA records out of the 90-QA
-  Gate 4 probe, so B1 coverage diagnostics are invalid.
-- Phase 4D-B1.1 local implementation restores full loaded-QA candidate
-  evidence output and adds fail-fast qid completeness checks.
+- Phase 4D-B1.1 candidate evidence completeness fix is accepted.
+- Phase 4D-B1.3 default pipeline sanity is accepted; the default
+  `candidate_spans` path reproduced the Phase 4C baseline with table/index
+  enhancement disabled.
+- 90-sample probe tuning is closed. The next phase is expanded unseen
+  validation, not another per-case repair.
 
 Gate 4 accepted server scope:
 
@@ -464,6 +470,59 @@ Phase 4D-B1.2 closeout:
 - A.4 remains the final diagnostic split for the 90-sample probe. No further
   per-case tuning on this probe is allowed.
 
+Phase 4D-B1.3 accepted default pipeline sanity:
+
+```text
+candidate_evidence_completeness.qa_count = 90
+candidate_evidence_completeness.candidate_evidence_count = 90
+candidate_evidence_completeness.qid_set_match = true
+candidate_evidence_completeness.missing_qid_count = 0
+candidate_evidence_completeness.extra_qid_count = 0
+candidate_evidence_completeness.duplicate_candidate_qid_count = 0
+table_index_enhancement_enabled = false
+candidate_span_answer_coverage = 0.7444444444444445
+candidate_answer_coverage_all = 0.5222222222222223
+candidate_answer_coverage_top1 = 0.23333333333333334
+candidate_answer_coverage_top5 = 0.3888888888888889
+candidate_answer_coverage_top20 = 0.45555555555555555
+candidate_answer_no_gold_leakage = true
+completeness_ok = true
+table_index_enhancement_default_disabled_ok = true
+coverage_matches_phase4c_baseline = true
+accepted = true
+```
+
+Phase 4D-C planned default pipeline:
+
+```text
+evidence_packing = candidate_spans
+rank_aware_context = false
+table_index_enhancement_enabled = false
+enable_table_index_packing = false
+no Candidate-ID Reader
+no full GRPO training
+no prompt tuning
+```
+
+Phase 4D-C first validation target:
+
+- MP-DocVQA validation shards 5-8;
+- 200-300 QA;
+- keep page-count bucket coverage;
+- do not run all 29 shards at once.
+
+Phase 4D-C staged validation:
+
+1. Step A: expanded sample manifest (CPU).
+2. Step B: ingestion missing windows if needed (CPU unless MinerU is invoked
+   externally).
+3. Step C: retrieval-only + candidate_spans (GPU required; loads BGE-M3 and
+   reranker).
+4. Step D: candidate answer diagnostics (CPU).
+5. Step E: failure attribution diagnostics (CPU).
+6. Step F: optional full E2E only if retrieval and diagnostics are stable (GPU
+   required; loads Qwen3 and the GRPO adapter).
+
 ## Local Validation
 
 Local `main` validation covers code and documentation state. The accepted Gate
@@ -502,7 +561,8 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Run larger unseen validation with the accepted pipeline and existing
+1. Run Phase 4D-C expanded unseen validation with the accepted default
+   `candidate_spans` pipeline and existing
    diagnostics.
 2. Keep `page_children` as the default until more shard and document-type
    validation supports a global default change.
@@ -513,7 +573,8 @@ absolute_path_hit_count = 0
 ## Stop Condition
 
 ```text
-Phase 4D-B1.2 local implementation implemented
+Phase 4D-B1.3 server sanity accepted
++ Phase 4D-C plan documented
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

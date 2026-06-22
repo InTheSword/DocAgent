@@ -8,6 +8,46 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-22: Phase 4D-B1.3 Default Pipeline Sanity Accepted
+
+Decision: accept Phase 4D-B1.3 default pipeline sanity, close tuning on the
+90-sample probe, and move next to Phase 4D-C expanded unseen validation.
+
+Evidence:
+
+- Candidate evidence completeness passed with `qa_count = 90`,
+  `candidate_evidence_count = 90`, exact qid-set match, and zero missing,
+  extra, or duplicate candidate qids.
+- `table_index_enhancement_enabled = false`, confirming the default
+  `candidate_spans` path does not run the B1 table/index enhancement.
+- Default coverage reproduced the accepted Phase 4C baseline:
+  `candidate_span_answer_coverage = 0.7444444444444445`,
+  `candidate_answer_coverage_all = 0.5222222222222223`,
+  `candidate_answer_coverage_top1 = 0.23333333333333334`,
+  `candidate_answer_coverage_top5 = 0.3888888888888889`, and
+  `candidate_answer_coverage_top20 = 0.45555555555555555`.
+- `candidate_answer_no_gold_leakage = true`.
+
+Current conclusion:
+
+- Phase 4C `candidate_spans` is accepted.
+- Phase 4D-A diagnostics and failure attribution tooling are accepted as
+  diagnostic infrastructure.
+- Phase 4D-B1.1 candidate evidence completeness fix is accepted and retained.
+- Phase 4D-B1 table/index enhancement is not accepted as default and remains
+  experimental behind `--enable-table-index-packing`.
+- Candidate-ID Reader remains postponed.
+
+Next phase:
+
+- Phase 4D-C: Expanded Unseen Validation with Accepted Default Pipeline.
+- Use the default pipeline: `evidence_packing = candidate_spans`,
+  `rank_aware_context = false`, `table_index_enhancement_enabled = false`,
+  `enable_table_index_packing = false`, no Candidate-ID Reader, no full GRPO
+  training, and no prompt tuning.
+- First unseen target: MP-DocVQA validation shards 5-8, 200-300 QA, with
+  page-count bucket coverage; do not run all 29 validation shards at once.
+
 ## 2026-06-22: Phase 4D-B1.2 Disable Table / Index Enhancement by Default
 
 Decision: retain the Phase 4D-B1.1 candidate evidence completeness fix, but do
