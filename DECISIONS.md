@@ -8,6 +8,45 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-22: Phase 4D-C Scaffold and Command Preparation Started
+
+Decision: start Phase 4D-C scaffold / command preparation on branch
+`codex/phase4d-c-expanded-unseen-validation`, created from `origin/main`, and
+do not run server validation in this round.
+
+Goal:
+
+- Phase 4D-C is expanded unseen validation, not another 90-sample probe tuning
+  round.
+- First target remains MP-DocVQA validation shards 5-8 with 200-300 QA and
+  page-count bucket coverage.
+- The default pipeline remains accepted `candidate_spans` with
+  `rank_aware_context = false`, `table_index_enhancement_enabled = false`,
+  `enable_table_index_packing = false`, no Candidate-ID Reader, no prompt
+  tuning, and no training.
+
+Capability check:
+
+- Existing scripts are sufficient for Step A-E command preparation.
+- Step A: `scripts/build_phase4b_expanded_sample.py`.
+- Step B: `scripts/run_phase4b_mpdocvqa_ingestion.py`.
+- Step C: `scripts/run_phase4b_mpdocvqa_e2e.py --retrieval-only
+  --evidence-packing candidate_spans`.
+- Step D: `scripts/analyze_phase4d_candidate_answer_coverage.py`.
+- Step E: `scripts/export_phase4d_failure_inspection.py`, including
+  `--candidate-span-gap-review`.
+
+Boundary:
+
+- No code changes are required for this scaffold round.
+- Do not enable `--enable-table-index-packing`.
+- Do not enable `--rank-aware-context`.
+- Do not enter Candidate-ID Reader, AnswerPolicy prompt changes, training,
+  full GRPO E2E by default, CDC, Demo, or further 90-sample probe tuning.
+- Candidate-ID Reader remains postponed until expanded unseen diagnostics show
+  reader-selection failures dominate after candidate coverage issues are
+  resolved.
+
 ## 2026-06-22: Phase 4D-B1.3 Default Pipeline Sanity Accepted
 
 Decision: accept Phase 4D-B1.3 default pipeline sanity, close tuning on the

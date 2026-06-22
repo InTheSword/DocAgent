@@ -70,6 +70,7 @@ Phase 4D-B1.1 server validation -> accepted
 Phase 4D-B1.2 closeout -> implemented
 Phase 4D-B1.3 default pipeline sanity -> accepted
 Phase 4D-C expanded unseen validation -> not_started
+Phase 4D-C scaffold / command preparation -> ready
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -522,6 +523,62 @@ Phase 4D-C staged validation:
 5. Step E: failure attribution diagnostics (CPU).
 6. Step F: optional full E2E only if retrieval and diagnostics are stable (GPU
    required; loads Qwen3 and the GRPO adapter).
+
+Phase 4D-C scaffold / command preparation:
+
+```text
+branch = codex/phase4d-c-expanded-unseen-validation
+branch_base = origin/main
+status = ready
+script_support = existing scripts cover Step A-E
+code_changes = none
+server_execution = not_started
+```
+
+Existing script support:
+
+- `scripts/build_phase4b_expanded_sample.py` builds the shards 5-8 expanded
+  sample manifest, preserves `source_doc_id + ordered_page_ids ->
+  window_signature -> doc_id`, writes `expanded_sample_manifest.jsonl`,
+  `selection_summary.json`, `documents.jsonl`, and `qa.jsonl`, and keeps
+  page-window document identity.
+- `scripts/run_phase4b_mpdocvqa_ingestion.py` supports `--skip-existing`,
+  `--revalidate-existing`, live MinerU API ingestion, QA page mapping checks,
+  portability checks, and per-window `acceptance_report.json`.
+- `scripts/run_phase4b_mpdocvqa_e2e.py --retrieval-only --evidence-packing
+  candidate_spans` writes retrieval artifacts, candidate evidence, candidate
+  packing metrics, gold-page rank distributions, by-doc/by-shard retrieval
+  metrics, completeness checks, and no-gold-leakage checks.
+- `scripts/analyze_phase4d_candidate_answer_coverage.py` writes candidate
+  answer coverage, all/top-k coverage, distractor metrics, and gold-free
+  candidate answer boards.
+- `scripts/export_phase4d_failure_inspection.py` writes refined failure
+  inspection artifacts and `--candidate-span-gap-review` artifacts.
+
+Prepared command defaults:
+
+```text
+evidence_packing = candidate_spans
+rank_aware_context = false
+table_index_enhancement_enabled = false
+enable_table_index_packing = false
+no Candidate-ID Reader
+no prompt tuning
+no training
+no full GRPO by default
+```
+
+CPU/GPU boundary:
+
+```text
+Step A manifest = CPU
+Step B ingestion missing windows = CPU for the existing MinerU API client;
+  isolated MinerU environment required only if local MinerU is substituted
+Step C retrieval-only = GPU required for BGE-M3 and reranker
+Step D candidate answer diagnostics = CPU
+Step E failure attribution diagnostics = CPU
+Step F optional full E2E = GPU required for Qwen3 + GRPO adapter
+```
 
 ## Local Validation
 

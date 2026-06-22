@@ -7,7 +7,9 @@ Updated: 2026-06-22
 Phase 4D-B1.3 default pipeline sanity is accepted. The default
 `candidate_spans` path reproduces the accepted Phase 4C baseline with
 `table_index_enhancement_enabled = false`. The 90-sample probe is closed to
-further tuning. The next phase is Phase 4D-C expanded unseen validation.
+further tuning. The Phase 4D-C scaffold and server command plan are ready on
+branch `codex/phase4d-c-expanded-unseen-validation`; server execution has not
+started. The next phase is Phase 4D-C expanded unseen validation.
 
 Status:
 
@@ -34,6 +36,7 @@ Phase 4D-B1.1 server validation -> accepted
 Phase 4D-B1.2 closeout -> implemented
 Phase 4D-B1.3 default pipeline sanity -> accepted
 Phase 4D-C expanded unseen validation -> not_started
+Phase 4D-C scaffold / command preparation -> ready
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -72,6 +75,25 @@ Current conclusion:
 - Phase 4D-B1.3 default pipeline sanity is accepted.
 - Candidate-ID Reader remains postponed.
 - Phase 4D-C expanded unseen validation is next.
+
+Phase 4D-C scaffold / command preparation:
+
+- Branch started from `origin/main`:
+  `codex/phase4d-c-expanded-unseen-validation`.
+- Goal is expanded unseen validation on MP-DocVQA validation shards 5-8, not
+  further 90-sample probe tuning.
+- Existing scripts are sufficient for Step A-E command preparation:
+  `build_phase4b_expanded_sample.py`, `run_phase4b_mpdocvqa_ingestion.py`,
+  `run_phase4b_mpdocvqa_e2e.py`,
+  `analyze_phase4d_candidate_answer_coverage.py`, and
+  `export_phase4d_failure_inspection.py`.
+- No code changes were required for this scaffold round.
+- Default pipeline remains accepted `candidate_spans` with
+  `rank_aware_context = false`, table/index enhancement disabled, no
+  Candidate-ID Reader, no prompt tuning, and no training.
+- Candidate-ID Reader remains postponed until expanded unseen diagnostics show
+  reader-selection failures dominate after candidate coverage issues are
+  resolved.
 
 Phase 4D-A accepted server audit:
 

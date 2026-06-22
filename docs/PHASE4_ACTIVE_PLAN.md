@@ -908,6 +908,7 @@ Status:
 
 ```text
 Phase 4D-C expanded unseen validation -> not_started
+Phase 4D-C scaffold / command preparation -> ready
 ```
 
 Goal:
@@ -954,6 +955,213 @@ Resource notes:
 - manifest and diagnostics: CPU;
 - retrieval-only: GPU required because it loads BGE-M3 and the reranker;
 - full E2E: GPU required because it loads Qwen3 and the GRPO adapter.
+
+Scaffold status:
+
+```text
+branch = codex/phase4d-c-expanded-unseen-validation
+branch_base = origin/main
+server_execution = not_started
+code_changes = none
+script_support = existing scripts cover Step A-E
+```
+
+Existing script support:
+
+- Step A is covered by `scripts/build_phase4b_expanded_sample.py`. It accepts
+  multiple val parquet shards, uses `source_doc_id + ordered_page_ids` for
+  window identity, writes `expanded_sample_manifest.jsonl`,
+  `selection_summary.json`, `documents.jsonl`, and `qa.jsonl`, and keeps
+  page-window `doc_id` separate from the raw source `doc_id`.
+- Step B is covered by `scripts/run_phase4b_mpdocvqa_ingestion.py` with
+  `--skip-existing` or `--revalidate-existing`. It writes per-window
+  `acceptance_report.json` with page counts, QA counts, mapping validity,
+  missing image references, persisted absolute path counts, no-mock status,
+  warnings, and failures.
+- Step C is covered by `scripts/run_phase4b_mpdocvqa_e2e.py --retrieval-only
+  --evidence-packing candidate_spans`. It writes `page_corpus.jsonl`,
+  `page_retrieval_results.jsonl`, `page_retrieval_metrics.json`,
+  `retrieval_preview.json`, `candidate_evidence.jsonl`,
+  `candidate_packing_metrics.json`, `summary.json`, and `summary.md`.
+- Step D is covered by `scripts/analyze_phase4d_candidate_answer_coverage.py`.
+  It writes candidate answer boards, all/top-k coverage metrics, distractor
+  metrics, and no-gold-leakage checks.
+- Step E is covered by `scripts/export_phase4d_failure_inspection.py`,
+  including refined failure summaries and `--candidate-span-gap-review`.
+
+Prepared server commands:
+
+Step A manifest (CPU):
+
+```bash
+cd /root/autodl-tmp/docagent
+source /root/miniconda3/etc/profile.d/conda.sh
+conda activate docagent
+git status --short
+git fetch origin --prune
+git switch codex/phase4d-c-expanded-unseen-validation
+mkdir -p outputs/logs/phase4d_c
+test -f /root/autodl-tmp/datasets/mp_docvqa/parquet/val-00005-of-00029.parquet
+test -f /root/autodl-tmp/datasets/mp_docvqa/parquet/val-00006-of-00029.parquet
+test -f /root/autodl-tmp/datasets/mp_docvqa/parquet/val-00007-of-00029.parquet
+test -f /root/autodl-tmp/datasets/mp_docvqa/parquet/val-00008-of-00029.parquet
+python scripts/build_phase4b_expanded_sample.py \
+  --input-parquet \
+    /root/autodl-tmp/datasets/mp_docvqa/parquet/val-00005-of-00029.parquet \
+    /root/autodl-tmp/datasets/mp_docvqa/parquet/val-00006-of-00029.parquet \
+    /root/autodl-tmp/datasets/mp_docvqa/parquet/val-00007-of-00029.parquet \
+    /root/autodl-tmp/datasets/mp_docvqa/parquet/val-00008-of-00029.parquet \
+  --output-root outputs/phase4/mpdocvqa_raw_phase4d_c_shards5_8 \
+  --target-qa-count 250 \
+  --min-qa-count 200 \
+  --max-qa-count 300 \
+  --seed phase4d-c-shards5-8 \
+  > outputs/logs/phase4d_c/step_a_manifest.log 2>&1
+python - <<'PY'
+import json
+from pathlib import Path
+root = Path("outputs/phase4/mpdocvqa_raw_phase4d_c_shards5_8")
+summary = json.loads((root / "selection_summary.json").read_text())
+print(json.dumps({"command": "Step A manifest", "status": "success", "artifact_paths": [str(root / "expanded_sample_manifest.jsonl"), str(root / "selection_summary.json"), str(root / "qa.jsonl")], "metrics": summary}, ensure_ascii=False))
+PY
+```
+
+Step B ingestion missing windows (CPU for existing MinerU API client; use an
+isolated MinerU environment only if replacing API ingestion with local MinerU):
+
+```bash
+cd /root/autodl-tmp/docagent
+source /root/miniconda3/etc/profile.d/conda.sh
+conda activate docagent
+mkdir -p outputs/logs/phase4d_c
+python - <<'PY' > outputs/phase4/phase4d_c_doc_ids.txt
+import json
+from pathlib import Path
+manifest = Path("outputs/phase4/mpdocvqa_raw_phase4d_c_shards5_8/expanded_sample_manifest.jsonl")
+for line in manifest.read_text().splitlines():
+    if line.strip():
+        print(json.loads(line)["doc_id"])
+PY
+python - <<'PY'
+import os
+if not os.getenv("MINERU_TOKEN"):
+    raise SystemExit("MINERU_TOKEN is missing; set it without printing it.")
+print('{"command": "Step B preflight", "status": "success", "artifact_paths": [], "metrics": {"mineru_token_set": true}}')
+PY
+while read -r doc_id; do
+  python scripts/run_phase4b_mpdocvqa_ingestion.py \
+    --sample-root outputs/phase4/mpdocvqa_raw_phase4d_c_shards5_8 \
+    --doc-id "$doc_id" \
+    --output-root outputs/phase4/mpdocvqa_ingestion \
+    --gate phase4d_c \
+    --live-api \
+    --skip-existing \
+    > "outputs/logs/phase4d_c/step_b_ingest_${doc_id}.log" 2>&1
+done < outputs/phase4/phase4d_c_doc_ids.txt
+python - <<'PY'
+import json
+from pathlib import Path
+root = Path("outputs/phase4/mpdocvqa_ingestion")
+doc_ids = Path("outputs/phase4/phase4d_c_doc_ids.txt").read_text().splitlines()
+reports = [json.loads((root / doc_id / "acceptance_report.json").read_text()) for doc_id in doc_ids]
+failures = [r for r in reports if r.get("status") != "success" or r.get("failures")]
+print(json.dumps({"command": "Step B ingestion missing windows", "status": "success" if not failures else "failed", "artifact_paths": [str(root / doc_id / "acceptance_report.json") for doc_id in doc_ids], "metrics": {"window_count": len(reports), "failed_window_count": len(failures)}}, ensure_ascii=False))
+PY
+```
+
+Step C retrieval-only + candidate_spans (GPU required for BGE-M3/reranker):
+
+```bash
+cd /root/autodl-tmp/docagent
+source /root/miniconda3/etc/profile.d/conda.sh
+conda activate docagent
+mkdir -p outputs/logs/phase4d_c
+test -d /root/autodl-tmp/models/bge-m3
+test -d /root/autodl-tmp/models/bge-reranker-v2-m3
+python scripts/run_phase4b_mpdocvqa_e2e.py \
+  --sample-root outputs/phase4/mpdocvqa_raw_phase4d_c_shards5_8 \
+  --ingestion-root outputs/phase4/mpdocvqa_ingestion \
+  --output-root outputs/evaluation/phase4d_c_expanded_unseen \
+  --run-id phase4d_c_retrieval_candidate_spans \
+  --gate phase4d_c \
+  --retrieval-only \
+  --evidence-packing candidate_spans \
+  --top-k-pages 5 \
+  --dense-backend bge \
+  --dense-model-path /root/autodl-tmp/models/bge-m3 \
+  --reranker-backend cross_encoder \
+  --reranker-model-path /root/autodl-tmp/models/bge-reranker-v2-m3 \
+  --retrieval-device cuda \
+  > outputs/logs/phase4d_c/step_c_retrieval_only.log 2>&1
+python - <<'PY'
+import json
+from pathlib import Path
+run = Path("outputs/evaluation/phase4d_c_expanded_unseen/phase4d_c_retrieval_candidate_spans")
+summary = json.loads((run / "summary.json").read_text())
+metrics = {"qa_count": summary["qa_count"], "candidate_evidence_completeness": summary["candidate_evidence_completeness"], "page_retrieval_metrics": summary["page_retrieval_metrics"]}
+print(json.dumps({"command": "Step C retrieval-only + candidate_spans", "status": "success", "artifact_paths": [str(run / name) for name in ("page_corpus.jsonl", "page_retrieval_results.jsonl", "page_retrieval_metrics.json", "retrieval_preview.json", "candidate_evidence.jsonl", "candidate_packing_metrics.json", "summary.json", "summary.md")], "metrics": metrics}, ensure_ascii=False))
+PY
+```
+
+Step D candidate answer diagnostics (CPU):
+
+```bash
+cd /root/autodl-tmp/docagent
+source /root/miniconda3/etc/profile.d/conda.sh
+conda activate docagent
+mkdir -p outputs/logs/phase4d_c
+python scripts/analyze_phase4d_candidate_answer_coverage.py \
+  --candidate-evidence outputs/evaluation/phase4d_c_expanded_unseen/phase4d_c_retrieval_candidate_spans/candidate_evidence.jsonl \
+  --qa-jsonl outputs/phase4/mpdocvqa_raw_phase4d_c_shards5_8/qa.jsonl \
+  --page-retrieval-results outputs/evaluation/phase4d_c_expanded_unseen/phase4d_c_retrieval_candidate_spans/page_retrieval_results.jsonl \
+  --candidate-packing-metrics outputs/evaluation/phase4d_c_expanded_unseen/phase4d_c_retrieval_candidate_spans/candidate_packing_metrics.json \
+  --phase4c-summary outputs/evaluation/phase4d_c_expanded_unseen/phase4d_c_retrieval_candidate_spans/summary.json \
+  --output-root outputs/evaluation/phase4d_c_expanded_unseen \
+  --run-id phase4d_c_candidate_answer_coverage \
+  --top-k 20 \
+  > outputs/logs/phase4d_c/step_d_candidate_answer_coverage.log 2>&1
+python - <<'PY'
+import json
+from pathlib import Path
+run = Path("outputs/evaluation/phase4d_c_expanded_unseen/phase4d_c_candidate_answer_coverage")
+summary = json.loads((run / "summary.json").read_text())
+print(json.dumps({"command": "Step D candidate answer diagnostics", "status": "success", "artifact_paths": [str(run / name) for name in ("candidate_answer_coverage_metrics.json", "candidate_answers.jsonl", "candidate_answers_topk.jsonl", "summary.md")], "metrics": summary["metrics"]}, ensure_ascii=False))
+PY
+```
+
+Step E failure attribution diagnostics (CPU; reader-specific attribution remains
+provisional until optional full E2E answer results exist):
+
+```bash
+cd /root/autodl-tmp/docagent
+source /root/miniconda3/etc/profile.d/conda.sh
+conda activate docagent
+mkdir -p outputs/logs/phase4d_c
+python scripts/export_phase4d_failure_inspection.py \
+  --run-dir outputs/evaluation/phase4d_c_expanded_unseen/phase4d_c_candidate_answer_coverage \
+  --candidate-evidence outputs/evaluation/phase4d_c_expanded_unseen/phase4d_c_retrieval_candidate_spans/candidate_evidence.jsonl \
+  --qa-jsonl outputs/phase4/mpdocvqa_raw_phase4d_c_shards5_8/qa.jsonl \
+  --output-root outputs/evaluation/phase4d_c_expanded_unseen \
+  --run-id phase4d_c_failure_inspection_refined \
+  --buckets C,D,E \
+  > outputs/logs/phase4d_c/step_e_failure_inspection.log 2>&1
+python scripts/export_phase4d_failure_inspection.py \
+  --candidate-span-gap-review \
+  --source-refined-run-dir outputs/evaluation/phase4d_c_expanded_unseen/phase4d_c_failure_inspection_refined \
+  --output-root outputs/evaluation/phase4d_c_expanded_unseen \
+  --run-id phase4d_c_candidate_span_gap_review \
+  > outputs/logs/phase4d_c/step_e_candidate_span_gap_review.log 2>&1
+python - <<'PY'
+import json
+from pathlib import Path
+root = Path("outputs/evaluation/phase4d_c_expanded_unseen")
+refined = root / "phase4d_c_failure_inspection_refined"
+gap = root / "phase4d_c_candidate_span_gap_review"
+summary = json.loads((refined / "failure_inspection_refined_summary.json").read_text())
+gap_summary = json.loads((gap / "candidate_span_gap_summary.json").read_text())
+print(json.dumps({"command": "Step E failure attribution diagnostics", "status": "success", "artifact_paths": [str(refined / name) for name in ("failure_inspection_refined_cases.jsonl", "failure_inspection_refined_summary.json", "failure_inspection_refined_summary.md")] + [str(gap / name) for name in ("candidate_span_gap_summary.json", "candidate_span_gap_summary.md")], "metrics": {"refined_failure_source_counts": summary["refined_failure_source_counts"], "true_failure_action_counts": summary["true_failure_action_counts"], "gap_subtype_counts": gap_summary["gap_subtype_counts"]}}, ensure_ascii=False))
+PY
+```
 
 ## 9. Stop Condition
 
