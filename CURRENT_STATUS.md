@@ -2,13 +2,13 @@
 
 Updated: 2026-06-22
 
-## Phase 4D-B1 Local Implementation
+## Phase 4D-B1.1 Local Implementation
 
-Phase 4D-A.4 final diagnostic is accepted and is the final diagnostic split
-for this 90-sample probe. It showed `table_or_index_span_gap = 10` as the
-dominant concentrated subtype inside the 21
-`candidate_span_or_normalization_gap` cases. Phase 4D-B1 implements the single
-allowed narrow generic repair: table/index candidate span selection.
+Phase 4D-B1 server sanity triage found a candidate evidence completeness
+regression: B1 generated only 9 `candidate_evidence.jsonl` rows for the
+90-QA Gate 4 probe. B1 diagnostics are invalid until completeness is restored.
+Phase 4D-B1.1 restores full loaded-QA candidate evidence output and adds
+fail-fast qid completeness checks.
 
 Status:
 
@@ -30,7 +30,9 @@ Phase 4D-A.3.1 server refined summary -> accepted
 Phase 4D-A.4 local implementation -> implemented
 Phase 4D-A.4 server final gap review -> accepted
 Phase 4D-B1 local implementation -> implemented
-Phase 4D-B1 server validation -> not_started
+Phase 4D-B1 server validation -> blocked
+Phase 4D-B1.1 local implementation -> implemented
+Phase 4D-B1.1 server validation -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -233,12 +235,44 @@ Phase 4D-B1 implemented boundary:
   coverage, top-span field-value presence, neighbor context, and
   parenthesized-index span counts.
 
+Phase 4D-B1 server sanity triage:
+
+```text
+qa_qid_count = 90
+baseline_qid_count = 90
+b1_qid_count = 9
+qa_missing_from_b1 = 81
+baseline_b1_qid_overlap = 9
+baseline row_count = 90
+b1 row_count = 9
+baseline sample_count = 90
+b1 sample_count = 9
+```
+
+Root cause:
+
+- The server validation command did not pass an explicit Gate 4 doc-id
+  manifest.
+- The runner fell back to `DEFAULT_DOC_IDS`, the three historical Gate 3
+  documents, instead of inferring all document windows from the active
+  expanded `sample_root/qa.jsonl`.
+
+Phase 4D-B1.1 implemented boundary:
+
+- infer doc scope from `sample_root/qa.jsonl` when no explicit doc scope is
+  provided;
+- preserve original candidate_spans fallback for non-table/index questions;
+- add `candidate_evidence_completeness` to summary and candidate packing
+  metrics;
+- fail before writing candidate evidence if candidate records do not exactly
+  match the loaded QA qid set.
+
 Unchanged boundary:
 
 - Reader prompts, AnswerPolicy, retrieval models, MinerU, checkpoints, reward,
   training data, CDC, Demo, and global `candidate_spans` default remain
   unchanged.
-- Phase 4D-B1 server validation has not yet run.
+- Phase 4D-B1.1 server validation has not yet run.
 
 ## Phase 4D-A Local Implementation
 
@@ -267,7 +301,9 @@ Phase 4D-A.3.1 server refined summary -> accepted
 Phase 4D-A.4 local implementation -> implemented
 Phase 4D-A.4 server final gap review -> accepted
 Phase 4D-B1 local implementation -> implemented
-Phase 4D-B1 server validation -> not_started
+Phase 4D-B1 server validation -> blocked
+Phase 4D-B1.1 local implementation -> implemented
+Phase 4D-B1.1 server validation -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -319,7 +355,9 @@ Phase 4D-A.3.1 server refined summary -> accepted
 Phase 4D-A.4 local implementation -> implemented
 Phase 4D-A.4 server final gap review -> accepted
 Phase 4D-B1 local implementation -> implemented
-Phase 4D-B1 server validation -> not_started
+Phase 4D-B1 server validation -> blocked
+Phase 4D-B1.1 local implementation -> implemented
+Phase 4D-B1.1 server validation -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -425,7 +463,9 @@ Phase 4D-A.3.1 server refined summary -> accepted
 Phase 4D-A.4 local implementation -> implemented
 Phase 4D-A.4 server final gap review -> accepted
 Phase 4D-B1 local implementation -> implemented
-Phase 4D-B1 server validation -> not_started
+Phase 4D-B1 server validation -> blocked
+Phase 4D-B1.1 local implementation -> implemented
+Phase 4D-B1.1 server validation -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started

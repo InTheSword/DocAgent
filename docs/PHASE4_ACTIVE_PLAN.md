@@ -317,8 +317,9 @@ Do not:
 
 ## 8. Next Priorities
 
-1. Validate Phase 4D-B1 by regenerating candidate span artifacts and rerunning
-   A.2/A.3.1/A.4 diagnostics on the server.
+1. Validate Phase 4D-B1.1 by regenerating candidate span artifacts and
+   confirming full 90-QA candidate_evidence completeness before rerunning
+   A.2/A.3.1/A.4 diagnostics.
 2. Keep Phase 4C `candidate_spans` available as an accepted experimental and
    recommended evidence-packing mode.
 3. Keep CDC `not_started` until explicitly started.
@@ -651,7 +652,9 @@ Phase 4D-A.3.1 server refined summary -> accepted
 Phase 4D-A.4 local implementation -> implemented
 Phase 4D-A.4 server final gap review -> accepted
 Phase 4D-B1 local implementation -> implemented
-Phase 4D-B1 server validation -> not_started
+Phase 4D-B1 server validation -> blocked
+Phase 4D-B1.1 local implementation -> implemented
+Phase 4D-B1.1 server validation -> not_started
 ```
 
 Scope:
@@ -751,7 +754,9 @@ Status:
 
 ```text
 Phase 4D-B1 local implementation -> implemented
-Phase 4D-B1 server validation -> not_started
+Phase 4D-B1 server validation -> blocked
+Phase 4D-B1.1 local implementation -> implemented
+Phase 4D-B1.1 server validation -> not_started
 ```
 
 Scope:
@@ -772,12 +777,62 @@ Constraints:
   training, CDC, Demo, or the default evidence-packing mode.
 - Candidate-ID Reader remains postponed.
 
+Server sanity triage:
+
+```text
+qa_qid_count = 90
+baseline_qid_count = 90
+b1_qid_count = 9
+qa_missing_from_b1 = 81
+baseline_b1_qid_overlap = 9
+baseline row_count = 90
+b1 row_count = 9
+baseline sample_count = 90
+b1 sample_count = 9
+```
+
+Interpretation:
+
+- B1 coverage diagnostics are invalid until candidate evidence completeness is
+  restored.
+- Root cause is runner scope selection: without explicit `--doc-id` or
+  `--doc-id-file`, the runner fell back to the three historical default
+  documents instead of the active sample `qa.jsonl` doc set.
+
+## 8.9 Phase 4D-B1.1 Candidate Evidence Completeness Regression Fix
+
+Status:
+
+```text
+Phase 4D-B1.1 local implementation -> implemented
+Phase 4D-B1.1 server validation -> not_started
+```
+
+Scope:
+
+- infer document scope from `sample_root/qa.jsonl` when no explicit doc scope
+  is provided;
+- preserve B1 table/index behavior only as scoring/context enhancement for
+  matching questions;
+- keep original candidate_spans fallback behavior for non-table/index
+  questions;
+- add candidate evidence completeness checks before artifact writing;
+- add `candidate_evidence_completeness` to run summary and candidate packing
+  metrics.
+
+Acceptance requirement:
+
+- `candidate_evidence_row_count == qa_count`;
+- `candidate_evidence_qid_set == loaded_qa_qid_set`;
+- `candidate_packing_metrics.sample_count == qa_count`;
+- no gold leakage remains true.
+
 ## 9. Stop Condition
 
 Stop after the following are complete:
 
 ```text
-Phase 4D-B1 local implementation implemented
+Phase 4D-B1.1 local implementation implemented
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

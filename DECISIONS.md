@@ -8,6 +8,43 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-22: Phase 4D-B1.1 Candidate Evidence Completeness Regression Fix
+
+Decision: block B1 diagnostics until candidate evidence completeness is
+restored, then add fail-fast completeness checks to the retrieval-only
+`candidate_spans` path.
+
+Evidence:
+
+- B1 server sanity triage showed `qa_qid_count = 90` but `b1_qid_count = 9`.
+- `qa_missing_from_b1 = 81`.
+- B1 `candidate_evidence.jsonl` and candidate packing metrics had
+  `sample_count = 9`, so B1 coverage metrics were invalid.
+
+Root cause:
+
+- The server validation command did not pass a Gate 4 doc-id manifest.
+- With no explicit `--doc-id` or `--doc-id-file`, the runner fell back to the
+  three historical default documents instead of using the active sample
+  `qa.jsonl` doc set.
+
+Implementation boundary:
+
+- Infer document scope from `sample_root/qa.jsonl` when no explicit doc scope
+  is provided.
+- Add `candidate_evidence_completeness` to run summary and candidate packing
+  metrics.
+- Fail before writing candidate evidence when candidate record qids do not
+  exactly match the loaded QA qid set.
+- Preserve B1 table/index diagnostics as additive metrics only.
+
+Constraints:
+
+- Do not change Reader prompts, AnswerPolicy integration, retrieval models,
+  checkpoints, reward, training split, training data, CDC, Demo, or the global
+  `candidate_spans` default.
+- Do not run full GRPO for B1.1.
+
 ## 2026-06-22: Phase 4D-B1 Generic Table / Index Candidate Span Fix
 
 Decision: after the accepted Phase 4D-A.4 final diagnostic, implement exactly

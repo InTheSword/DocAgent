@@ -6,7 +6,7 @@
 ## Current Stage
 
 ```text
-Phase 4D-B1: Generic table / index candidate span selection fix
+Phase 4D-B1.1: Candidate evidence completeness regression fix
 ```
 
 ## Current Goal
@@ -23,6 +23,7 @@ Phase 4C candidate_evidence.jsonl
 -> refined action attribution from final-answer hit and candidate/top-k coverage
 -> final subtype split for candidate_span_or_normalization_gap before any repair
 -> one narrow generic table/index candidate span selection fix
+-> candidate_evidence completeness regression fix before B1 metrics can be used
 ```
 
 ## Current Status
@@ -62,7 +63,9 @@ Phase 4D-A.3.1 server refined summary -> accepted
 Phase 4D-A.4 local implementation -> implemented
 Phase 4D-A.4 server final gap review -> accepted
 Phase 4D-B1 local implementation -> implemented
-Phase 4D-B1 server validation -> not_started
+Phase 4D-B1 server validation -> blocked
+Phase 4D-B1.1 local implementation -> implemented
+Phase 4D-B1.1 server validation -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -94,6 +97,8 @@ evaluation implementation, metrics, or conclusions in this phase.
   for audit and decision guidance only.
 - implement one narrow generic table/index candidate span selection fix after
   A.4 showed `table_or_index_span_gap` is the dominant subtype.
+- restore complete `candidate_evidence.jsonl` output and fail fast if
+  candidate evidence qids do not match the loaded QA qids.
 
 ## Blockers
 
@@ -117,9 +122,11 @@ evaluation implementation, metrics, or conclusions in this phase.
 - Phase 4D-A.4 final diagnostic is accepted. It confirmed
   `table_or_index_span_gap = 10` as the dominant generic subtype inside the
   21 `candidate_span_or_normalization_gap` cases.
-- Phase 4D-B1 local implementation has no local blocker. Server validation
-  requires regenerating candidate span artifacts and rerunning diagnostics on
-  the existing 90-sample probe.
+- Phase 4D-B1 server validation is blocked by a completeness regression:
+  B1 `candidate_evidence.jsonl` contained only 9 QA records out of the 90-QA
+  Gate 4 probe, so B1 coverage diagnostics are invalid.
+- Phase 4D-B1.1 local implementation restores full loaded-QA candidate
+  evidence output and adds fail-fast qid completeness checks.
 
 Gate 4 accepted server scope:
 
@@ -415,6 +422,33 @@ Phase 4D-B1 boundary:
 - Do not modify Reader prompts, AnswerPolicy, retrieval models, training, CDC,
   Demo, or the global `candidate_spans` default.
 
+Phase 4D-B1 server sanity triage:
+
+```text
+qa_qid_count = 90
+baseline_qid_count = 90
+b1_qid_count = 9
+qa_missing_from_b1 = 81
+baseline_b1_qid_overlap = 9
+baseline row_count = 90
+b1 row_count = 9
+baseline sample_count = 90
+b1 sample_count = 9
+```
+
+Phase 4D-B1.1 implemented boundary:
+
+- when no explicit `--doc-id` or `--doc-id-file` is provided, infer the loaded
+  document scope from the active `sample_root/qa.jsonl` instead of falling back
+  to the three historical default documents;
+- keep table/index enhancements as per-question scoring/context behavior only;
+- preserve original candidate_spans fallback behavior for non-table/index
+  questions;
+- add `candidate_evidence_completeness` to summary and
+  `candidate_packing_metrics.json`;
+- fail before writing candidate evidence if candidate record count or qid set
+  does not match the loaded QA qid set.
+
 ## Local Validation
 
 Local `main` validation covers code and documentation state. The accepted Gate
@@ -453,9 +487,11 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Validate Phase 4D-B1 on the server by regenerating candidate span artifacts
-   and rerunning the A.2/A.3.1/A.4 diagnostics.
-2. Compare against A.4 before counts: `table_or_index_span_gap = 10`,
+1. Re-run Phase 4D-B1.1 server validation and confirm
+   `candidate_evidence_completeness.qid_set_match = true` with 90 candidate
+   evidence records.
+2. Then rerun A.2/A.3.1/A.4 diagnostics and compare against A.4 before counts:
+   `table_or_index_span_gap = 10`,
    `candidate_span_selection_gap = 5`,
    `candidate_span_partial_context_gap = 5`, and
    `page_number_or_content_lookup_gap = 1`.
@@ -466,7 +502,7 @@ absolute_path_hit_count = 0
 ## Stop Condition
 
 ```text
-Phase 4D-B1 local implementation implemented
+Phase 4D-B1.1 local implementation implemented
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

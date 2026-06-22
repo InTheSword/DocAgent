@@ -7,10 +7,20 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from docagent.schemas import EvidenceBlock, EvidenceLocation
 from docagent.utils.jsonl import read_jsonl, write_jsonl
 from docagent.workflow.prompts import build_evidence_context, compile_answer_prompt
-from scripts.run_phase4b_mpdocvqa_e2e import build_failure_cases, parse_args, run_phase4b_e2e
+from scripts.run_phase4b_mpdocvqa_e2e import (
+    Phase4BE2EError,
+    _assert_candidate_evidence_complete,
+    _candidate_evidence_completeness,
+    build_failure_cases,
+    load_gate3_inputs,
+    parse_args,
+    run_phase4b_e2e,
+)
 
 
 DOC_A = "docA__window"
@@ -363,10 +373,25 @@ def test_candidate_spans_retrieval_only_writes_artifacts_and_changes_fixed_evide
     assert summary["evidence_packing_mode"] == "candidate_spans"
     assert summary["fixed_evidence_hash"] != baseline_summary["fixed_evidence_hash"]
     assert summary["candidate_packing"]["no_gold_leakage"] is True
+    assert summary["candidate_evidence_completeness"] == {
+        "qa_count": 3,
+        "candidate_evidence_count": 3,
+        "qid_set_match": True,
+        "missing_qid_count": 0,
+        "extra_qid_count": 0,
+        "duplicate_candidate_qid_count": 0,
+        "missing_qids_preview": [],
+        "extra_qids_preview": [],
+        "duplicate_candidate_qids_preview": [],
+    }
     assert candidate_metrics["sample_count"] == 3
+    assert candidate_metrics["table_index_question_count"] == 0
+    assert candidate_metrics["candidate_evidence_completeness"]["qid_set_match"] is True
     assert candidate_metrics["no_gold_leakage"] is True
     assert candidate_metrics["mean_candidate_span_count"] > 0
     assert preview
+    assert len(candidate_rows) == 3
+    assert {row["qid"] for row in candidate_rows} == {"q_alpha", "q_beta", "q_gamma"}
     assert fixed_rows[0]["evidence_packing_mode"] == "candidate_spans"
     assert fixed_rows[0]["candidate_packing_stats"]["candidate_span_count"] > 0
     assert candidate_rows[0]["packing_mode"] == "candidate_spans"
@@ -376,6 +401,65 @@ def test_candidate_spans_retrieval_only_writes_artifacts_and_changes_fixed_evide
     assert "answers" not in serialized_candidates
     assert "gold_page" not in serialized_candidates
     assert all("\\" not in value and ":" not in value for value in summary["artifact_paths"].values())
+
+
+def test_candidate_spans_without_doc_scope_infers_all_qa_docs(tmp_path: Path) -> None:
+    sample_root, ingestion_root, output_root = _fixture(tmp_path)
+    args = parse_args(
+        [
+            "--sample-root",
+            str(sample_root),
+            "--ingestion-root",
+            str(ingestion_root),
+            "--output-root",
+            str(output_root),
+            "--run-id",
+            "candidate_all",
+            "--dense-backend",
+            "hash",
+            "--reranker-backend",
+            "keyword",
+            "--allow-mock-backends",
+            "--retrieval-only",
+            "--force",
+            "--evidence-packing",
+            "candidate_spans",
+        ]
+    )
+
+    summary = run_phase4b_e2e(args)
+    candidate_rows = read_jsonl(output_root / "candidate_all" / "candidate_evidence.jsonl")
+    candidate_metrics = json.loads((output_root / "candidate_all" / "candidate_packing_metrics.json").read_text(encoding="utf-8"))
+
+    assert summary["document_count"] == 2
+    assert summary["qa_count"] == 3
+    assert summary["candidate_evidence_completeness"]["candidate_evidence_count"] == 3
+    assert summary["candidate_evidence_completeness"]["qid_set_match"] is True
+    assert len(candidate_rows) == 3
+    assert {row["qid"] for row in candidate_rows} == {"q_alpha", "q_beta", "q_gamma"}
+    assert candidate_metrics["sample_count"] == 3
+    assert candidate_metrics["candidate_evidence_completeness"]["qid_set_match"] is True
+
+
+def test_candidate_evidence_completeness_fails_on_missing_qid(tmp_path: Path) -> None:
+    sample_root, ingestion_root, output_root = _fixture(tmp_path)
+    args = _args(sample_root, ingestion_root, output_root, "--validate-only")
+    windows = load_gate3_inputs(args)
+    completeness = _candidate_evidence_completeness(
+        [
+            {"qid": "q_alpha", "candidate_spans": []},
+            {"qid": "q_beta", "candidate_spans": []},
+        ],
+        windows,
+    )
+
+    assert completeness["qa_count"] == 3
+    assert completeness["candidate_evidence_count"] == 2
+    assert completeness["qid_set_match"] is False
+    assert completeness["missing_qid_count"] == 1
+    assert completeness["missing_qids_preview"] == ["q_gamma"]
+    with pytest.raises(Phase4BE2EError, match="candidate_evidence completeness check failed"):
+        _assert_candidate_evidence_complete(completeness)
 
 
 def test_full_mock_answer_policy_writes_answer_metrics_and_sqlite_trace(tmp_path: Path) -> None:

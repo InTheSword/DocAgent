@@ -202,19 +202,36 @@ def _doc_ids_from_file(path: Path) -> list[str]:
     raise Phase4BE2EError(f"unsupported doc id file format: {path}")
 
 
+def _doc_ids_from_sample_qa(sample_root: Path) -> list[str]:
+    qa_path = sample_root / "qa.jsonl"
+    if not qa_path.is_file():
+        return []
+    return [
+        str(record.get("doc_id") or "").strip()
+        for record in read_jsonl(qa_path)
+        if str(record.get("doc_id") or "").strip()
+    ]
+
+
+def _unique_doc_ids(doc_ids: list[str]) -> list[str]:
+    seen: set[str] = set()
+    unique: list[str] = []
+    for doc_id in doc_ids:
+        if doc_id and doc_id not in seen:
+            seen.add(doc_id)
+            unique.append(doc_id)
+    return unique
+
+
 def _requested_doc_ids(args: argparse.Namespace) -> list[str]:
     doc_ids: list[str] = []
     if args.doc_id_file:
         doc_ids.extend(_doc_ids_from_file(repo_path(args.doc_id_file)))
     if args.doc_id:
         doc_ids.extend(args.doc_id)
-    seen: set[str] = set()
-    unique: list[str] = []
-    for doc_id in doc_ids or DEFAULT_DOC_IDS:
-        if doc_id and doc_id not in seen:
-            seen.add(doc_id)
-            unique.append(doc_id)
-    return unique
+    if not doc_ids:
+        doc_ids = _doc_ids_from_sample_qa(repo_path(args.sample_root)) or DEFAULT_DOC_IDS
+    return _unique_doc_ids(doc_ids)
 
 
 def _load_document_window(
@@ -924,6 +941,44 @@ def _gold_answers_by_qid(windows: list[DocumentWindow]) -> dict[str, list[str]]:
     return answers_by_qid
 
 
+def _loaded_qa_qids(windows: list[DocumentWindow]) -> list[str]:
+    return [str(qa.get("qid")) for window in windows for qa in window.qa_records if qa.get("qid") is not None]
+
+
+def _candidate_evidence_completeness(candidate_records: list[dict[str, Any]], windows: list[DocumentWindow]) -> dict[str, Any]:
+    qa_qids = _loaded_qa_qids(windows)
+    candidate_qids = [str(record.get("qid")) for record in candidate_records if record.get("qid") is not None]
+    qa_qid_set = set(qa_qids)
+    candidate_qid_set = set(candidate_qids)
+    missing_qids = sorted(qa_qid_set - candidate_qid_set)
+    extra_qids = sorted(candidate_qid_set - qa_qid_set)
+    duplicate_candidate_qids = sorted(qid for qid, count in Counter(candidate_qids).items() if count > 1)
+    return {
+        "qa_count": len(qa_qids),
+        "candidate_evidence_count": len(candidate_records),
+        "qid_set_match": not missing_qids and not extra_qids and not duplicate_candidate_qids and len(candidate_records) == len(qa_qids),
+        "missing_qid_count": len(missing_qids),
+        "extra_qid_count": len(extra_qids),
+        "duplicate_candidate_qid_count": len(duplicate_candidate_qids),
+        "missing_qids_preview": missing_qids[:10],
+        "extra_qids_preview": extra_qids[:10],
+        "duplicate_candidate_qids_preview": duplicate_candidate_qids[:10],
+    }
+
+
+def _assert_candidate_evidence_complete(completeness: dict[str, Any]) -> None:
+    if completeness.get("qid_set_match"):
+        return
+    raise Phase4BE2EError(
+        "candidate_evidence completeness check failed: "
+        f"qa_count={completeness.get('qa_count')}, "
+        f"candidate_evidence_count={completeness.get('candidate_evidence_count')}, "
+        f"missing_qid_count={completeness.get('missing_qid_count')}, "
+        f"extra_qid_count={completeness.get('extra_qid_count')}, "
+        f"duplicate_candidate_qid_count={completeness.get('duplicate_candidate_qid_count')}"
+    )
+
+
 FORBIDDEN_CONTEXT_KEYS = {
     "answer_page_idx",
     "answers",
@@ -1450,6 +1505,7 @@ def run_phase4b_e2e(args: argparse.Namespace) -> dict[str, Any]:
 
     candidate_records: list[dict[str, Any]] = []
     candidate_metrics: dict[str, Any] | None = None
+    candidate_evidence_completeness: dict[str, Any] | None = None
     if args.evidence_packing == "candidate_spans":
         fixed_records, fixed_evidence_by_qid, candidate_records = build_candidate_span_evidence(
             windows=windows,
@@ -1480,12 +1536,15 @@ def run_phase4b_e2e(args: argparse.Namespace) -> dict[str, Any]:
     fixed_hash = fixed_evidence_hash(fixed_records)
     write_jsonl(paths["fixed_evidence"], fixed_records)
     if write_candidate_evidence:
+        candidate_evidence_completeness = _candidate_evidence_completeness(candidate_records, windows)
+        _assert_candidate_evidence_complete(candidate_evidence_completeness)
         assert_no_gold_leakage(candidate_records)
         candidate_metrics = summarize_candidate_packing(
             candidate_records,
             gold_page_aggregate_ids=_gold_page_aggregate_ids(windows),
             gold_answers_by_qid=_gold_answers_by_qid(windows),
         )
+        candidate_metrics["candidate_evidence_completeness"] = candidate_evidence_completeness
         write_jsonl(paths["candidate_evidence"], candidate_records)
         _write_json(paths["candidate_evidence_preview"], {"records": candidate_records[:3]})
         _write_json(paths["candidate_packing_metrics"], candidate_metrics)
@@ -1548,6 +1607,7 @@ def run_phase4b_e2e(args: argparse.Namespace) -> dict[str, Any]:
         "retrieval_scope": RETRIEVAL_SCOPE,
         "query_rewrite": "none",
         "evidence_packing_mode": args.evidence_packing,
+        "candidate_evidence_completeness": candidate_evidence_completeness,
         "candidate_packing": candidate_metrics,
         "rank_aware_context": bool(args.rank_aware_context),
         "document_count": len(windows),
