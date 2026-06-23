@@ -6,27 +6,19 @@
 ## Current Stage
 
 ```text
-Phase 4D-C accepted -> Phase 4D-D next
+Phase 4D-C accepted -> Phase 4D-D deferred -> Phase 5 active
 ```
 
 ## Current Goal
 
 ```text
-Phase 4C candidate_evidence.jsonl
--> deterministic typed candidate answer extraction
--> candidate answer board artifacts
--> coverage / rank / distractor metrics
--> error bucket analysis
--> extraction/ranking refinement before Candidate-ID Reader
--> filtering / reranking / type-aware top-k board before Candidate-ID Reader
--> C/D/E case-level failure inspection before new Reader work
--> refined action attribution from final-answer hit and candidate/top-k coverage
--> final subtype split for candidate_span_or_normalization_gap before any repair
--> one narrow generic table/index candidate span selection fix
--> candidate_evidence completeness regression fix before B1 metrics can be used
--> close 90-sample probe tuning after default pipeline sanity
--> expanded unseen validation with the accepted default pipeline
--> candidate answer extraction and span gap generalized improvement
+Phase 5 Personal-use DocAgent MVP
+-> Phase 5A architecture audit and contracts
+-> preserve provided PHASE5_ACTIVE_PLAN.md as the master plan
+-> document router contract
+-> document deterministic tool inventory
+-> document MVP acceptance criteria
+-> stop before functional MVP implementation
 ```
 
 ## Current Status
@@ -72,7 +64,9 @@ Phase 4D-B1.2 closeout -> implemented
 Phase 4D-B1.3 default pipeline sanity -> accepted
 Phase 4D-C expanded unseen validation -> accepted
 Phase 4D-C scaffold / command preparation -> ready
-Phase 4D-D candidate answer board generalized improvement -> not_started
+Phase 4D-D candidate answer board generalized improvement -> deferred
+Phase 5 Personal-use DocAgent MVP -> active
+Phase 5A architecture audit and contracts -> implemented
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -137,8 +131,8 @@ evaluation implementation, metrics, or conclusions in this phase.
 - Phase 4D-C expanded unseen validation is accepted on the strict accepted
   shards 5-8 set. The main bottleneck remains candidate answer extraction and
   candidate span construction, not Reader selection.
-- 90-sample probe tuning is closed. The next phase is generalized candidate
-  answer board and span gap improvement, not another per-case repair.
+- 90-sample probe tuning is closed. Phase 4D-D candidate answer board and span
+  gap improvement is deferred while Phase 5 focuses on a personal-use MVP.
 
 Gate 4 accepted server scope:
 
@@ -626,12 +620,30 @@ Phase 4D-D planned boundary:
 
 ```text
 goal = Candidate Answer Extraction & Span Gap Generalized Improvement
-status = not_started
+status = deferred
 first_action = failure pattern audit before writing new rules
 do_not_patch_specific_qids = true
 do_not_enable_candidate_id_reader = true
 do_not_run_full_grpo_by_default = true
 do_not_tune_90_sample_probe = true
+```
+
+Phase 5A active boundary:
+
+```text
+goal = Personal-use DocAgent MVP architecture audit and contracts
+status = implemented
+branch = codex/phase5a-mvp-planning-contracts
+deliverables = docs/PHASE5_ACTIVE_PLAN.md,
+              docs/PHASE5_ROUTER_CONTRACT.md,
+              docs/PHASE5_TOOL_INVENTORY.md,
+              docs/PHASE5_MVP_ACCEPTANCE.md
+do_not_implement_docagent_cli = true
+do_not_implement_router_code = true
+do_not_implement_document_tools = true
+do_not_modify_answer_policy_prompt = true
+do_not_modify_candidate_answer_extraction = true
+do_not_run_full_grpo_e2e = true
 ```
 
 Phase 4D-C scaffold / command preparation:
@@ -729,22 +741,25 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Start Phase 4D-D with a failure pattern audit for candidate answer
-   extraction and candidate span construction before writing new rules.
-2. Keep Candidate-ID Reader postponed until reader-selection failures dominate
+1. Start Phase 5B with deterministic document tools after Phase 5A contracts
+   are accepted.
+2. Keep Phase 4D-D deferred until MVP entrypoint, router, deterministic tools,
+   and multi-task regression are accepted.
+3. Keep Candidate-ID Reader postponed until reader-selection failures dominate
    after candidate coverage issues are resolved.
-3. Keep optional full GRPO E2E postponed until candidate answer board quality
+4. Keep optional full GRPO E2E postponed until candidate answer board quality
    improves.
-4. Keep `page_children` as the default until more shard and document-type
+5. Keep `page_children` as the default until more shard and document-type
    validation supports a global default change.
-5. Keep CDC `not_started` until explicitly started.
+6. Keep CDC `not_started` until explicitly started.
 
 ## Stop Condition
 
 ```text
 Phase 4D-B1.3 server sanity accepted
 + Phase 4D-C expanded unseen validation accepted
-+ Phase 4D-D next action documented
++ Phase 4D-D deferred
++ Phase 5A architecture audit and contract documents implemented
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

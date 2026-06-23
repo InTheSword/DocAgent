@@ -1,0 +1,387 @@
+# Phase 5 Tool Inventory
+
+## Audit Scope
+
+This inventory is based on current repository files. Phase 5A does not
+implement document tools; it records what can be reused and what still needs
+code.
+
+## Reusable Code Paths
+
+Ingestion and document cache:
+
+- `docagent/ingestion/document_registry.py`
+  - `DocumentRegistry.register`
+  - `DocumentRecord`
+- `docagent/ingestion/service.py`
+  - `DocumentIngestionService.ingest`
+  - `IngestionResult`
+- `docagent/parser/mineru_converter.py`
+  - `find_content_list`
+  - `content_list_to_blocks`
+  - `build_page_blocks`
+  - `raw_content_list_stats`
+- `docagent/ingestion/quality.py`
+  - `build_structure_quality_report`
+
+Storage and trace:
+
+- `docagent/storage/db.py`
+  - `connect`
+  - migration helpers
+- `docagent/storage/repositories.py`
+  - `DocumentRepository`
+  - `TraceRepository`
+- `docagent/storage/schema.sql`
+
+Schemas:
+
+- `docagent/schemas.py`
+  - `EvidenceLocation`
+  - `EvidenceBlock`
+  - `DocAgentSample`
+  - `QAState`
+
+Retrieval and local fact QA:
+
+- `docagent/retrieval/bm25_index.py`
+- `docagent/retrieval/dense_encoder.py`
+- `docagent/retrieval/dense_index.py`
+- `docagent/retrieval/fusion.py`
+- `docagent/retrieval/hybrid_retriever.py`
+- `docagent/retrieval/index_manager.py`
+- `docagent/retrieval/reranker.py`
+- `docagent/retrieval/evidence_packing.py`
+- `docagent/workflow/graph.py`
+- `docagent/workflow/prompts.py`
+- `docagent/workflow/output_adapter.py`
+- `docagent/models/base.py`
+- `docagent/models/qwen_answer_policy.py`
+
+Existing script entrypoints:
+
+- `scripts/ingest_document.py`: ingest a file with MinerU existing/local/API
+  modes, optionally build dense index, and persist into SQLite.
+- `scripts/query_document.py`: query an already ingested `doc_id` through
+  retrieval and `run_qa_workflow`.
+- `scripts/inspect_document.py`: list documents, inspect document metadata,
+  blocks, and indexes from SQLite.
+- `scripts/run_phase4b_mpdocvqa_ingestion.py`: Phase 4 window ingestion,
+  acceptance report, portability/path scans, and `docagent.sqlite`.
+- `scripts/run_phase4b_mpdocvqa_e2e.py`: retrieval-only/full E2E runner,
+  `page_children` and `candidate_spans` evidence packing, fixed evidence,
+  candidate evidence, metrics, and trace SQLite.
+- `scripts/analyze_phase4d_candidate_answer_coverage.py`: candidate answer
+  diagnostics over `candidate_evidence.jsonl`.
+- `scripts/export_phase4d_failure_inspection.py`: C/D/E failure inspection and
+  candidate span gap review artifacts.
+- `scripts/eval_retrieval_phase2.py`, `scripts/eval_workflow_phase2.py`, and
+  `scripts/run_workflow_smoke.py`: earlier retrieval/workflow evaluation and
+  smoke paths.
+
+## Current Ingestion Artifact Paths
+
+Generic local ingestion writes under:
+
+```text
+data/documents/<doc_id>/
+  source/original.<ext>
+  mineru/
+  evidence_blocks.jsonl
+  page_documents.jsonl
+  structure_quality.json
+  ingestion_report.json
+  index_metadata.json
+  index_metadata_<model_id>.json
+```
+
+Phase 4 MP-DocVQA ingestion writes under run-specific roots such as:
+
+```text
+outputs/phase4/mpdocvqa_ingestion/<doc_id>/
+outputs/evaluation/.../<run_id>/
+```
+
+Phase 4 ingestion also uses a per-work directory SQLite path:
+
+```text
+docagent.sqlite
+```
+
+Generic local scripts default to:
+
+```text
+outputs/docagent.db
+```
+
+## Artifact Formats
+
+`evidence_blocks.jsonl`:
+
+- one JSON object per `EvidenceBlock`;
+- excludes page aggregate blocks;
+- records text/table/image evidence blocks converted from MinerU content list.
+
+`page_documents.jsonl`:
+
+- one JSON object per page aggregate `EvidenceBlock`;
+- `block_type = "page"`;
+- `text` is the joined retrieval text from page child blocks;
+- `metadata.child_block_ids` links to page children.
+
+`structure_quality.json`:
+
+- quality summary built from MinerU `layout.json`, `*_content_list.json`,
+  converted blocks, and page documents.
+
+`ingestion_report.json`:
+
+- compact result from `IngestionResult.to_dict()`.
+
+SQLite:
+
+- `documents`
+- `evidence_blocks`
+- `document_indexes`
+- `qa_logs`
+- `qa_runs`
+- `tool_traces`
+- `eval_results`
+
+## Existing Document Metadata Fields
+
+From `DocumentRecord`, `DocumentRepository`, and `schema.sql`:
+
+```text
+doc_id
+sha256
+original_name
+mime_type
+file_size
+file_path
+document_dir
+page_count
+parser_backend
+parse_status
+index_status
+created_at
+updated_at
+```
+
+`documents.source` currently receives `record.original_name` in
+`DocumentRepository.upsert_document`.
+
+## Existing Page-level Fields
+
+Page aggregate blocks from `build_page_blocks` use:
+
+```text
+doc_id
+page_id
+block_id = <doc_id>_pNNN_page
+block_type = page
+text
+location.page
+location.block_id
+metadata.parser = mineru
+metadata.child_block_ids
+metadata.excluded_child_block_ids
+```
+
+Page count is also stored on `DocumentRecord.page_count` and the `documents`
+SQLite table after ingestion.
+
+## Existing Block-level Fields
+
+`EvidenceBlock` supports:
+
+```text
+doc_id
+block_id
+block_type
+text
+page_id
+table_html
+image_path
+visual_summary
+location.page
+location.block_id
+location.table_id
+location.image_id
+location.bbox
+metadata
+```
+
+MinerU conversion metadata includes:
+
+```text
+parser
+reading_order
+raw_item_index
+raw_mineru_type
+is_boilerplate
+exclude_from_retrieval
+mineru_provenance
+mineru_page_idx
+text_level
+previous_block_id
+next_block_id
+parent_block_id
+unknown_raw_type
+resource_exists
+```
+
+## Existing Table-related Fields
+
+For table raw types, `mineru_converter` maps blocks to:
+
+```text
+block_type = table
+text = caption + table text/body + footnote
+table_html
+image_path
+location.bbox
+metadata.table_caption
+metadata.table_footnote
+metadata.table_body
+metadata.raw_mineru_type
+metadata.resource_exists
+```
+
+Table counts already appear in `structure_quality.json`:
+
+```text
+table_count
+table_html_count
+```
+
+## Existing Image / Figure-related Fields
+
+For image, figure, and chart raw types, `mineru_converter` maps blocks to:
+
+```text
+block_type = image
+text = caption / image_caption / nearby_text / text / content
+image_path
+location.bbox
+metadata.raw_mineru_type
+metadata.img_path
+metadata.resource_exists
+metadata.chart_caption
+metadata.chart_footnote
+```
+
+The schema also supports `visual_summary`, but current Phase 5 must not add VLM
+image understanding.
+
+Image/figure counts already appear in `structure_quality.json`:
+
+```text
+chart_count
+image_reference_count
+missing_image_reference_count
+```
+
+## Current Table / Image Processing Capability
+
+Current deterministic support:
+
+- preserve table text and `table_html` when MinerU provides it;
+- preserve table/image resource paths as relative paths when possible;
+- preserve captions, footnotes, nearby text, and chart metadata;
+- include table/image blocks in retrieval text and candidate evidence;
+- sanitize unsafe absolute image paths in `candidate_spans` output.
+
+Current limitations:
+
+- no table grid normalization API;
+- no deterministic row/column lookup tool yet;
+- no simple calculation tool yet;
+- no visual pixel reasoning;
+- figure/chart answers depend on OCR/caption/nearby text, not image pixels.
+
+## P0 Deterministic Tool Plan
+
+These tools can be implemented deterministically from existing artifacts and
+SQLite with small new wrapper code.
+
+| Tool | Current source | Needs new code? | Notes |
+|---|---|---:|---|
+| `count_pages` | `documents.page_count`, `page_documents.jsonl`, page blocks | Yes | Prefer SQLite/document metadata, verify against page blocks when available. |
+| `count_blocks` | `evidence_blocks` table or `evidence_blocks.jsonl` | Yes | Count non-page blocks by default. |
+| `count_tables` | `EvidenceBlock.block_type == "table"` | Yes | Also expose `table_html_count` when needed. |
+| `count_images` | `block_type == "image"` and chart/image metadata | Yes | Count image/figure/chart regions from converted blocks. |
+| `get_page_text` | page aggregate block text or blocks filtered by `page_id` | Yes | Return page number, text, child block ids, and citation metadata. |
+| `list_pages` | page aggregate blocks / page ids | Yes | Return page ids and per-page child counts. |
+
+## P1 Tool Plan
+
+These are feasible from current artifacts, but require more output contract work.
+
+| Tool | Current source | Needs new code? | Notes |
+|---|---|---:|---|
+| `extract_all_tables` | table `EvidenceBlock`s | Yes | Return table id/block id, page, text, html, bbox, preview. |
+| `extract_all_images` | image/chart `EvidenceBlock`s | Yes | Return image id/block id, page, path, caption/OCR text, bbox. |
+| `list_sections` | `raw_mineru_type`, `text_level`, title-like blocks | Yes | Heuristic only until section hierarchy is formalized. |
+| `document_outline` | section/title blocks plus page ordering | Yes | Should clearly mark heuristic confidence. |
+
+## P2 Tool Plan
+
+These should wait until P0/P1 contracts and tests are accepted.
+
+| Tool | Current source | Needs new code? | Reason to defer |
+|---|---|---:|---|
+| `table_lookup` | table blocks and `table_html` | Yes | Needs row/column parsing and result citations. |
+| `simple_calculation` | table lookup outputs or extracted numeric spans | Yes | Needs typed numeric normalization and traceable calculation inputs. |
+| `document_summary` | page text and outline/page previews | Yes | Needs summary strategy and citation policy; external LLM use must be bounded. |
+
+## Tools To Defer
+
+```text
+visual_pixel_qa
+chart color / spatial reasoning
+external VLM fallback
+multi-document comparison
+multi-turn memory
+cloud vector database integration
+Candidate-ID Reader
+candidate answer extraction rule tuning
+```
+
+## Reusable Tests
+
+Likely reusable for Phase 5:
+
+- `tests/test_document_registry.py`
+- `tests/test_document_ingestion.py`
+- `tests/test_mineru_converter.py`
+- `tests/test_ingestion_quality_report.py`
+- `tests/test_sqlite_trace.py`
+- `tests/test_query_document_smoke_backends.py`
+- `tests/test_evidence_packing.py`
+- `tests/test_phase4b_mpdocvqa_e2e.py`
+- `tests/test_phase4b_mpdocvqa_ingestion.py`
+- `tests/test_answer_policy.py`
+- `tests/test_workflow_model_node.py`
+
+## Reusable Config Files
+
+- `configs/document_workflow.yaml`
+- `configs/parser_mineru.yaml`
+- `configs/retrieval_hybrid.yaml`
+- `configs/answer_policy.yaml`
+- `configs/workflow_mpdocvqa.yaml`
+
+`configs/grpo_qwen3.yaml`, `configs/sft_qwen3_lora.yaml`, and training scripts
+remain out of Phase 5A scope.
+
+## Future CLI Placement
+
+The future unified MVP entrypoint should be:
+
+```text
+scripts/docagent_cli.py
+```
+
+This matches existing script conventions and keeps the first implementation
+small. Phase 5A does not create this file.

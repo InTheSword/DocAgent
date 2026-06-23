@@ -317,8 +317,8 @@ Do not:
 
 ## 8. Next Priorities
 
-1. Start Phase 4D-D with a failure pattern audit for candidate answer
-   extraction and candidate span construction before writing new rules.
+1. Phase 4D-D candidate answer board generalized improvement is deferred while
+   Phase 5 starts the personal-use DocAgent MVP track.
 2. Keep Candidate-ID Reader postponed; expanded unseen validation shows only
    5 reader/reranking-attributed cases versus 72 extraction and 38 span cases.
 3. Keep optional full GRPO E2E postponed until candidate answer board quality
@@ -910,7 +910,7 @@ Status:
 ```text
 Phase 4D-C expanded unseen validation -> accepted
 Phase 4D-C scaffold / command preparation -> ready
-Phase 4D-D candidate answer board generalized improvement -> not_started
+Phase 4D-D candidate answer board generalized improvement -> deferred
 ```
 
 Goal:
@@ -1101,7 +1101,7 @@ Engineering notes from server execution:
 Phase 4D-D planned boundary:
 
 ```text
-Phase 4D-D candidate answer board generalized improvement -> not_started
+Phase 4D-D candidate answer board generalized improvement -> deferred
 first_action = failure pattern audit before writing new rules
 do_not_patch_specific_qids = true
 do_not_enable_candidate_id_reader = true

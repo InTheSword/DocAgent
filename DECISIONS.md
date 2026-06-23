@@ -8,6 +8,48 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-23: Phase 5 Personal-use DocAgent MVP Activated
+
+Decision: defer Phase 4D-D candidate answer board generalized improvement and
+start Phase 5 as the active personal-use DocAgent MVP track.
+
+Rationale:
+
+- Phase 4D-C identified candidate answer extraction and candidate span
+  construction as the larger bottlenecks, with only 5 cases attributed to
+  reader selection.
+- The current project priority has shifted to a product-like personal document
+  assistant suitable for job-search demonstration.
+- Candidate answer board improvement should be revisited after the MVP
+  entrypoint, router, deterministic document tools, and multi-task regression
+  are accepted.
+
+Phase 5A scope:
+
+- Preserve the provided `docs/PHASE5_ACTIVE_PLAN.md` as the master Phase 5
+  plan, allowing only lightweight formatting and repository-style alignment.
+- Add router, deterministic tool inventory, and MVP acceptance contracts.
+- Audit existing ingestion, retrieval, E2E, evaluation, trace, schema, test,
+  and config paths.
+- Do not implement `scripts/docagent_cli.py`, router code, document tools,
+  AnswerPolicy prompt changes, candidate answer extraction changes, VLM, model
+  training, or full GRPO E2E.
+
+Current status:
+
+```text
+Phase 4D-C expanded unseen validation -> accepted
+Phase 4D-D candidate answer board generalized improvement -> deferred
+Phase 5 Personal-use DocAgent MVP -> active
+Phase 5A architecture audit and contracts -> implemented
+```
+
+Next implementation target:
+
+- Phase 5B deterministic P0 document tools:
+  `count_pages`, `count_blocks`, `count_tables`, `count_images`,
+  `get_page_text`, and `list_pages`.
+
 ## 2026-06-23: Phase 4D-C Expanded Unseen Validation Accepted
 
 Decision: accept Phase 4D-C expanded unseen validation and move the next

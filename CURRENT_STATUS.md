@@ -1,15 +1,15 @@
 # Current Status
 
-Updated: 2026-06-22
+Updated: 2026-06-23
 
-## Phase 4D-C Accepted / Phase 4D-D Next
+## Phase 4D-C Accepted / Phase 5 Active
 
 Phase 4D-C expanded unseen validation is accepted on MP-DocVQA validation
 shards 5-8 using the accepted default `candidate_spans` pipeline. The strict
 accepted set contains 77 document windows, 572 pages, and 218 QA. The main
 bottleneck is candidate answer extraction and candidate span construction, not
-Reader selection. The next phase should start Phase 4D-D candidate answer board
-generalized improvement with a failure pattern audit.
+Reader selection. Phase 4D-D candidate answer board generalized improvement is
+deferred while Phase 5 starts the personal-use DocAgent MVP track.
 
 Status:
 
@@ -37,7 +37,9 @@ Phase 4D-B1.2 closeout -> implemented
 Phase 4D-B1.3 default pipeline sanity -> accepted
 Phase 4D-C expanded unseen validation -> accepted
 Phase 4D-C scaffold / command preparation -> ready
-Phase 4D-D candidate answer board generalized improvement -> not_started
+Phase 4D-D candidate answer board generalized improvement -> deferred
+Phase 5 Personal-use DocAgent MVP -> active
+Phase 5A architecture audit and contracts -> implemented
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -76,7 +78,8 @@ Current conclusion:
 - Phase 4D-B1.3 default pipeline sanity is accepted.
 - Phase 4D-C expanded unseen validation is accepted.
 - Candidate-ID Reader remains postponed.
-- Phase 4D-D candidate answer board generalized improvement is next.
+- Phase 4D-D candidate answer board generalized improvement is deferred.
+- Phase 5 Personal-use DocAgent MVP is active.
 
 Phase 4D-C accepted server result:
 
