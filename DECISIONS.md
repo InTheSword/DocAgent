@@ -8,6 +8,89 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-23: Phase 4D-C Expanded Unseen Validation Accepted
+
+Decision: accept Phase 4D-C expanded unseen validation and move the next
+recommended milestone to Phase 4D-D candidate answer board generalized
+improvement.
+
+Scope:
+
+- MP-DocVQA validation shards 5-8.
+- Accepted default pipeline:
+  `evidence_packing = candidate_spans`,
+  `rank_aware_context = false`,
+  `table_index_enhancement_enabled = false`,
+  `enable_table_index_packing = false`.
+- No Candidate-ID Reader, no prompt tuning, no training, and no full GRPO E2E
+  by default.
+
+Accepted strict set:
+
+```text
+raw_sample = 85 document windows / 250 QA
+excluded_failed_ingestion = 6 windows / 29 QA
+excluded_qa_mapping_mismatch = 2 windows / 3 QA
+strict_accepted_sample = 77 document windows / 572 pages / 218 QA
+strict_sample_root = outputs/phase4/mpdocvqa_raw_phase4d_c_shards5_8_strict_accepted
+```
+
+Evidence:
+
+- Candidate evidence completeness passed:
+  `candidate_evidence_count = 218 / 218`, `qid_set_match = true`, zero missing,
+  extra, or duplicate qids.
+- `table_index_enhancement_enabled = false`.
+- `no_gold_leakage = true`.
+- Candidate retrieval remained usable:
+  `Recall@1/3/5 = 0.7248 / 0.8945 / 0.9128`, `MRR = 0.8099`.
+- Candidate span answer coverage was `0.7523`.
+- Candidate answer coverage was limited:
+  `candidate_answer_coverage_all = 0.4266`,
+  `candidate_answer_coverage_top20 = 0.3991`.
+- Failure attribution:
+  `extraction_rule_gap = 72`,
+  `candidate_span_or_normalization_gap = 38`,
+  `reader_selection_gap = 5`.
+- Candidate span gap subtypes:
+  `table_or_index_span_gap = 14`,
+  `candidate_span_selection_gap = 10`,
+  `candidate_span_partial_context_gap = 9`,
+  `page_number_or_content_lookup_gap = 5`,
+  `normalization_or_metric_gap = 0`,
+  `ocr_or_parsing_gap = 0`.
+
+Interpretation:
+
+- Phase 4D-C validates that the accepted default `candidate_spans` pipeline can
+  run stably on a larger unseen strict set.
+- The main bottleneck is not Candidate-ID Reader. Candidate answer extraction
+  and candidate span construction dominate the failure distribution.
+- The 90-sample probe observation generalized: candidate answer coverage
+  dropped from `0.5222` to `0.4266`, and top20 coverage dropped from `0.4556`
+  to `0.3991`.
+- Candidate-ID Reader remains postponed.
+- Optional full GRPO E2E remains postponed until candidate answer board quality
+  improves.
+
+Next milestone:
+
+- Phase 4D-D: Candidate Answer Extraction & Span Gap Generalized Improvement.
+- First action should be a failure pattern audit before writing new rules.
+- Do not patch specific qids, documents, titles, entities, or answers.
+- Do not re-open 90-sample probe tuning.
+- Do not enable `--enable-table-index-packing` or `--rank-aware-context` by
+  default.
+
+Engineering notes:
+
+- Expanded shard validation commands must preflight required parquet files.
+- Accepted-only ingestion reports are insufficient before E2E; strict QA
+  mapping checks are required.
+- Failure inspection only supports C/D/E buckets. A is retrieval-side miss; G
+  means candidate answer covered but no Reader/full E2E output.
+- Compact metric readers must handle nested retrieval metric structures.
+
 ## 2026-06-22: Phase 4D-C Scaffold and Command Preparation Started
 
 Decision: start Phase 4D-C scaffold / command preparation on branch

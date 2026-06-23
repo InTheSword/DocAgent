@@ -6,7 +6,7 @@
 ## Current Stage
 
 ```text
-Phase 4D-C: Expanded Unseen Validation with Accepted Default Pipeline
+Phase 4D-C accepted -> Phase 4D-D next
 ```
 
 ## Current Goal
@@ -26,6 +26,7 @@ Phase 4C candidate_evidence.jsonl
 -> candidate_evidence completeness regression fix before B1 metrics can be used
 -> close 90-sample probe tuning after default pipeline sanity
 -> expanded unseen validation with the accepted default pipeline
+-> candidate answer extraction and span gap generalized improvement
 ```
 
 ## Current Status
@@ -69,8 +70,9 @@ Phase 4D-B1.1 local implementation -> implemented
 Phase 4D-B1.1 server validation -> accepted
 Phase 4D-B1.2 closeout -> implemented
 Phase 4D-B1.3 default pipeline sanity -> accepted
-Phase 4D-C expanded unseen validation -> not_started
+Phase 4D-C expanded unseen validation -> accepted
 Phase 4D-C scaffold / command preparation -> ready
+Phase 4D-D candidate answer board generalized improvement -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -132,8 +134,11 @@ evaluation implementation, metrics, or conclusions in this phase.
 - Phase 4D-B1.3 default pipeline sanity is accepted; the default
   `candidate_spans` path reproduced the Phase 4C baseline with table/index
   enhancement disabled.
-- 90-sample probe tuning is closed. The next phase is expanded unseen
-  validation, not another per-case repair.
+- Phase 4D-C expanded unseen validation is accepted on the strict accepted
+  shards 5-8 set. The main bottleneck remains candidate answer extraction and
+  candidate span construction, not Reader selection.
+- 90-sample probe tuning is closed. The next phase is generalized candidate
+  answer board and span gap improvement, not another per-case repair.
 
 Gate 4 accepted server scope:
 
@@ -524,6 +529,111 @@ Phase 4D-C staged validation:
 6. Step F: optional full E2E only if retrieval and diagnostics are stable (GPU
    required; loads Qwen3 and the GRPO adapter).
 
+Phase 4D-C accepted server result:
+
+```text
+source_shards = MP-DocVQA validation shards 5-8
+raw_sample = 85 document windows / 250 QA
+strict_accepted_sample = 77 document windows / 572 pages / 218 QA
+artifact_root = outputs/evaluation/phase4d_c_expanded_unseen_strict
+retrieval_run = phase4d_c_retrieval_candidate_spans
+candidate_answer_run = phase4d_c_candidate_answer_coverage
+failure_inspection_run = phase4d_c_failure_inspection_refined_cd
+candidate_span_gap_review_run = phase4d_c_candidate_span_gap_review_cd
+```
+
+Step B strict filtering:
+
+```text
+excluded_failed_ingestion = 6 windows / 29 QA
+excluded_qa_mapping_mismatch = 2 windows / 3 QA
+strict_filter_required = sample_qa_count == qa_page_mapping_count
+                       + report_qa_count == sample_qa_count
+                       + page_identity_mapping_invalid_count == 0
+                       + gold_page_mapping_invalid_count == 0
+```
+
+Step C retrieval-only + candidate_spans accepted result:
+
+```text
+qa_count = 218
+document_count = 77
+page_count = 572
+candidate_evidence_count = 218
+qid_set_match = true
+missing_qid_count = 0
+extra_qid_count = 0
+duplicate_candidate_qid_count = 0
+table_index_enhancement_enabled = false
+candidate_packing_sample_count = 218
+mean_candidate_span_count = 7.6055
+mean_candidate_block_count = 14.9312
+gold_page_has_candidate_span_rate = 0.9128
+no_gold_leakage = true
+candidate Recall@1/3/5 = 0.7248 / 0.8945 / 0.9128
+candidate MRR = 0.8099
+```
+
+Step D candidate answer diagnostics accepted result:
+
+```text
+sample_count = 218
+candidate_span_answer_coverage = 0.7523
+candidate_answer_coverage_all = 0.4266
+candidate_answer_coverage_top1 = 0.1468
+candidate_answer_coverage_top3 = 0.2477
+candidate_answer_coverage_top5 = 0.3073
+candidate_answer_coverage_top10 = 0.3716
+candidate_answer_coverage_top20 = 0.3991
+candidate_answer_no_gold_leakage = true
+bucket_A = 19
+bucket_C = 43
+bucket_D = 72
+bucket_G = 84
+```
+
+Step E failure attribution accepted result:
+
+```text
+extraction_rule_gap = 72
+candidate_span_or_normalization_gap = 38
+reader_selection_gap = 5
+improve_candidate_answer_extraction = 72
+improve_candidate_spans = 38
+candidate_id_reader_or_reranking = 5
+table_or_index_span_gap = 14
+candidate_span_selection_gap = 10
+candidate_span_partial_context_gap = 9
+page_number_or_content_lookup_gap = 5
+normalization_or_metric_gap = 0
+ocr_or_parsing_gap = 0
+```
+
+Phase 4D-C interpretation:
+
+- The accepted default `candidate_spans` path remains stable on the strict
+  unseen set, with complete candidate evidence, exact qid-set match, no gold
+  leakage, and table/index enhancement disabled.
+- Candidate answer coverage drops versus the 90-sample probe
+  (`all: 0.5222 -> 0.4266`, `top20: 0.4556 -> 0.3991`), so the candidate
+  answer extraction/span issue is not a probe artifact.
+- Candidate-ID Reader remains postponed: reader/reranking attribution is only
+  5 cases, while extraction/span improvement accounts for 110 cases.
+- Optional full GRPO E2E remains postponed until candidate answer board quality
+  improves.
+
+Phase 4D-D planned boundary:
+
+```text
+goal = Candidate Answer Extraction & Span Gap Generalized Improvement
+status = not_started
+first_action = failure pattern audit before writing new rules
+do_not_patch_specific_qids = true
+do_not_enable_candidate_id_reader = true
+do_not_run_full_grpo_by_default = true
+do_not_tune_90_sample_probe = true
+```
+
 Phase 4D-C scaffold / command preparation:
 
 ```text
@@ -532,7 +642,8 @@ branch_base = origin/main
 status = ready
 script_support = existing scripts cover Step A-E
 code_changes = none
-server_execution = not_started
+initial_server_execution = not_started
+server_execution_after_report = accepted
 ```
 
 Existing script support:
@@ -618,20 +729,22 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Run Phase 4D-C expanded unseen validation with the accepted default
-   `candidate_spans` pipeline and existing
-   diagnostics.
-2. Keep `page_children` as the default until more shard and document-type
-   validation supports a global default change.
-3. Keep Candidate-ID Reader postponed until reader-selection failures dominate
+1. Start Phase 4D-D with a failure pattern audit for candidate answer
+   extraction and candidate span construction before writing new rules.
+2. Keep Candidate-ID Reader postponed until reader-selection failures dominate
    after candidate coverage issues are resolved.
-4. Keep CDC `not_started` until explicitly started.
+3. Keep optional full GRPO E2E postponed until candidate answer board quality
+   improves.
+4. Keep `page_children` as the default until more shard and document-type
+   validation supports a global default change.
+5. Keep CDC `not_started` until explicitly started.
 
 ## Stop Condition
 
 ```text
 Phase 4D-B1.3 server sanity accepted
-+ Phase 4D-C plan documented
++ Phase 4D-C expanded unseen validation accepted
++ Phase 4D-D next action documented
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

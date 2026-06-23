@@ -2,14 +2,14 @@
 
 Updated: 2026-06-22
 
-## Phase 4D-B1.3 Accepted / Phase 4D-C Next
+## Phase 4D-C Accepted / Phase 4D-D Next
 
-Phase 4D-B1.3 default pipeline sanity is accepted. The default
-`candidate_spans` path reproduces the accepted Phase 4C baseline with
-`table_index_enhancement_enabled = false`. The 90-sample probe is closed to
-further tuning. The Phase 4D-C scaffold and server command plan are ready on
-branch `codex/phase4d-c-expanded-unseen-validation`; server execution has not
-started. The next phase is Phase 4D-C expanded unseen validation.
+Phase 4D-C expanded unseen validation is accepted on MP-DocVQA validation
+shards 5-8 using the accepted default `candidate_spans` pipeline. The strict
+accepted set contains 77 document windows, 572 pages, and 218 QA. The main
+bottleneck is candidate answer extraction and candidate span construction, not
+Reader selection. The next phase should start Phase 4D-D candidate answer board
+generalized improvement with a failure pattern audit.
 
 Status:
 
@@ -35,8 +35,9 @@ Phase 4D-B1.1 local implementation -> implemented
 Phase 4D-B1.1 server validation -> accepted
 Phase 4D-B1.2 closeout -> implemented
 Phase 4D-B1.3 default pipeline sanity -> accepted
-Phase 4D-C expanded unseen validation -> not_started
+Phase 4D-C expanded unseen validation -> accepted
 Phase 4D-C scaffold / command preparation -> ready
+Phase 4D-D candidate answer board generalized improvement -> not_started
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -73,8 +74,72 @@ Current conclusion:
 - Phase 4D-B1 table/index enhancement is not accepted as default; it remains
   experimental behind `--enable-table-index-packing`.
 - Phase 4D-B1.3 default pipeline sanity is accepted.
+- Phase 4D-C expanded unseen validation is accepted.
 - Candidate-ID Reader remains postponed.
-- Phase 4D-C expanded unseen validation is next.
+- Phase 4D-D candidate answer board generalized improvement is next.
+
+Phase 4D-C accepted server result:
+
+```text
+source_shards = MP-DocVQA validation shards 5-8
+raw_sample = 85 document windows / 250 QA
+strict_accepted_sample = 77 document windows / 572 pages / 218 QA
+strict_sample_root = outputs/phase4/mpdocvqa_raw_phase4d_c_shards5_8_strict_accepted
+output_root = outputs/evaluation/phase4d_c_expanded_unseen_strict
+retrieval_run = phase4d_c_retrieval_candidate_spans
+candidate_answer_run = phase4d_c_candidate_answer_coverage
+failure_inspection_run = phase4d_c_failure_inspection_refined_cd
+candidate_span_gap_review_run = phase4d_c_candidate_span_gap_review_cd
+```
+
+Step C accepted retrieval-only / candidate_spans:
+
+```text
+candidate_evidence_count = 218 / 218
+qid_set_match = true
+table_index_enhancement_enabled = false
+no_gold_leakage = true
+gold_page_has_candidate_span_rate = 0.9128
+candidate Recall@1/3/5 = 0.7248 / 0.8945 / 0.9128
+candidate MRR = 0.8099
+```
+
+Step D accepted candidate answer diagnostics:
+
+```text
+candidate_span_answer_coverage = 0.7523
+candidate_answer_coverage_all = 0.4266
+candidate_answer_coverage_top20 = 0.3991
+candidate_answer_no_gold_leakage = true
+bucket_A = 19
+bucket_C = 43
+bucket_D = 72
+bucket_G = 84
+```
+
+Step E accepted failure attribution:
+
+```text
+extraction_rule_gap = 72
+candidate_span_or_normalization_gap = 38
+reader_selection_gap = 5
+table_or_index_span_gap = 14
+candidate_span_selection_gap = 10
+candidate_span_partial_context_gap = 9
+page_number_or_content_lookup_gap = 5
+```
+
+Phase 4D-C interpretation:
+
+- The accepted default `candidate_spans` path remains stable on the strict
+  unseen set.
+- Candidate answer coverage is lower than the 90-sample probe
+  (`all: 0.5222 -> 0.4266`, `top20: 0.4556 -> 0.3991`), so candidate board
+  quality is a real expanded-set bottleneck.
+- Candidate-ID Reader remains postponed because reader/reranking attribution
+  is only 5 cases versus 72 extraction cases and 38 span cases.
+- Optional full GRPO E2E remains postponed until candidate answer board quality
+  improves.
 
 Phase 4D-C scaffold / command preparation:
 
@@ -391,7 +456,7 @@ Phase 4D-B1.1 local implementation -> implemented
 Phase 4D-B1.1 server validation -> accepted
 Phase 4D-B1.2 closeout -> implemented
 Phase 4D-B1.3 default pipeline sanity -> accepted
-Phase 4D-C expanded unseen validation -> not_started
+Phase 4D-C expanded unseen validation -> accepted
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -447,7 +512,7 @@ Phase 4D-B1.1 local implementation -> implemented
 Phase 4D-B1.1 server validation -> accepted
 Phase 4D-B1.2 closeout -> implemented
 Phase 4D-B1.3 default pipeline sanity -> accepted
-Phase 4D-C expanded unseen validation -> not_started
+Phase 4D-C expanded unseen validation -> accepted
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started
@@ -557,7 +622,7 @@ Phase 4D-B1.1 local implementation -> implemented
 Phase 4D-B1.1 server validation -> accepted
 Phase 4D-B1.2 closeout -> implemented
 Phase 4D-B1.3 default pipeline sanity -> accepted
-Phase 4D-C expanded unseen validation -> not_started
+Phase 4D-C expanded unseen validation -> accepted
 CDC -> not_started
 Router/tools -> not_started
 Demo/closure -> not_started

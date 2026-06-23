@@ -317,14 +317,15 @@ Do not:
 
 ## 8. Next Priorities
 
-1. Run Phase 4D-C expanded unseen validation with the accepted/default
-   `candidate_spans` pipeline.
-2. Keep B1 table/index scoring/context enhancement disabled by default and
+1. Start Phase 4D-D with a failure pattern audit for candidate answer
+   extraction and candidate span construction before writing new rules.
+2. Keep Candidate-ID Reader postponed; expanded unseen validation shows only
+   5 reader/reranking-attributed cases versus 72 extraction and 38 span cases.
+3. Keep optional full GRPO E2E postponed until candidate answer board quality
+   improves.
+4. Keep B1 table/index scoring/context enhancement disabled by default and
    available only through `--enable-table-index-packing` as experimental.
-3. Keep CDC `not_started` until explicitly started.
-4. Keep Candidate-ID Reader postponed until expanded unseen diagnostics show
-   reader-selection failures dominate after candidate coverage issues are
-   resolved.
+5. Keep CDC `not_started` until explicitly started.
 
 ## 8.1 Phase 4C Candidate Spans Accepted Result
 
@@ -656,7 +657,7 @@ Phase 4D-B1.1 local implementation -> implemented
 Phase 4D-B1.1 server validation -> accepted
 Phase 4D-B1.2 local implementation -> implemented
 Phase 4D-B1.3 default pipeline sanity -> accepted
-Phase 4D-C expanded unseen validation -> not_started
+Phase 4D-C expanded unseen validation -> accepted
 ```
 
 Scope:
@@ -907,8 +908,9 @@ Interpretation:
 Status:
 
 ```text
-Phase 4D-C expanded unseen validation -> not_started
+Phase 4D-C expanded unseen validation -> accepted
 Phase 4D-C scaffold / command preparation -> ready
+Phase 4D-D candidate answer board generalized improvement -> not_started
 ```
 
 Goal:
@@ -956,12 +958,164 @@ Resource notes:
 - retrieval-only: GPU required because it loads BGE-M3 and the reranker;
 - full E2E: GPU required because it loads Qwen3 and the GRPO adapter.
 
+Accepted strict validation result:
+
+```text
+source_shards = MP-DocVQA validation shards 5-8
+raw_sample = 85 document windows / 250 QA
+strict_accepted_sample = 77 document windows / 572 pages / 218 QA
+strict_sample_root = outputs/phase4/mpdocvqa_raw_phase4d_c_shards5_8_strict_accepted
+output_root = outputs/evaluation/phase4d_c_expanded_unseen_strict
+retrieval_run = phase4d_c_retrieval_candidate_spans
+candidate_answer_run = phase4d_c_candidate_answer_coverage
+failure_inspection_run = phase4d_c_failure_inspection_refined_cd
+candidate_span_gap_review_run = phase4d_c_candidate_span_gap_review_cd
+```
+
+Step A accepted:
+
+```text
+manifest_row_count = 85
+qa_jsonl_count = 250
+selected_window_count = 85
+selected_qa_count = 250
+page_bucket_distribution = pages_1:22, pages_2_5:22, pages_6_9:20, pages_10_plus:21
+shard_distribution = val-00005:23, val-00006:25, val-00007:16, val-00008:23
+```
+
+Step B strict accepted set:
+
+```text
+initial_ingestion_reports = 85
+failed_ingestion_windows = 6
+failed_ingestion_qa = 29
+accepted_only_windows = 79
+accepted_only_qa = 221
+strict_excluded_qa_mapping_mismatch_windows = 2
+strict_excluded_qa_mapping_mismatch_qa = 3
+strict_accepted_windows = 77
+strict_accepted_pages = 572
+strict_accepted_qa = 218
+```
+
+Strict filtering boundary:
+
+```text
+acceptance_report.status = success
+acceptance_report.failures = []
+sample_qa_count == qa_page_mapping_count
+report_qa_count == sample_qa_count
+page_identity_mapping_invalid_count == 0
+gold_page_mapping_invalid_count == 0
+page_identity_mapping.jsonl exists
+```
+
+Step C accepted retrieval-only + candidate_spans result:
+
+```text
+qa_count = 218
+document_count = 77
+page_count = 572
+candidate_evidence_completeness.qa_count = 218
+candidate_evidence_completeness.candidate_evidence_count = 218
+candidate_evidence_completeness.qid_set_match = true
+candidate_evidence_completeness.missing_qid_count = 0
+candidate_evidence_completeness.extra_qid_count = 0
+candidate_evidence_completeness.duplicate_candidate_qid_count = 0
+table_index_enhancement_enabled = false
+candidate_packing_sample_count = 218
+mean_candidate_span_count = 7.6055
+mean_candidate_block_count = 14.9312
+gold_page_has_candidate_span_rate = 0.9128
+no_gold_leakage = true
+candidate Recall@1/3/5 = 0.7248 / 0.8945 / 0.9128
+candidate MRR = 0.8099
+```
+
+Step D accepted candidate answer diagnostics:
+
+```text
+sample_count = 218
+candidate_span_answer_coverage = 0.7523
+candidate_answer_coverage_all = 0.4266
+candidate_answer_coverage_top1 = 0.1468
+candidate_answer_coverage_top3 = 0.2477
+candidate_answer_coverage_top5 = 0.3073
+candidate_answer_coverage_top10 = 0.3716
+candidate_answer_coverage_top20 = 0.3991
+candidate_answer_no_gold_leakage = true
+bucket_A = 19
+bucket_B = 0
+bucket_C = 43
+bucket_D = 72
+bucket_E = 0
+bucket_F = 0
+bucket_G = 84
+```
+
+Step E accepted failure attribution:
+
+```text
+candidate_span_or_normalization_gap = 38
+extraction_rule_gap = 72
+reader_selection_gap = 5
+improve_candidate_answer_extraction = 72
+improve_candidate_spans = 38
+candidate_id_reader_or_reranking = 5
+table_or_index_span_gap = 14
+candidate_span_selection_gap = 10
+candidate_span_partial_context_gap = 9
+page_number_or_content_lookup_gap = 5
+normalization_or_metric_gap = 0
+ocr_or_parsing_gap = 0
+```
+
+Phase 4D-C interpretation:
+
+- The accepted `candidate_spans` pipeline is stable on the strict unseen set:
+  full candidate evidence completeness, exact qid match, no gold leakage, and
+  table/index enhancement disabled.
+- Candidate answer coverage is lower than the 90-sample probe
+  (`all: 0.5222 -> 0.4266`, `top20: 0.4556 -> 0.3991`), so the candidate answer
+  extraction/span issue is not a one-sample artifact.
+- Current bottleneck is not Candidate-ID Reader. Only 5 cases are attributed
+  to reader/reranking, while 72 require candidate answer extraction work and
+  38 require candidate span work.
+- Optional full GRPO E2E remains postponed because Step C/D/E already identify
+  the dominant failure source and full E2E would mostly measure known candidate
+  board limitations.
+
+Engineering notes from server execution:
+
+- Expanded shard commands must preflight target parquet files explicitly;
+  shards 5-8 were initially absent on the server.
+- Wrapper commands should not use `set -e`, outer `exit`, or outer
+  `raise SystemExit` behavior that closes an interactive terminal; print JSON
+  status and log tails instead.
+- Accepted-only ingestion status is insufficient before retrieval; E2E inputs
+  need strict QA mapping checks.
+- Compact retrieval metric readers must support nested metric structures.
+- Failure inspection supports C/D/E buckets only; A is retrieval-side miss, and
+  G means no Reader/full E2E output.
+
+Phase 4D-D planned boundary:
+
+```text
+Phase 4D-D candidate answer board generalized improvement -> not_started
+first_action = failure pattern audit before writing new rules
+do_not_patch_specific_qids = true
+do_not_enable_candidate_id_reader = true
+do_not_run_full_grpo_by_default = true
+do_not_tune_90_sample_probe = true
+```
+
 Scaffold status:
 
 ```text
 branch = codex/phase4d-c-expanded-unseen-validation
 branch_base = origin/main
-server_execution = not_started
+initial_server_execution = not_started
+server_execution_after_report = accepted
 code_changes = none
 script_support = existing scripts cover Step A-E
 ```
