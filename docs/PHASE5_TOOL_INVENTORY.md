@@ -38,10 +38,11 @@ Known Phase 5B limitations:
 - `table_lookup`, `simple_calculation`, `document_summary`, Router, CLI, and
   trace artifact integration remain deferred.
 
-Next implementation target:
+Current implementation target:
 
 ```text
 Phase 5D local_fact_qa wrapper -> implemented
+Phase 5D-S local_fact_qa smoke runner -> implemented
 ```
 
 ## Phase 5D local_fact_qa Wrapper Status
@@ -71,6 +72,71 @@ passes a trace path; the wrapper does not invent trace artifact locations.
 Local tests cover wrapper behavior, structured errors, dry-run behavior, fake
 workflow injection, default heuristic workflow reuse, citation fields, and
 SQLite trace persistence. They do not verify server real-model QA quality.
+
+## Phase 5D-S local_fact_qa Smoke Runner Status
+
+Phase 5D-S adds a reusable smoke runner in:
+
+```text
+scripts/run_phase5d_local_fact_qa_smoke.py
+```
+
+The runner calls the Phase 5D `local_fact_qa` wrapper over an existing SQLite
+database and already-ingested `doc_id`. It is not the final MVP CLI and does
+not implement Router, document summary, table lookup, calculation, trace
+artifact wrapping, training, VLM, or external LLM API calls.
+
+Supported inputs:
+
+```text
+--db-path
+--doc-id
+--question
+--questions-jsonl
+--output-dir
+--dry-run
+--limit
+--answer-policy {heuristic,base,sft,grpo}
+--retrieval-config
+--workflow-config
+--evidence-packing
+```
+
+Additional AnswerPolicy options mirror the existing Qwen policy configuration
+for server smoke use. `--retrieval-config` and `--workflow-config` are recorded
+in smoke artifacts for reproducibility; this runner does not replace the
+future unified CLI configuration layer.
+
+Output artifacts are written under:
+
+```text
+outputs/smoke/phase5d_local_fact_qa/<run_id>/
+  summary.json
+  summary.md
+  results.jsonl
+  preview.json
+```
+
+`results.jsonl` rows include `doc_id`, `question`, `status`, `answer`,
+`citations`, `supporting_evidence_ids`, `tools_used`, `run_id`, `trace_path`,
+`warnings`, and `error`. `summary.json` records dry-run / real-workflow flags
+and confirms that the runner does not use external API, VLM, training, or full
+E2E execution.
+
+Data sources:
+
+- `DocumentRepository` and SQLite `documents` / `evidence_blocks`;
+- existing `local_fact_qa` wrapper;
+- optional SQLite `TraceRepository` on non-dry-run paths;
+- existing `run_qa_workflow` and AnswerPolicy path.
+
+Known limitations:
+
+- dry-run validates wrapper shape and evidence access only; it does not verify
+  answer quality;
+- local heuristic workflow smoke is not server real-model QA validation;
+- server real-model smoke remains a foreground command-plan step using existing
+  model artifacts and SQLite evidence.
 
 Deferred:
 

@@ -621,6 +621,30 @@ It does not require changing AnswerPolicy prompt.
 It does not require retraining.
 ```
 
+### Phase 5D-S: Local Fact QA Tool Server Smoke
+
+Goal:
+
+```text
+Prepare a reusable foreground smoke runner for the Phase 5D local_fact_qa tool.
+```
+
+Implementation:
+
+```text
+scripts/run_phase5d_local_fact_qa_smoke.py
+```
+
+Acceptance:
+
+```text
+The runner can execute dry-run wrapper checks and non-dry local_fact_qa workflow smoke over an existing SQLite doc_id.
+It writes summary.json, summary.md, results.jsonl, and preview.json under outputs/smoke/phase5d_local_fact_qa/<run_id>/.
+It records structured failures for missing db paths, missing doc_id, missing questions, and tool errors.
+It records dry-run and real-workflow flags, and confirms no external API, VLM, training, or full E2E execution is used.
+Server real-model smoke is ready as a foreground command plan but is not accepted until run on server artifacts.
+```
+
 ### Phase 5E: Document Summary MVP
 
 Goal:
@@ -719,9 +743,9 @@ Is an external LLM planning call justified here?
 Immediate next step:
 
 ```text
-Start Phase 5A.
-Perform architecture audit and contract design.
-Do not directly implement the full MVP yet.
+Run Phase 5D-S server smoke on real SQLite evidence and available local model artifacts.
+Then continue to Phase 5E document_summary or Phase 5F unified CLI only with explicit task scope.
+Do not implement final CLI trace artifacts, document_summary, table lookup, or calculation inside Phase 5D-S.
 ```
 
 Phase 4D-D remains deferred until after Phase 5 MVP is accepted.

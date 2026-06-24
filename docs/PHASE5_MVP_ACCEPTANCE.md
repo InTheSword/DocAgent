@@ -293,6 +293,7 @@ Current next targets:
 
 ```text
 Phase 5D local_fact_qa wrapper -> implemented
+Phase 5D-S local_fact_qa smoke runner -> implemented
 Phase 5F unified CLI / trace artifact integration -> not_started
 ```
 
@@ -317,6 +318,31 @@ Phase 5D local_fact_qa tool wrapper is complete when:
   return structured errors;
 - no CLI, external LLM API, VLM, training, table lookup, calculation, or
   document summary is implemented in Phase 5D.
+
+## Exit Criteria For Phase 5D-S
+
+Phase 5D-S local fact QA smoke support is complete when:
+
+- `scripts/run_phase5d_local_fact_qa_smoke.py` can run `local_fact_qa` over an
+  already-ingested SQLite document;
+- it supports `--db-path`, `--doc-id`, `--question` or `--questions-jsonl`,
+  `--output-dir`, `--dry-run`, `--limit`, `--answer-policy`,
+  `--retrieval-config`, `--workflow-config`, and `--evidence-packing`;
+- it writes `summary.json`, `summary.md`, `results.jsonl`, and `preview.json`
+  under `outputs/smoke/phase5d_local_fact_qa/<run_id>/`;
+- output rows include `doc_id`, `question`, `status`, `answer`, `citations`,
+  `supporting_evidence_ids`, `tools_used`, `run_id`, `trace_path`, warnings,
+  and structured errors;
+- missing db paths, missing doc ids, missing questions, and tool errors are
+  recorded as structured failures rather than hidden by empty SQLite creation;
+- dry-run and fixture tests are explicitly documented as not validating real QA
+  quality;
+- server real-model smoke is prepared as a foreground command plan, but is not
+  marked accepted until run on the server with real artifacts.
+
+Phase 5D-S does not implement final CLI trace artifact creation. Trace artifact
+creation is deferred to Router / CLI / MVP integration unless an existing
+wrapper is reused without functional expansion.
 
 Current next targets:
 

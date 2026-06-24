@@ -8,6 +8,54 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-24: Phase 5D-S local_fact_qa Smoke Runner Implemented
+
+Decision: add a reusable server-smoke runner for the Phase 5D `local_fact_qa`
+tool wrapper, without turning it into the final unified CLI.
+
+Implementation:
+
+- `scripts/run_phase5d_local_fact_qa_smoke.py`
+- focused tests in `tests/test_phase5d_local_fact_qa_smoke.py`
+
+Reused components:
+
+- `DocumentRepository` and SQLite evidence blocks for document access;
+- Phase 5D `local_fact_qa` wrapper;
+- optional `TraceRepository` on non-dry-run workflow paths;
+- existing `run_qa_workflow` and AnswerPolicy implementations.
+
+Artifacts:
+
+```text
+outputs/smoke/phase5d_local_fact_qa/<run_id>/summary.json
+outputs/smoke/phase5d_local_fact_qa/<run_id>/summary.md
+outputs/smoke/phase5d_local_fact_qa/<run_id>/results.jsonl
+outputs/smoke/phase5d_local_fact_qa/<run_id>/preview.json
+```
+
+Boundary:
+
+- dry-run mode validates wrapper shape and evidence access only;
+- local heuristic workflow smoke does not validate server real-model QA
+  quality;
+- missing db paths, missing doc ids, missing questions, and tool failures are
+  written as structured smoke failures;
+- no Router, final CLI, trace artifact wrapper, document summary, table lookup,
+  calculation, external LLM API, VLM, training, full GRPO E2E, AnswerPolicy
+  prompt change, or candidate answer extraction change is included.
+
+Current status:
+
+```text
+Phase 5D local_fact_qa wrapper -> implemented
+Phase 5D-S local_fact_qa smoke runner -> implemented
+Phase 5D-S server real-model smoke -> ready
+Phase 5E document_summary -> not_started
+Phase 5F Unified CLI -> not_started
+Phase 5G Multi-task Regression -> not_started
+```
+
 ## 2026-06-24: Phase 5D local_fact_qa Tool Wrapper Implemented
 
 Decision: implement `local_fact_qa` as a callable tool wrapper around the

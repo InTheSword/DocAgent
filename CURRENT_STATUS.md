@@ -32,6 +32,15 @@ boundaries, default heuristic workflow reuse, citation/supporting evidence
 fields, and SQLite trace persistence; server real-model smoke has not been
 run in this round.
 
+Phase 5D-S local fact QA smoke support is implemented in
+`scripts/run_phase5d_local_fact_qa_smoke.py`. It runs the Phase 5D
+`local_fact_qa` wrapper against an existing SQLite `doc_id`, supports dry-run
+and non-dry workflow smoke, and writes `summary.json`, `summary.md`,
+`results.jsonl`, and `preview.json` under
+`outputs/smoke/phase5d_local_fact_qa/<run_id>/`. Dry-run and local heuristic
+smoke do not validate server real-model QA quality. A foreground server command
+plan is ready; server real-model smoke remains pending.
+
 Status:
 
 ```text
@@ -64,6 +73,8 @@ Phase 5A architecture audit and contracts -> implemented
 Phase 5B deterministic P0 document tools -> implemented
 Phase 5C Router / Planner -> implemented
 Phase 5D local_fact_qa wrapper -> implemented
+Phase 5D-S local_fact_qa smoke runner -> implemented
+Phase 5D-S server real-model smoke -> ready
 Phase 5E Document Summary MVP -> not_started
 Phase 5F Unified CLI -> not_started
 Phase 5G Multi-task Regression -> not_started
@@ -113,6 +124,9 @@ Current conclusion:
   calls or tool execution.
 - Phase 5D `local_fact_qa` wrapper is implemented as a callable tool interface;
   local tests cover wrapper behavior, not server real-model QA quality.
+- Phase 5D-S smoke runner is implemented and writes reusable smoke artifacts;
+  server real-model smoke is ready as a foreground command plan, not yet
+  accepted.
 - Next Phase 5 target is Phase 5E document_summary or Phase 5F CLI integration;
   final CLI and trace artifact integration remain not_started.
 
