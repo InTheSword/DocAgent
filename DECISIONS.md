@@ -8,6 +8,53 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-24: Phase 5B P0 Deterministic Document Tools Implemented
+
+Decision: implement the Phase 5B P0 deterministic document tools as direct,
+testable Python functions without Router, CLI, external LLM, VLM, or trace
+artifact expansion.
+
+Implementation:
+
+- `docagent/tools/document_tools.py`
+- exported from `docagent/tools/__init__.py`
+- focused tests in `tests/test_phase5_document_tools.py`
+
+Implemented tools:
+
+```text
+count_pages
+count_blocks
+count_tables
+count_images
+get_page_text
+list_pages
+```
+
+Data sources:
+
+- `DocumentRepository.get_document`
+- `documents.page_count`
+- SQLite-backed `EvidenceBlock` payloads loaded via
+  `DocumentRepository.load_evidence_blocks`
+- page aggregate blocks when present, with same-page child block fallback
+
+Known limitations:
+
+- `count_images` uses MinerU-derived image/figure/chart block metadata and
+  does not perform pixel reasoning.
+- `get_page_text` is deterministic page text assembly, not summarization.
+- `table_lookup`, `simple_calculation`, `document_summary`, Router,
+  `scripts/docagent_cli.py`, and final MVP trace artifact creation remain
+  deferred.
+
+Current status:
+
+```text
+Phase 5B deterministic P0 document tools -> implemented
+Phase 5C Router / Planner -> not_started
+```
+
 ## 2026-06-23: Phase 5 Personal-use DocAgent MVP Activated
 
 Decision: defer Phase 4D-D candidate answer board generalized improvement and

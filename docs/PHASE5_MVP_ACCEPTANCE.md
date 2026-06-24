@@ -179,7 +179,10 @@ Phase 5B/P0 implementation should add or reuse smoke tests for:
 - get page text for a known page;
 - list pages for an ingested fixture;
 - JSON output schema validity;
-- trace artifact creation.
+
+Trace artifact creation is not part of Phase 5B P0 deterministic document
+tools. It is deferred to Router / CLI / MVP integration unless an existing
+wrapper is reused without functional expansion.
 
 ## Minimum Regression Categories
 
@@ -228,6 +231,29 @@ Phase 5A is complete when:
 - Phase 5 is recorded as active;
 - no behavior-changing code is modified;
 - lightweight documentation or existing tests pass.
+
+## Exit Criteria For Phase 5B
+
+Phase 5B P0 deterministic document tools are complete when:
+
+- `docagent/tools/document_tools.py` exposes `count_pages`, `count_blocks`,
+  `count_tables`, `count_images`, `get_page_text`, and `list_pages`;
+- tools read from `DocumentRepository`, `documents.page_count`, and persisted
+  `EvidenceBlock` payloads;
+- tool outputs are JSON-serializable dicts;
+- missing documents and missing pages return structured errors;
+- page inputs and outputs use 1-based page numbers;
+- text previews are capped;
+- focused tests cover normal counts, page lookup, list pages, JSON
+  serialization, and structured errors;
+- Router, `scripts/docagent_cli.py`, final trace artifacts, `document_summary`,
+  `table_lookup`, and `simple_calculation` remain deferred.
+
+Next implementation target:
+
+```text
+Phase 5C Router / Planner -> not_started
+```
 
 ## Exit Criteria For Phase 5 MVP
 

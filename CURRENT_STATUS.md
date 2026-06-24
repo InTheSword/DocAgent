@@ -1,6 +1,6 @@
 # Current Status
 
-Updated: 2026-06-23
+Updated: 2026-06-24
 
 ## Phase 4D-C Accepted / Phase 5 Active
 
@@ -10,6 +10,13 @@ accepted set contains 77 document windows, 572 pages, and 218 QA. The main
 bottleneck is candidate answer extraction and candidate span construction, not
 Reader selection. Phase 4D-D candidate answer board generalized improvement is
 deferred while Phase 5 starts the personal-use DocAgent MVP track.
+
+Phase 5B P0 deterministic document tools are implemented in
+`docagent/tools/document_tools.py`. The tools read from
+`DocumentRepository`, `documents.page_count`, and persisted `EvidenceBlock`
+payloads. They do not implement Router, `scripts/docagent_cli.py`, final CLI
+trace artifact creation, `document_summary`, `table_lookup`, or
+`simple_calculation`.
 
 Status:
 
@@ -40,8 +47,10 @@ Phase 4D-C scaffold / command preparation -> ready
 Phase 4D-D candidate answer board generalized improvement -> deferred
 Phase 5 Personal-use DocAgent MVP -> active
 Phase 5A architecture audit and contracts -> implemented
+Phase 5B deterministic P0 document tools -> implemented
+Phase 5C Router / Planner -> not_started
 CDC -> not_started
-Router/tools -> not_started
+MVP CLI / trace integration -> not_started
 Demo/closure -> not_started
 ```
 
@@ -80,6 +89,10 @@ Current conclusion:
 - Candidate-ID Reader remains postponed.
 - Phase 4D-D candidate answer board generalized improvement is deferred.
 - Phase 5 Personal-use DocAgent MVP is active.
+- Phase 5B P0 deterministic tools are implemented from SQLite document
+  metadata and EvidenceBlock payloads.
+- Next Phase 5 target is Router / Planner, not final CLI or trace artifact
+  integration.
 
 Phase 4D-C accepted server result:
 

@@ -13,12 +13,11 @@ Phase 4D-C accepted -> Phase 4D-D deferred -> Phase 5 active
 
 ```text
 Phase 5 Personal-use DocAgent MVP
--> Phase 5A architecture audit and contracts
--> preserve provided PHASE5_ACTIVE_PLAN.md as the master plan
--> document router contract
--> document deterministic tool inventory
--> document MVP acceptance criteria
--> stop before functional MVP implementation
+-> Phase 5B deterministic P0 document tools
+-> implement count_pages, count_blocks, count_tables, count_images,
+   get_page_text, and list_pages from DocumentRepository / EvidenceBlock data
+-> stop before Router, docagent_cli.py, final CLI trace artifacts,
+   document_summary, table_lookup, and simple_calculation
 ```
 
 ## Current Status
@@ -67,8 +66,10 @@ Phase 4D-C scaffold / command preparation -> ready
 Phase 4D-D candidate answer board generalized improvement -> deferred
 Phase 5 Personal-use DocAgent MVP -> active
 Phase 5A architecture audit and contracts -> implemented
+Phase 5B deterministic P0 document tools -> implemented
+Phase 5C Router / Planner -> not_started
 CDC -> not_started
-Router/tools -> not_started
+MVP CLI / trace integration -> not_started
 Demo/closure -> not_started
 ```
 

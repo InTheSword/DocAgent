@@ -6,6 +6,44 @@ This inventory is based on current repository files. Phase 5A does not
 implement document tools; it records what can be reused and what still needs
 code.
 
+## Phase 5B Implementation Status
+
+Phase 5B P0 deterministic document tools are implemented in:
+
+```text
+docagent/tools/document_tools.py
+```
+
+The functions read from `DocumentRepository`, `documents.page_count`, and
+SQLite-backed `EvidenceBlock` payloads. They do not call Router, CLI, external
+LLM, VLM, retrieval, or model code.
+
+Implemented P0 tools:
+
+```text
+count_pages
+count_blocks
+count_tables
+count_images
+get_page_text
+list_pages
+```
+
+Known Phase 5B limitations:
+
+- `get_page_text` uses page aggregate blocks when available and otherwise
+  joins same-page child block retrieval text.
+- `count_images` counts image/figure-like evidence blocks and chart metadata
+  from MinerU-derived block metadata; it does not perform pixel reasoning.
+- `table_lookup`, `simple_calculation`, `document_summary`, Router, CLI, and
+  trace artifact integration remain deferred.
+
+Next implementation target:
+
+```text
+Phase 5C Router / Planner -> not_started
+```
+
 ## Reusable Code Paths
 
 Ingestion and document cache:
@@ -307,12 +345,12 @@ SQLite with small new wrapper code.
 
 | Tool | Current source | Needs new code? | Notes |
 |---|---|---:|---|
-| `count_pages` | `documents.page_count`, `page_documents.jsonl`, page blocks | Yes | Prefer SQLite/document metadata, verify against page blocks when available. |
-| `count_blocks` | `evidence_blocks` table or `evidence_blocks.jsonl` | Yes | Count non-page blocks by default. |
-| `count_tables` | `EvidenceBlock.block_type == "table"` | Yes | Also expose `table_html_count` when needed. |
-| `count_images` | `block_type == "image"` and chart/image metadata | Yes | Count image/figure/chart regions from converted blocks. |
-| `get_page_text` | page aggregate block text or blocks filtered by `page_id` | Yes | Return page number, text, child block ids, and citation metadata. |
-| `list_pages` | page aggregate blocks / page ids | Yes | Return page ids and per-page child counts. |
+| `count_pages` | `documents.page_count`, page blocks, block page ids | Implemented | Prefer SQLite document metadata, then page blocks, then block page ids. |
+| `count_blocks` | `evidence_blocks` table | Implemented | Counts non-page blocks by default and returns `by_block_type`. |
+| `count_tables` | `EvidenceBlock.block_type == "table"` | Implemented | Returns `table_count`, `table_html_count`, and compact table block metadata. |
+| `count_images` | `block_type in {"image", "figure"}` and chart/image metadata | Implemented | Counts image/figure/chart regions from converted blocks. |
+| `get_page_text` | page aggregate block text or blocks filtered by `page_id` | Implemented | Returns 1-based page number, full text, capped preview, block ids, and source. |
+| `list_pages` | page aggregate blocks / page ids | Implemented | Returns 1-based pages, child block counts, page block ids, and capped previews. |
 
 ## P1 Tool Plan
 
