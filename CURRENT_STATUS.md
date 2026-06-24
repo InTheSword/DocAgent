@@ -18,6 +18,12 @@ payloads. They do not implement Router, `scripts/docagent_cli.py`, final CLI
 trace artifact creation, `document_summary`, `table_lookup`, or
 `simple_calculation`.
 
+Phase 5C rule-first Router / Planner is implemented in `docagent/router/`.
+It returns schema-valid single-step planning decisions from question,
+`available_tools`, and optional `document_profile`. It does not execute tools,
+call external LLM/VLM APIs, wrap `local_fact_qa`, implement summary/table/
+calculation tools, or write final CLI trace artifacts.
+
 Status:
 
 ```text
@@ -48,7 +54,10 @@ Phase 4D-D candidate answer board generalized improvement -> deferred
 Phase 5 Personal-use DocAgent MVP -> active
 Phase 5A architecture audit and contracts -> implemented
 Phase 5B deterministic P0 document tools -> implemented
-Phase 5C Router / Planner -> not_started
+Phase 5C Router / Planner -> implemented
+Phase 5D local_fact_qa wrapper -> not_started
+Phase 5E Document Summary MVP -> not_started
+Phase 5F Unified CLI -> not_started
 CDC -> not_started
 MVP CLI / trace integration -> not_started
 Demo/closure -> not_started
@@ -91,8 +100,10 @@ Current conclusion:
 - Phase 5 Personal-use DocAgent MVP is active.
 - Phase 5B P0 deterministic tools are implemented from SQLite document
   metadata and EvidenceBlock payloads.
-- Next Phase 5 target is Router / Planner, not final CLI or trace artifact
-  integration.
+- Phase 5C rule-first Router / Planner is implemented without external LLM API
+  calls or tool execution.
+- Next Phase 5 target is the Phase 5D `local_fact_qa` wrapper; final CLI and
+  trace artifact integration remain not_started.
 
 Phase 4D-C accepted server result:
 

@@ -8,6 +8,53 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-24: Phase 5C Rule-first Router / Planner Implemented
+
+Decision: implement the Phase 5C router as a deterministic rule-first
+single-step planner, not a simple classifier and not a tool executor.
+
+Implementation:
+
+- `docagent/router/schemas.py`
+- `docagent/router/rule_router.py`
+- `docagent/router/__init__.py`
+- focused tests in `tests/test_phase5_router.py`
+
+Supported task types:
+
+```text
+local_fact_qa
+table_lookup_or_calculation
+document_statistics
+page_lookup
+structured_extraction
+document_summary
+```
+
+Router behavior:
+
+- input supports `doc_id`, `question`, `available_tools`, optional
+  `document_profile`, and optional `options`;
+- output includes selected tools, retrieval/full-scan flags, table/calculation
+  flags, target evidence types, lightweight deterministic `query_rewrite`,
+  confidence, reason, fallback status, and warnings;
+- selected tools are validated against `available_tools`;
+- external LLM fallback is disabled by default and no external API client is
+  implemented;
+- `requires_visual_understanding` is always false;
+- unsupported visual pixel questions fall back to OCR/caption-based
+  `local_fact_qa` when available, otherwise return a structured router error;
+- complex query decomposition is deferred and reported with
+  `complex_query_decomposition_deferred`.
+
+Current status:
+
+```text
+Phase 5C Router / Planner -> implemented
+Phase 5D local_fact_qa wrapper -> not_started
+Phase 5F Unified CLI -> not_started
+```
+
 ## 2026-06-24: Phase 5B P0 Deterministic Document Tools Implemented
 
 Decision: implement the Phase 5B P0 deterministic document tools as direct,

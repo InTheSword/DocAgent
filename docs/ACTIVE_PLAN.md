@@ -13,11 +13,12 @@ Phase 4D-C accepted -> Phase 4D-D deferred -> Phase 5 active
 
 ```text
 Phase 5 Personal-use DocAgent MVP
--> Phase 5B deterministic P0 document tools
--> implement count_pages, count_blocks, count_tables, count_images,
-   get_page_text, and list_pages from DocumentRepository / EvidenceBlock data
--> stop before Router, docagent_cli.py, final CLI trace artifacts,
-   document_summary, table_lookup, and simple_calculation
+-> Phase 5C Router / Planner
+-> implement a rule-first single-step planner from question + available_tools
+   + optional document_profile
+-> output schema-valid planning decisions without executing tools
+-> stop before docagent_cli.py, local_fact_qa wrapper, final CLI trace
+   artifacts, document_summary generation, table_lookup, and simple_calculation
 ```
 
 ## Current Status
@@ -67,7 +68,10 @@ Phase 4D-D candidate answer board generalized improvement -> deferred
 Phase 5 Personal-use DocAgent MVP -> active
 Phase 5A architecture audit and contracts -> implemented
 Phase 5B deterministic P0 document tools -> implemented
-Phase 5C Router / Planner -> not_started
+Phase 5C Router / Planner -> implemented
+Phase 5D local_fact_qa wrapper -> not_started
+Phase 5E Document Summary MVP -> not_started
+Phase 5F Unified CLI -> not_started
 CDC -> not_started
 MVP CLI / trace integration -> not_started
 Demo/closure -> not_started

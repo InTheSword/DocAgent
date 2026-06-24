@@ -168,6 +168,21 @@ document_summary
 table tool exists. Until the tool exists, it may fall back to `local_fact_qa`
 with a warning.
 
+Phase 5C implements the rule-first single-step Router / Planner for:
+
+```text
+local_fact_qa
+table_lookup_or_calculation
+document_statistics
+page_lookup
+structured_extraction
+document_summary
+```
+
+The router returns schema-valid planning decisions only. It does not execute
+tools, generate summaries, wrap `local_fact_qa`, or write final CLI trace
+artifacts.
+
 ## Minimum Smoke Tests
 
 Phase 5B/P0 implementation should add or reuse smoke tests for:
@@ -252,7 +267,33 @@ Phase 5B P0 deterministic document tools are complete when:
 Next implementation target:
 
 ```text
-Phase 5C Router / Planner -> not_started
+Phase 5C Router / Planner -> implemented
+```
+
+## Exit Criteria For Phase 5C
+
+Phase 5C Router / Planner is complete when:
+
+- `docagent/router/rule_router.py` provides a rule-first single-step planner;
+- `docagent/router/schemas.py` validates supported task types, selected tools,
+  confidence range, warning fields, and the Phase 5 visual boundary;
+- router input supports `doc_id`, `question`, `available_tools`, optional
+  `document_profile`, and optional `options`;
+- router output includes `task_type`, `selected_tools`, retrieval/full-scan
+  flags, table/calculation flags, `requires_visual_understanding`,
+  `target_evidence_types`, `query_rewrite`, `confidence`, `reason`,
+  `fallback_used`, and `warnings`;
+- external LLM fallback is disabled by default and no external API is called;
+- unsupported `visual_pixel_qa` questions fall back to OCR/caption
+  `local_fact_qa` when available, otherwise return a structured router error;
+- complex query decomposition is explicitly deferred via warning;
+- at least 30 fixed router cases pass.
+
+Current next targets:
+
+```text
+Phase 5D local_fact_qa wrapper -> not_started
+Phase 5F unified CLI / trace artifact integration -> not_started
 ```
 
 ## Exit Criteria For Phase 5 MVP
