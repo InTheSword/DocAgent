@@ -267,7 +267,7 @@ Phase 5B P0 deterministic document tools are complete when:
 Next implementation target:
 
 ```text
-Phase 5C Router / Planner -> implemented
+Phase 5C Router / Planner -> accepted
 ```
 
 ## Exit Criteria For Phase 5C
@@ -292,8 +292,9 @@ Phase 5C Router / Planner is complete when:
 Current next targets:
 
 ```text
-Phase 5D local_fact_qa wrapper -> implemented
-Phase 5D-S local_fact_qa smoke runner -> implemented
+Phase 5D local_fact_qa wrapper -> accepted
+Phase 5D-S local_fact_qa smoke runner -> accepted
+Phase 5D-S server real-model smoke -> accepted
 Phase 5F unified CLI / trace artifact integration -> not_started
 ```
 
@@ -337,12 +338,57 @@ Phase 5D-S local fact QA smoke support is complete when:
   recorded as structured failures rather than hidden by empty SQLite creation;
 - dry-run and fixture tests are explicitly documented as not validating real QA
   quality;
-- server real-model smoke is prepared as a foreground command plan, but is not
-  marked accepted until run on the server with real artifacts.
+- server real-model smoke has passed on server artifacts and is accepted as
+  execution stability evidence, not benchmark-level answer quality.
 
 Phase 5D-S does not implement final CLI trace artifact creation. Trace artifact
 creation is deferred to Router / CLI / MVP integration unless an existing
 wrapper is reused without functional expansion.
+
+Accepted Phase 5D-S server smoke evidence:
+
+```text
+db_path = outputs/docagent.db
+doc_id = c1fc1c5e040ec894
+dry_run_run_id = phase5d_local_fact_qa_20260624_155343_e1eac210
+real_model_run_id = phase5d_local_fact_qa_20260624_155345_4076f226
+real_model_summary = outputs/smoke/phase5d_local_fact_qa/phase5d_local_fact_qa_20260624_155345_4076f226/summary.json
+real_model_results = outputs/smoke/phase5d_local_fact_qa/phase5d_local_fact_qa_20260624_155345_4076f226/results.jsonl
+real_model_preview = outputs/smoke/phase5d_local_fact_qa/phase5d_local_fact_qa_20260624_155345_4076f226/preview.json
+status = success
+question_count = 3
+completed_count = 3
+failed_count = 0
+used_dry_run = false
+used_real_workflow = true
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+warning = evidence_packing_option_deferred_to_workflow
+```
+
+The warning does not block smoke acceptance; it only records that the
+`evidence_packing` option is handled by the existing workflow path.
+
+Real-model result preview:
+
+```text
+Q1: What is this document about?
+A1: The Cigarette Industry in India
+citations_count = 3
+supporting_evidence_ids_count = 3
+
+Q2: What date is mentioned in this document?
+A2: 2000-01
+citations_count = 5
+supporting_evidence_ids_count = 5
+
+Q3: What amount or total is mentioned in this document?
+A3: 10
+citations_count = 5
+supporting_evidence_ids_count = 5
+```
 
 Current next targets:
 

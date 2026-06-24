@@ -13,10 +13,11 @@ Phase 4D-C accepted -> Phase 4D-D deferred -> Phase 5 active
 
 ```text
 Phase 5 Personal-use DocAgent MVP
--> Phase 5D local_fact_qa tool wrapper
--> wrap existing retrieval + evidence context + AnswerPolicy + trace path as a
-   callable local_fact_qa tool
--> support dry_run / fake workflow tests without claiming real-model QA quality
+-> Phase 5D-S server smoke result sync
+-> record the completed local_fact_qa smoke runner and accepted server
+   real-model smoke evidence
+-> treat smoke as execution stability evidence, not benchmark-level answer
+   quality
 -> stop before docagent_cli.py, document_summary generation, table_lookup,
    simple_calculation, external LLM/VLM, training, and full GRPO E2E
 ```
@@ -66,10 +67,12 @@ Phase 4D-C expanded unseen validation -> accepted
 Phase 4D-C scaffold / command preparation -> ready
 Phase 4D-D candidate answer board generalized improvement -> deferred
 Phase 5 Personal-use DocAgent MVP -> active
-Phase 5A architecture audit and contracts -> implemented
-Phase 5B deterministic P0 document tools -> implemented
-Phase 5C Router / Planner -> implemented
-Phase 5D local_fact_qa wrapper -> implemented
+Phase 5A architecture audit and contracts -> accepted
+Phase 5B deterministic P0 document tools -> accepted
+Phase 5C Router / Planner -> accepted
+Phase 5D local_fact_qa wrapper -> accepted
+Phase 5D-S local_fact_qa smoke runner -> accepted
+Phase 5D-S server real-model smoke -> accepted
 Phase 5E Document Summary MVP -> not_started
 Phase 5F Unified CLI -> not_started
 Phase 5G Multi-task Regression -> not_started
@@ -638,7 +641,7 @@ Phase 5A active boundary:
 
 ```text
 goal = Personal-use DocAgent MVP architecture audit and contracts
-status = implemented
+status = accepted
 branch = codex/phase5a-mvp-planning-contracts
 deliverables = docs/PHASE5_ACTIVE_PLAN.md,
               docs/PHASE5_ROUTER_CONTRACT.md,
@@ -650,6 +653,32 @@ do_not_implement_document_tools = true
 do_not_modify_answer_policy_prompt = true
 do_not_modify_candidate_answer_extraction = true
 do_not_run_full_grpo_e2e = true
+```
+
+Phase 5D-S accepted server smoke:
+
+```text
+branch = codex/phase5d-local-fact-qa-smoke
+runner_commit = 53b9d1000ce8389c9dd1a574072f61bdb6407eb7
+db_path = outputs/docagent.db
+doc_id = c1fc1c5e040ec894
+dry_run_run_id = phase5d_local_fact_qa_20260624_155343_e1eac210
+real_model_run_id = phase5d_local_fact_qa_20260624_155345_4076f226
+real_model_summary = outputs/smoke/phase5d_local_fact_qa/phase5d_local_fact_qa_20260624_155345_4076f226/summary.json
+real_model_results = outputs/smoke/phase5d_local_fact_qa/phase5d_local_fact_qa_20260624_155345_4076f226/results.jsonl
+real_model_preview = outputs/smoke/phase5d_local_fact_qa/phase5d_local_fact_qa_20260624_155345_4076f226/preview.json
+status = success
+question_count = 3
+completed_count = 3
+failed_count = 0
+used_dry_run = false
+used_real_workflow = true
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+warning = evidence_packing_option_deferred_to_workflow
+acceptance_boundary = execution stability, not benchmark-level answer quality
 ```
 
 Phase 4D-C scaffold / command preparation:
@@ -747,17 +776,18 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Start Phase 5B with deterministic document tools after Phase 5A contracts
-   are accepted.
-2. Keep Phase 4D-D deferred until MVP entrypoint, router, deterministic tools,
+1. Keep Phase 5D-S accepted as a smoke/execution-stability milestone.
+2. Start Phase 5E document_summary or Phase 5F unified CLI only after explicit
+   task approval.
+3. Keep Phase 4D-D deferred until MVP entrypoint, router, deterministic tools,
    and multi-task regression are accepted.
-3. Keep Candidate-ID Reader postponed until reader-selection failures dominate
+4. Keep Candidate-ID Reader postponed until reader-selection failures dominate
    after candidate coverage issues are resolved.
-4. Keep optional full GRPO E2E postponed until candidate answer board quality
+5. Keep optional full GRPO E2E postponed until candidate answer board quality
    improves.
-5. Keep `page_children` as the default until more shard and document-type
+6. Keep `page_children` as the default until more shard and document-type
    validation supports a global default change.
-6. Keep CDC `not_started` until explicitly started.
+7. Keep CDC `not_started` until explicitly started.
 
 ## Stop Condition
 
@@ -765,13 +795,18 @@ absolute_path_hit_count = 0
 Phase 4D-B1.3 server sanity accepted
 + Phase 4D-C expanded unseen validation accepted
 + Phase 4D-D deferred
-+ Phase 5A architecture audit and contract documents implemented
++ Phase 5A architecture audit and contract documents accepted
++ Phase 5B deterministic P0 document tools accepted
++ Phase 5C Router / Planner accepted
++ Phase 5D local_fact_qa wrapper accepted
++ Phase 5D-S server smoke accepted as execution stability evidence
 + targeted and regression tests pass
 + status documents updated
 + branch pushed
-+ stop before Reader prompt changes, AnswerPolicy integration, training, CDC,
-   Demo, per-qid repairs, further 90-sample probe tuning, and any global
-   `candidate_spans` default change
++ stop before Phase 5E implementation, docagent_cli.py, Reader prompt changes,
+   AnswerPolicy integration changes, training, CDC, Demo, per-qid repairs,
+   further 90-sample probe tuning, and any global `candidate_spans` default
+   change
 ```
 
 ## Phase Documents

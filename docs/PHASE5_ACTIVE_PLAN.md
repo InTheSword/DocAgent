@@ -4,6 +4,22 @@
 
 Phase 4D-C has been accepted and recorded.
 
+Current Phase 5 status after Phase 5D-S server smoke result sync:
+
+```text
+Phase 5A architecture audit and contracts -> accepted
+Phase 5B deterministic P0 document tools -> accepted
+Phase 5C Router / Planner -> accepted
+Phase 5D local_fact_qa wrapper -> accepted
+Phase 5D-S local_fact_qa smoke runner -> accepted
+Phase 5D-S server real-model smoke -> accepted
+Phase 5E document_summary -> not_started
+Phase 5F unified CLI -> not_started
+Phase 5G multi-task regression -> not_started
+```
+
+Phase 5D-S validates execution stability, not benchmark-level answer quality.
+
 Current accepted Phase 4D-C result:
 
 ```text
@@ -642,7 +658,30 @@ The runner can execute dry-run wrapper checks and non-dry local_fact_qa workflow
 It writes summary.json, summary.md, results.jsonl, and preview.json under outputs/smoke/phase5d_local_fact_qa/<run_id>/.
 It records structured failures for missing db paths, missing doc_id, missing questions, and tool errors.
 It records dry-run and real-workflow flags, and confirms no external API, VLM, training, or full E2E execution is used.
-Server real-model smoke is ready as a foreground command plan but is not accepted until run on server artifacts.
+Server real-model smoke has passed on server artifacts and is accepted as execution stability evidence, not benchmark-level answer quality.
+```
+
+Accepted server smoke evidence:
+
+```text
+db_path = outputs/docagent.db
+doc_id = c1fc1c5e040ec894
+dry_run_run_id = phase5d_local_fact_qa_20260624_155343_e1eac210
+real_model_run_id = phase5d_local_fact_qa_20260624_155345_4076f226
+real_model_summary = outputs/smoke/phase5d_local_fact_qa/phase5d_local_fact_qa_20260624_155345_4076f226/summary.json
+real_model_results = outputs/smoke/phase5d_local_fact_qa/phase5d_local_fact_qa_20260624_155345_4076f226/results.jsonl
+real_model_preview = outputs/smoke/phase5d_local_fact_qa/phase5d_local_fact_qa_20260624_155345_4076f226/preview.json
+status = success
+question_count = 3
+completed_count = 3
+failed_count = 0
+used_dry_run = false
+used_real_workflow = true
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+warning = evidence_packing_option_deferred_to_workflow
 ```
 
 ### Phase 5E: Document Summary MVP
@@ -743,9 +782,9 @@ Is an external LLM planning call justified here?
 Immediate next step:
 
 ```text
-Run Phase 5D-S server smoke on real SQLite evidence and available local model artifacts.
-Then continue to Phase 5E document_summary or Phase 5F unified CLI only with explicit task scope.
-Do not implement final CLI trace artifacts, document_summary, table lookup, or calculation inside Phase 5D-S.
+Phase 5D-S server smoke result is accepted and synced.
+Continue to Phase 5E document_summary or Phase 5F unified CLI only with explicit task scope.
+Do not implement final CLI trace artifacts, document_summary, table lookup, or calculation in this result-sync round.
 ```
 
 Phase 4D-D remains deferred until after Phase 5 MVP is accepted.

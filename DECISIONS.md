@@ -8,6 +8,81 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-25: Phase 5D-S Server Smoke Accepted
+
+Decision: accept Phase 5D-S as an execution-stability smoke milestone after
+server dry-run and real-model smoke both completed successfully on an existing
+SQLite document.
+
+Evidence:
+
+```text
+branch = codex/phase5d-local-fact-qa-smoke
+runner_commit = 53b9d1000ce8389c9dd1a574072f61bdb6407eb7
+db_path = outputs/docagent.db
+doc_id = c1fc1c5e040ec894
+dry_run_run_id = phase5d_local_fact_qa_20260624_155343_e1eac210
+real_model_run_id = phase5d_local_fact_qa_20260624_155345_4076f226
+real_model_summary = outputs/smoke/phase5d_local_fact_qa/phase5d_local_fact_qa_20260624_155345_4076f226/summary.json
+real_model_results = outputs/smoke/phase5d_local_fact_qa/phase5d_local_fact_qa_20260624_155345_4076f226/results.jsonl
+real_model_preview = outputs/smoke/phase5d_local_fact_qa/phase5d_local_fact_qa_20260624_155345_4076f226/preview.json
+status = success
+question_count = 3
+completed_count = 3
+failed_count = 0
+used_dry_run = false
+used_real_workflow = true
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+warning = evidence_packing_option_deferred_to_workflow
+```
+
+Real-model preview:
+
+```text
+Q1: What is this document about?
+A1: The Cigarette Industry in India
+citations_count = 3
+supporting_evidence_ids_count = 3
+
+Q2: What date is mentioned in this document?
+A2: 2000-01
+citations_count = 5
+supporting_evidence_ids_count = 5
+
+Q3: What amount or total is mentioned in this document?
+A3: 10
+citations_count = 5
+supporting_evidence_ids_count = 5
+```
+
+Boundary:
+
+- this acceptance validates execution stability, not benchmark-level answer
+  quality;
+- `evidence_packing_option_deferred_to_workflow` does not block acceptance and
+  only records that the option is handled by the existing workflow path;
+- no `local_fact_qa` core logic, smoke runner behavior, Router, final CLI,
+  document summary, table lookup, calculation, external LLM API, VLM, training,
+  full GRPO E2E, AnswerPolicy prompt, or candidate answer extraction change is
+  included.
+
+Current status:
+
+```text
+Phase 5A architecture audit and contracts -> accepted
+Phase 5B deterministic P0 document tools -> accepted
+Phase 5C Router / Planner -> accepted
+Phase 5D local_fact_qa wrapper -> accepted
+Phase 5D-S local_fact_qa smoke runner -> accepted
+Phase 5D-S server real-model smoke -> accepted
+Phase 5E document_summary -> not_started
+Phase 5F Unified CLI -> not_started
+Phase 5G Multi-task Regression -> not_started
+```
+
 ## 2026-06-24: Phase 5D-S local_fact_qa Smoke Runner Implemented
 
 Decision: add a reusable server-smoke runner for the Phase 5D `local_fact_qa`

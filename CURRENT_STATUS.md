@@ -1,6 +1,6 @@
 # Current Status
 
-Updated: 2026-06-24
+Updated: 2026-06-25
 
 ## Phase 4D-C Accepted / Phase 5 Active
 
@@ -11,35 +11,33 @@ bottleneck is candidate answer extraction and candidate span construction, not
 Reader selection. Phase 4D-D candidate answer board generalized improvement is
 deferred while Phase 5 starts the personal-use DocAgent MVP track.
 
-Phase 5B P0 deterministic document tools are implemented in
+Phase 5B P0 deterministic document tools are accepted in
 `docagent/tools/document_tools.py`. The tools read from
 `DocumentRepository`, `documents.page_count`, and persisted `EvidenceBlock`
 payloads. They do not implement Router, `scripts/docagent_cli.py`, final CLI
 trace artifact creation, `document_summary`, `table_lookup`, or
 `simple_calculation`.
 
-Phase 5C rule-first Router / Planner is implemented in `docagent/router/`.
+Phase 5C rule-first Router / Planner is accepted in `docagent/router/`.
 It returns schema-valid single-step planning decisions from question,
 `available_tools`, and optional `document_profile`. It does not execute tools,
 call external LLM/VLM APIs, wrap `local_fact_qa`, implement summary/table/
 calculation tools, or write final CLI trace artifacts.
 
-Phase 5D local_fact_qa tool wrapper is implemented in
+Phase 5D local_fact_qa tool wrapper is accepted in
 `docagent/tools/local_fact_qa.py`. It reuses `DocumentRepository`,
 `run_qa_workflow`, AnswerPolicy, retrieval/evidence context logic, and optional
 `TraceRepository`. Local tests cover wrapper behavior, dry-run/fake workflow
 boundaries, default heuristic workflow reuse, citation/supporting evidence
-fields, and SQLite trace persistence; server real-model smoke has not been
-run in this round.
+fields, SQLite trace persistence, and the accepted Phase 5D-S server smoke.
 
-Phase 5D-S local fact QA smoke support is implemented in
+Phase 5D-S local fact QA smoke support is accepted in
 `scripts/run_phase5d_local_fact_qa_smoke.py`. It runs the Phase 5D
 `local_fact_qa` wrapper against an existing SQLite `doc_id`, supports dry-run
 and non-dry workflow smoke, and writes `summary.json`, `summary.md`,
 `results.jsonl`, and `preview.json` under
-`outputs/smoke/phase5d_local_fact_qa/<run_id>/`. Dry-run and local heuristic
-smoke do not validate server real-model QA quality. A foreground server command
-plan is ready; server real-model smoke remains pending.
+`outputs/smoke/phase5d_local_fact_qa/<run_id>/`. The accepted server smoke
+validates execution stability, not benchmark-level answer quality.
 
 Status:
 
@@ -69,12 +67,12 @@ Phase 4D-C expanded unseen validation -> accepted
 Phase 4D-C scaffold / command preparation -> ready
 Phase 4D-D candidate answer board generalized improvement -> deferred
 Phase 5 Personal-use DocAgent MVP -> active
-Phase 5A architecture audit and contracts -> implemented
-Phase 5B deterministic P0 document tools -> implemented
-Phase 5C Router / Planner -> implemented
-Phase 5D local_fact_qa wrapper -> implemented
-Phase 5D-S local_fact_qa smoke runner -> implemented
-Phase 5D-S server real-model smoke -> ready
+Phase 5A architecture audit and contracts -> accepted
+Phase 5B deterministic P0 document tools -> accepted
+Phase 5C Router / Planner -> accepted
+Phase 5D local_fact_qa wrapper -> accepted
+Phase 5D-S local_fact_qa smoke runner -> accepted
+Phase 5D-S server real-model smoke -> accepted
 Phase 5E Document Summary MVP -> not_started
 Phase 5F Unified CLI -> not_started
 Phase 5G Multi-task Regression -> not_started
@@ -105,6 +103,51 @@ coverage_matches_phase4c_baseline = true
 accepted = true
 ```
 
+Phase 5D-S accepted server smoke evidence:
+
+```text
+db_path = outputs/docagent.db
+doc_id = c1fc1c5e040ec894
+dry_run_run_id = phase5d_local_fact_qa_20260624_155343_e1eac210
+real_model_run_id = phase5d_local_fact_qa_20260624_155345_4076f226
+real_model_summary = outputs/smoke/phase5d_local_fact_qa/phase5d_local_fact_qa_20260624_155345_4076f226/summary.json
+real_model_results = outputs/smoke/phase5d_local_fact_qa/phase5d_local_fact_qa_20260624_155345_4076f226/results.jsonl
+real_model_preview = outputs/smoke/phase5d_local_fact_qa/phase5d_local_fact_qa_20260624_155345_4076f226/preview.json
+status = success
+question_count = 3
+completed_count = 3
+failed_count = 0
+used_dry_run = false
+used_real_workflow = true
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+warning = evidence_packing_option_deferred_to_workflow
+```
+
+The warning does not block smoke acceptance. It records that the
+`evidence_packing` option is deferred to the existing workflow path.
+
+Real-model smoke result preview:
+
+```text
+Q1: What is this document about?
+A1: The Cigarette Industry in India
+citations_count = 3
+supporting_evidence_ids_count = 3
+
+Q2: What date is mentioned in this document?
+A2: 2000-01
+citations_count = 5
+supporting_evidence_ids_count = 5
+
+Q3: What amount or total is mentioned in this document?
+A3: 10
+citations_count = 5
+supporting_evidence_ids_count = 5
+```
+
 Current conclusion:
 
 - Phase 4C `candidate_spans` is accepted.
@@ -118,15 +161,14 @@ Current conclusion:
 - Candidate-ID Reader remains postponed.
 - Phase 4D-D candidate answer board generalized improvement is deferred.
 - Phase 5 Personal-use DocAgent MVP is active.
-- Phase 5B P0 deterministic tools are implemented from SQLite document
+- Phase 5A architecture audit and contracts are accepted.
+- Phase 5B P0 deterministic tools are accepted from SQLite document
   metadata and EvidenceBlock payloads.
-- Phase 5C rule-first Router / Planner is implemented without external LLM API
+- Phase 5C rule-first Router / Planner is accepted without external LLM API
   calls or tool execution.
-- Phase 5D `local_fact_qa` wrapper is implemented as a callable tool interface;
-  local tests cover wrapper behavior, not server real-model QA quality.
-- Phase 5D-S smoke runner is implemented and writes reusable smoke artifacts;
-  server real-model smoke is ready as a foreground command plan, not yet
-  accepted.
+- Phase 5D `local_fact_qa` wrapper is accepted as a callable tool interface.
+- Phase 5D-S smoke runner and server real-model smoke are accepted as execution
+  stability evidence, not as a benchmark-level answer-quality result.
 - Next Phase 5 target is Phase 5E document_summary or Phase 5F CLI integration;
   final CLI and trace artifact integration remain not_started.
 
