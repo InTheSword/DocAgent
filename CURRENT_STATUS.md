@@ -24,6 +24,14 @@ It returns schema-valid single-step planning decisions from question,
 call external LLM/VLM APIs, wrap `local_fact_qa`, implement summary/table/
 calculation tools, or write final CLI trace artifacts.
 
+Phase 5D local_fact_qa tool wrapper is implemented in
+`docagent/tools/local_fact_qa.py`. It reuses `DocumentRepository`,
+`run_qa_workflow`, AnswerPolicy, retrieval/evidence context logic, and optional
+`TraceRepository`. Local tests cover wrapper behavior, dry-run/fake workflow
+boundaries, default heuristic workflow reuse, citation/supporting evidence
+fields, and SQLite trace persistence; server real-model smoke has not been
+run in this round.
+
 Status:
 
 ```text
@@ -55,9 +63,10 @@ Phase 5 Personal-use DocAgent MVP -> active
 Phase 5A architecture audit and contracts -> implemented
 Phase 5B deterministic P0 document tools -> implemented
 Phase 5C Router / Planner -> implemented
-Phase 5D local_fact_qa wrapper -> not_started
+Phase 5D local_fact_qa wrapper -> implemented
 Phase 5E Document Summary MVP -> not_started
 Phase 5F Unified CLI -> not_started
+Phase 5G Multi-task Regression -> not_started
 CDC -> not_started
 MVP CLI / trace integration -> not_started
 Demo/closure -> not_started
@@ -102,8 +111,10 @@ Current conclusion:
   metadata and EvidenceBlock payloads.
 - Phase 5C rule-first Router / Planner is implemented without external LLM API
   calls or tool execution.
-- Next Phase 5 target is the Phase 5D `local_fact_qa` wrapper; final CLI and
-  trace artifact integration remain not_started.
+- Phase 5D `local_fact_qa` wrapper is implemented as a callable tool interface;
+  local tests cover wrapper behavior, not server real-model QA quality.
+- Next Phase 5 target is Phase 5E document_summary or Phase 5F CLI integration;
+  final CLI and trace artifact integration remain not_started.
 
 Phase 4D-C accepted server result:
 

@@ -292,8 +292,38 @@ Phase 5C Router / Planner is complete when:
 Current next targets:
 
 ```text
-Phase 5D local_fact_qa wrapper -> not_started
+Phase 5D local_fact_qa wrapper -> implemented
 Phase 5F unified CLI / trace artifact integration -> not_started
+```
+
+## Exit Criteria For Phase 5D
+
+Phase 5D local_fact_qa tool wrapper is complete when:
+
+- `docagent/tools/local_fact_qa.py` exposes a callable `local_fact_qa` tool;
+- the tool accepts `doc_id`, `question`, optional `router_plan`, and optional
+  options such as `top_k`, `dry_run`, and `trace_path`;
+- the real path reuses `run_qa_workflow`, `DocumentRepository`, AnswerPolicy,
+  retrieval/evidence context logic, and optional `TraceRepository`;
+- the default local path uses `HeuristicAnswerPolicy` and does not load a large
+  model unless the caller injects one;
+- dry-run mode does not generate an answer and is marked with
+  `dry_run_no_answer_generated`;
+- fake workflow injection is supported for wrapper-level tests without
+  pretending to validate real QA quality;
+- outputs are JSON-serializable and include `citations`,
+  `supporting_evidence_ids`, `tools_used`, and `trace_path`;
+- missing document, empty question, missing evidence, and workflow failure
+  return structured errors;
+- no CLI, external LLM API, VLM, training, table lookup, calculation, or
+  document summary is implemented in Phase 5D.
+
+Current next targets:
+
+```text
+Phase 5E document_summary -> not_started
+Phase 5F unified CLI -> not_started
+Phase 5G multi-task regression -> not_started
 ```
 
 ## Exit Criteria For Phase 5 MVP

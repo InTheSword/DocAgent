@@ -8,6 +8,49 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-24: Phase 5D local_fact_qa Tool Wrapper Implemented
+
+Decision: implement `local_fact_qa` as a callable tool wrapper around the
+existing local QA workflow, without building the final CLI or changing model,
+prompt, retrieval, or candidate extraction behavior.
+
+Implementation:
+
+- `docagent/tools/local_fact_qa.py`
+- focused tests in `tests/test_phase5_local_fact_qa_tool.py`
+
+Reused components:
+
+- `DocumentRepository` for document lookup and EvidenceBlock loading;
+- `run_qa_workflow` for retrieval, evidence context construction,
+  AnswerPolicy execution, format/location checks, answer repair, and trace
+  callbacks;
+- `HeuristicAnswerPolicy` as the default local policy when no AnswerPolicy is
+  injected;
+- optional injected retriever, AnswerPolicy, workflow runner, and
+  `TraceRepository`.
+
+Boundary:
+
+- dry-run mode returns wrapper-shaped success without generating an answer and
+  emits `dry_run_no_answer_generated`;
+- fake workflow injection is only for wrapper tests and is not real QA quality
+  validation;
+- server real-model smoke was not run in this round;
+- `trace_path` is only returned when explicitly supplied by the caller;
+- no external LLM API, VLM, CLI, document summary, table lookup, calculation,
+  training, full GRPO E2E, AnswerPolicy prompt change, or candidate answer
+  extraction change is included.
+
+Current status:
+
+```text
+Phase 5D local_fact_qa wrapper -> implemented
+Phase 5E document_summary -> not_started
+Phase 5F Unified CLI -> not_started
+Phase 5G Multi-task Regression -> not_started
+```
+
 ## 2026-06-24: Phase 5C Rule-first Router / Planner Implemented
 
 Decision: implement the Phase 5C router as a deterministic rule-first

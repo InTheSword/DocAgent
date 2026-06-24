@@ -13,12 +13,12 @@ Phase 4D-C accepted -> Phase 4D-D deferred -> Phase 5 active
 
 ```text
 Phase 5 Personal-use DocAgent MVP
--> Phase 5C Router / Planner
--> implement a rule-first single-step planner from question + available_tools
-   + optional document_profile
--> output schema-valid planning decisions without executing tools
--> stop before docagent_cli.py, local_fact_qa wrapper, final CLI trace
-   artifacts, document_summary generation, table_lookup, and simple_calculation
+-> Phase 5D local_fact_qa tool wrapper
+-> wrap existing retrieval + evidence context + AnswerPolicy + trace path as a
+   callable local_fact_qa tool
+-> support dry_run / fake workflow tests without claiming real-model QA quality
+-> stop before docagent_cli.py, document_summary generation, table_lookup,
+   simple_calculation, external LLM/VLM, training, and full GRPO E2E
 ```
 
 ## Current Status
@@ -69,9 +69,10 @@ Phase 5 Personal-use DocAgent MVP -> active
 Phase 5A architecture audit and contracts -> implemented
 Phase 5B deterministic P0 document tools -> implemented
 Phase 5C Router / Planner -> implemented
-Phase 5D local_fact_qa wrapper -> not_started
+Phase 5D local_fact_qa wrapper -> implemented
 Phase 5E Document Summary MVP -> not_started
 Phase 5F Unified CLI -> not_started
+Phase 5G Multi-task Regression -> not_started
 CDC -> not_started
 MVP CLI / trace integration -> not_started
 Demo/closure -> not_started

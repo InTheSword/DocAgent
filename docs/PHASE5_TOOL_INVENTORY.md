@@ -41,7 +41,43 @@ Known Phase 5B limitations:
 Next implementation target:
 
 ```text
-Phase 5C Router / Planner -> not_started
+Phase 5D local_fact_qa wrapper -> implemented
+```
+
+## Phase 5D local_fact_qa Wrapper Status
+
+Phase 5D implements a callable local fact QA tool wrapper in:
+
+```text
+docagent/tools/local_fact_qa.py
+```
+
+The wrapper reuses:
+
+- `DocumentRepository` for document existence and EvidenceBlock loading;
+- `run_qa_workflow` for retrieval, evidence context construction,
+  AnswerPolicy execution, format/location checks, and answer repair;
+- `HeuristicAnswerPolicy` as the local default AnswerPolicy when no policy is
+  injected;
+- optional injected retriever / workflow runner for real hybrid retrieval,
+  smoke tests, or controlled fake workflow tests;
+- optional `TraceRepository` for SQLite trace persistence.
+
+Phase 5D output is a JSON-serializable dict with `answer`, `citations`,
+`supporting_evidence_ids`, `tools_used`, `trace_path`, `run_id`, warnings, and
+structured errors. `trace_path` remains empty unless the caller explicitly
+passes a trace path; the wrapper does not invent trace artifact locations.
+
+Local tests cover wrapper behavior, structured errors, dry-run behavior, fake
+workflow injection, default heuristic workflow reuse, citation fields, and
+SQLite trace persistence. They do not verify server real-model QA quality.
+
+Deferred:
+
+```text
+Phase 5E document_summary -> not_started
+Phase 5F unified CLI -> not_started
+Phase 5G multi-task regression -> not_started
 ```
 
 ## Reusable Code Paths
