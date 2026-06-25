@@ -8,6 +8,73 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-25: Phase 5F-1 Unified CLI MVP Implemented
+
+Decision: implement the first unified CLI MVP in `scripts/docagent_cli.py`
+before Phase 5E document summary, because the accepted deterministic tools,
+Router, local_fact_qa wrapper, and server smoke evidence now need a single user
+entrypoint.
+
+Implementation:
+
+- `scripts/docagent_cli.py`
+- focused tests in `tests/test_phase5f_cli.py`
+
+Supported CLI parameters:
+
+```text
+--db-path
+--doc-id
+--file
+--question
+--output-dir
+--dry-run
+--list-documents
+--limit
+```
+
+Implemented behavior:
+
+- `--list-documents` returns a single JSON object with recent SQLite documents
+  and includes `doc_id`, original name or file path, page count, parse/index
+  status, and timestamps when present;
+- `--doc-id + --question` checks document existence, calls the Phase 5C Router,
+  and dispatches supported task types;
+- `document_statistics` uses Phase 5B deterministic tools;
+- `page_lookup` uses `get_page_text` or `list_pages`;
+- `local_fact_qa` uses the accepted Phase 5D wrapper and supports `--dry-run`;
+- every QA run writes `result.json`, `summary.json`, `router_plan.json`, and
+  `trace.json` under `outputs/cli/<run_id>/`;
+- stdout is a single JSON object.
+
+File-entry contract:
+
+- `--file + --question` is part of the CLI contract;
+- current ingestion support is partial: an already-ingested SQLite document can
+  be reused when the input file SHA matches `documents.sha256`;
+- if no matching document exists, the CLI returns structured
+  `file_ingestion_unavailable` and tells the user to run
+  `scripts/ingest_document.py` first;
+- the CLI does not call MinerU, MinerU API, or local parser backends directly
+  in Phase 5F-1.
+
+Boundary:
+
+- Phase 5E document_summary remains `not_started`;
+- table lookup, simple calculation, structured extraction tools, LLM-assisted
+  Router fallback, external LLM API, VLM, training, full GRPO E2E,
+  AnswerPolicy prompt changes, and candidate answer extraction changes remain
+  out of scope.
+
+Current status:
+
+```text
+Phase 5F-1 Unified CLI MVP -> implemented
+Phase 5E document_summary -> not_started
+Phase 5F server CLI smoke / full CLI acceptance -> not_started
+Phase 5G Multi-task Regression -> not_started
+```
+
 ## 2026-06-25: Phase 5D-S Server Smoke Accepted
 
 Decision: accept Phase 5D-S as an execution-stability smoke milestone after

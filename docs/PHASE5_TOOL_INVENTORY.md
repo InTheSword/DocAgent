@@ -44,6 +44,7 @@ Current implementation target:
 Phase 5D local_fact_qa wrapper -> accepted
 Phase 5D-S local_fact_qa smoke runner -> accepted
 Phase 5D-S server real-model smoke -> accepted
+Phase 5F-1 unified CLI MVP -> implemented
 ```
 
 ## Phase 5D local_fact_qa Wrapper Status
@@ -188,7 +189,8 @@ Deferred:
 
 ```text
 Phase 5E document_summary -> not_started
-Phase 5F unified CLI -> not_started
+Phase 5F-1 unified CLI MVP -> implemented
+Phase 5F server CLI smoke / full CLI acceptance -> not_started
 Phase 5G multi-task regression -> not_started
 ```
 
@@ -561,13 +563,59 @@ Likely reusable for Phase 5:
 `configs/grpo_qwen3.yaml`, `configs/sft_qwen3_lora.yaml`, and training scripts
 remain out of Phase 5A scope.
 
-## Future CLI Placement
+## Phase 5F-1 Unified CLI MVP Status
 
-The future unified MVP entrypoint should be:
+The Phase 5F-1 unified MVP entrypoint is implemented in:
 
 ```text
 scripts/docagent_cli.py
 ```
 
-This matches existing script conventions and keeps the first implementation
-small. Phase 5A does not create this file.
+Supported parameters:
+
+```text
+--db-path
+--doc-id
+--file
+--question
+--output-dir
+--dry-run
+--list-documents
+--limit
+```
+
+Implemented paths:
+
+- `--list-documents` reads SQLite through `DocumentRepository` and returns
+  recent documents with `doc_id`, original name or file path, `page_count`,
+  parse/index status, and timestamps when present.
+- `--doc-id + --question` checks document existence, calls the Phase 5C Router,
+  then dispatches `document_statistics`, `page_lookup`, or `local_fact_qa`.
+- `--file + --question` is part of the CLI contract. Current support is
+  partial: the CLI reuses an existing SQLite document when file SHA matches;
+  otherwise it returns structured `file_ingestion_unavailable` instead of
+  pretending ingestion succeeded.
+
+Artifact output:
+
+```text
+outputs/cli/<run_id>/
+  result.json
+  summary.json
+  router_plan.json
+  trace.json
+```
+
+Deferred from Phase 5F-1:
+
+```text
+Phase 5E document_summary
+table_lookup
+simple_calculation
+structured extraction tools
+LLM-assisted Router fallback
+external LLM API
+VLM
+training
+full GRPO E2E
+```

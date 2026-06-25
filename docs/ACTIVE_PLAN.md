@@ -13,12 +13,12 @@ Phase 4D-C accepted -> Phase 4D-D deferred -> Phase 5 active
 
 ```text
 Phase 5 Personal-use DocAgent MVP
--> Phase 5D-S server smoke result sync
--> record the completed local_fact_qa smoke runner and accepted server
-   real-model smoke evidence
--> treat smoke as execution stability evidence, not benchmark-level answer
-   quality
--> stop before docagent_cli.py, document_summary generation, table_lookup,
+-> Phase 5F-1 Unified CLI MVP with file-entry contract
+-> provide scripts/docagent_cli.py for --doc-id, --file contract,
+   --list-documents, Router dispatch, deterministic tools, and local_fact_qa
+-> keep --file ingestion honest: reuse already-ingested files by SHA or return
+   structured file_ingestion_unavailable
+-> stop before Phase 5E document_summary, LLM Router fallback, table_lookup,
    simple_calculation, external LLM/VLM, training, and full GRPO E2E
 ```
 
@@ -73,8 +73,9 @@ Phase 5C Router / Planner -> accepted
 Phase 5D local_fact_qa wrapper -> accepted
 Phase 5D-S local_fact_qa smoke runner -> accepted
 Phase 5D-S server real-model smoke -> accepted
+Phase 5F-1 Unified CLI MVP -> implemented
 Phase 5E Document Summary MVP -> not_started
-Phase 5F Unified CLI -> not_started
+Phase 5F server CLI smoke / full CLI acceptance -> not_started
 Phase 5G Multi-task Regression -> not_started
 CDC -> not_started
 MVP CLI / trace integration -> not_started
@@ -681,6 +682,26 @@ warning = evidence_packing_option_deferred_to_workflow
 acceptance_boundary = execution stability, not benchmark-level answer quality
 ```
 
+Phase 5F-1 implemented local CLI MVP:
+
+```text
+branch = codex/phase5f1-unified-cli-mvp
+entrypoint = scripts/docagent_cli.py
+supports_doc_id_question = true
+supports_list_documents = true
+supports_file_question_contract = true
+file_ingestion_status = partial_reuse_or_structured_unavailable
+file_reuse = existing SQLite document can be reused by source file SHA
+file_unavailable_error = file_ingestion_unavailable
+router_used = true
+deterministic_tools_used = true
+local_fact_qa_used = true
+document_summary = not_started
+table_lookup = not_started
+simple_calculation = not_started
+llm_router_fallback = not_started
+```
+
 Phase 4D-C scaffold / command preparation:
 
 ```text
@@ -776,9 +797,10 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Keep Phase 5D-S accepted as a smoke/execution-stability milestone.
-2. Start Phase 5E document_summary or Phase 5F unified CLI only after explicit
-   task approval.
+1. Keep Phase 5F-1 as a local implemented CLI MVP until server CLI smoke is
+   explicitly run and recorded.
+2. Start Phase 5E document_summary or later Phase 5F CLI expansion only after
+   explicit task approval.
 3. Keep Phase 4D-D deferred until MVP entrypoint, router, deterministic tools,
    and multi-task regression are accepted.
 4. Keep Candidate-ID Reader postponed until reader-selection failures dominate
@@ -800,13 +822,14 @@ Phase 4D-B1.3 server sanity accepted
 + Phase 5C Router / Planner accepted
 + Phase 5D local_fact_qa wrapper accepted
 + Phase 5D-S server smoke accepted as execution stability evidence
++ Phase 5F-1 unified CLI MVP implemented locally
 + targeted and regression tests pass
 + status documents updated
 + branch pushed
-+ stop before Phase 5E implementation, docagent_cli.py, Reader prompt changes,
-   AnswerPolicy integration changes, training, CDC, Demo, per-qid repairs,
-   further 90-sample probe tuning, and any global `candidate_spans` default
-   change
++ stop before Phase 5E implementation, LLM Router fallback, table lookup,
+   simple_calculation, Reader prompt changes, AnswerPolicy integration changes,
+   training, CDC, Demo, per-qid repairs, further 90-sample probe tuning, and
+   any global `candidate_spans` default change
 ```
 
 ## Phase Documents

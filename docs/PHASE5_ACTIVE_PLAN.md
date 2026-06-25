@@ -13,8 +13,9 @@ Phase 5C Router / Planner -> accepted
 Phase 5D local_fact_qa wrapper -> accepted
 Phase 5D-S local_fact_qa smoke runner -> accepted
 Phase 5D-S server real-model smoke -> accepted
+Phase 5F-1 unified CLI MVP -> implemented
 Phase 5E document_summary -> not_started
-Phase 5F unified CLI -> not_started
+Phase 5F server CLI smoke / full CLI acceptance -> not_started
 Phase 5G multi-task regression -> not_started
 ```
 
@@ -727,6 +728,45 @@ Outputs structured JSON.
 Writes a trace artifact.
 ```
 
+#### Phase 5F-1: Unified CLI MVP with file-entry contract
+
+Implementation:
+
+```text
+scripts/docagent_cli.py
+```
+
+Implemented local CLI contract:
+
+```text
+--db-path
+--doc-id
+--file
+--question
+--output-dir
+--dry-run
+--list-documents
+--limit
+```
+
+Supported paths:
+
+```text
+--list-documents lists recent SQLite documents with doc_id, original_name/file_path, page_count, parse_status, index_status, created_at, and updated_at.
+--doc-id + --question checks the document, calls the Phase 5C Router, then dispatches document_statistics, page_lookup, or local_fact_qa.
+--file + --question is part of the CLI contract. The CLI reuses an already-ingested SQLite document when the input file SHA matches an existing document. If no matching document exists, it returns structured file_ingestion_unavailable and tells the user to ingest first.
+```
+
+Boundary:
+
+```text
+document_summary remains Phase 5E not_started.
+table_lookup and simple_calculation remain not_started.
+structured_extraction returns structured unsupported when current tools are insufficient.
+LLM-assisted Router fallback remains future Phase 5C-2 work and is not implemented.
+No external LLM API, VLM, training, full GRPO E2E, AnswerPolicy prompt change, or candidate answer extraction change is included.
+```
+
 ### Phase 5G: Multi-task Regression
 
 Goal:
@@ -782,9 +822,9 @@ Is an external LLM planning call justified here?
 Immediate next step:
 
 ```text
-Phase 5D-S server smoke result is accepted and synced.
-Continue to Phase 5E document_summary or Phase 5F unified CLI only with explicit task scope.
-Do not implement final CLI trace artifacts, document_summary, table lookup, or calculation in this result-sync round.
+Phase 5F-1 unified CLI MVP is implemented locally.
+Next step is a small server CLI smoke on an existing doc_id, or explicit Phase 5E / later Phase 5F expansion.
+Do not implement document_summary, LLM Router fallback, table lookup, calculation, VLM, training, or full E2E in Phase 5F-1.
 ```
 
 Phase 4D-D remains deferred until after Phase 5 MVP is accepted.

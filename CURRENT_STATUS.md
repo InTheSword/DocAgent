@@ -39,6 +39,15 @@ and non-dry workflow smoke, and writes `summary.json`, `summary.md`,
 `outputs/smoke/phase5d_local_fact_qa/<run_id>/`. The accepted server smoke
 validates execution stability, not benchmark-level answer quality.
 
+Phase 5F-1 Unified CLI MVP is implemented in `scripts/docagent_cli.py`. The
+CLI supports `--db-path`, `--doc-id`, `--file`, `--question`, `--output-dir`,
+`--dry-run`, `--list-documents`, and `--limit`. It calls the Phase 5C Router
+before dispatching supported tasks, uses Phase 5B deterministic tools for
+`document_statistics`, uses page tools for `page_lookup`, and uses Phase 5D
+`local_fact_qa` for fact QA. `--file + --question` is now a CLI contract, but
+file ingestion is partial: already-ingested files can be reused by SHA;
+otherwise the CLI returns structured `file_ingestion_unavailable`.
+
 Status:
 
 ```text
@@ -73,8 +82,9 @@ Phase 5C Router / Planner -> accepted
 Phase 5D local_fact_qa wrapper -> accepted
 Phase 5D-S local_fact_qa smoke runner -> accepted
 Phase 5D-S server real-model smoke -> accepted
+Phase 5F-1 Unified CLI MVP -> implemented
 Phase 5E Document Summary MVP -> not_started
-Phase 5F Unified CLI -> not_started
+Phase 5F server CLI smoke / full CLI acceptance -> not_started
 Phase 5G Multi-task Regression -> not_started
 CDC -> not_started
 MVP CLI / trace integration -> not_started
@@ -169,8 +179,11 @@ Current conclusion:
 - Phase 5D `local_fact_qa` wrapper is accepted as a callable tool interface.
 - Phase 5D-S smoke runner and server real-model smoke are accepted as execution
   stability evidence, not as a benchmark-level answer-quality result.
-- Next Phase 5 target is Phase 5E document_summary or Phase 5F CLI integration;
-  final CLI and trace artifact integration remain not_started.
+- Phase 5F-1 unified CLI MVP is implemented locally with Router dispatch,
+  deterministic tools, page lookup, local_fact_qa, list-documents, and a
+  structured `--file` contract.
+- Phase 5E document_summary, LLM-assisted Router fallback, table lookup,
+  simple calculation, and Phase 5G regression remain not_started.
 
 Phase 4D-C accepted server result:
 

@@ -59,7 +59,9 @@ python scripts/docagent_cli.py \
 Minimum CLI behavior:
 
 - accept `--doc-id` for already ingested documents;
-- optionally accept `--file` only after ingestion integration is stable;
+- accept `--file` as a CLI contract; Phase 5F-1 reuses an already-ingested
+  SQLite document by file SHA when possible and otherwise returns structured
+  `file_ingestion_unavailable`;
 - classify the question into a supported task type;
 - call deterministic document tools for deterministic tasks;
 - call the existing local fact QA workflow for specific fact questions;
@@ -295,7 +297,8 @@ Current next targets:
 Phase 5D local_fact_qa wrapper -> accepted
 Phase 5D-S local_fact_qa smoke runner -> accepted
 Phase 5D-S server real-model smoke -> accepted
-Phase 5F unified CLI / trace artifact integration -> not_started
+Phase 5F-1 unified CLI MVP -> implemented
+Phase 5F server CLI smoke / full CLI acceptance -> not_started
 ```
 
 ## Exit Criteria For Phase 5D
@@ -394,9 +397,40 @@ Current next targets:
 
 ```text
 Phase 5E document_summary -> not_started
-Phase 5F unified CLI -> not_started
+Phase 5F-1 unified CLI MVP -> implemented
+Phase 5F server CLI smoke / full CLI acceptance -> not_started
 Phase 5G multi-task regression -> not_started
 ```
+
+## Exit Criteria For Phase 5F-1
+
+Phase 5F-1 Unified CLI MVP is implemented when:
+
+- `scripts/docagent_cli.py` exists;
+- CLI supports `--db-path`, `--doc-id`, `--file`, `--question`,
+  `--output-dir`, `--dry-run`, `--list-documents`, and `--limit`;
+- `--list-documents` prints one JSON object and includes `doc_id`,
+  original name or file path, `page_count`, parse/index status, and timestamps
+  when present;
+- `--doc-id + --question` checks document existence, calls the Phase 5C Router,
+  dispatches deterministic document tools for `document_statistics`, dispatches
+  page tools for `page_lookup`, and dispatches Phase 5D `local_fact_qa`;
+- `--file + --question` is part of the CLI contract. Current support is
+  partial: already-ingested files can be reused by SHA; otherwise the CLI
+  returns structured `file_ingestion_unavailable` and points users to
+  `scripts/ingest_document.py`;
+- unsupported task types return structured errors:
+  `document_summary_not_implemented`, `table_lookup_not_implemented`, or
+  `structured_extraction_not_implemented`;
+- stdout is a single JSON object and every QA run writes
+  `result.json`, `summary.json`, `router_plan.json`, and `trace.json` under
+  `outputs/cli/<run_id>/`;
+- summary artifacts record that external API, VLM, training, and full E2E are
+  not used.
+
+Phase 5F-1 does not implement Phase 5E document_summary, LLM-assisted Router
+fallback, table lookup, simple calculation, VLM, training, full GRPO E2E,
+AnswerPolicy prompt changes, or candidate answer extraction changes.
 
 ## Exit Criteria For Phase 5 MVP
 
