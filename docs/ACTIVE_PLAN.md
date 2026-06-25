@@ -13,11 +13,11 @@ Phase 4D-C accepted -> Phase 4D-D deferred -> Phase 5 active
 
 ```text
 Phase 5 Personal-use DocAgent MVP
--> Phase 5F-1 Unified CLI MVP with file-entry contract
--> provide scripts/docagent_cli.py for --doc-id, --file contract,
-   --list-documents, Router dispatch, deterministic tools, and local_fact_qa
--> keep --file ingestion honest: reuse already-ingested files by SHA or return
-   structured file_ingestion_unavailable
+-> Phase 5F-1 server CLI smoke result sync
+-> record accepted CLI smoke evidence for scripts/docagent_cli.py on an
+   existing server SQLite doc_id
+-> keep --file ingestion status honest: CLI contract and SHA reuse exist, but
+   new-file ingestion through docagent_cli remains not_started
 -> stop before Phase 5E document_summary, LLM Router fallback, table_lookup,
    simple_calculation, external LLM/VLM, training, and full GRPO E2E
 ```
@@ -73,9 +73,12 @@ Phase 5C Router / Planner -> accepted
 Phase 5D local_fact_qa wrapper -> accepted
 Phase 5D-S local_fact_qa smoke runner -> accepted
 Phase 5D-S server real-model smoke -> accepted
-Phase 5F-1 Unified CLI MVP -> implemented
+Phase 5F-1 Unified CLI MVP -> accepted
+Phase 5F-1 server CLI smoke -> accepted
+Phase 5F-2 file-to-answer ingestion integration -> not_started
+Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5E Document Summary MVP -> not_started
-Phase 5F server CLI smoke / full CLI acceptance -> not_started
+Phase 5F full CLI acceptance -> not_started
 Phase 5G Multi-task Regression -> not_started
 CDC -> not_started
 MVP CLI / trace integration -> not_started
@@ -682,10 +685,11 @@ warning = evidence_packing_option_deferred_to_workflow
 acceptance_boundary = execution stability, not benchmark-level answer quality
 ```
 
-Phase 5F-1 implemented local CLI MVP:
+Phase 5F-1 accepted unified CLI MVP:
 
 ```text
 branch = codex/phase5f1-unified-cli-mvp
+commit = b7e92c89908ce57517f145e18cd6ca1b702a300e
 entrypoint = scripts/docagent_cli.py
 supports_doc_id_question = true
 supports_list_documents = true
@@ -700,6 +704,52 @@ document_summary = not_started
 table_lookup = not_started
 simple_calculation = not_started
 llm_router_fallback = not_started
+```
+
+Phase 5F-1 accepted server CLI smoke:
+
+```text
+db_path = outputs/docagent.db
+doc_id = c1fc1c5e040ec894
+list_documents_run_id = docagent_cli_20260625_035337_52161dae
+list_documents_status = success
+list_documents_document_count = 2
+document_statistics_run_id = docagent_cli_20260625_035423_8cea1735
+document_statistics_status = success
+document_statistics_task_type = document_statistics
+document_statistics_tools_used = count_pages
+document_statistics_answer = The document contains 5 pages.
+page_lookup_run_id = docagent_cli_20260625_035527_52de8e1f
+page_lookup_status = success
+page_lookup_task_type = page_lookup
+page_lookup_tools_used = get_page_text
+page_lookup_citations_count = 1
+local_fact_qa_dry_run_id = docagent_cli_20260625_035552_54cc8822
+local_fact_qa_dry_run_status = success
+local_fact_qa_dry_run_warning = dry_run_no_answer_generated
+local_fact_qa_real_run_id = docagent_cli_20260625_035621_145b69a9
+local_fact_qa_real_status = success
+local_fact_qa_real_tool_run_id = 341437e6-7976-4a2f-a7b5-2dac762960d0
+file_missing_run_id = docagent_cli_20260625_035702_766dcb4a
+file_missing_status = error
+file_missing_error = file_not_found
+artifact_root = outputs/cli_smoke
+acceptance_boundary = execution stability, not benchmark-level answer quality
+```
+
+Known Phase 5F-1 limitations:
+
+```text
+--file + --question is partial: CLI contract and existing-file SHA reuse exist,
+but new-file ingestion through docagent_cli is not_started and remains Phase
+5F-2 work.
+local_fact_qa real workflow executed successfully, but answer quality is
+unstable. The server date question returned an irrelevant evidence text prefix
+instead of a date.
+Page metadata consistency needs audit: list-documents reports page_count = 5
+for doc_id c1fc1c5e040ec894 while local_fact_qa citations include page 24.
+This may reflect a documents.page_count vs evidence block page-number mismatch
+or source/page-window metadata semantics.
 ```
 
 Phase 4D-C scaffold / command preparation:
@@ -797,10 +847,11 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Keep Phase 5F-1 as a local implemented CLI MVP until server CLI smoke is
-   explicitly run and recorded.
-2. Start Phase 5E document_summary or later Phase 5F CLI expansion only after
+1. Start Phase 5F-2 file-to-answer ingestion integration, Phase 5E
+   document_summary, or Phase 5C-2 LLM-assisted Router fallback only after
    explicit task approval.
+2. Keep Phase 5F-1 server smoke accepted as execution-stability evidence, not
+   benchmark-level answer-quality evidence.
 3. Keep Phase 4D-D deferred until MVP entrypoint, router, deterministic tools,
    and multi-task regression are accepted.
 4. Keep Candidate-ID Reader postponed until reader-selection failures dominate
@@ -822,7 +873,8 @@ Phase 4D-B1.3 server sanity accepted
 + Phase 5C Router / Planner accepted
 + Phase 5D local_fact_qa wrapper accepted
 + Phase 5D-S server smoke accepted as execution stability evidence
-+ Phase 5F-1 unified CLI MVP implemented locally
++ Phase 5F-1 unified CLI MVP accepted
++ Phase 5F-1 server CLI smoke accepted as execution stability evidence
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

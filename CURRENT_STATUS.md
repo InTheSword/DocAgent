@@ -39,14 +39,16 @@ and non-dry workflow smoke, and writes `summary.json`, `summary.md`,
 `outputs/smoke/phase5d_local_fact_qa/<run_id>/`. The accepted server smoke
 validates execution stability, not benchmark-level answer quality.
 
-Phase 5F-1 Unified CLI MVP is implemented in `scripts/docagent_cli.py`. The
+Phase 5F-1 Unified CLI MVP is accepted in `scripts/docagent_cli.py`. The
 CLI supports `--db-path`, `--doc-id`, `--file`, `--question`, `--output-dir`,
 `--dry-run`, `--list-documents`, and `--limit`. It calls the Phase 5C Router
 before dispatching supported tasks, uses Phase 5B deterministic tools for
 `document_statistics`, uses page tools for `page_lookup`, and uses Phase 5D
 `local_fact_qa` for fact QA. `--file + --question` is now a CLI contract, but
 file ingestion is partial: already-ingested files can be reused by SHA;
-otherwise the CLI returns structured `file_ingestion_unavailable`.
+otherwise the CLI returns structured `file_ingestion_unavailable`. The
+accepted server CLI smoke validates execution stability only, not
+benchmark-level answer quality.
 
 Status:
 
@@ -82,9 +84,12 @@ Phase 5C Router / Planner -> accepted
 Phase 5D local_fact_qa wrapper -> accepted
 Phase 5D-S local_fact_qa smoke runner -> accepted
 Phase 5D-S server real-model smoke -> accepted
-Phase 5F-1 Unified CLI MVP -> implemented
+Phase 5F-1 Unified CLI MVP -> accepted
+Phase 5F-1 server CLI smoke -> accepted
+Phase 5F-2 file-to-answer ingestion integration -> not_started
+Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5E Document Summary MVP -> not_started
-Phase 5F server CLI smoke / full CLI acceptance -> not_started
+Phase 5F full CLI acceptance -> not_started
 Phase 5G Multi-task Regression -> not_started
 CDC -> not_started
 MVP CLI / trace integration -> not_started
@@ -158,6 +163,65 @@ citations_count = 5
 supporting_evidence_ids_count = 5
 ```
 
+Phase 5F-1 accepted server CLI smoke evidence:
+
+```text
+branch = codex/phase5f1-unified-cli-mvp
+commit = b7e92c89908ce57517f145e18cd6ca1b702a300e
+db_path = outputs/docagent.db
+doc_id = c1fc1c5e040ec894
+list_documents_run_id = docagent_cli_20260625_035337_52161dae
+list_documents_status = success
+list_documents_document_count = 2
+list_documents_key_doc_page_count = 5
+list_documents_key_doc_parse_status = parsed
+list_documents_key_doc_index_status = ready
+document_statistics_run_id = docagent_cli_20260625_035423_8cea1735
+document_statistics_status = success
+document_statistics_task_type = document_statistics
+document_statistics_tools_used = count_pages
+document_statistics_answer = The document contains 5 pages.
+page_lookup_run_id = docagent_cli_20260625_035527_52de8e1f
+page_lookup_status = success
+page_lookup_task_type = page_lookup
+page_lookup_tools_used = get_page_text
+page_lookup_citations_count = 1
+local_fact_qa_dry_run_id = docagent_cli_20260625_035552_54cc8822
+local_fact_qa_dry_run_status = success
+local_fact_qa_dry_run_citations_count = 5
+local_fact_qa_dry_run_supporting_evidence_ids_count = 5
+local_fact_qa_dry_run_warning = dry_run_no_answer_generated
+local_fact_qa_real_run_id = docagent_cli_20260625_035621_145b69a9
+local_fact_qa_real_status = success
+local_fact_qa_real_tool_run_id = 341437e6-7976-4a2f-a7b5-2dac762960d0
+local_fact_qa_real_citations_count = 5
+local_fact_qa_real_supporting_evidence_ids_count = 5
+file_missing_run_id = docagent_cli_20260625_035702_766dcb4a
+file_missing_status = error
+file_missing_error = file_not_found
+artifact_root = outputs/cli_smoke
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+acceptance_boundary = execution stability, not benchmark-level answer quality
+```
+
+Known Phase 5F-1 limitations:
+
+```text
+--file + --question is partial: CLI contract and existing-file SHA reuse exist,
+but new-file ingestion through docagent_cli is not_started and remains Phase
+5F-2 work.
+local_fact_qa real workflow executed successfully, but answer quality is
+unstable. The server date question returned an irrelevant evidence text prefix
+instead of a date.
+Page metadata consistency needs audit: list-documents reports page_count = 5
+for doc_id c1fc1c5e040ec894 while local_fact_qa citations include page 24.
+This may reflect a documents.page_count vs evidence block page-number mismatch
+or source/page-window metadata semantics.
+```
+
 Current conclusion:
 
 - Phase 4C `candidate_spans` is accepted.
@@ -179,11 +243,14 @@ Current conclusion:
 - Phase 5D `local_fact_qa` wrapper is accepted as a callable tool interface.
 - Phase 5D-S smoke runner and server real-model smoke are accepted as execution
   stability evidence, not as a benchmark-level answer-quality result.
-- Phase 5F-1 unified CLI MVP is implemented locally with Router dispatch,
+- Phase 5F-1 unified CLI MVP is accepted with Router dispatch,
   deterministic tools, page lookup, local_fact_qa, list-documents, and a
   structured `--file` contract.
-- Phase 5E document_summary, LLM-assisted Router fallback, table lookup,
-  simple calculation, and Phase 5G regression remain not_started.
+- Phase 5F-1 server CLI smoke is accepted as execution-stability evidence, not
+  as benchmark-level answer-quality evidence.
+- Phase 5F-2 file-to-answer ingestion integration, Phase 5E document_summary,
+  Phase 5C-2 LLM-assisted Router fallback, table lookup, simple calculation,
+  and Phase 5G regression remain not_started.
 
 Phase 4D-C accepted server result:
 

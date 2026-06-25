@@ -4,7 +4,7 @@
 
 Phase 4D-C has been accepted and recorded.
 
-Current Phase 5 status after Phase 5D-S server smoke result sync:
+Current Phase 5 status after Phase 5F-1 server CLI smoke result sync:
 
 ```text
 Phase 5A architecture audit and contracts -> accepted
@@ -13,9 +13,12 @@ Phase 5C Router / Planner -> accepted
 Phase 5D local_fact_qa wrapper -> accepted
 Phase 5D-S local_fact_qa smoke runner -> accepted
 Phase 5D-S server real-model smoke -> accepted
-Phase 5F-1 unified CLI MVP -> implemented
+Phase 5F-1 unified CLI MVP -> accepted
+Phase 5F-1 server CLI smoke -> accepted
+Phase 5F-2 file-to-answer ingestion integration -> not_started
+Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5E document_summary -> not_started
-Phase 5F server CLI smoke / full CLI acceptance -> not_started
+Phase 5F full CLI acceptance -> not_started
 Phase 5G multi-task regression -> not_started
 ```
 
@@ -757,6 +760,57 @@ Supported paths:
 --file + --question is part of the CLI contract. The CLI reuses an already-ingested SQLite document when the input file SHA matches an existing document. If no matching document exists, it returns structured file_ingestion_unavailable and tells the user to ingest first.
 ```
 
+Accepted Phase 5F-1 server CLI smoke evidence:
+
+```text
+branch = codex/phase5f1-unified-cli-mvp
+commit = b7e92c89908ce57517f145e18cd6ca1b702a300e
+db_path = outputs/docagent.db
+doc_id = c1fc1c5e040ec894
+list_documents_run_id = docagent_cli_20260625_035337_52161dae
+list_documents_status = success
+list_documents_document_count = 2
+document_statistics_run_id = docagent_cli_20260625_035423_8cea1735
+document_statistics_status = success
+document_statistics_task_type = document_statistics
+document_statistics_tools_used = count_pages
+page_lookup_run_id = docagent_cli_20260625_035527_52de8e1f
+page_lookup_status = success
+page_lookup_task_type = page_lookup
+page_lookup_tools_used = get_page_text
+page_lookup_citations_count = 1
+local_fact_qa_dry_run_id = docagent_cli_20260625_035552_54cc8822
+local_fact_qa_dry_run_status = success
+local_fact_qa_dry_run_warning = dry_run_no_answer_generated
+local_fact_qa_real_run_id = docagent_cli_20260625_035621_145b69a9
+local_fact_qa_real_status = success
+local_fact_qa_real_tool_run_id = 341437e6-7976-4a2f-a7b5-2dac762960d0
+file_missing_run_id = docagent_cli_20260625_035702_766dcb4a
+file_missing_status = error
+file_missing_error = file_not_found
+artifact_root = outputs/cli_smoke
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+acceptance_boundary = execution stability, not benchmark-level answer quality
+```
+
+Known limitations:
+
+```text
+--file + --question is partial: CLI contract and existing-file SHA reuse exist,
+but new-file ingestion through docagent_cli is not_started and remains Phase
+5F-2 work.
+local_fact_qa real workflow executed successfully, but answer quality is
+unstable. The server date question returned an irrelevant evidence text prefix
+instead of a date.
+Page metadata consistency needs audit: list-documents reports page_count = 5
+for doc_id c1fc1c5e040ec894 while local_fact_qa citations include page 24.
+This may reflect a documents.page_count vs evidence block page-number mismatch
+or source/page-window metadata semantics.
+```
+
 Boundary:
 
 ```text
@@ -822,9 +876,9 @@ Is an external LLM planning call justified here?
 Immediate next step:
 
 ```text
-Phase 5F-1 unified CLI MVP is implemented locally.
-Next step is a small server CLI smoke on an existing doc_id, or explicit Phase 5E / later Phase 5F expansion.
-Do not implement document_summary, LLM Router fallback, table lookup, calculation, VLM, training, or full E2E in Phase 5F-1.
+Phase 5F-1 unified CLI MVP and server CLI smoke are accepted.
+Next step requires explicit approval: Phase 5F-2 file-to-answer ingestion integration, Phase 5E document_summary, or Phase 5C-2 LLM-assisted Router fallback.
+Do not implement document_summary, LLM Router fallback, table lookup, calculation, VLM, training, or full E2E as part of Phase 5F-1 result sync.
 ```
 
 Phase 4D-D remains deferred until after Phase 5 MVP is accepted.
