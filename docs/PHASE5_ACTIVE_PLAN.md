@@ -4,7 +4,7 @@
 
 Phase 4D-C has been accepted and recorded.
 
-Current Phase 5 status after Phase 5F-2 server file-to-answer smoke result sync:
+Current Phase 5 status after Phase 5F-3 local MinerU-backed file-to-answer implementation:
 
 ```text
 Phase 5A architecture audit and contracts -> accepted
@@ -17,6 +17,8 @@ Phase 5F-1 unified CLI MVP -> accepted
 Phase 5F-1 server CLI smoke -> accepted
 Phase 5F-2 file-to-answer ingestion integration -> accepted
 Phase 5F-2 server file-to-answer smoke -> accepted
+Phase 5F-3 MinerU-backed file-to-answer smoke -> implemented
+Phase 5F-3 server smoke -> ready
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5E document_summary -> not_started
 Phase 5F full CLI acceptance -> not_started
@@ -902,6 +904,82 @@ Dense index is not built in the lightweight smoke; index_status may remain
 not_started.
 ```
 
+#### Phase 5F-3: MinerU-backed file-to-answer full-chain smoke
+
+Implementation:
+
+```text
+scripts/docagent_cli.py
+docagent/parser/mineru_backend.py
+```
+
+Implemented behavior:
+
+```text
+--file + --question can use --parser mineru_existing with
+--mineru-output-dir / --mineru-output to consume existing MinerU output.
+The CLI copies the existing MinerU output into the document cache, then reuses
+DocumentIngestionService, DocumentRegistry, DocumentRepository, SQLite
+EvidenceBlocks/page documents, Phase 5C Router, deterministic document tools,
+and local_fact_qa dry-run.
+--parser auto still uses TextParserBackend for .txt files.
+PDF/image inputs without --mineru-output-dir still return structured
+parser_backend_unavailable rather than fake success.
+--parser mineru with --parser-mode local_cli is wired to MinerUParserBackend
+for environments where an isolated MinerU CLI is available.
+When a summary-like dry-run question falls back to local_fact_qa because
+document_summary is unavailable, top-level task_type records the executed
+local_fact_qa path while router_plan preserves the original document_summary
+decision and warnings.
+metadata_consistency records documents.page_count, page_documents count,
+max evidence page, and max citation page; inconsistency emits
+page_metadata_inconsistent only as a warning.
+```
+
+Local smoke evidence:
+
+```text
+tested_file_type = pdf
+tested_sample_path = data/real_documents/globocan_africa_2022/source/original.pdf
+tested_mineru_output = data/real_documents/globocan_africa_2022/mineru_raw
+tested_doc_id = fe3465edd3da60d2
+tested_status = success
+tested_task_type = document_statistics
+tested_tools_used = count_pages
+tested_answer = The document contains 2 pages.
+tested_page_count = 2
+tested_block_count = 57
+tested_metadata_consistency = ok
+tested_local_fact_qa_dry_run_question = What is this document about?
+tested_local_fact_qa_dry_run_task_type = local_fact_qa
+tested_local_fact_qa_dry_run_router_task_type = document_summary
+tested_local_fact_qa_dry_run_tools_used = local_fact_qa
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+```
+
+Server smoke:
+
+```text
+status = ready
+sample_path = data/real_documents/globocan_africa_2022/source/original.pdf
+mineru_output = data/real_documents/globocan_africa_2022/mineru_raw
+commands_cover = document_statistics, page_lookup, local_fact_qa dry-run
+acceptance_boundary = execution smoke, not benchmark answer quality
+```
+
+Boundary:
+
+```text
+Phase 5F-3 does not implement Phase 5E document_summary.
+Phase 5F-3 does not implement LLM-assisted Router fallback, table lookup,
+simple calculation, VLM, training, full GRPO E2E, AnswerPolicy prompt changes,
+or candidate answer extraction changes.
+Live MinerU API/installation is not added to the stable docagent environment.
+```
+
 ### Phase 5G: Multi-task Regression
 
 Goal:
@@ -959,8 +1037,9 @@ Immediate next step:
 ```text
 Phase 5F-1 unified CLI MVP and server CLI smoke are accepted.
 Phase 5F-2 file-to-answer ingestion integration and server smoke are accepted for lightweight .txt files.
-Next step requires explicit approval: Phase 5G multi-task regression, Phase 5E document_summary, or Phase 5C-2 LLM-assisted Router fallback.
-Do not implement document_summary, LLM Router fallback, table lookup, calculation, VLM, training, or full E2E as part of Phase 5F-2.
+Phase 5F-3 MinerU-backed file-to-answer support is implemented locally and ready for server smoke.
+Next step requires explicit approval/result: Phase 5F-3 server smoke result sync, Phase 5G multi-task regression, Phase 5E document_summary, or Phase 5C-2 LLM-assisted Router fallback.
+Do not implement document_summary, LLM Router fallback, table lookup, calculation, VLM, training, or full E2E as part of Phase 5F-3.
 ```
 
 Phase 4D-D remains deferred until after Phase 5 MVP is accepted.

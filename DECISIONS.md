@@ -8,6 +8,77 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-25: Phase 5F-3 MinerU-backed File-to-answer CLI Implemented
+
+Decision: implement Phase 5F-3 by extending `scripts/docagent_cli.py` from
+UTF-8 `.txt` ingestion to existing MinerU/parser-backed file ingestion, while
+reusing `MinerUParserBackend`, `DocumentIngestionService`,
+`DocumentRegistry`, `DocumentRepository`, the Phase 5C Router, deterministic
+document tools, and `local_fact_qa` dry-run.
+
+Implementation:
+
+- `scripts/docagent_cli.py`
+- `tests/test_phase5f_mineru_file_cli.py`
+
+Behavior:
+
+- `--file <document> --parser mineru_existing --mineru-output-dir <dir>
+  --question <question>` copies existing MinerU output into the document cache
+  and ingests it through the existing `DocumentIngestionService`;
+- `--mineru-output` is accepted as an alias for `--mineru-output-dir`;
+- `--parser auto` preserves the accepted `.txt` behavior and returns
+  structured `parser_backend_unavailable` for PDF/image files without a
+  configured MinerU output;
+- `--parser mineru --parser-mode local_cli` is wired to
+  `MinerUParserBackend` for server environments with an isolated MinerU CLI;
+- metadata consistency now records `documents.page_count`, page document
+  count, max evidence page, and max citation page, and emits
+  `page_metadata_inconsistent` only as a warning.
+
+Local evidence:
+
+```text
+tested_file_type = pdf
+tested_sample_path = data/real_documents/globocan_africa_2022/source/original.pdf
+tested_mineru_output = data/real_documents/globocan_africa_2022/mineru_raw
+tested_doc_id = fe3465edd3da60d2
+tested_status = success
+tested_task_type = document_statistics
+tested_tools_used = count_pages
+tested_answer = The document contains 2 pages.
+tested_page_count = 2
+tested_block_count = 57
+tested_metadata_consistency = ok
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+```
+
+Boundary:
+
+- Phase 5F-3 is implemented locally and ready for server smoke, but is not
+  accepted until the server smoke returns.
+- Existing MinerU output is consumed; this change does not install MinerU,
+  call MinerU API, call VLM, or mutate the stable `docagent` environment.
+- `local_fact_qa` dry-run validates evidence shape, not generated answer
+  quality.
+- No Phase 5E document_summary, LLM-assisted Router fallback, Phase 5G
+  regression, table lookup, simple calculation, training, full GRPO E2E,
+  AnswerPolicy prompt change, or candidate answer extraction change is
+  included.
+
+Current status:
+
+```text
+Phase 5F-3 MinerU-backed file-to-answer smoke -> implemented
+Phase 5F-3 server smoke -> ready
+Phase 5E document_summary -> not_started
+Phase 5C-2 LLM-assisted Router fallback -> not_started
+Phase 5G multi-task regression -> not_started
+```
+
 ## 2026-06-25: Phase 5F-2 Server File-to-answer Smoke Accepted
 
 Decision: accept Phase 5F-2 file-to-answer ingestion integration after server

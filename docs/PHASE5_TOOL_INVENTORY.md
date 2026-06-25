@@ -48,6 +48,8 @@ Phase 5F-1 unified CLI MVP -> accepted
 Phase 5F-1 server CLI smoke -> accepted
 Phase 5F-2 file-to-answer ingestion integration -> accepted
 Phase 5F-2 server file-to-answer smoke -> accepted
+Phase 5F-3 MinerU-backed file-to-answer smoke -> implemented
+Phase 5F-3 server smoke -> ready
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 ```
 
@@ -197,6 +199,8 @@ Phase 5F-1 unified CLI MVP -> accepted
 Phase 5F-1 server CLI smoke -> accepted
 Phase 5F-2 file-to-answer ingestion integration -> accepted
 Phase 5F-2 server file-to-answer smoke -> accepted
+Phase 5F-3 MinerU-backed file-to-answer smoke -> implemented
+Phase 5F-3 server smoke -> ready
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5F full CLI acceptance -> not_started
 Phase 5G multi-task regression -> not_started
@@ -763,4 +767,94 @@ used_vlm = false
 used_training = false
 used_full_e2e = false
 acceptance_boundary = lightweight .txt execution stability, not benchmark answer quality
+```
+
+## Phase 5F-3 MinerU-backed File-to-answer CLI Status
+
+Phase 5F-3 extends the unified CLI file ingestion path to existing MinerU
+parser output:
+
+```text
+scripts/docagent_cli.py
+docagent/parser/mineru_backend.py
+docagent/ingestion/service.py
+docagent/storage/repositories.py
+docagent/tools/document_tools.py
+docagent/tools/local_fact_qa.py
+```
+
+Implemented ingestion path:
+
+```text
+--file <document> + --parser mineru_existing + --mineru-output-dir <mineru_output> + --question
+-> DocumentRegistry
+-> copy existing MinerU output into the document cache
+-> MinerUParserBackend(mode=parse_existing)
+-> DocumentIngestionService
+-> DocumentRepository / SQLite EvidenceBlocks and page documents
+-> Phase 5C Router
+-> deterministic tools, page lookup, or local_fact_qa dry-run
+-> unified JSON output and outputs/cli/<run_id>/ artifacts
+```
+
+For summary-like dry-run questions where `document_summary` is unavailable,
+the Router plan is preserved with `router_plan.task_type = document_summary`,
+while the top-level CLI `task_type` records the executed
+`local_fact_qa` dry-run path. This is a smoke fallback and does not implement
+Phase 5E document_summary.
+
+Supported CLI parser options:
+
+```text
+--parser auto
+--parser text
+--parser mineru_existing
+--parser mineru
+--parser-mode parse_existing
+--parser-mode local_cli
+--mineru-output-dir / --mineru-output
+--mineru-command
+--mineru-timeout-seconds
+```
+
+Structured file-ingestion errors:
+
+```text
+file_not_found
+parser_backend_unavailable
+unsupported_file_type
+file_ingestion_failed
+document_registration_failed
+document_not_found
+```
+
+Local implementation evidence:
+
+```text
+tested_file_type = pdf
+tested_sample_path = data/real_documents/globocan_africa_2022/source/original.pdf
+tested_mineru_output = data/real_documents/globocan_africa_2022/mineru_raw
+tested_doc_id = fe3465edd3da60d2
+tested_status = success
+tested_task_type = document_statistics
+tested_tools_used = count_pages
+tested_answer = The document contains 2 pages.
+tested_page_count = 2
+tested_block_count = 57
+tested_metadata_consistency = ok
+tested_local_fact_qa_dry_run_task_type = local_fact_qa
+tested_local_fact_qa_dry_run_router_task_type = document_summary
+```
+
+Current limitations:
+
+```text
+Phase 5F-3 is implemented locally and ready for server smoke, but is not
+accepted until server smoke returns.
+The validated local path consumes existing MinerU output; it does not install
+MinerU or call MinerU API.
+local_fact_qa dry-run validates evidence shape, not generated answer quality.
+Phase 5E document_summary, table_lookup, simple_calculation,
+LLM-assisted Router fallback, VLM, training, and full GRPO E2E remain
+not_started.
 ```

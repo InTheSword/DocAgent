@@ -302,6 +302,8 @@ Phase 5F-1 unified CLI MVP -> accepted
 Phase 5F-1 server CLI smoke -> accepted
 Phase 5F-2 file-to-answer ingestion integration -> accepted
 Phase 5F-2 server file-to-answer smoke -> accepted
+Phase 5F-3 MinerU-backed file-to-answer smoke -> implemented
+Phase 5F-3 server smoke -> ready
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5F full CLI acceptance -> not_started
 ```
@@ -406,6 +408,8 @@ Phase 5F-1 unified CLI MVP -> accepted
 Phase 5F-1 server CLI smoke -> accepted
 Phase 5F-2 file-to-answer ingestion integration -> accepted
 Phase 5F-2 server file-to-answer smoke -> accepted
+Phase 5F-3 MinerU-backed file-to-answer smoke -> implemented
+Phase 5F-3 server smoke -> ready
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5F full CLI acceptance -> not_started
 Phase 5G multi-task regression -> not_started
@@ -580,6 +584,70 @@ not_started.
 Phase 5E document_summary, Phase 5C-2 LLM-assisted Router fallback, and
 Phase 5G multi-task regression remain not_started.
 ```
+
+## Exit Criteria For Phase 5F-3
+
+Phase 5F-3 MinerU-backed file-to-answer full-chain smoke is implemented when:
+
+- `scripts/docagent_cli.py --file <document> --question <question>` can use
+  existing MinerU output through `--parser mineru_existing` and
+  `--mineru-output-dir` / `--mineru-output`;
+- ingestion reuses `DocumentRegistry`, `DocumentIngestionService`,
+  `DocumentRepository`, SQLite EvidenceBlocks, and page documents;
+- successful file ingestion returns a generated or reused `doc_id`,
+  `source.type = file`, `source.was_ingested`, `source.reused_existing`, and
+  `source.ingestion_status`;
+- after ingestion, the CLI calls the Phase 5C Router and dispatches to
+  deterministic document tools, page lookup, or `local_fact_qa` dry-run;
+- summary-like dry-run fallback may execute `local_fact_qa` when
+  `document_summary` is unavailable; the top-level `task_type` records
+  `local_fact_qa` while `router_plan.task_type` preserves
+  `document_summary`;
+- missing parser/MinerU support returns structured errors such as
+  `parser_backend_unavailable`, `file_ingestion_failed`,
+  `unsupported_file_type`, or `document_registration_failed`;
+- stdout remains one JSON object and artifacts are written under
+  `outputs/cli/<run_id>/`;
+- metadata consistency records `documents.page_count`, page document count,
+  max evidence page, and max citation page, with
+  `page_metadata_inconsistent` as a warning only.
+
+Local implementation evidence:
+
+```text
+branch = codex/phase5f3-mineru-file-cli-smoke
+tested_file_type = pdf
+tested_sample_path = data/real_documents/globocan_africa_2022/source/original.pdf
+tested_mineru_output = data/real_documents/globocan_africa_2022/mineru_raw
+tested_doc_id = fe3465edd3da60d2
+tested_status = success
+tested_task_type = document_statistics
+tested_tools_used = count_pages
+tested_answer = The document contains 2 pages.
+tested_page_count = 2
+tested_block_count = 57
+tested_metadata_consistency = ok
+tested_local_fact_qa_dry_run_task_type = local_fact_qa
+tested_local_fact_qa_dry_run_router_task_type = document_summary
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+```
+
+Server smoke status:
+
+```text
+status = ready
+sample_path = data/real_documents/globocan_africa_2022/source/original.pdf
+mineru_output = data/real_documents/globocan_africa_2022/mineru_raw
+required_questions = How many pages are in this document?; Show the text from page 1.; What is this document about?
+acceptance_boundary = execution smoke, not benchmark answer quality
+```
+
+Phase 5F-3 does not implement Phase 5E document_summary, LLM-assisted Router
+fallback, table lookup, simple calculation, VLM, training, full GRPO E2E,
+AnswerPolicy prompt changes, or candidate answer extraction changes.
 
 ## Exit Criteria For Phase 5 MVP
 

@@ -60,6 +60,15 @@ PDF/image inputs without a configured CLI parser backend return structured
 `parser_backend_unavailable`; new-file MinerU-backed PDF ingestion inside
 `docagent_cli.py` remains not_started.
 
+Phase 5F-3 MinerU-backed file-to-answer support is implemented locally in
+`scripts/docagent_cli.py` by reusing `MinerUParserBackend`,
+`DocumentIngestionService`, `DocumentRegistry`, `DocumentRepository`, Router,
+deterministic tools, and `local_fact_qa` dry-run. The implemented path consumes
+existing MinerU output through `--parser mineru_existing` and
+`--mineru-output-dir` / `--mineru-output`, then writes the same unified JSON
+and CLI artifacts. Server smoke is ready but has not returned yet, so this
+milestone is not accepted.
+
 Status:
 
 ```text
@@ -98,6 +107,8 @@ Phase 5F-1 Unified CLI MVP -> accepted
 Phase 5F-1 server CLI smoke -> accepted
 Phase 5F-2 file-to-answer ingestion integration -> accepted
 Phase 5F-2 server file-to-answer smoke -> accepted
+Phase 5F-3 MinerU-backed file-to-answer smoke -> implemented
+Phase 5F-3 server smoke -> ready
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5E Document Summary MVP -> not_started
 Phase 5F full CLI acceptance -> not_started
@@ -309,6 +320,44 @@ Dense index is not built in the lightweight smoke; index_status may remain
 not_started.
 ```
 
+Phase 5F-3 implemented local MinerU-backed file-to-answer smoke support:
+
+```text
+branch = codex/phase5f3-mineru-file-cli-smoke
+entrypoint = scripts/docagent_cli.py
+parser_backend = docagent/parser/mineru_backend.py
+supported_parser_mode = mineru_existing / parse_existing
+optional_parser_mode = mineru / local_cli when MinerU CLI is installed separately
+existing_mineru_output_arg = --mineru-output-dir / --mineru-output
+tested_local_file_type = pdf
+tested_local_sample_path = data/real_documents/globocan_africa_2022/source/original.pdf
+tested_local_mineru_output = data/real_documents/globocan_africa_2022/mineru_raw
+tested_local_doc_id = fe3465edd3da60d2
+tested_local_status = success
+tested_local_task_type = document_statistics
+tested_local_tools_used = count_pages
+tested_local_answer = The document contains 2 pages.
+tested_local_page_count = 2
+tested_local_block_count = 57
+tested_local_metadata_consistency = ok
+tested_local_fact_qa_dry_run_task_type = local_fact_qa
+tested_local_fact_qa_dry_run_router_task_type = document_summary
+metadata_consistency_fields = documents.page_count, page_documents count, max evidence page, max citation page
+metadata_consistency_warning = page_metadata_inconsistent
+server_smoke_status = ready
+acceptance_boundary = execution smoke, not benchmark answer quality
+```
+
+Known Phase 5F-3 limitations:
+
+```text
+Phase 5F-3 is implemented locally and ready for server smoke, but is not
+accepted until server smoke returns.
+The validated local path consumes existing MinerU output; it does not install
+MinerU or call MinerU API.
+local_fact_qa dry-run validates evidence shape, not generated answer quality.
+```
+
 Current conclusion:
 
 - Phase 4C `candidate_spans` is accepted.
@@ -338,6 +387,9 @@ Current conclusion:
 - Phase 5F-2 file-to-answer ingestion integration and server smoke are
   accepted for UTF-8 `.txt` files and SHA reuse, with structured failures for
   unsupported parser paths.
+- Phase 5F-3 MinerU-backed file-to-answer support is implemented locally and
+  ready for server smoke, using existing MinerU output and the existing parser
+  backend.
 - Phase 5E document_summary, Phase 5C-2 LLM-assisted Router fallback, table
   lookup, simple calculation, and Phase 5G regression remain not_started.
 

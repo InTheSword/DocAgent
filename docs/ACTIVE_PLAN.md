@@ -13,12 +13,13 @@ Phase 4D-C accepted -> Phase 4D-D deferred -> Phase 5 active
 
 ```text
 Phase 5 Personal-use DocAgent MVP
--> Phase 5F-2 server file-to-answer smoke result sync
--> record accepted lightweight .txt --file + --question execution through
-   DocumentIngestionService into SQLite, Router, deterministic tools,
-   local_fact_qa, JSON output, and artifacts
--> keep PDF/MinerU-dependent inputs honest with structured
-   parser_backend_unavailable unless a supported backend is configured later
+-> Phase 5F-3 MinerU-backed file-to-answer full-chain smoke
+-> extend --file + --question from accepted .txt ingestion to existing
+   MinerU/parser-backed file ingestion through DocumentIngestionService,
+   SQLite, Router, document tools, local_fact_qa dry-run, JSON output, and
+   artifacts
+-> keep missing parser/MinerU output honest with structured
+   parser_backend_unavailable or file_ingestion_failed
 -> stop before Phase 5E document_summary, LLM Router fallback, table_lookup,
    simple_calculation, external LLM/VLM, training, and full GRPO E2E
 ```
@@ -78,6 +79,8 @@ Phase 5F-1 Unified CLI MVP -> accepted
 Phase 5F-1 server CLI smoke -> accepted
 Phase 5F-2 file-to-answer ingestion integration -> accepted
 Phase 5F-2 server file-to-answer smoke -> accepted
+Phase 5F-3 MinerU-backed file-to-answer smoke -> implemented
+Phase 5F-3 server smoke -> ready
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5E Document Summary MVP -> not_started
 Phase 5F full CLI acceptance -> not_started
@@ -833,6 +836,39 @@ Phase 5E document_summary, Phase 5C-2 LLM-assisted Router fallback, and
 Phase 5G multi-task regression remain not_started.
 ```
 
+Phase 5F-3 implemented local MinerU/parser-backed file-to-answer smoke support:
+
+```text
+branch = codex/phase5f3-mineru-file-cli-smoke
+entrypoint = scripts/docagent_cli.py
+parser_backend = docagent/parser/mineru_backend.py
+supported_parser_mode = mineru_existing / parse_existing
+optional_parser_mode = mineru / local_cli when MinerU CLI is installed separately
+existing_mineru_output_arg = --mineru-output-dir / --mineru-output
+tested_local_file = data/real_documents/globocan_africa_2022/source/original.pdf
+tested_local_mineru_output = data/real_documents/globocan_africa_2022/mineru_raw
+tested_local_doc_id = fe3465edd3da60d2
+tested_local_page_count = 2
+tested_local_block_count = 57
+tested_local_tools_used = count_pages
+metadata_consistency_fields = documents.page_count, page_documents count, max evidence page, max citation page
+metadata_consistency_warning = page_metadata_inconsistent
+server_smoke_status = ready
+acceptance_boundary = execution smoke, not benchmark answer quality
+```
+
+Known Phase 5F-3 limitations:
+
+```text
+Server smoke has not returned yet, so Phase 5F-3 is implemented locally but
+not accepted.
+The accepted local path uses existing MinerU output with parse_existing; live
+MinerU CLI/API execution remains a server/environment concern.
+local_fact_qa dry-run can validate evidence shape without answer generation.
+Phase 5E document_summary, Phase 5C-2 LLM-assisted Router fallback, and
+Phase 5G multi-task regression remain not_started.
+```
+
 Phase 4D-C scaffold / command preparation:
 
 ```text
@@ -928,20 +964,22 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Start Phase 5G multi-task regression only after explicit task approval.
-2. Start Phase 5E document_summary or Phase 5C-2 LLM-assisted Router fallback
+1. Run the Phase 5F-3 server file-to-answer smoke on an existing MinerU-backed
+   sample after this branch is pushed.
+2. Start Phase 5G multi-task regression only after explicit task approval.
+3. Start Phase 5E document_summary or Phase 5C-2 LLM-assisted Router fallback
    only after explicit task approval.
-3. Keep Phase 5F-1 server smoke accepted as execution-stability evidence, not
+4. Keep Phase 5F-1 server smoke accepted as execution-stability evidence, not
    benchmark-level answer-quality evidence.
-4. Keep Phase 4D-D deferred until MVP entrypoint, router, deterministic tools,
+5. Keep Phase 4D-D deferred until MVP entrypoint, router, deterministic tools,
    and multi-task regression are accepted.
-5. Keep Candidate-ID Reader postponed until reader-selection failures dominate
+6. Keep Candidate-ID Reader postponed until reader-selection failures dominate
    after candidate coverage issues are resolved.
-6. Keep optional full GRPO E2E postponed until candidate answer board quality
+7. Keep optional full GRPO E2E postponed until candidate answer board quality
    improves.
-7. Keep `page_children` as the default until more shard and document-type
+8. Keep `page_children` as the default until more shard and document-type
    validation supports a global default change.
-8. Keep CDC `not_started` until explicitly started.
+9. Keep CDC `not_started` until explicitly started.
 
 ## Stop Condition
 
@@ -958,6 +996,7 @@ Phase 4D-B1.3 server sanity accepted
 + Phase 5F-1 server CLI smoke accepted as execution stability evidence
 + Phase 5F-2 file-to-answer ingestion integration accepted
 + Phase 5F-2 server file-to-answer smoke accepted as execution stability evidence
++ Phase 5F-3 MinerU-backed file-to-answer support implemented locally
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

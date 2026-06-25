@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import sys
 import uuid
 from datetime import datetime, timezone
@@ -13,9 +14,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from docagent.ingestion.document_registry import SUPPORTED_EXTENSIONS
+from docagent.ingestion.document_registry import SUPPORTED_EXTENSIONS, DocumentRegistry
 from docagent.ingestion.hashing import sha256_file
 from docagent.ingestion.service import DocumentIngestionService
+from docagent.parser.mineru_backend import MinerUParserBackend
 from docagent.parser.text_backend import TextParserBackend
 from docagent.router.rule_router import plan_route
 from docagent.storage.db import connect
@@ -170,20 +172,110 @@ def _file_source(*, file_path: Path, db_path: Path) -> dict[str, Any]:
     }
 
 
-def _parser_backend_for_file(file_path: Path) -> tuple[Any | None, dict[str, str] | None]:
+def _looks_like_local_absolute_path(value: str) -> bool:
+    return (
+        (len(value) >= 3 and value[1] == ":" and value[2] in {"\\", "/"})
+        or value.startswith("\\\\")
+        or (value.startswith("/") and "://" not in value)
+    )
+
+
+def _sanitize_manifest_paths(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _sanitize_manifest_paths(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_manifest_paths(item) for item in value]
+    if isinstance(value, str) and _looks_like_local_absolute_path(value):
+        return Path(value).name
+    return value
+
+
+def _copy_mineru_output_to_document_cache(
+    *,
+    file_path: Path,
+    document_root: Path,
+    mineru_output_dir: Path,
+) -> dict[str, str] | None:
+    if not mineru_output_dir.is_dir():
+        return {
+            "type": "file_ingestion_failed",
+            "message": f"MinerU output directory not found: {mineru_output_dir}",
+        }
+
+    try:
+        preview_record = DocumentRegistry(document_root).register(file_path)
+    except Exception as exc:
+        return {
+            "type": "document_registration_failed",
+            "message": str(exc),
+        }
+    target = Path(preview_record.document_dir) / "mineru"
+    if target.exists():
+        if any(
+            path.name.endswith("content_list.json") and not path.name.endswith("_content_list_v2.json")
+            for path in target.rglob("*.json")
+        ):
+            return None
+        return {
+            "type": "file_ingestion_failed",
+            "message": f"Document cache MinerU directory exists but has no content list: {target}",
+        }
+
+    shutil.copytree(mineru_output_dir, target)
+    manifest = mineru_output_dir.parent / "source_manifest.json"
+    if manifest.exists():
+        manifest_payload = json.loads(manifest.read_text(encoding="utf-8-sig"))
+        manifest_payload = _sanitize_manifest_paths(manifest_payload)
+        manifest_payload["source_file"] = f"source/original{file_path.suffix.lower()}"
+        (Path(preview_record.document_dir) / "mineru_source_manifest.json").write_text(
+            json.dumps(manifest_payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    return None
+
+
+def _parser_backend_for_file(
+    file_path: Path,
+    *,
+    parser_name: str,
+    parser_mode: str,
+    mineru_output_dir: Path | None,
+    mineru_command: str,
+    mineru_timeout_seconds: int,
+) -> tuple[Any | None, dict[str, str] | None]:
     extension = file_path.suffix.lower()
     if extension not in SUPPORTED_EXTENSIONS:
         return None, {
             "type": "unsupported_file_type",
             "message": f"Unsupported file type for ingestion: {extension or '<none>'}",
         }
-    if extension == ".txt":
+    if parser_name == "text" or (parser_name == "auto" and extension == ".txt"):
+        if extension != ".txt":
+            return None, {
+                "type": "parser_backend_unavailable",
+                "message": f"Text parser only supports .txt files, not {extension}.",
+            }
         return TextParserBackend(), None
+    if parser_name in {"mineru_existing", "mineru"} or (
+        parser_name == "auto" and extension in {".pdf", ".png", ".jpg", ".jpeg"} and mineru_output_dir is not None
+    ):
+        mode = "parse_existing" if parser_name == "mineru_existing" or mineru_output_dir is not None else parser_mode
+        backend_name = "mineru_existing" if mode == "parse_existing" else "mineru"
+        return (
+            MinerUParserBackend(
+                mode=mode,
+                command=mineru_command,
+                timeout_seconds=mineru_timeout_seconds,
+                backend_name=backend_name,
+            ),
+            None,
+        )
     return None, {
         "type": "parser_backend_unavailable",
         "message": (
-            f"No CLI parser backend is configured for {extension} files in Phase 5F-2. "
-            "Use scripts/ingest_document.py with MinerU first, or use a UTF-8 .txt file."
+            f"No CLI parser backend is configured for {extension} files. "
+            "Use --parser mineru_existing with --mineru-output-dir for existing MinerU output, "
+            "or use a UTF-8 .txt file."
         ),
     }
 
@@ -193,11 +285,31 @@ def _ingest_file(
     repository: DocumentRepository,
     file_path: Path,
     document_root: Path,
+    parser_name: str,
+    parser_mode: str,
+    mineru_output_dir: Path | None,
+    mineru_command: str,
+    mineru_timeout_seconds: int,
 ) -> tuple[str | None, dict[str, Any] | None, dict[str, Any]]:
-    parser_backend, parser_error = _parser_backend_for_file(file_path)
+    parser_backend, parser_error = _parser_backend_for_file(
+        file_path,
+        parser_name=parser_name,
+        parser_mode=parser_mode,
+        mineru_output_dir=mineru_output_dir,
+        mineru_command=mineru_command,
+        mineru_timeout_seconds=mineru_timeout_seconds,
+    )
     if parser_error is not None:
         return None, parser_error, {"status": "failed", "error": parser_error}
     assert parser_backend is not None
+    if isinstance(parser_backend, MinerUParserBackend) and parser_backend.mode == "parse_existing" and mineru_output_dir is not None:
+        copy_error = _copy_mineru_output_to_document_cache(
+            file_path=file_path,
+            document_root=document_root,
+            mineru_output_dir=mineru_output_dir,
+        )
+        if copy_error is not None:
+            return None, copy_error, {"status": "failed", "error": copy_error}
     service = DocumentIngestionService(document_root=document_root, repository=repository)
     try:
         ingestion_result = service.ingest(file_path=file_path, parser_backend=parser_backend)
@@ -377,22 +489,55 @@ def _tool_error(tool_result: dict[str, Any], default_type: str) -> dict[str, Any
     }
 
 
-def _page_metadata_warnings(document: dict[str, Any], citations: list[dict[str, Any]]) -> list[str]:
+def _page_metadata_consistency(
+    repository: DocumentRepository,
+    doc_id: str,
+    document: dict[str, Any],
+    citations: list[dict[str, Any]],
+) -> dict[str, Any]:
     page_count = document.get("page_count")
     try:
         page_count_int = int(page_count)
     except (TypeError, ValueError):
-        return []
-    if page_count_int <= 0:
-        return []
+        page_count_int = None
+
+    blocks = repository.load_evidence_blocks(doc_id, include_page_blocks=True)
+    page_block_count = sum(1 for block in blocks if block.block_type == "page")
+    evidence_pages = [
+        int(block.location.page)
+        for block in blocks
+        if block.block_type != "page" and block.location.page is not None
+    ]
+    citation_pages: list[int] = []
     for citation in citations:
         try:
-            page = int(citation.get("page"))
+            citation_pages.append(int(citation.get("page")))
         except (TypeError, ValueError):
             continue
-        if page > page_count_int:
-            return ["page_metadata_inconsistent"]
-    return []
+
+    max_evidence_page = max(evidence_pages) if evidence_pages else None
+    max_citation_page = max(citation_pages) if citation_pages else None
+    inconsistent = False
+    if page_count_int is not None and page_count_int > 0:
+        if page_block_count and page_block_count != page_count_int:
+            inconsistent = True
+        if max_evidence_page is not None and max_evidence_page > page_count_int:
+            inconsistent = True
+        if max_citation_page is not None and max_citation_page > page_count_int:
+            inconsistent = True
+    return {
+        "documents_page_count": page_count_int,
+        "page_documents_count": page_block_count,
+        "max_evidence_page": max_evidence_page,
+        "max_citation_page": max_citation_page,
+        "status": "warning" if inconsistent else "ok",
+        "warning": "page_metadata_inconsistent" if inconsistent else "",
+    }
+
+
+def _page_metadata_warnings(metadata_consistency: dict[str, Any]) -> list[str]:
+    warning = str(metadata_consistency.get("warning") or "")
+    return [warning] if warning else []
 
 
 def _run_local_fact_qa(
@@ -498,6 +643,19 @@ def _dispatch_tool(
             dry_run=dry_run,
             run_id=run_id,
         )
+    if task_type == "document_summary" and dry_run and "local_fact_qa" in set(str(tool) for tool in router_plan.get("selected_tools") or []):
+        result = _run_local_fact_qa(
+            repository=repository,
+            trace_repository=trace_repository,
+            db_path=db_path,
+            doc_id=doc_id,
+            question=question,
+            router_plan=router_plan,
+            dry_run=dry_run,
+            run_id=run_id,
+        )
+        result["effective_task_type"] = "local_fact_qa"
+        return result
     if task_type in {"document_summary", "table_lookup_or_calculation", "structured_extraction"}:
         unsupported = _unsupported_task(task_type)
         unsupported["warnings"] = list(dict.fromkeys((router_plan.get("warnings") or []) + [unsupported["error"]["type"]]))
@@ -566,6 +724,7 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
     db_path = _project_path(args.db_path)
     output_dir = _project_path(args.output_dir)
     document_root = _project_path(args.document_root)
+    mineru_output_dir = _project_path(args.mineru_output_dir) if args.mineru_output_dir else None
     limit = max(0, int(args.limit))
 
     if args.list_documents:
@@ -666,6 +825,11 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
                     repository=repository,
                     file_path=file_path,
                     document_root=document_root,
+                    parser_name=str(args.parser),
+                    parser_mode=str(args.parser_mode),
+                    mineru_output_dir=mineru_output_dir,
+                    mineru_command=str(args.mineru_command),
+                    mineru_timeout_seconds=int(args.mineru_timeout_seconds),
                 )
                 if ingestion_error is not None:
                     source["ingestion_status"] = "failed"
@@ -696,6 +860,10 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
                 source["resolved_doc_id"] = doc_id
                 source["ingestion_status"] = str(ingestion_summary.get("parse_status") or ingestion_summary.get("status") or "success")
                 source["ingestion"] = ingestion_summary
+                source["parser"] = str(args.parser)
+                source["parser_mode"] = str(args.parser_mode)
+                if mineru_output_dir is not None:
+                    source["mineru_output_dir"] = str(mineru_output_dir)
                 warnings.append("file_ingested")
         else:
             source = {"type": "doc_id", "doc_id": doc_id, "db_path": str(db_path)}
@@ -769,7 +937,7 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
             doc_id=doc_id,
             source=source,
             question=question,
-            task_type=str(router_plan.get("task_type") or ""),
+            task_type=str(tool_result.get("effective_task_type") or router_plan.get("task_type") or ""),
             router_plan=router_plan,
         )
         result["status"] = tool_result.get("status") or "error"
@@ -777,12 +945,14 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
         result["citations"] = tool_result.get("citations") or []
         result["supporting_evidence_ids"] = tool_result.get("supporting_evidence_ids") or []
         result["tools_used"] = tool_result.get("tools_used") or []
+        metadata_consistency = _page_metadata_consistency(repository, doc_id, document, result["citations"])
+        result["metadata_consistency"] = metadata_consistency
         result["warnings"] = list(
             dict.fromkeys(
                 warnings
                 + (router_plan.get("warnings") or [])
                 + (tool_result.get("warnings") or [])
-                + _page_metadata_warnings(document, result["citations"])
+                + _page_metadata_warnings(metadata_consistency)
             )
         )
         result["error"] = tool_result.get("error") or {}
@@ -811,6 +981,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--question")
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR))
     parser.add_argument("--document-root", default=str(DEFAULT_DOCUMENT_ROOT))
+    parser.add_argument("--parser", choices=["auto", "text", "mineru_existing", "mineru"], default="auto")
+    parser.add_argument("--parser-mode", choices=["parse_existing", "local_cli"], default="parse_existing")
+    parser.add_argument("--mineru-output-dir", "--mineru-output", dest="mineru_output_dir")
+    parser.add_argument("--mineru-command", default="mineru")
+    parser.add_argument("--mineru-timeout-seconds", type=int, default=600)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--list-documents", action="store_true")
     parser.add_argument("--limit", type=int, default=20)
