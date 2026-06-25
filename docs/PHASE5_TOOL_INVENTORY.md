@@ -46,7 +46,8 @@ Phase 5D-S local_fact_qa smoke runner -> accepted
 Phase 5D-S server real-model smoke -> accepted
 Phase 5F-1 unified CLI MVP -> accepted
 Phase 5F-1 server CLI smoke -> accepted
-Phase 5F-2 file-to-answer ingestion integration -> implemented
+Phase 5F-2 file-to-answer ingestion integration -> accepted
+Phase 5F-2 server file-to-answer smoke -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 ```
 
@@ -194,7 +195,8 @@ Deferred:
 Phase 5E document_summary -> not_started
 Phase 5F-1 unified CLI MVP -> accepted
 Phase 5F-1 server CLI smoke -> accepted
-Phase 5F-2 file-to-answer ingestion integration -> implemented
+Phase 5F-2 file-to-answer ingestion integration -> accepted
+Phase 5F-2 server file-to-answer smoke -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5F full CLI acceptance -> not_started
 Phase 5G multi-task regression -> not_started
@@ -724,4 +726,41 @@ a configured CLI MinerU path is explicitly added.
 Phase 5E document_summary, table_lookup, simple_calculation,
 LLM-assisted Router fallback, VLM, training, and full GRPO E2E remain
 not_started.
+```
+
+Accepted server smoke evidence:
+
+```text
+branch = codex/phase5f2-file-ingestion-cli
+implementation_commit = 0c9d0842d7a9ac3d949f3fa990cb91dd0ab4c092
+db_path = outputs/docagent_phase5f2_smoke.db
+doc_id = b108d4d188313393
+source_file = /tmp/docagent_phase5f2_smoke.txt
+stats_log = outputs/logs/phase5f2_file_stats.json
+stats_run_id = docagent_cli_20260625_071021_e8424977
+stats_status = success
+stats_task_type = document_statistics
+stats_tools_used = count_pages
+stats_answer = The document contains 1 pages.
+stats_was_ingested = true
+stats_reused_existing = false
+stats_ingestion_status = parsed
+stats_page_count = 1
+stats_block_count = 1
+stats_index_status = not_started
+stats_structure_quality = passed
+fact_dry_run_log = outputs/logs/phase5f2_file_fact_dry_run.json
+fact_dry_run_id = docagent_cli_20260625_071021_4e422db6
+fact_status = success
+fact_task_type = local_fact_qa
+fact_tools_used = local_fact_qa
+fact_was_ingested = false
+fact_reused_existing = true
+fact_warning = dry_run_no_answer_generated
+artifact_root = outputs/cli_smoke
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+acceptance_boundary = lightweight .txt execution stability, not benchmark answer quality
 ```

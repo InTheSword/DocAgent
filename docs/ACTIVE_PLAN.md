@@ -13,10 +13,10 @@ Phase 4D-C accepted -> Phase 4D-D deferred -> Phase 5 active
 
 ```text
 Phase 5 Personal-use DocAgent MVP
--> Phase 5F-2 file-to-answer ingestion integration
--> support lightweight .txt --file + --question through DocumentIngestionService
-   into SQLite, Router, deterministic tools, local_fact_qa, JSON output, and
-   artifacts
+-> Phase 5F-2 server file-to-answer smoke result sync
+-> record accepted lightweight .txt --file + --question execution through
+   DocumentIngestionService into SQLite, Router, deterministic tools,
+   local_fact_qa, JSON output, and artifacts
 -> keep PDF/MinerU-dependent inputs honest with structured
    parser_backend_unavailable unless a supported backend is configured later
 -> stop before Phase 5E document_summary, LLM Router fallback, table_lookup,
@@ -76,7 +76,8 @@ Phase 5D-S local_fact_qa smoke runner -> accepted
 Phase 5D-S server real-model smoke -> accepted
 Phase 5F-1 Unified CLI MVP -> accepted
 Phase 5F-1 server CLI smoke -> accepted
-Phase 5F-2 file-to-answer ingestion integration -> implemented
+Phase 5F-2 file-to-answer ingestion integration -> accepted
+Phase 5F-2 server file-to-answer smoke -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5E Document Summary MVP -> not_started
 Phase 5F full CLI acceptance -> not_started
@@ -780,6 +781,58 @@ simple_calculation = not_started
 llm_router_fallback = not_started
 ```
 
+Phase 5F-2 accepted server file-to-answer smoke:
+
+```text
+branch = codex/phase5f2-file-ingestion-cli
+implementation_commit = 0c9d0842d7a9ac3d949f3fa990cb91dd0ab4c092
+db_path = outputs/docagent_phase5f2_smoke.db
+doc_id = b108d4d188313393
+source_file = /tmp/docagent_phase5f2_smoke.txt
+stats_log = outputs/logs/phase5f2_file_stats.json
+stats_run_id = docagent_cli_20260625_071021_e8424977
+stats_status = success
+stats_task_type = document_statistics
+stats_tools_used = count_pages
+stats_answer = The document contains 1 pages.
+stats_was_ingested = true
+stats_reused_existing = false
+stats_ingestion_status = parsed
+stats_page_count = 1
+stats_block_count = 1
+stats_index_status = not_started
+stats_structure_quality = passed
+fact_dry_run_log = outputs/logs/phase5f2_file_fact_dry_run.json
+fact_dry_run_id = docagent_cli_20260625_071021_4e422db6
+fact_status = success
+fact_task_type = local_fact_qa
+fact_tools_used = local_fact_qa
+fact_was_ingested = false
+fact_reused_existing = true
+fact_warning = dry_run_no_answer_generated
+artifact_root = outputs/cli_smoke
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+acceptance_boundary = lightweight .txt execution stability, not benchmark answer quality
+```
+
+Known Phase 5F-2 limitations:
+
+```text
+Server smoke validates lightweight UTF-8 .txt file-to-answer execution
+stability, not benchmark answer quality.
+Current accepted file ingestion support covers UTF-8 .txt through
+TextParserBackend.
+PDF/MinerU-backed file-to-answer through docagent_cli is not yet accepted.
+local_fact_qa answer quality remains a separate known limitation.
+Dense index is not built in the lightweight smoke; index_status may remain
+not_started.
+Phase 5E document_summary, Phase 5C-2 LLM-assisted Router fallback, and
+Phase 5G multi-task regression remain not_started.
+```
+
 Phase 4D-C scaffold / command preparation:
 
 ```text
@@ -875,8 +928,7 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Run a small server file-to-answer CLI smoke for Phase 5F-2 only after
-   explicit approval.
+1. Start Phase 5G multi-task regression only after explicit task approval.
 2. Start Phase 5E document_summary or Phase 5C-2 LLM-assisted Router fallback
    only after explicit task approval.
 3. Keep Phase 5F-1 server smoke accepted as execution-stability evidence, not
@@ -904,7 +956,8 @@ Phase 4D-B1.3 server sanity accepted
 + Phase 5D-S server smoke accepted as execution stability evidence
 + Phase 5F-1 unified CLI MVP accepted
 + Phase 5F-1 server CLI smoke accepted as execution stability evidence
-+ Phase 5F-2 file-to-answer ingestion integration implemented locally
++ Phase 5F-2 file-to-answer ingestion integration accepted
++ Phase 5F-2 server file-to-answer smoke accepted as execution stability evidence
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

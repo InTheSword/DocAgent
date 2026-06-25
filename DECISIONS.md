@@ -8,6 +8,73 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-25: Phase 5F-2 Server File-to-answer Smoke Accepted
+
+Decision: accept Phase 5F-2 file-to-answer ingestion integration after server
+smoke verified a lightweight UTF-8 `.txt` file can be ingested, assigned a
+`doc_id`, routed, dispatched to tools, and reused by SHA on a second run. This
+acceptance validates execution stability, not benchmark-level answer quality.
+
+Evidence:
+
+```text
+implementation_branch = codex/phase5f2-file-ingestion-cli
+implementation_commit = 0c9d0842d7a9ac3d949f3fa990cb91dd0ab4c092
+db_path = outputs/docagent_phase5f2_smoke.db
+doc_id = b108d4d188313393
+source_file = /tmp/docagent_phase5f2_smoke.txt
+stats_log = outputs/logs/phase5f2_file_stats.json
+stats_run_id = docagent_cli_20260625_071021_e8424977
+stats_status = success
+stats_task_type = document_statistics
+stats_tools_used = count_pages
+stats_answer = The document contains 1 pages.
+stats_was_ingested = true
+stats_reused_existing = false
+stats_ingestion_status = parsed
+stats_page_count = 1
+stats_block_count = 1
+stats_index_status = not_started
+stats_structure_quality = passed
+fact_dry_run_log = outputs/logs/phase5f2_file_fact_dry_run.json
+fact_dry_run_id = docagent_cli_20260625_071021_4e422db6
+fact_status = success
+fact_task_type = local_fact_qa
+fact_tools_used = local_fact_qa
+fact_was_ingested = false
+fact_reused_existing = true
+fact_warning = dry_run_no_answer_generated
+artifact_root = outputs/cli_smoke
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+```
+
+Boundary:
+
+- Current accepted file ingestion support covers UTF-8 `.txt` through
+  `TextParserBackend`.
+- PDF/MinerU-backed file-to-answer through `docagent_cli.py` is not yet
+  accepted.
+- `local_fact_qa` answer quality remains a separate known limitation.
+- Dense index is not built in the lightweight smoke; `index_status` may remain
+  `not_started`.
+- No Phase 5E document_summary, LLM-assisted Router fallback, Phase 5G
+  regression, table lookup, simple calculation, VLM, training, full GRPO E2E,
+  AnswerPolicy prompt change, or candidate answer extraction change is
+  included.
+
+Current status:
+
+```text
+Phase 5F-2 file-to-answer ingestion integration -> accepted
+Phase 5F-2 server file-to-answer smoke -> accepted
+Phase 5E document_summary -> not_started
+Phase 5C-2 LLM-assisted Router fallback -> not_started
+Phase 5G multi-task regression -> not_started
+```
+
 ## 2026-06-25: Phase 5F-2 File-to-answer Ingestion CLI Implemented
 
 Decision: implement Phase 5F-2 by adding lightweight `.txt` file ingestion to
@@ -50,7 +117,8 @@ Boundary:
 Current status:
 
 ```text
-Phase 5F-2 file-to-answer ingestion integration -> implemented
+Phase 5F-2 file-to-answer ingestion integration -> accepted
+Phase 5F-2 server file-to-answer smoke -> accepted
 Phase 5E document_summary -> not_started
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5G multi-task regression -> not_started
