@@ -15,7 +15,7 @@ Phase 5D-S local_fact_qa smoke runner -> accepted
 Phase 5D-S server real-model smoke -> accepted
 Phase 5F-1 unified CLI MVP -> accepted
 Phase 5F-1 server CLI smoke -> accepted
-Phase 5F-2 file-to-answer ingestion integration -> not_started
+Phase 5F-2 file-to-answer ingestion integration -> implemented
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5E document_summary -> not_started
 Phase 5F full CLI acceptance -> not_started
@@ -799,9 +799,9 @@ acceptance_boundary = execution stability, not benchmark-level answer quality
 Known limitations:
 
 ```text
---file + --question is partial: CLI contract and existing-file SHA reuse exist,
-but new-file ingestion through docagent_cli is not_started and remains Phase
-5F-2 work.
+--file + --question is partial for non-text inputs: CLI contract and
+existing-file SHA reuse exist, and Phase 5F-2 adds new .txt ingestion, but
+new PDF/MinerU ingestion through docagent_cli remains not_started.
 local_fact_qa real workflow executed successfully, but answer quality is
 unstable. The server date question returned an irrelevant evidence text prefix
 instead of a date.
@@ -819,6 +819,36 @@ table_lookup and simple_calculation remain not_started.
 structured_extraction returns structured unsupported when current tools are insufficient.
 LLM-assisted Router fallback remains future Phase 5C-2 work and is not implemented.
 No external LLM API, VLM, training, full GRPO E2E, AnswerPolicy prompt change, or candidate answer extraction change is included.
+```
+
+#### Phase 5F-2: File-to-answer ingestion integration
+
+Implementation:
+
+```text
+scripts/docagent_cli.py
+docagent/parser/text_backend.py
+```
+
+Implemented behavior:
+
+```text
+--file + --question now supports new UTF-8 .txt file ingestion through DocumentIngestionService.
+New .txt files are registered by DocumentRegistry, persisted through DocumentRepository, converted into EvidenceBlocks/page blocks, routed by the Phase 5C Router, and dispatched to deterministic tools or local_fact_qa.
+Already-ingested files are still reused by sha256 and do not repeat ingestion.
+CLI output returns the generated or reused doc_id and source.was_ingested / source.reused_existing.
+summary.json records used_file_ingestion, reused_existing_document, ingestion_status, and ingestion_error.
+PDF/image inputs without a configured CLI parser backend return structured parser_backend_unavailable rather than fake success.
+Unsupported extensions return unsupported_file_type.
+page_metadata_inconsistent is emitted as a non-blocking warning when citation pages exceed documents.page_count.
+```
+
+Boundary:
+
+```text
+Phase 5F-2 does not implement MinerU-backed PDF ingestion inside docagent_cli.
+Phase 5F-2 does not implement Phase 5E document_summary.
+Phase 5F-2 does not implement LLM-assisted Router fallback, table lookup, simple calculation, VLM, training, full GRPO E2E, AnswerPolicy prompt changes, or candidate answer extraction changes.
 ```
 
 ### Phase 5G: Multi-task Regression
@@ -877,8 +907,9 @@ Immediate next step:
 
 ```text
 Phase 5F-1 unified CLI MVP and server CLI smoke are accepted.
-Next step requires explicit approval: Phase 5F-2 file-to-answer ingestion integration, Phase 5E document_summary, or Phase 5C-2 LLM-assisted Router fallback.
-Do not implement document_summary, LLM Router fallback, table lookup, calculation, VLM, training, or full E2E as part of Phase 5F-1 result sync.
+Phase 5F-2 file-to-answer ingestion integration is implemented locally for lightweight .txt files.
+Next step requires explicit approval: Phase 5F-2 server file-to-answer smoke, Phase 5E document_summary, or Phase 5C-2 LLM-assisted Router fallback.
+Do not implement document_summary, LLM Router fallback, table lookup, calculation, VLM, training, or full E2E as part of Phase 5F-2.
 ```
 
 Phase 4D-D remains deferred until after Phase 5 MVP is accepted.

@@ -59,9 +59,10 @@ python scripts/docagent_cli.py \
 Minimum CLI behavior:
 
 - accept `--doc-id` for already ingested documents;
-- accept `--file` as a CLI contract; Phase 5F-1 reuses an already-ingested
-  SQLite document by file SHA when possible and otherwise returns structured
-  `file_ingestion_unavailable`;
+- accept `--file` as a CLI contract; Phase 5F-2 supports new UTF-8 `.txt`
+  file ingestion through `DocumentIngestionService`, reuses an
+  already-ingested SQLite document by file SHA when possible, and returns
+  structured ingestion errors for unsupported or unavailable parser backends;
 - classify the question into a supported task type;
 - call deterministic document tools for deterministic tasks;
 - call the existing local fact QA workflow for specific fact questions;
@@ -299,7 +300,7 @@ Phase 5D-S local_fact_qa smoke runner -> accepted
 Phase 5D-S server real-model smoke -> accepted
 Phase 5F-1 unified CLI MVP -> accepted
 Phase 5F-1 server CLI smoke -> accepted
-Phase 5F-2 file-to-answer ingestion integration -> not_started
+Phase 5F-2 file-to-answer ingestion integration -> implemented
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5F full CLI acceptance -> not_started
 ```
@@ -402,7 +403,7 @@ Current next targets:
 Phase 5E document_summary -> not_started
 Phase 5F-1 unified CLI MVP -> accepted
 Phase 5F-1 server CLI smoke -> accepted
-Phase 5F-2 file-to-answer ingestion integration -> not_started
+Phase 5F-2 file-to-answer ingestion integration -> implemented
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5F full CLI acceptance -> not_started
 Phase 5G multi-task regression -> not_started
@@ -481,9 +482,9 @@ acceptance_boundary = execution stability, not benchmark-level answer quality
 Known Phase 5F-1 limitations:
 
 ```text
---file + --question is partial: CLI contract and existing-file SHA reuse exist,
-but new-file ingestion through docagent_cli is not_started and remains Phase
-5F-2 work.
+--file + --question is partial for non-text inputs: CLI contract and
+existing-file SHA reuse exist, and Phase 5F-2 adds new .txt ingestion, but
+new PDF/MinerU ingestion through docagent_cli remains not_started.
 local_fact_qa real workflow executed successfully, but answer quality is
 unstable. The server date question returned an irrelevant evidence text prefix
 instead of a date.
@@ -492,6 +493,39 @@ for doc_id c1fc1c5e040ec894 while local_fact_qa citations include page 24.
 This may reflect a documents.page_count vs evidence block page-number mismatch
 or source/page-window metadata semantics.
 ```
+
+## Exit Criteria For Phase 5F-2
+
+Phase 5F-2 File-to-answer ingestion integration is implemented when:
+
+- `scripts/docagent_cli.py --file <path> --question <question>` can ingest a
+  new lightweight UTF-8 `.txt` file through `DocumentIngestionService`;
+- ingestion reuses `DocumentRegistry`, `DocumentRepository`, and existing
+  SQLite / EvidenceBlock persistence;
+- successful file ingestion returns a generated `doc_id` plus
+  `source.was_ingested = true` and `source.reused_existing = false`;
+- a second run over the same file reuses the existing SHA-matched document and
+  returns `source.was_ingested = false` and `source.reused_existing = true`;
+- after ingestion, the CLI calls the Phase 5C Router and dispatches to
+  deterministic document tools or Phase 5D `local_fact_qa`;
+- failed file ingestion returns structured errors such as `file_not_found`,
+  `parser_backend_unavailable`, `unsupported_file_type`, or
+  `file_ingestion_failed`;
+- stdout remains one JSON object and QA runs still write `result.json`,
+  `summary.json`, `router_plan.json`, and `trace.json`;
+- `summary.json` records `used_file_ingestion`,
+  `reused_existing_document`, `ingestion_status`, `ingestion_error`,
+  `used_router`, `used_external_api`, `used_vlm`, `used_training`, and
+  `used_full_e2e`;
+- `page_metadata_inconsistent` is a non-blocking warning when citation pages
+  exceed `documents.page_count`.
+
+Phase 5F-2 does not implement MinerU-backed PDF ingestion inside
+`docagent_cli.py`; PDF/image inputs without a configured CLI parser backend
+return structured `parser_backend_unavailable`. Phase 5E document_summary,
+LLM-assisted Router fallback, table lookup, simple calculation, VLM, training,
+full GRPO E2E, AnswerPolicy prompt changes, and candidate answer extraction
+changes remain out of scope.
 
 ## Exit Criteria For Phase 5 MVP
 

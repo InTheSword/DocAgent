@@ -46,7 +46,7 @@ Phase 5D-S local_fact_qa smoke runner -> accepted
 Phase 5D-S server real-model smoke -> accepted
 Phase 5F-1 unified CLI MVP -> accepted
 Phase 5F-1 server CLI smoke -> accepted
-Phase 5F-2 file-to-answer ingestion integration -> not_started
+Phase 5F-2 file-to-answer ingestion integration -> implemented
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 ```
 
@@ -194,7 +194,7 @@ Deferred:
 Phase 5E document_summary -> not_started
 Phase 5F-1 unified CLI MVP -> accepted
 Phase 5F-1 server CLI smoke -> accepted
-Phase 5F-2 file-to-answer ingestion integration -> not_started
+Phase 5F-2 file-to-answer ingestion integration -> implemented
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5F full CLI acceptance -> not_started
 Phase 5G multi-task regression -> not_started
@@ -634,9 +634,9 @@ acceptance_boundary = execution stability, not benchmark-level answer quality
 Known limitations:
 
 ```text
---file + --question is partial: CLI contract and existing-file SHA reuse exist,
-but new-file ingestion through docagent_cli is not_started and remains Phase
-5F-2 work.
+--file + --question is partial for non-text inputs: CLI contract and
+existing-file SHA reuse exist, and Phase 5F-2 adds new .txt ingestion, but
+new PDF/MinerU ingestion through docagent_cli remains not_started.
 local_fact_qa real workflow executed successfully, but answer quality is
 unstable. The server date question returned an irrelevant evidence text prefix
 instead of a date.
@@ -668,4 +668,60 @@ external LLM API
 VLM
 training
 full GRPO E2E
+```
+
+## Phase 5F-2 File-to-answer Ingestion CLI Status
+
+Phase 5F-2 adds lightweight file ingestion to the unified CLI:
+
+```text
+scripts/docagent_cli.py
+docagent/parser/text_backend.py
+```
+
+Implemented ingestion path:
+
+```text
+--file <utf8_txt> + --question
+-> DocumentRegistry
+-> TextParserBackend
+-> DocumentIngestionService
+-> DocumentRepository / SQLite EvidenceBlocks
+-> Phase 5C Router
+-> deterministic tools or local_fact_qa
+-> unified JSON output and outputs/cli/<run_id>/ artifacts
+```
+
+Supported CLI file-ingestion behavior:
+
+- new UTF-8 `.txt` files are ingested and return a generated `doc_id`;
+- already-ingested files are reused by `sha256` and do not repeat ingestion;
+- `source.was_ingested` and `source.reused_existing` are returned in CLI
+  output;
+- `summary.json` records `used_file_ingestion`,
+  `reused_existing_document`, `ingestion_status`, and `ingestion_error`;
+- `--document-root` is available for directing the existing document cache,
+  defaulting to `data/documents`;
+- `page_metadata_inconsistent` is emitted as a warning when citation pages
+  exceed `documents.page_count`.
+
+Structured file-ingestion errors:
+
+```text
+file_not_found
+parser_backend_unavailable
+unsupported_file_type
+file_ingestion_failed
+document_not_found
+```
+
+Current limitations:
+
+```text
+PDF/image ingestion inside docagent_cli is not implemented in Phase 5F-2.
+MinerU-backed PDF ingestion should still use scripts/ingest_document.py until
+a configured CLI MinerU path is explicitly added.
+Phase 5E document_summary, table_lookup, simple_calculation,
+LLM-assisted Router fallback, VLM, training, and full GRPO E2E remain
+not_started.
 ```

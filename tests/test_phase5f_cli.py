@@ -213,10 +213,9 @@ def test_doc_id_local_fact_qa_dry_run_returns_unified_json(tmp_path: Path) -> No
     assert payload["supporting_evidence_ids"]
 
 
-def test_file_argument_without_reusable_ingestion_returns_structured_unavailable(tmp_path: Path) -> None:
+def test_file_argument_missing_file_returns_structured_error(tmp_path: Path) -> None:
     db_path = _repository_with_document(tmp_path)
-    file_path = tmp_path / "new.pdf"
-    file_path.write_bytes(b"%PDF-1.4\nnew document")
+    file_path = tmp_path / "missing.pdf"
 
     payload = _run_cli(
         tmp_path,
@@ -231,7 +230,9 @@ def test_file_argument_without_reusable_ingestion_returns_structured_unavailable
     )
 
     assert payload["status"] == "error"
-    assert payload["error"]["type"] == "file_ingestion_unavailable"
+    assert payload["error"]["type"] == "file_not_found"
+    assert payload["source"]["was_ingested"] is False
+    assert payload["source"]["reused_existing"] is False
     assert payload["router_plan"] == {}
     assert Path(payload["artifact_dir"], "result.json").is_file()
 

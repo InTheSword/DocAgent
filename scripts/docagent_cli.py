@@ -13,7 +13,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from docagent.ingestion.document_registry import SUPPORTED_EXTENSIONS
 from docagent.ingestion.hashing import sha256_file
+from docagent.ingestion.service import DocumentIngestionService
+from docagent.parser.text_backend import TextParserBackend
 from docagent.router.rule_router import plan_route
 from docagent.storage.db import connect
 from docagent.storage.repositories import DocumentRepository, TraceRepository
@@ -38,6 +41,7 @@ AVAILABLE_TOOLS = [
     "list_pages",
 ]
 DEFAULT_OUTPUT_DIR = ROOT / "outputs" / "cli"
+DEFAULT_DOCUMENT_ROOT = ROOT / "data" / "documents"
 
 
 def _now_run_id() -> str:
@@ -153,6 +157,61 @@ def _resolve_file_doc_id(
     if document is None:
         return None, [], None
     return str(document["doc_id"]), ["file_reused_existing_doc_id"], document
+
+
+def _file_source(*, file_path: Path, db_path: Path) -> dict[str, Any]:
+    return {
+        "type": "file",
+        "file": str(file_path),
+        "file_path": str(file_path),
+        "db_path": str(db_path),
+        "was_ingested": False,
+        "reused_existing": False,
+    }
+
+
+def _parser_backend_for_file(file_path: Path) -> tuple[Any | None, dict[str, str] | None]:
+    extension = file_path.suffix.lower()
+    if extension not in SUPPORTED_EXTENSIONS:
+        return None, {
+            "type": "unsupported_file_type",
+            "message": f"Unsupported file type for ingestion: {extension or '<none>'}",
+        }
+    if extension == ".txt":
+        return TextParserBackend(), None
+    return None, {
+        "type": "parser_backend_unavailable",
+        "message": (
+            f"No CLI parser backend is configured for {extension} files in Phase 5F-2. "
+            "Use scripts/ingest_document.py with MinerU first, or use a UTF-8 .txt file."
+        ),
+    }
+
+
+def _ingest_file(
+    *,
+    repository: DocumentRepository,
+    file_path: Path,
+    document_root: Path,
+) -> tuple[str | None, dict[str, Any] | None, dict[str, Any]]:
+    parser_backend, parser_error = _parser_backend_for_file(file_path)
+    if parser_error is not None:
+        return None, parser_error, {"status": "failed", "error": parser_error}
+    assert parser_backend is not None
+    service = DocumentIngestionService(document_root=document_root, repository=repository)
+    try:
+        ingestion_result = service.ingest(file_path=file_path, parser_backend=parser_backend)
+    except ValueError as exc:
+        message = str(exc)
+        error_type = "unsupported_file_type" if "unsupported document type" in message else "file_ingestion_failed"
+        error = {"type": error_type, "message": message}
+        return None, error, {"status": "failed", "error": error}
+    except Exception as exc:
+        error = {"type": "file_ingestion_failed", "message": str(exc)}
+        return None, error, {"status": "failed", "error": error}
+    payload = ingestion_result.to_dict()
+    payload["status"] = "success"
+    return ingestion_result.document.doc_id, None, payload
 
 
 def _list_documents(*, db_path: Path, limit: int) -> dict[str, Any]:
@@ -318,6 +377,24 @@ def _tool_error(tool_result: dict[str, Any], default_type: str) -> dict[str, Any
     }
 
 
+def _page_metadata_warnings(document: dict[str, Any], citations: list[dict[str, Any]]) -> list[str]:
+    page_count = document.get("page_count")
+    try:
+        page_count_int = int(page_count)
+    except (TypeError, ValueError):
+        return []
+    if page_count_int <= 0:
+        return []
+    for citation in citations:
+        try:
+            page = int(citation.get("page"))
+        except (TypeError, ValueError):
+            continue
+        if page > page_count_int:
+            return ["page_metadata_inconsistent"]
+    return []
+
+
 def _run_local_fact_qa(
     *,
     repository: DocumentRepository,
@@ -446,6 +523,7 @@ def _finalize_qa_result(
 
     result["artifact_dir"] = str(artifact_dir)
     result["trace_path"] = str(trace_path)
+    source = result.get("source") or {}
 
     summary = {
         "status": result["status"],
@@ -455,7 +533,10 @@ def _finalize_qa_result(
         "question": result.get("question") or "",
         "task_type": result.get("task_type") or "",
         "tools_used": result.get("tools_used") or [],
-        "used_file_ingestion": used_file_ingestion,
+        "used_file_ingestion": bool(source.get("was_ingested", used_file_ingestion)),
+        "reused_existing_document": bool(source.get("reused_existing", False)),
+        "ingestion_status": source.get("ingestion_status") or "",
+        "ingestion_error": source.get("ingestion_error") or {},
         "used_router": bool(router_plan),
         "used_external_api": False,
         "used_vlm": False,
@@ -466,7 +547,7 @@ def _finalize_qa_result(
     }
     trace = {
         "run_id": run_id,
-        "source": result.get("source") or {},
+        "source": source,
         "router_plan": router_plan,
         "result_status": result.get("status"),
         "tools_used": result.get("tools_used") or [],
@@ -484,6 +565,7 @@ def _finalize_qa_result(
 def run_cli(args: argparse.Namespace) -> dict[str, Any]:
     db_path = _project_path(args.db_path)
     output_dir = _project_path(args.output_dir)
+    document_root = _project_path(args.document_root)
     limit = max(0, int(args.limit))
 
     if args.list_documents:
@@ -494,6 +576,12 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
     source: dict[str, Any] = {}
     source_type = "doc_id"
     used_file_ingestion = False
+    file_path: Path | None = None
+
+    if args.file:
+        source_type = "file"
+        file_path = _project_path(args.file)
+        source = _file_source(file_path=file_path, db_path=db_path)
 
     if not question:
         result = _error_result(
@@ -524,7 +612,23 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
             source_type="unknown",
             used_file_ingestion=False,
         )
-    if not db_path.is_file():
+    if file_path is not None and not file_path.is_file():
+        result = _error_result(
+            mode="qa",
+            run_id=run_id,
+            error_type="file_not_found",
+            message=f"Input file not found: {file_path}",
+            question=question,
+            source=source,
+        )
+        return _finalize_qa_result(
+            result=result,
+            output_dir=output_dir,
+            router_plan={},
+            source_type=source_type,
+            used_file_ingestion=False,
+        )
+    if not db_path.is_file() and file_path is None:
         result = _error_result(
             mode="qa",
             run_id=run_id,
@@ -548,56 +652,71 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
         warnings: list[str] = []
         doc_id = str(args.doc_id or "").strip()
 
-        if args.file:
-            source_type = "file"
-            file_path = _project_path(args.file)
-            source = {"type": "file", "file_path": str(file_path), "db_path": str(db_path)}
-            if not file_path.is_file():
-                result = _error_result(
-                    mode="qa",
-                    run_id=run_id,
-                    error_type="file_not_found",
-                    message=f"Input file not found: {file_path}",
-                    source=source,
-                    question=question,
-                )
-                return _finalize_qa_result(
-                    result=result,
-                    output_dir=output_dir,
-                    router_plan={},
-                    source_type=source_type,
-                    used_file_ingestion=False,
-                )
+        if file_path is not None:
             resolved_doc_id, file_warnings, _document = _resolve_file_doc_id(repository=repository, file_path=file_path)
             warnings.extend(file_warnings)
             if resolved_doc_id:
                 doc_id = resolved_doc_id
+                source["was_ingested"] = False
+                source["reused_existing"] = True
                 source["resolved_doc_id"] = resolved_doc_id
-            elif not doc_id:
-                result = _error_result(
-                    mode="qa",
-                    run_id=run_id,
-                    error_type="file_ingestion_unavailable",
-                    message=(
-                        "File-based ingestion is not available through docagent_cli yet. "
-                        "Use scripts/ingest_document.py first, then call docagent_cli with --doc-id."
-                    ),
-                    source=source,
-                    question=question,
-                    warnings=["file_ingestion_unavailable"],
-                )
-                return _finalize_qa_result(
-                    result=result,
-                    output_dir=output_dir,
-                    router_plan={},
-                    source_type=source_type,
-                    used_file_ingestion=used_file_ingestion,
-                )
+                source["ingestion_status"] = "reused_existing"
             else:
-                source["provided_doc_id"] = doc_id
-                warnings.append("file_ingestion_unavailable_doc_id_used")
+                ingested_doc_id, ingestion_error, ingestion_summary = _ingest_file(
+                    repository=repository,
+                    file_path=file_path,
+                    document_root=document_root,
+                )
+                if ingestion_error is not None:
+                    source["ingestion_status"] = "failed"
+                    source["ingestion_error"] = ingestion_error
+                    source["ingestion"] = ingestion_summary
+                    warnings.append(str(ingestion_error["type"]))
+                    result = _error_result(
+                        mode="qa",
+                        run_id=run_id,
+                        error_type=str(ingestion_error["type"]),
+                        message=str(ingestion_error["message"]),
+                        source=source,
+                        question=question,
+                        warnings=warnings,
+                    )
+                    return _finalize_qa_result(
+                        result=result,
+                        output_dir=output_dir,
+                        router_plan={},
+                        source_type=source_type,
+                        used_file_ingestion=False,
+                    )
+                assert ingested_doc_id is not None
+                doc_id = ingested_doc_id
+                used_file_ingestion = True
+                source["was_ingested"] = True
+                source["reused_existing"] = False
+                source["resolved_doc_id"] = doc_id
+                source["ingestion_status"] = str(ingestion_summary.get("parse_status") or ingestion_summary.get("status") or "success")
+                source["ingestion"] = ingestion_summary
+                warnings.append("file_ingested")
         else:
             source = {"type": "doc_id", "doc_id": doc_id, "db_path": str(db_path)}
+
+        if not doc_id:
+            result = _error_result(
+                mode="qa",
+                run_id=run_id,
+                error_type="document_required",
+                message="A document id could not be resolved from --doc-id or --file.",
+                source=source,
+                question=question,
+                warnings=warnings,
+            )
+            return _finalize_qa_result(
+                result=result,
+                output_dir=output_dir,
+                router_plan={},
+                source_type=source_type,
+                used_file_ingestion=used_file_ingestion,
+            )
 
         document = repository.get_document(doc_id)
         if document is None:
@@ -658,7 +777,14 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
         result["citations"] = tool_result.get("citations") or []
         result["supporting_evidence_ids"] = tool_result.get("supporting_evidence_ids") or []
         result["tools_used"] = tool_result.get("tools_used") or []
-        result["warnings"] = list(dict.fromkeys(warnings + (router_plan.get("warnings") or []) + (tool_result.get("warnings") or [])))
+        result["warnings"] = list(
+            dict.fromkeys(
+                warnings
+                + (router_plan.get("warnings") or [])
+                + (tool_result.get("warnings") or [])
+                + _page_metadata_warnings(document, result["citations"])
+            )
+        )
         result["error"] = tool_result.get("error") or {}
         if tool_result.get("structured_result") is not None:
             result["structured_result"] = tool_result.get("structured_result")
@@ -684,6 +810,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--file")
     parser.add_argument("--question")
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR))
+    parser.add_argument("--document-root", default=str(DEFAULT_DOCUMENT_ROOT))
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--list-documents", action="store_true")
     parser.add_argument("--limit", type=int, default=20)

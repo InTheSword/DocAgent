@@ -45,10 +45,18 @@ CLI supports `--db-path`, `--doc-id`, `--file`, `--question`, `--output-dir`,
 before dispatching supported tasks, uses Phase 5B deterministic tools for
 `document_statistics`, uses page tools for `page_lookup`, and uses Phase 5D
 `local_fact_qa` for fact QA. `--file + --question` is now a CLI contract, but
-file ingestion is partial: already-ingested files can be reused by SHA;
-otherwise the CLI returns structured `file_ingestion_unavailable`. The
+Phase 5F-1 only provided SHA reuse and structured unavailable behavior. The
 accepted server CLI smoke validates execution stability only, not
 benchmark-level answer quality.
+
+Phase 5F-2 file-to-answer ingestion integration is implemented in
+`scripts/docagent_cli.py` with `docagent/parser/text_backend.py`. The CLI can
+ingest new UTF-8 `.txt` files through `DocumentIngestionService`, reuse
+existing SHA-matched documents, return generated or reused `doc_id`, and
+continue through Router dispatch to deterministic tools or `local_fact_qa`.
+PDF/image inputs without a configured CLI parser backend return structured
+`parser_backend_unavailable`; new-file MinerU-backed PDF ingestion inside
+`docagent_cli.py` remains not_started.
 
 Status:
 
@@ -86,7 +94,7 @@ Phase 5D-S local_fact_qa smoke runner -> accepted
 Phase 5D-S server real-model smoke -> accepted
 Phase 5F-1 Unified CLI MVP -> accepted
 Phase 5F-1 server CLI smoke -> accepted
-Phase 5F-2 file-to-answer ingestion integration -> not_started
+Phase 5F-2 file-to-answer ingestion integration -> implemented
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5E Document Summary MVP -> not_started
 Phase 5F full CLI acceptance -> not_started
@@ -210,9 +218,9 @@ acceptance_boundary = execution stability, not benchmark-level answer quality
 Known Phase 5F-1 limitations:
 
 ```text
---file + --question is partial: CLI contract and existing-file SHA reuse exist,
-but new-file ingestion through docagent_cli is not_started and remains Phase
-5F-2 work.
+--file + --question is partial for non-text inputs: CLI contract and
+existing-file SHA reuse exist, and Phase 5F-2 adds new .txt ingestion, but
+new PDF/MinerU ingestion through docagent_cli remains not_started.
 local_fact_qa real workflow executed successfully, but answer quality is
 unstable. The server date question returned an irrelevant evidence text prefix
 instead of a date.
@@ -220,6 +228,32 @@ Page metadata consistency needs audit: list-documents reports page_count = 5
 for doc_id c1fc1c5e040ec894 while local_fact_qa citations include page 24.
 This may reflect a documents.page_count vs evidence block page-number mismatch
 or source/page-window metadata semantics.
+```
+
+Phase 5F-2 implemented local file-to-answer ingestion:
+
+```text
+branch = codex/phase5f2-file-ingestion-cli
+entrypoint = scripts/docagent_cli.py
+parser_backend = docagent/parser/text_backend.py
+new_lightweight_file_ingestion = .txt
+ingestion_service_reused = DocumentIngestionService
+document_registry_reused = DocumentRegistry
+sqlite_repository_reused = DocumentRepository
+sha256_reuse_supported = true
+generated_or_reused_doc_id_returned = true
+source_was_ingested_returned = true
+source_reused_existing_returned = true
+summary_used_file_ingestion = true
+summary_reused_existing_document = true
+summary_ingestion_status = true
+summary_ingestion_error = true
+structured_errors = file_not_found, parser_backend_unavailable, unsupported_file_type, file_ingestion_failed
+page_metadata_inconsistent_warning = implemented
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
 ```
 
 Current conclusion:
@@ -248,9 +282,11 @@ Current conclusion:
   structured `--file` contract.
 - Phase 5F-1 server CLI smoke is accepted as execution-stability evidence, not
   as benchmark-level answer-quality evidence.
-- Phase 5F-2 file-to-answer ingestion integration, Phase 5E document_summary,
-  Phase 5C-2 LLM-assisted Router fallback, table lookup, simple calculation,
-  and Phase 5G regression remain not_started.
+- Phase 5F-2 file-to-answer ingestion integration is implemented locally for
+  UTF-8 `.txt` files and SHA reuse, with structured failures for unsupported
+  parser paths.
+- Phase 5E document_summary, Phase 5C-2 LLM-assisted Router fallback, table
+  lookup, simple calculation, and Phase 5G regression remain not_started.
 
 Phase 4D-C accepted server result:
 

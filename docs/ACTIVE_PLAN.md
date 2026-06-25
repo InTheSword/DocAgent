@@ -13,11 +13,12 @@ Phase 4D-C accepted -> Phase 4D-D deferred -> Phase 5 active
 
 ```text
 Phase 5 Personal-use DocAgent MVP
--> Phase 5F-1 server CLI smoke result sync
--> record accepted CLI smoke evidence for scripts/docagent_cli.py on an
-   existing server SQLite doc_id
--> keep --file ingestion status honest: CLI contract and SHA reuse exist, but
-   new-file ingestion through docagent_cli remains not_started
+-> Phase 5F-2 file-to-answer ingestion integration
+-> support lightweight .txt --file + --question through DocumentIngestionService
+   into SQLite, Router, deterministic tools, local_fact_qa, JSON output, and
+   artifacts
+-> keep PDF/MinerU-dependent inputs honest with structured
+   parser_backend_unavailable unless a supported backend is configured later
 -> stop before Phase 5E document_summary, LLM Router fallback, table_lookup,
    simple_calculation, external LLM/VLM, training, and full GRPO E2E
 ```
@@ -75,7 +76,7 @@ Phase 5D-S local_fact_qa smoke runner -> accepted
 Phase 5D-S server real-model smoke -> accepted
 Phase 5F-1 Unified CLI MVP -> accepted
 Phase 5F-1 server CLI smoke -> accepted
-Phase 5F-2 file-to-answer ingestion integration -> not_started
+Phase 5F-2 file-to-answer ingestion integration -> implemented
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5E Document Summary MVP -> not_started
 Phase 5F full CLI acceptance -> not_started
@@ -740,9 +741,9 @@ acceptance_boundary = execution stability, not benchmark-level answer quality
 Known Phase 5F-1 limitations:
 
 ```text
---file + --question is partial: CLI contract and existing-file SHA reuse exist,
-but new-file ingestion through docagent_cli is not_started and remains Phase
-5F-2 work.
+--file + --question is partial for non-text inputs: CLI contract and
+existing-file SHA reuse exist, and Phase 5F-2 adds new .txt ingestion, but
+new PDF/MinerU ingestion through docagent_cli remains not_started.
 local_fact_qa real workflow executed successfully, but answer quality is
 unstable. The server date question returned an irrelevant evidence text prefix
 instead of a date.
@@ -750,6 +751,33 @@ Page metadata consistency needs audit: list-documents reports page_count = 5
 for doc_id c1fc1c5e040ec894 while local_fact_qa citations include page 24.
 This may reflect a documents.page_count vs evidence block page-number mismatch
 or source/page-window metadata semantics.
+```
+
+Phase 5F-2 implemented file-to-answer ingestion integration:
+
+```text
+branch = codex/phase5f2-file-ingestion-cli
+entrypoint = scripts/docagent_cli.py
+parser_backend = docagent/parser/text_backend.py
+supports_new_lightweight_file_ingestion = true
+supported_new_file_type = .txt
+ingestion_service_reused = DocumentIngestionService
+document_registry_reused = DocumentRegistry
+sqlite_repository_reused = DocumentRepository
+supports_sha256_reuse = true
+source_was_ingested_returned = true
+source_reused_existing_returned = true
+generated_or_reused_doc_id_returned = true
+summary_records_ingestion_status = true
+summary_records_reused_existing_document = true
+pdf_without_cli_backend = parser_backend_unavailable
+unsupported_extension_error = unsupported_file_type
+file_not_found_error = file_not_found
+page_metadata_inconsistent_warning = implemented
+document_summary = not_started
+table_lookup = not_started
+simple_calculation = not_started
+llm_router_fallback = not_started
 ```
 
 Phase 4D-C scaffold / command preparation:
@@ -847,20 +875,21 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Start Phase 5F-2 file-to-answer ingestion integration, Phase 5E
-   document_summary, or Phase 5C-2 LLM-assisted Router fallback only after
-   explicit task approval.
-2. Keep Phase 5F-1 server smoke accepted as execution-stability evidence, not
+1. Run a small server file-to-answer CLI smoke for Phase 5F-2 only after
+   explicit approval.
+2. Start Phase 5E document_summary or Phase 5C-2 LLM-assisted Router fallback
+   only after explicit task approval.
+3. Keep Phase 5F-1 server smoke accepted as execution-stability evidence, not
    benchmark-level answer-quality evidence.
-3. Keep Phase 4D-D deferred until MVP entrypoint, router, deterministic tools,
+4. Keep Phase 4D-D deferred until MVP entrypoint, router, deterministic tools,
    and multi-task regression are accepted.
-4. Keep Candidate-ID Reader postponed until reader-selection failures dominate
+5. Keep Candidate-ID Reader postponed until reader-selection failures dominate
    after candidate coverage issues are resolved.
-5. Keep optional full GRPO E2E postponed until candidate answer board quality
+6. Keep optional full GRPO E2E postponed until candidate answer board quality
    improves.
-6. Keep `page_children` as the default until more shard and document-type
+7. Keep `page_children` as the default until more shard and document-type
    validation supports a global default change.
-7. Keep CDC `not_started` until explicitly started.
+8. Keep CDC `not_started` until explicitly started.
 
 ## Stop Condition
 
@@ -875,6 +904,7 @@ Phase 4D-B1.3 server sanity accepted
 + Phase 5D-S server smoke accepted as execution stability evidence
 + Phase 5F-1 unified CLI MVP accepted
 + Phase 5F-1 server CLI smoke accepted as execution stability evidence
++ Phase 5F-2 file-to-answer ingestion integration implemented locally
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

@@ -8,6 +8,54 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-25: Phase 5F-2 File-to-answer Ingestion CLI Implemented
+
+Decision: implement Phase 5F-2 by adding lightweight `.txt` file ingestion to
+the unified CLI while reusing the existing document registry, ingestion
+service, SQLite repository, Router, deterministic tools, and `local_fact_qa`
+wrapper.
+
+Implementation:
+
+- `scripts/docagent_cli.py`
+- `docagent/parser/text_backend.py`
+- focused tests in `tests/test_phase5f_file_ingestion_cli.py`
+
+Behavior:
+
+- `--file <utf8_txt> --question <question>` now registers the file through
+  `DocumentRegistry`, parses it through `TextParserBackend`, persists it
+  through `DocumentIngestionService` / `DocumentRepository`, then routes and
+  dispatches the question through the existing Phase 5 CLI path;
+- SHA-matched files reuse the existing `doc_id` and do not repeat ingestion;
+- CLI output returns generated or reused `doc_id`, `source.was_ingested`, and
+  `source.reused_existing`;
+- `summary.json` records `used_file_ingestion`,
+  `reused_existing_document`, `ingestion_status`, and `ingestion_error`;
+- file ingestion errors are structured: `file_not_found`,
+  `parser_backend_unavailable`, `unsupported_file_type`, and
+  `file_ingestion_failed`;
+- `page_metadata_inconsistent` is emitted as a warning when citation pages
+  exceed `documents.page_count`.
+
+Boundary:
+
+- PDF/image ingestion inside `docagent_cli.py` is not implemented in Phase
+  5F-2. MinerU-backed PDF ingestion remains a later explicit integration path
+  or can be performed through `scripts/ingest_document.py`.
+- No Phase 5E document_summary, LLM-assisted Router fallback, table lookup,
+  simple calculation, VLM, training, full GRPO E2E, AnswerPolicy prompt
+  change, or candidate answer extraction change is included.
+
+Current status:
+
+```text
+Phase 5F-2 file-to-answer ingestion integration -> implemented
+Phase 5E document_summary -> not_started
+Phase 5C-2 LLM-assisted Router fallback -> not_started
+Phase 5G multi-task regression -> not_started
+```
+
 ## 2026-06-25: Phase 5F-1 Server CLI Smoke Accepted
 
 Decision: accept Phase 5F-1 unified CLI MVP after server CLI smoke verified
