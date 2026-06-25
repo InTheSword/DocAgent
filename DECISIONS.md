@@ -8,6 +8,94 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-25: Phase 5F-3 Server MinerU File-to-answer Smoke Accepted
+
+Decision: accept Phase 5F-3 MinerU-backed file-to-answer implementation after
+server smoke verified existing MinerU output-backed `--file + --question`
+execution through `DocumentIngestionService`, SQLite EvidenceBlocks/page
+documents, Router, deterministic document tools, and `local_fact_qa` dry-run.
+This validates execution stability, not online MinerU OCR execution or
+benchmark answer quality.
+
+Evidence:
+
+```text
+implementation_branch = codex/phase5f3-mineru-file-cli-smoke
+implementation_commit = 3eaf488cd7870af2e64dcd74f0f807edd8a1cb01
+sample_path = data/real_documents/globocan_africa_2022/source/original.pdf
+mineru_output = data/real_documents/globocan_africa_2022/mineru_raw
+doc_id = fe3465edd3da60d2
+overall_status = success
+stats_artifact = outputs/logs/phase5f3_file_stats.json
+stats_status = success
+stats_question = How many pages are in this document?
+stats_task_type = document_statistics
+stats_answer = The document contains 2 pages.
+stats_tools_used = count_pages
+stats_was_ingested = true
+stats_reused_existing = false
+stats_ingestion_status = parsed
+stats_parser = mineru_existing
+stats_parser_mode = parse_existing
+stats_page_count = 2
+stats_block_count = 57
+stats_block_type_counts = image:6, table:5, text:46
+stats_structure_quality = passed_with_warnings
+stats_metadata_consistency = ok
+page_lookup_artifact = outputs/logs/phase5f3_file_page_lookup.json
+page_lookup_status = success
+page_lookup_question = Show the text from page 1.
+page_lookup_task_type = page_lookup
+page_lookup_tools_used = get_page_text
+page_lookup_was_ingested = false
+page_lookup_reused_existing = true
+page_lookup_ingestion_status = reused_existing
+page_lookup_metadata_consistency = ok
+fact_dry_run_artifact = outputs/logs/phase5f3_file_fact_dry_run.json
+fact_dry_run_status = success
+fact_dry_run_question = What is this document about?
+fact_dry_run_task_type = local_fact_qa
+fact_dry_run_router_task_type = document_summary
+fact_dry_run_tools_used = local_fact_qa
+fact_dry_run_was_ingested = false
+fact_dry_run_reused_existing = true
+fact_dry_run_ingestion_status = reused_existing
+fact_dry_run_metadata_consistency = ok
+fact_dry_run_warnings = file_reused_existing_doc_id, tool_unavailable, fallback_to_local_fact_qa, router_plan_task_type_not_local_fact_qa, dry_run_no_answer_generated
+artifact_logs = outputs/logs/phase5f3_file_stats.json, outputs/logs/phase5f3_file_page_lookup.json, outputs/logs/phase5f3_file_fact_dry_run.json
+artifact_cli_dirs = /root/autodl-tmp/docagent/outputs/cli_smoke/docagent_cli_20260625_113113_45d75c97, /root/autodl-tmp/docagent/outputs/cli_smoke/docagent_cli_20260625_113113_3888da94, /root/autodl-tmp/docagent/outputs/cli_smoke/docagent_cli_20260625_113113_7ef9e062
+metadata_consistency = ok, ok, ok
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+```
+
+Boundary:
+
+- Existing MinerU output-backed execution is accepted; online MinerU
+  OCR/parser execution from raw PDF remains a later task.
+- Router correctly classifies "What is this document about?" as
+  `document_summary`, but Phase 5E `document_summary` is not implemented, so
+  CLI falls back to `local_fact_qa` dry-run with warnings. This does not block
+  execution-smoke acceptance.
+- `local_fact_qa` answer quality is not benchmark-validated by this smoke.
+- GLOBOCAN `structure_quality` is `passed_with_warnings`.
+- No Phase 5E document_summary, LLM-assisted Router fallback, Phase 5G
+  regression, table lookup, simple calculation, VLM, training, full GRPO E2E,
+  AnswerPolicy prompt change, or candidate answer extraction change is
+  included.
+
+Current status:
+
+```text
+Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
+Phase 5F-3 server smoke -> accepted
+Phase 5E document_summary -> not_started
+Phase 5C-2 LLM-assisted Router fallback -> not_started
+Phase 5G multi-task regression -> not_started
+```
+
 ## 2026-06-25: Phase 5F-3 MinerU-backed File-to-answer CLI Implemented
 
 Decision: implement Phase 5F-3 by extending `scripts/docagent_cli.py` from
@@ -58,8 +146,7 @@ used_full_e2e = false
 
 Boundary:
 
-- Phase 5F-3 is implemented locally and ready for server smoke, but is not
-  accepted until the server smoke returns.
+- Phase 5F-3 was implemented locally and later accepted after server smoke.
 - Existing MinerU output is consumed; this change does not install MinerU,
   call MinerU API, call VLM, or mutate the stable `docagent` environment.
 - `local_fact_qa` dry-run validates evidence shape, not generated answer
@@ -72,8 +159,8 @@ Boundary:
 Current status:
 
 ```text
-Phase 5F-3 MinerU-backed file-to-answer smoke -> implemented
-Phase 5F-3 server smoke -> ready
+Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
+Phase 5F-3 server smoke -> accepted
 Phase 5E document_summary -> not_started
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5G multi-task regression -> not_started

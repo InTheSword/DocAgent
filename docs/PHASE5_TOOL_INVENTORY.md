@@ -48,8 +48,8 @@ Phase 5F-1 unified CLI MVP -> accepted
 Phase 5F-1 server CLI smoke -> accepted
 Phase 5F-2 file-to-answer ingestion integration -> accepted
 Phase 5F-2 server file-to-answer smoke -> accepted
-Phase 5F-3 MinerU-backed file-to-answer smoke -> implemented
-Phase 5F-3 server smoke -> ready
+Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
+Phase 5F-3 server smoke -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 ```
 
@@ -199,8 +199,8 @@ Phase 5F-1 unified CLI MVP -> accepted
 Phase 5F-1 server CLI smoke -> accepted
 Phase 5F-2 file-to-answer ingestion integration -> accepted
 Phase 5F-2 server file-to-answer smoke -> accepted
-Phase 5F-3 MinerU-backed file-to-answer smoke -> implemented
-Phase 5F-3 server smoke -> ready
+Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
+Phase 5F-3 server smoke -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5F full CLI acceptance -> not_started
 Phase 5G multi-task regression -> not_started
@@ -846,14 +846,63 @@ tested_local_fact_qa_dry_run_task_type = local_fact_qa
 tested_local_fact_qa_dry_run_router_task_type = document_summary
 ```
 
+Accepted server smoke evidence:
+
+```text
+implementation_commit = 3eaf488cd7870af2e64dcd74f0f807edd8a1cb01
+sample_path = data/real_documents/globocan_africa_2022/source/original.pdf
+mineru_output = data/real_documents/globocan_africa_2022/mineru_raw
+doc_id = fe3465edd3da60d2
+stats_artifact = outputs/logs/phase5f3_file_stats.json
+stats_status = success
+stats_task_type = document_statistics
+stats_answer = The document contains 2 pages.
+stats_tools_used = count_pages
+stats_was_ingested = true
+stats_reused_existing = false
+stats_ingestion_status = parsed
+stats_parser = mineru_existing
+stats_parser_mode = parse_existing
+stats_page_count = 2
+stats_block_count = 57
+stats_block_type_counts = image:6, table:5, text:46
+stats_structure_quality = passed_with_warnings
+stats_metadata_consistency = ok
+page_lookup_artifact = outputs/logs/phase5f3_file_page_lookup.json
+page_lookup_status = success
+page_lookup_task_type = page_lookup
+page_lookup_tools_used = get_page_text
+page_lookup_was_ingested = false
+page_lookup_reused_existing = true
+page_lookup_ingestion_status = reused_existing
+page_lookup_metadata_consistency = ok
+fact_dry_run_artifact = outputs/logs/phase5f3_file_fact_dry_run.json
+fact_dry_run_status = success
+fact_dry_run_task_type = local_fact_qa
+fact_dry_run_router_task_type = document_summary
+fact_dry_run_tools_used = local_fact_qa
+fact_dry_run_was_ingested = false
+fact_dry_run_reused_existing = true
+fact_dry_run_ingestion_status = reused_existing
+fact_dry_run_metadata_consistency = ok
+fact_dry_run_warnings = file_reused_existing_doc_id, tool_unavailable, fallback_to_local_fact_qa, router_plan_task_type_not_local_fact_qa, dry_run_no_answer_generated
+artifact_root = outputs/cli_smoke
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+acceptance_boundary = existing MinerU output-backed execution smoke, not online MinerU OCR execution or benchmark answer quality
+```
+
 Current limitations:
 
 ```text
-Phase 5F-3 is implemented locally and ready for server smoke, but is not
-accepted until server smoke returns.
-The validated local path consumes existing MinerU output; it does not install
-MinerU or call MinerU API.
-local_fact_qa dry-run validates evidence shape, not generated answer quality.
+Phase 5F-3 accepts existing MinerU output-backed file-to-answer execution.
+Online MinerU OCR/parser execution from raw PDF remains a later task.
+document_summary is not implemented; summary-like questions may fall back to
+local_fact_qa dry-run with warnings.
+local_fact_qa answer quality is not benchmark-validated by this smoke.
+The GLOBOCAN sample structure_quality is passed_with_warnings.
 Phase 5E document_summary, table_lookup, simple_calculation,
 LLM-assisted Router fallback, VLM, training, and full GRPO E2E remain
 not_started.
