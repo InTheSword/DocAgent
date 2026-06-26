@@ -203,8 +203,57 @@ Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5F full CLI acceptance -> not_started
-Phase 5G multi-task regression -> not_started
+Phase 5G CLI regression baseline -> implemented
 ```
+
+## Phase 5G CLI Regression Runner
+
+The Phase 5G multi-task CLI regression baseline is implemented in:
+
+```text
+scripts/run_phase5g_cli_regression.py
+```
+
+The runner reuses the accepted CLI surface instead of reimplementing routing or
+tools. Each regression case invokes `scripts/docagent_cli.py` through a
+subprocess, parses stdout as a single JSON object, validates expected status,
+task type, tools used, warnings, errors, and artifact writing, then records a
+per-case result.
+
+Default case coverage:
+
+```text
+list_documents
+document_statistics
+page_lookup
+local_fact_qa dry-run
+.txt file-to-answer
+MinerU existing-output-backed file-to-answer
+document_summary not implemented path
+table_lookup_or_calculation not implemented path
+visual_pixel_qa unsupported / fallback boundary
+file_not_found structured error
+```
+
+Artifact output:
+
+```text
+outputs/regression/phase5g_cli/<run_id>/
+  regression_cases.jsonl
+  regression_results.jsonl
+  regression_summary.json
+  regression_summary.md
+  preview.json
+```
+
+Known limitations:
+
+- This runner is an execution stability baseline, not a benchmark answer
+  quality evaluation.
+- If the local GLOBOCAN PDF or existing MinerU output directory is absent, the
+  MinerU file-to-answer case is marked skipped instead of fabricated.
+- `document_summary`, table lookup, simple calculation, LLM Router fallback,
+  VLM, training, and full GRPO E2E remain out of scope.
 
 ## Reusable Code Paths
 

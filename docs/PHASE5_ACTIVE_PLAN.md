@@ -4,7 +4,7 @@
 
 Phase 4D-C has been accepted and recorded.
 
-Current Phase 5 status after Phase 5F-3 server smoke result sync:
+Current Phase 5 status after Phase 5G CLI regression baseline implementation:
 
 ```text
 Phase 5A architecture audit and contracts -> accepted
@@ -19,10 +19,10 @@ Phase 5F-2 file-to-answer ingestion integration -> accepted
 Phase 5F-2 server file-to-answer smoke -> accepted
 Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
+Phase 5G CLI regression baseline -> implemented
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5E document_summary -> not_started
 Phase 5F full CLI acceptance -> not_started
-Phase 5G multi-task regression -> not_started
 ```
 
 Phase 5D-S validates execution stability, not benchmark-level answer quality.
@@ -1038,22 +1038,69 @@ Goal:
 Validate that the MVP works beyond one demo question.
 ```
 
-Minimum regression categories:
+Implementation status:
 
 ```text
-local_fact_qa
-document_statistics
-page_lookup
-structured_extraction
-document_summary
+Phase 5G CLI regression baseline -> implemented
+runner = scripts/run_phase5g_cli_regression.py
+tests = tests/test_phase5g_cli_regression.py
+artifact_root = outputs/regression/phase5g_cli/<run_id>/
 ```
 
-Acceptance:
+Default regression categories:
 
 ```text
-Regression report is generated.
-Failures are categorized by task type.
-Known limitations are documented.
+list_documents
+document_statistics
+page_lookup
+local_fact_qa dry-run
+.txt file-to-answer
+MinerU existing-output-backed file-to-answer
+document_summary not implemented path
+table_lookup_or_calculation not implemented path
+visual_pixel_qa unsupported / local_fact_qa fallback boundary
+file_not_found structured error
+```
+
+Artifacts:
+
+```text
+regression_cases.jsonl
+regression_results.jsonl
+regression_summary.json
+regression_summary.md
+preview.json
+```
+
+Summary metrics:
+
+```text
+case_count
+completed_count
+failed_count
+skipped_count
+unsupported_count
+json_valid_count
+artifact_write_count
+task_type_distribution
+tools_used_distribution
+failure_taxonomy
+known_limitation_counts
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+```
+
+Known limitations:
+
+```text
+Phase 5G is an execution regression baseline, not a benchmark accuracy report.
+Missing local GLOBOCAN / MinerU output fixtures are recorded as skipped.
+document_summary remains Phase 5E not_started.
+table_lookup and simple_calculation remain not_started.
+visual_pixel_qa remains unsupported and may fall back to local_fact_qa dry-run.
+LLM-assisted Router fallback remains Phase 5C-2 not_started.
 ```
 
 ## 13. Implementation Discipline
@@ -1088,8 +1135,11 @@ Immediate next step:
 Phase 5F-1 unified CLI MVP and server CLI smoke are accepted.
 Phase 5F-2 file-to-answer ingestion integration and server smoke are accepted for lightweight .txt files.
 Phase 5F-3 MinerU-backed file-to-answer implementation and server smoke are accepted for existing MinerU output-backed execution.
-Next step requires explicit approval: Phase 5G multi-task regression, Phase 5E document_summary, or Phase 5C-2 LLM-assisted Router fallback.
-Do not implement document_summary, LLM Router fallback, table lookup, calculation, VLM, training, or full E2E as part of Phase 5F-3 result sync.
+Phase 5G CLI regression baseline is implemented locally.
+Next step requires explicit approval: server Phase 5G CLI regression smoke,
+Phase 5E document_summary, or Phase 5C-2 LLM-assisted Router fallback.
+Do not implement document_summary, LLM Router fallback, table lookup,
+calculation, VLM, training, or full E2E as part of Phase 5G.
 ```
 
 Phase 4D-D remains deferred until after Phase 5 MVP is accepted.

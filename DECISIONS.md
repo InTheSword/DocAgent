@@ -8,6 +8,84 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-26: Phase 5G CLI Regression Baseline Implemented
+
+Decision: implement Phase 5G as a lightweight multi-task CLI regression
+baseline in `scripts/run_phase5g_cli_regression.py`. The runner invokes the
+accepted `scripts/docagent_cli.py` entrypoint rather than reimplementing
+Router, deterministic document tools, local_fact_qa, or file ingestion.
+
+Implementation:
+
+- `scripts/run_phase5g_cli_regression.py`
+- `tests/test_phase5g_cli_regression.py`
+
+Default case coverage:
+
+```text
+list_documents
+document_statistics
+page_lookup
+local_fact_qa dry-run
+.txt file-to-answer
+MinerU existing-output-backed file-to-answer
+document_summary not implemented path
+table_lookup_or_calculation not implemented path
+visual_pixel_qa unsupported / local_fact_qa fallback boundary
+file_not_found structured error
+```
+
+Artifacts:
+
+```text
+outputs/regression/phase5g_cli/<run_id>/
+  regression_cases.jsonl
+  regression_results.jsonl
+  regression_summary.json
+  regression_summary.md
+  preview.json
+```
+
+Summary metrics:
+
+```text
+case_count
+completed_count
+failed_count
+skipped_count
+unsupported_count
+json_valid_count
+artifact_write_count
+task_type_distribution
+tools_used_distribution
+failure_taxonomy
+known_limitation_counts
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+```
+
+Boundary:
+
+- Phase 5G validates CLI execution stability, JSON shape, structured failures,
+  tool dispatch, artifact writing, and known limitation categorization. It is
+  not a benchmark answer-quality report.
+- Missing local GLOBOCAN / MinerU output paths are marked skipped; the runner
+  does not fabricate PDF/MinerU success.
+- No Phase 5E document_summary, LLM-assisted Router fallback, table lookup,
+  simple calculation, online MinerU OCR, VLM, training, full GRPO E2E,
+  AnswerPolicy prompt change, or candidate answer extraction change is
+  included.
+
+Current status:
+
+```text
+Phase 5G CLI regression baseline -> implemented
+Phase 5E document_summary -> not_started
+Phase 5C-2 LLM-assisted Router fallback -> not_started
+```
+
 ## 2026-06-25: Phase 5F-3 Server MinerU File-to-answer Smoke Accepted
 
 Decision: accept Phase 5F-3 MinerU-backed file-to-answer implementation after

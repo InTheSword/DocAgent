@@ -410,9 +410,9 @@ Phase 5F-2 file-to-answer ingestion integration -> accepted
 Phase 5F-2 server file-to-answer smoke -> accepted
 Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
+Phase 5G CLI regression baseline -> implemented
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5F full CLI acceptance -> not_started
-Phase 5G multi-task regression -> not_started
 ```
 
 ## Exit Criteria For Phase 5F-1
@@ -584,7 +584,7 @@ local_fact_qa answer quality remains a separate known limitation.
 Dense index is not built in the lightweight smoke; index_status may remain
 not_started.
 Phase 5E document_summary, Phase 5C-2 LLM-assisted Router fallback, and
-Phase 5G multi-task regression remain not_started.
+Phase 5G server regression smoke remain not_started.
 ```
 
 ## Exit Criteria For Phase 5F-3
@@ -701,6 +701,61 @@ local_fact_qa dry-run.
 local_fact_qa answer quality is not benchmark-validated by this smoke.
 The GLOBOCAN sample structure_quality is passed_with_warnings.
 ```
+
+## Phase 5G CLI Regression Baseline
+
+Phase 5G adds an execution regression runner in:
+
+```text
+scripts/run_phase5g_cli_regression.py
+```
+
+It calls `scripts/docagent_cli.py` and writes artifacts under:
+
+```text
+outputs/regression/phase5g_cli/<run_id>/
+  regression_cases.jsonl
+  regression_results.jsonl
+  regression_summary.json
+  regression_summary.md
+  preview.json
+```
+
+Default coverage:
+
+```text
+list_documents
+document_statistics
+page_lookup
+local_fact_qa dry-run
+.txt file-to-answer
+MinerU existing-output-backed file-to-answer
+document_summary not implemented path
+table_lookup_or_calculation not implemented path
+visual_pixel_qa unsupported / fallback boundary
+file_not_found structured error
+```
+
+`regression_summary.json` records case counts, completed / failed / skipped /
+unsupported counts, JSON validity, artifact writing, task-type distribution,
+tools-used distribution, failure taxonomy, known limitation counts, and confirms:
+
+```text
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+```
+
+Boundary:
+
+- Phase 5G is a CLI execution stability regression, not a benchmark accuracy
+  report.
+- Missing local GLOBOCAN / MinerU fixture paths are recorded as skipped.
+- Phase 5E `document_summary` remains not_started.
+- Phase 5C-2 LLM-assisted Router fallback remains not_started.
+- table lookup, simple calculation, VLM, training, and full GRPO E2E remain
+  out of scope.
 
 ## Exit Criteria For Phase 5 MVP
 

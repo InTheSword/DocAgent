@@ -70,6 +70,16 @@ and CLI artifacts. The accepted server smoke validates existing MinerU
 output-backed execution, not online MinerU OCR execution or benchmark answer
 quality.
 
+Phase 5G CLI regression baseline is implemented in
+`scripts/run_phase5g_cli_regression.py`. The runner reads default or JSONL
+regression cases, calls `scripts/docagent_cli.py`, validates stdout JSON,
+task type, tools used, artifact writing, structured errors, skipped cases, and
+known limitations, then writes `regression_cases.jsonl`,
+`regression_results.jsonl`, `regression_summary.json`,
+`regression_summary.md`, and `preview.json` under
+`outputs/regression/phase5g_cli/<run_id>/`. This is an execution stability
+baseline, not a benchmark answer-quality report.
+
 Status:
 
 ```text
@@ -110,10 +120,10 @@ Phase 5F-2 file-to-answer ingestion integration -> accepted
 Phase 5F-2 server file-to-answer smoke -> accepted
 Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
+Phase 5G CLI regression baseline -> implemented
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5E Document Summary MVP -> not_started
 Phase 5F full CLI acceptance -> not_started
-Phase 5G Multi-task Regression -> not_started
 CDC -> not_started
 MVP CLI / trace integration -> not_started
 Demo/closure -> not_started
@@ -423,8 +433,10 @@ Current conclusion:
   unsupported parser paths.
 - Phase 5F-3 MinerU-backed file-to-answer implementation and server smoke are
   accepted for existing MinerU output-backed execution.
+- Phase 5G CLI regression baseline is implemented locally.
 - Phase 5E document_summary, Phase 5C-2 LLM-assisted Router fallback, table
-  lookup, simple calculation, and Phase 5G regression remain not_started.
+  lookup, simple calculation, and Phase 5G server regression smoke remain
+  not_started.
 
 Phase 4D-C accepted server result:
 

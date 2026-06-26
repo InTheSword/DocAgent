@@ -13,12 +13,12 @@ Phase 4D-C accepted -> Phase 4D-D deferred -> Phase 5 active
 
 ```text
 Phase 5 Personal-use DocAgent MVP
--> Phase 5F-3 server smoke result sync
--> record accepted existing MinerU output-backed --file + --question
-   execution through DocumentIngestionService, SQLite, Router, document tools,
-   local_fact_qa dry-run, JSON output, and artifacts
--> keep this as execution smoke evidence, not online MinerU OCR execution or
-   benchmark answer-quality evidence
+-> Phase 5G multi-task CLI regression baseline
+-> add a lightweight runner that calls scripts/docagent_cli.py over accepted
+   CLI / Router / document tools / local_fact_qa / file-to-answer paths
+-> write regression cases, results, summary JSON/Markdown, and preview artifacts
+-> keep this as execution stability regression, not benchmark answer-quality
+   evidence
 -> stop before Phase 5E document_summary, LLM Router fallback, table_lookup,
    simple_calculation, external LLM/VLM, training, and full GRPO E2E
 ```
@@ -80,10 +80,10 @@ Phase 5F-2 file-to-answer ingestion integration -> accepted
 Phase 5F-2 server file-to-answer smoke -> accepted
 Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
+Phase 5G CLI regression baseline -> implemented
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5E Document Summary MVP -> not_started
 Phase 5F full CLI acceptance -> not_started
-Phase 5G Multi-task Regression -> not_started
 CDC -> not_started
 MVP CLI / trace integration -> not_started
 Demo/closure -> not_started
@@ -834,7 +834,7 @@ local_fact_qa answer quality remains a separate known limitation.
 Dense index is not built in the lightweight smoke; index_status may remain
 not_started.
 Phase 5E document_summary, Phase 5C-2 LLM-assisted Router fallback, and
-Phase 5G multi-task regression remain not_started.
+Phase 5G server regression smoke remain not_started.
 ```
 
 Phase 5F-3 accepted MinerU/parser-backed file-to-answer smoke:
@@ -908,7 +908,7 @@ local_fact_qa dry-run. This does not block execution-smoke acceptance.
 local_fact_qa answer quality is not benchmark-validated by this smoke.
 The GLOBOCAN sample structure_quality is passed_with_warnings.
 Phase 5E document_summary, Phase 5C-2 LLM-assisted Router fallback, and
-Phase 5G multi-task regression remain not_started.
+Phase 5G server regression smoke remain not_started.
 ```
 
 Phase 4D-C scaffold / command preparation:
