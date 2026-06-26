@@ -8,6 +8,55 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-26: Phase 5C-2 LLM-assisted Router Fallback Implemented
+
+Decision: implement optional LLM-assisted Router fallback while preserving the
+accepted rule-first Router as the deterministic baseline. The fallback is
+disabled by default, requires explicit opt-in, and only returns a routing
+decision. It does not answer document questions or execute document tools.
+
+Implementation:
+
+```text
+docagent/router/llm_client.py
+docagent/router/llm_router.py
+scripts/docagent_cli.py
+tests/test_phase5c2_llm_router.py
+```
+
+Configuration:
+
+```text
+DOCAGENT_ROUTER_LLM_API_KEY
+DOCAGENT_ROUTER_LLM_BASE_URL
+DOCAGENT_ROUTER_LLM_MODEL
+DOCAGENT_ROUTER_LLM_TIMEOUT_SECONDS
+--router-llm-env-file .secrets/router_llm.env
+```
+
+Boundary:
+
+- default CLI behavior remains rule-only;
+- the Router LLM sees only `question`, `available_tools`, the initial
+  `rule_plan`, and lightweight `document_profile` fields;
+- full document text, retrieved evidence, OCR full text, image pixels, user
+  file contents, and `local_fact_qa` outputs are not sent to the Router LLM;
+- LLM output must pass schema validation before use;
+- invalid JSON, unavailable selected tools, `requires_visual_understanding`,
+  missing config, or API failure falls back to the rule plan;
+- Phase 5E document_summary, table lookup, simple calculation, VLM,
+  local_fact_qa answer-quality improvement, training, and full GRPO E2E remain
+  not_started.
+
+Current status:
+
+```text
+Phase 5C-2 LLM-assisted Router fallback -> implemented
+Phase 5E document_summary -> not_started
+online MinerU OCR execution -> not_started
+local_fact_qa answer quality improvement -> not_started
+```
+
 ## 2026-06-26: Phase 5G Server CLI Regression Accepted
 
 Decision: accept Phase 5G CLI regression baseline after the server regression

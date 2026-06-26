@@ -9,12 +9,15 @@ DocAgent MVP. Phase 5C implements a rule-first single-step planner in:
 docagent/router/
   schemas.py
   rule_router.py
+  llm_client.py
+  llm_router.py
 ```
 
-The Phase 5C router only returns a planning decision. It does not execute tools,
-call external LLM APIs, call VLM APIs, create CLI trace artifacts, wrap
-`local_fact_qa`, generate summaries, implement table lookup, modify prompts,
-train models, or run server E2E.
+The Phase 5C router only returns a planning decision. The Phase 5C-2 LLM
+fallback is optional, disabled by default, and only classifies routing
+decisions. It does not execute tools, call VLM APIs, create CLI trace
+artifacts, wrap `local_fact_qa`, generate summaries, implement table lookup,
+modify prompts, train models, or run server E2E.
 
 Initial supported task types:
 
@@ -135,6 +138,13 @@ Validation requirements:
 - `reason` must be a short operational explanation, not chain-of-thought.
 - Router output must be JSON-serializable.
 
+Phase 5C-2 may add these JSON-serializable fields to the router plan:
+
+```text
+router_source = rule | llm_fallback | rule_after_llm_failure
+llm_router.status = used | not_configured | api_error | invalid_output | validation_failed
+```
+
 Phase 5C implementation notes:
 
 - `plan_route(payload)` and `route_question(payload)` accept dict-like input
@@ -193,12 +203,34 @@ Not allowed by default:
 External fallback output must still pass the same schema validation as rule
 output.
 
-Phase 5C status:
+Phase 5C-2 status:
 
-- external LLM fallback is disabled by default;
-- no external API client is implemented;
-- if `allow_external_llm_router = true`, the router adds
-  `external_llm_router_unavailable` and still uses deterministic rules.
+- external LLM fallback is implemented and disabled by default;
+- `rule_router.py` remains the deterministic baseline;
+- `llm_router.py` first runs the rule router, then optionally calls the LLM
+  only when explicitly allowed and the rule plan is low-confidence,
+  ambiguous, complex, or tool-unavailable;
+- high-confidence `document_statistics`, high-confidence `page_lookup`, and
+  the visual unsupported boundary do not call the LLM;
+- the LLM sees only `question`, `available_tools`, the initial `rule_plan`,
+  and lightweight `document_profile` fields;
+- the LLM does not see full document text, retrieved evidence, OCR full text,
+  image pixels, user file contents, or `local_fact_qa` outputs;
+- invalid JSON, schema validation failure, unavailable tool selection,
+  `requires_visual_understanding = true`, API failure, or missing config
+  falls back to the rule plan.
+
+Configuration:
+
+```text
+DOCAGENT_ROUTER_LLM_API_KEY
+DOCAGENT_ROUTER_LLM_BASE_URL
+DOCAGENT_ROUTER_LLM_MODEL
+DOCAGENT_ROUTER_LLM_TIMEOUT_SECONDS
+--router-llm-env-file .secrets/router_llm.env
+```
+
+The API key must not be committed or printed. `.secrets/` is git-ignored.
 
 ## Routing Failure Fallback Behavior
 

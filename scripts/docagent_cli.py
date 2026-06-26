@@ -19,7 +19,7 @@ from docagent.ingestion.hashing import sha256_file
 from docagent.ingestion.service import DocumentIngestionService
 from docagent.parser.mineru_backend import MinerUParserBackend
 from docagent.parser.text_backend import TextParserBackend
-from docagent.router.rule_router import plan_route
+from docagent.router.llm_router import DEFAULT_LLM_ROUTER_THRESHOLD, plan_route_with_optional_llm
 from docagent.storage.db import connect
 from docagent.storage.repositories import DocumentRepository, TraceRepository
 from docagent.tools.document_tools import (
@@ -696,7 +696,7 @@ def _finalize_qa_result(
         "ingestion_status": source.get("ingestion_status") or "",
         "ingestion_error": source.get("ingestion_error") or {},
         "used_router": bool(router_plan),
-        "used_external_api": False,
+        "used_external_api": _router_used_external_api(router_plan),
         "used_vlm": False,
         "used_training": False,
         "used_full_e2e": False,
@@ -718,6 +718,15 @@ def _finalize_qa_result(
     _write_json(trace_path, trace)
     _write_json(result_path, result)
     return result
+
+
+def _router_used_external_api(router_plan: dict[str, Any]) -> bool:
+    if router_plan.get("router_source") == "llm_fallback":
+        return True
+    llm_router = router_plan.get("llm_router")
+    if not isinstance(llm_router, dict):
+        return False
+    return str(llm_router.get("status") or "") in {"used", "api_error", "invalid_output", "validation_failed"}
 
 
 def run_cli(args: argparse.Namespace) -> dict[str, Any]:
@@ -907,18 +916,22 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
             )
 
         profile = _document_profile(repository, doc_id)
-        router_plan = plan_route(
+        router_llm_env_file = _project_path(args.router_llm_env_file) if args.router_llm_env_file else None
+        router_plan = plan_route_with_optional_llm(
             {
                 "doc_id": doc_id,
                 "question": question,
                 "document_profile": profile,
                 "available_tools": AVAILABLE_TOOLS,
                 "options": {
-                    "allow_external_llm_router": False,
+                    "allow_external_llm_router": bool(args.allow_llm_router),
                     "prefer_deterministic_tools": True,
                     "max_tool_calls": 4,
                 },
-            }
+            },
+            threshold=float(args.router_llm_threshold),
+            env_file=router_llm_env_file,
+            model_override=str(args.router_llm_model or "") or None,
         )
         tool_result = _dispatch_tool(
             repository=repository,
@@ -989,6 +1002,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--list-documents", action="store_true")
     parser.add_argument("--limit", type=int, default=20)
+    parser.add_argument("--allow-llm-router", action="store_true")
+    parser.add_argument("--router-llm-threshold", type=float, default=DEFAULT_LLM_ROUTER_THRESHOLD)
+    parser.add_argument("--router-llm-model")
+    parser.add_argument("--router-llm-env-file")
     return parser
 
 

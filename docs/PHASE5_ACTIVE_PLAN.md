@@ -4,7 +4,7 @@
 
 Phase 4D-C has been accepted and recorded.
 
-Current Phase 5 status after Phase 5G server CLI regression acceptance:
+Current Phase 5 status after Phase 5C-2 local implementation:
 
 ```text
 Phase 5A architecture audit and contracts -> accepted
@@ -21,7 +21,7 @@ Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
 Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
-Phase 5C-2 LLM-assisted Router fallback -> not_started
+Phase 5C-2 LLM-assisted Router fallback -> implemented
 Phase 5E document_summary -> not_started
 Phase 5F full CLI acceptance -> not_started
 ```
@@ -628,6 +628,63 @@ At least 30 fixed router test cases pass.
 External LLM fallback is optional and disabled by default unless configured.
 ```
 
+#### Phase 5C-2: LLM-assisted Router fallback
+
+Implementation:
+
+```text
+docagent/router/llm_client.py
+docagent/router/llm_router.py
+scripts/docagent_cli.py
+```
+
+Implemented behavior:
+
+```text
+rule_router remains the deterministic baseline.
+plan_route_with_optional_llm first runs the rule router.
+If the rule plan is high-confidence for document_statistics, page_lookup, or
+the visual unsupported boundary, no LLM call is made.
+If the rule plan is low-confidence, ambiguous, complex, or tool-unavailable,
+the optional LLM router can be used only when explicitly enabled.
+LLM output is schema-validated before use.
+Invalid JSON, unavailable tool selection, requires_visual_understanding=true,
+API failure, or missing config falls back to the rule plan.
+```
+
+CLI support:
+
+```text
+--allow-llm-router
+--router-llm-threshold
+--router-llm-model
+--router-llm-env-file
+```
+
+Configuration sources:
+
+```text
+DOCAGENT_ROUTER_LLM_API_KEY
+DOCAGENT_ROUTER_LLM_BASE_URL
+DOCAGENT_ROUTER_LLM_MODEL
+DOCAGENT_ROUTER_LLM_TIMEOUT_SECONDS
+--router-llm-env-file .secrets/router_llm.env
+```
+
+Boundary:
+
+```text
+Default CLI behavior remains rule-only.
+The Router LLM sees only question, available_tools, rule_plan, and lightweight
+document_profile fields.
+It does not receive full document text, retrieved evidence, OCR full text, image
+pixels, local_fact_qa results, or user file contents.
+It does not answer document questions, generate citations, call tools, override
+the Phase 5 visual boundary, or modify local_fact_qa / AnswerPolicy behavior.
+Phase 5E document_summary remains not_started.
+local_fact_qa answer quality improvement remains not_started.
+```
+
 ### Phase 5D: Reuse Hybrid RAG as local_fact_qa Tool
 
 Goal:
@@ -1134,7 +1191,8 @@ Missing local GLOBOCAN / MinerU output fixtures are recorded as skipped.
 document_summary remains Phase 5E not_started.
 table_lookup and simple_calculation remain not_started.
 visual_pixel_qa remains unsupported and may fall back to local_fact_qa dry-run.
-LLM-assisted Router fallback remains Phase 5C-2 not_started.
+LLM-assisted Router fallback is implemented in Phase 5C-2 and remains disabled
+by default unless explicitly configured and allowed.
 ```
 
 ## 13. Implementation Discipline
@@ -1170,9 +1228,10 @@ Phase 5F-1 unified CLI MVP and server CLI smoke are accepted.
 Phase 5F-2 file-to-answer ingestion integration and server smoke are accepted for lightweight .txt files.
 Phase 5F-3 MinerU-backed file-to-answer implementation and server smoke are accepted for existing MinerU output-backed execution.
 Phase 5G CLI regression baseline and server regression are accepted as execution stability evidence.
-Next step requires explicit approval: Phase 5E document_summary, Phase 5C-2 LLM-assisted Router fallback, or another named MVP closure step.
-Do not implement document_summary, LLM Router fallback, table lookup,
-calculation, VLM, training, or full E2E as part of Phase 5G.
+Next step requires explicit approval: Phase 5E document_summary, real API smoke
+for Phase 5C-2 LLM-assisted Router fallback, or another named MVP closure step.
+Do not implement document_summary, table lookup, calculation, VLM, training, or
+full E2E as part of Phase 5C-2.
 ```
 
 Phase 4D-D remains deferred until after Phase 5 MVP is accepted.

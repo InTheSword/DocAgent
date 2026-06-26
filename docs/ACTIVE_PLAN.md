@@ -13,13 +13,11 @@ Phase 4D-C accepted -> Phase 4D-D deferred -> Phase 5 active
 
 ```text
 Phase 5 Personal-use DocAgent MVP
--> Phase 5G server CLI regression accepted
--> record the successful multi-task CLI regression over accepted CLI / Router /
-   document tools / local_fact_qa / file-to-answer paths
--> keep this as execution stability evidence, not benchmark answer-quality
-   evidence
--> stop before Phase 5E document_summary, LLM Router fallback, table_lookup,
-   simple_calculation, external LLM/VLM, training, and full GRPO E2E
+-> Phase 5C-2 LLM-assisted Router fallback implemented
+-> keep the accepted rule router as the deterministic default
+-> use external LLM only for explicitly enabled low-confidence routing fallback
+-> stop before Phase 5E document_summary, table_lookup, simple_calculation,
+   VLM, local_fact_qa answer-quality fixes, training, and full GRPO E2E
 ```
 
 ## Current Status
@@ -81,7 +79,7 @@ Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
 Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
-Phase 5C-2 LLM-assisted Router fallback -> not_started
+Phase 5C-2 LLM-assisted Router fallback -> implemented
 Phase 5E Document Summary MVP -> not_started
 Phase 5F full CLI acceptance -> not_started
 CDC -> not_started

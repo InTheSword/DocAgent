@@ -50,8 +50,66 @@ Phase 5F-2 file-to-answer ingestion integration -> accepted
 Phase 5F-2 server file-to-answer smoke -> accepted
 Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
-Phase 5C-2 LLM-assisted Router fallback -> not_started
+Phase 5C-2 LLM-assisted Router fallback -> implemented
 ```
+
+## Phase 5C-2 LLM-assisted Router Fallback Status
+
+Phase 5C-2 optional Router LLM fallback is implemented in:
+
+```text
+docagent/router/llm_client.py
+docagent/router/llm_router.py
+scripts/docagent_cli.py
+```
+
+The deterministic rule router remains the default baseline. The LLM fallback
+is disabled unless the caller explicitly passes `--allow-llm-router` or sets
+`allow_external_llm_router = true` in the wrapper input.
+
+Configuration sources:
+
+```text
+DOCAGENT_ROUTER_LLM_API_KEY
+DOCAGENT_ROUTER_LLM_BASE_URL
+DOCAGENT_ROUTER_LLM_MODEL
+DOCAGENT_ROUTER_LLM_TIMEOUT_SECONDS
+--router-llm-env-file .secrets/router_llm.env
+```
+
+Planning data visible to the LLM:
+
+```text
+question
+available_tools
+initial rule_plan
+lightweight document_profile fields
+```
+
+Planning data not sent to the LLM:
+
+```text
+full document text
+retrieved evidence
+OCR full text
+image pixels
+user file contents
+local_fact_qa outputs
+```
+
+Fallback validation:
+
+```text
+LLM output must match the RouterDecision schema.
+selected_tools must exist in available_tools.
+requires_visual_understanding must remain false.
+invalid JSON, schema validation failure, missing config, or API failure falls
+back to the rule plan.
+```
+
+This does not implement `document_summary`, `table_lookup`,
+`simple_calculation`, VLM, local_fact_qa answer-quality fixes, training, or
+full GRPO E2E.
 
 ## Phase 5D local_fact_qa Wrapper Status
 
@@ -201,7 +259,7 @@ Phase 5F-2 file-to-answer ingestion integration -> accepted
 Phase 5F-2 server file-to-answer smoke -> accepted
 Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
-Phase 5C-2 LLM-assisted Router fallback -> not_started
+Phase 5C-2 LLM-assisted Router fallback -> implemented
 Phase 5F full CLI acceptance -> not_started
 Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted

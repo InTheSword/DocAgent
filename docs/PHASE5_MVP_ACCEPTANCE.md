@@ -304,9 +304,36 @@ Phase 5F-2 file-to-answer ingestion integration -> accepted
 Phase 5F-2 server file-to-answer smoke -> accepted
 Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
-Phase 5C-2 LLM-assisted Router fallback -> not_started
+Phase 5C-2 LLM-assisted Router fallback -> implemented
 Phase 5F full CLI acceptance -> not_started
 ```
+
+## Exit Criteria For Phase 5C-2
+
+Phase 5C-2 LLM-assisted Router fallback is implemented when:
+
+- `docagent/router/llm_router.py` runs the accepted rule router first and only
+  considers LLM fallback for low-confidence, ambiguous, complex, or
+  tool-unavailable plans;
+- high-confidence `document_statistics`, high-confidence `page_lookup`, and
+  visual unsupported boundary routes remain rule-only;
+- `docagent/router/llm_client.py` reads config from environment variables or
+  a local env file without printing or committing API keys;
+- CLI support exists for `--allow-llm-router`,
+  `--router-llm-threshold`, `--router-llm-model`, and
+  `--router-llm-env-file`;
+- the LLM router receives only `question`, `available_tools`, the initial
+  `rule_plan`, and lightweight `document_profile` fields;
+- LLM output is schema-validated and falls back to the rule plan on invalid
+  JSON, unavailable selected tools, `requires_visual_understanding = true`,
+  missing config, or API failure;
+- router plans record `router_source` and structured `llm_router.status`
+  where relevant;
+- default CLI behavior remains rule-only and does not call an external API.
+
+Phase 5C-2 does not implement Phase 5E document_summary, table lookup, simple
+calculation, local_fact_qa answer-quality fixes, VLM, training, full GRPO E2E,
+AnswerPolicy prompt changes, or candidate answer extraction changes.
 
 ## Exit Criteria For Phase 5D
 
@@ -412,7 +439,7 @@ Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
 Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
-Phase 5C-2 LLM-assisted Router fallback -> not_started
+Phase 5C-2 LLM-assisted Router fallback -> implemented
 Phase 5F full CLI acceptance -> not_started
 ```
 
@@ -754,7 +781,8 @@ Boundary:
   report.
 - Missing local GLOBOCAN / MinerU fixture paths are recorded as skipped.
 - Phase 5E `document_summary` remains not_started.
-- Phase 5C-2 LLM-assisted Router fallback remains not_started.
+- Phase 5C-2 LLM-assisted Router fallback is implemented and disabled by
+  default unless explicitly configured and allowed.
 - table lookup, simple calculation, VLM, training, and full GRPO E2E remain
   out of scope.
 
@@ -794,7 +822,7 @@ Status:
 Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
 Phase 5E document_summary -> not_started
-Phase 5C-2 LLM-assisted Router fallback -> not_started
+Phase 5C-2 LLM-assisted Router fallback -> implemented
 online MinerU OCR execution -> not_started
 local_fact_qa answer quality improvement -> not_started
 ```

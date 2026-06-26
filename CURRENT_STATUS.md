@@ -1,6 +1,6 @@
 # Current Status
 
-Updated: 2026-06-25
+Updated: 2026-06-26
 
 ## Phase 4D-C Accepted / Phase 5 Active
 
@@ -84,6 +84,18 @@ recorded 2 unsupported known-limitations cases, failed 0 cases, emitted valid
 JSON for all 10 cases, and wrote 9 CLI artifacts without external API, VLM,
 training, or full E2E execution.
 
+Phase 5C-2 LLM-assisted Router fallback is implemented in
+`docagent/router/llm_client.py`, `docagent/router/llm_router.py`, and
+`scripts/docagent_cli.py`. The accepted rule router remains the deterministic
+baseline; LLM fallback is disabled by default and requires explicit
+`--allow-llm-router` plus environment or `--router-llm-env-file` configuration.
+The Router LLM only receives the question, available tools, initial rule plan,
+and lightweight document profile. It does not receive full document text,
+retrieved evidence, OCR full text, image pixels, user file contents, or
+`local_fact_qa` outputs. Invalid JSON, schema validation failure, unavailable
+tool selection, visual-understanding requests, missing config, and API errors
+fall back to the rule plan.
+
 Phase 5G accepted server regression evidence:
 
 ```text
@@ -156,7 +168,7 @@ Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
 Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
-Phase 5C-2 LLM-assisted Router fallback -> not_started
+Phase 5C-2 LLM-assisted Router fallback -> implemented
 Phase 5E Document Summary MVP -> not_started
 Phase 5F full CLI acceptance -> not_started
 CDC -> not_started
