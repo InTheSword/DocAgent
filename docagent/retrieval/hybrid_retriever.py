@@ -223,6 +223,10 @@ def _coerce_query_plan(value: QueryPlannerOutput | dict[str, object] | None) -> 
         rule_queries=[str(item) for item in value.get("rule_queries") or [] if str(item).strip()],
         llm_queries=[str(item) for item in value.get("llm_queries") or [] if str(item).strip()],
         final_queries=final_queries,
+        query_sources={
+            "rule": [str(item) for item in (value.get("query_sources") or {}).get("rule") or []],
+            "llm": [str(item) for item in (value.get("query_sources") or {}).get("llm") or []],
+        },
         mode=str(value.get("mode") or "hybrid"),
         warnings=[str(item) for item in value.get("warnings") or []],
         llm_status=str(value.get("llm_status") or "not_started"),

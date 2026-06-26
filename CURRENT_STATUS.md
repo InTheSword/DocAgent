@@ -109,15 +109,19 @@ Phase 5C-3 Query Planning + Multi-Query Retrieval is implemented in
 `docagent/retrieval/hybrid_retriever.py`,
 `docagent/retrieval/index_manager.py`, and optional CLI exposure in
 `scripts/docagent_cli.py`. The rule extractor always produces deterministic
-retrieval queries from task type, page/table/image/statistics signals, and
-keywords. The LLM expander reuses the Phase 5C-2 OpenAI-compatible Router LLM
-configuration and client only for query expansion; it must output a JSON array
-of strings and does not answer document questions. Query fusion deduplicates
-rule and LLM queries, caps the final list at 8, and preserves rule-query
-priority. If LLM config is missing, the API fails, or the LLM output is
-invalid, retrieval falls back to rule queries. This phase does not change
-Router task classification, `local_fact_qa` answer logic, AnswerPolicy,
-ingestion, VLM logic, training, or full GRPO E2E.
+structural anchor queries from the question, optional router task type,
+page/table/image/statistics signals, and keywords. The LLM Query Rewriter is
+decoupled from Router context: it reuses the Phase 5C-2 OpenAI-compatible
+Router LLM configuration and client, but receives only `question` and must
+output retrieval query strings. It does not receive task_type,
+document_profile, rule_queries, RouterPlan, full document text, retrieved
+evidence, OCR full text, image pixels, or tool state. Query fusion deduplicates
+rule and LLM queries, caps the final list at 8, preserves rule-query priority,
+and records `query_sources`. If LLM config is missing, the API fails, output is
+invalid/empty, or the LLM echoes the input payload, retrieval falls back to rule
+queries. This phase does not change Router task classification,
+`local_fact_qa` answer logic, AnswerPolicy, ingestion, VLM logic, training, or
+full GRPO E2E.
 
 Phase 5C-2 accepted server real API smoke evidence:
 
@@ -526,8 +530,9 @@ Current conclusion:
   execution-stability evidence, not benchmark answer-quality evidence.
 - Phase 5C-2 LLM-assisted Router fallback is accepted after real API smoke.
 - Phase 5C-3 Query Planning + Multi-Query Retrieval is implemented with
-  rule-first query extraction, optional LLM query expansion, multi-query BM25 /
-  dense retrieval fusion, and CLI opt-in via `--enable-query-planning`.
+  Router-decoupled LLM Query Rewriter, rule structural anchors, query-source
+  tracking, multi-query BM25 / dense retrieval fusion, and CLI opt-in via
+  `--enable-query-planning`.
 - Phase 5E document_summary, table lookup, simple calculation, online MinerU
   OCR execution, and local_fact_qa answer quality improvement remain
   not_started.

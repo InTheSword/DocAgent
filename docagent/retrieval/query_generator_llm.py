@@ -12,16 +12,29 @@ RAW_RESPONSE_PREVIEW_LIMIT = 1000
 MAX_LLM_QUERIES = 8
 MAX_QUERY_CHARS = 200
 QUERY_OBJECT_KEYS = ("queries", "final_queries", "retrieval_queries")
+ECHO_PAYLOAD_KEYS = {
+    "question",
+    "task_type",
+    "document_profile",
+    "rule_queries",
+    "available_tools",
+    "router_plan",
+    "selected_tools",
+}
 
-SYSTEM_PROMPT = """You are a retrieval query generator.
+SYSTEM_PROMPT = """You are a Query Rewriter in a document retrieval system.
+
+Your task is to rewrite the user question into multiple short retrieval queries.
 
 Rules:
 - Output ONLY a JSON array of strings.
+- Do NOT output a JSON object.
 - Do NOT output Markdown.
 - Do NOT explain.
 - Do NOT answer the question.
 - Do NOT include reasoning.
-- Each query must be short, search-oriented, and preserve key terms.
+- Do NOT repeat the input payload.
+- Each query must be short, specific, suitable for BM25 / dense retrieval, and preserve key terms.
 
 Example output:
 ["cancer incidence Africa", "Africa cancer statistics 2022", "mortality rate Africa cancer"]"""
@@ -30,9 +43,6 @@ Example output:
 def generate_llm_queries(
     *,
     question: str,
-    task_type: str,
-    document_profile: Mapping[str, Any] | None,
-    rule_queries: list[str],
     llm_client: Any | None = None,
     env_file: Path | None = None,
     model_override: str | None = None,
@@ -61,12 +71,7 @@ def generate_llm_queries(
             return [], diagnostics
         llm_client = OpenAICompatibleRouterClient(config)
 
-    payload = {
-        "question": question,
-        "task_type": task_type,
-        "document_profile": _light_profile(document_profile or {}),
-        "rule_queries": list(rule_queries),
-    }
+    payload = {"question": question}
     try:
         raw = llm_client.complete(system_prompt=SYSTEM_PROMPT, user_payload=payload)
     except RouterLLMError as exc:
@@ -77,32 +82,36 @@ def generate_llm_queries(
         return [], diagnostics
 
     diagnostics["llm_raw_response_preview"] = _safe_preview(raw)
-    queries, normalization_warnings = _parse_query_response(raw)
+    queries, normalization_warnings, output_error_type = _parse_query_response(raw)
     diagnostics["llm_normalization_warnings"] = normalization_warnings
     diagnostics["llm_parsed_queries_preview"] = [_safe_preview(query) for query in queries[:MAX_LLM_QUERIES]]
     if not queries:
-        diagnostics["status"] = "invalid_output"
-        diagnostics["warnings"] = ["query_planner_llm_invalid_output"]
+        error_type = output_error_type or "query_planner_llm_invalid_output"
+        diagnostics["status"] = "echoed_payload" if error_type == "query_planner_llm_echoed_payload" else "invalid_output"
+        diagnostics["warnings"] = [error_type]
         diagnostics["error"] = {
-            "type": "query_planner_llm_invalid_output",
-            "message": "Query planner LLM did not return a non-empty JSON array of strings.",
+            "type": error_type,
+            "message": _error_message(error_type),
         }
-        diagnostics["llm_error_type"] = "query_planner_llm_invalid_output"
+        diagnostics["llm_error_type"] = error_type
         return [], diagnostics
 
     diagnostics["status"] = "used"
     return queries, diagnostics
 
 
-def _parse_query_response(raw: str) -> tuple[list[str], list[str]]:
+def _parse_query_response(raw: str) -> tuple[list[str], list[str], str | None]:
     warnings: list[str] = []
     payload = _extract_first_json_payload(str(raw or ""))
     if payload is None:
-        return [], warnings
+        return [], warnings, "query_planner_llm_invalid_output"
 
     if not isinstance(payload, list):
         if not isinstance(payload, dict):
-            return [], warnings
+            return [], warnings, "query_planner_llm_invalid_output"
+        if _looks_like_echo_payload(payload):
+            warnings.append("query_planner_llm_echoed_payload")
+            return [], warnings, "query_planner_llm_echoed_payload"
         for key in QUERY_OBJECT_KEYS:
             value = payload.get(key)
             if isinstance(value, list):
@@ -110,8 +119,18 @@ def _parse_query_response(raw: str) -> tuple[list[str], list[str]]:
                 warnings.append(f"query_planner_llm_used_{key}")
                 break
         else:
-            return [], warnings
-    return _clean_queries(payload, warnings), warnings
+            return [], warnings, "query_planner_llm_invalid_output"
+    queries = _clean_queries(payload, warnings)
+    if not queries:
+        return [], warnings, "query_planner_llm_empty_queries"
+    return queries, warnings, None
+
+
+def _looks_like_echo_payload(payload: Mapping[str, Any]) -> bool:
+    keys = set(payload.keys())
+    if any(key in keys for key in QUERY_OBJECT_KEYS):
+        return False
+    return bool(keys & ECHO_PAYLOAD_KEYS)
 
 
 def _extract_first_json_payload(raw: str) -> Any | None:
@@ -222,9 +241,10 @@ def _safe_preview(value: Any) -> str:
     return text[:RAW_RESPONSE_PREVIEW_LIMIT]
 
 
-def _light_profile(profile: Mapping[str, Any]) -> dict[str, Any]:
-    return {
-        key: profile.get(key)
-        for key in ("page_count", "table_count", "image_count")
-        if key in profile
+def _error_message(error_type: str) -> str:
+    messages = {
+        "query_planner_llm_echoed_payload": "Query rewriter echoed the input payload; using rule queries only.",
+        "query_planner_llm_empty_queries": "Query rewriter returned no usable query strings; using rule queries only.",
+        "query_planner_llm_invalid_output": "Query rewriter did not return a valid JSON array of strings.",
     }
+    return messages.get(error_type, "Query rewriter output could not be used; using rule queries only.")

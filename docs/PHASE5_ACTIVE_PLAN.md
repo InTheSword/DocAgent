@@ -725,20 +725,24 @@ docagent/retrieval/index_manager.py
 scripts/docagent_cli.py
 ```
 
-Implemented behavior:
+Implemented behavior after the Phase 5C-3 decoupling refactor:
 
 ```text
-question -> query planner -> rule queries / optional LLM expansion
+question -> Router decides task_type
+         -> Rule Query Extractor generates structural anchor queries
+         -> LLM Query Rewriter generates semantic retrieval queries from question only
          -> query fusion -> multi-query retrieval -> existing workflow
 ```
 
 The rule extractor always runs and generates deterministic retrieval queries
-from task type, explicit page/table/image/statistics cues, lightweight
-document_profile, and keyword extraction. The LLM query expander reuses the
-Phase 5C-2 OpenAI-compatible Router LLM config and client. It is used only as
-a Query Expansion / Query Rewriting Assistant and must output a JSON array of
-strings. It does not route tasks, answer questions, create citations, or
-receive full document text / retrieved evidence / OCR full text / image pixels.
+from the question, optional router task_type, explicit page/table/image/
+statistics cues, and keyword extraction. The LLM Query Rewriter reuses the
+Phase 5C-2 OpenAI-compatible Router LLM config and client, but it receives
+only `question` as user payload. It does not receive task_type,
+document_profile, rule_queries, RouterPlan, retrieved evidence, OCR full text,
+document full text, image pixels, or tool state. It must output retrieval
+query strings only and must not route tasks, select tools, answer questions,
+create citations, or echo the input payload.
 
 Fusion policy:
 
@@ -748,6 +752,7 @@ deduplicate case-insensitively
 limit to 8 queries
 preserve rule-query priority
 fallback to rule queries when LLM is unavailable or invalid
+query_sources records final-query source as rule or llm
 ```
 
 CLI support:
@@ -762,6 +767,16 @@ The default CLI path remains unchanged unless `--enable-query-planning` is
 provided. `summary.json` records `used_query_planning`,
 `query_planner_mode`, and `query_count`; the top-level CLI result includes a
 `query_planner` object for local_fact_qa paths.
+
+LLM rewriter diagnostics:
+
+```text
+llm_status = used / skipped / not_configured / invalid_output / echoed_payload / api_error
+llm_error_type = query_planner_llm_invalid_output | query_planner_llm_echoed_payload | query_planner_llm_empty_queries | query_planner_llm_api_error | query_planner_llm_not_configured
+llm_raw_response_preview is capped and redacted.
+llm_parsed_queries_preview records parsed query strings only.
+llm_normalization_warnings records filtering, truncation, duplicate removal, or compatible object parsing.
+```
 
 Boundary:
 

@@ -8,6 +8,50 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-26: Phase 5C-3 Query Rewriter / Query Planner Decoupled
+
+Decision: refactor Phase 5C-3 query planning responsibilities so the Router
+continues to own task classification, the LLM Query Rewriter only generates
+semantic retrieval queries, the Rule Query Extractor generates structural
+anchor queries, and Fusion combines the two query sources.
+
+Refined design:
+
+```text
+Router -> task_type
+Rule Query Extractor -> structural anchors from question + optional task_type
+LLM Query Rewriter -> semantic retrieval queries from question only
+Query Fusion -> final_queries and query_sources
+```
+
+LLM Query Rewriter boundary:
+
+```text
+input = {"question": "..."}
+output = JSON array of strings
+not sent = task_type, document_profile, rule_queries, RouterPlan,
+           available_tools, retrieved evidence, OCR full text, document full text,
+           image pixels, tool state
+```
+
+Echo handling:
+
+```text
+If the LLM returns an object that echoes input/router-like payload fields such
+as question, task_type, document_profile, or rule_queries without a compatible
+queries/final_queries/retrieval_queries list, the output is rejected with
+query_planner_llm_echoed_payload and retrieval falls back to rule queries.
+```
+
+Boundary:
+
+- no Router task classification changes;
+- no local_fact_qa answer-generation changes;
+- no AnswerPolicy, candidate answer extraction, ingestion, VLM, training, or
+  full GRPO E2E changes;
+- Phase 5E document_summary, table_lookup, and simple_calculation remain
+  not_started.
+
 ## 2026-06-26: Phase 5C-3 Query Planning + Multi-Query Retrieval Implemented
 
 Decision: implement query planning as retrieval preprocessing between Router

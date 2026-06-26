@@ -290,7 +290,8 @@ Pipeline position:
 ```text
 question
 -> Router / Planner task_type decision
--> Query Planner for retrieval queries
+-> Rule Query Extractor for structural anchor queries
+-> optional LLM Query Rewriter for semantic retrieval queries
 -> multi-query retrieval / fusion
 -> existing tool or workflow path
 ```
@@ -303,6 +304,10 @@ Query Planner output:
   "rule_queries": ["page 1", "table revenue"],
   "llm_queries": ["revenue table 2022"],
   "final_queries": ["page 1", "table revenue", "revenue table 2022"],
+  "query_sources": {
+    "rule": ["page 1", "table revenue"],
+    "llm": ["revenue table 2022"]
+  },
   "mode": "hybrid",
   "warnings": [],
   "llm_status": "used"
@@ -310,10 +315,10 @@ Query Planner output:
 ```
 
 Rule query generation is deterministic and must always be available. It may
-use task type, explicit page/table/image/statistics cues, lightweight
-document_profile fields, and keyword extraction.
+use the question, optional router task type, explicit page/table/image/
+statistics cues, and keyword extraction. It does not depend on LLM output.
 
-The optional LLM query expander reuses the Phase 5C-2 Router LLM client and
+The optional LLM Query Rewriter reuses the Phase 5C-2 Router LLM client and
 configuration:
 
 ```text
@@ -324,12 +329,21 @@ DOCAGENT_ROUTER_LLM_TIMEOUT_SECONDS
 --router-llm-env-file .secrets/router_llm.env
 ```
 
-The LLM query expander is not a Router. It may rewrite one question into
-short retrieval-oriented query strings only. It must output a JSON array of
-strings, and it must not answer the question, create citations, receive full
-document text, receive retrieved evidence, receive OCR full text, inspect
-image pixels, or call tools. Missing config, API errors, invalid JSON, empty
-arrays, or non-string outputs fall back to rule queries.
+The LLM Query Rewriter is not a Router. Its user payload contains only:
+
+```json
+{
+  "question": "string"
+}
+```
+
+It may rewrite one question into short retrieval-oriented query strings only.
+It must output a JSON array of strings and must not output task_type,
+selected_tools, document_profile, rule_queries, RouterPlan, explanations,
+citations, or answers. It must not receive full document text, retrieved
+evidence, OCR full text, image pixels, user file content, or tool state.
+Missing config, API errors, invalid JSON, empty arrays, non-string outputs, or
+detected input-payload echo fall back to rule queries.
 
 Fusion policy:
 
@@ -338,6 +352,7 @@ final_queries = rule_queries + llm_queries
 deduplicate
 limit to 8
 rule queries keep priority
+query_sources records which final queries came from rule or llm
 ```
 
 Phase 5C-3 does not implement `document_summary`, `table_lookup`,

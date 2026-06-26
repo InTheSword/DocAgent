@@ -149,7 +149,8 @@ scripts/docagent_cli.py
 Purpose:
 
 ```text
-question -> query planner -> multi-query retrieval -> fusion -> existing pipeline
+question -> Router task_type -> Rule Query Extractor + LLM Query Rewriter
+         -> query fusion -> multi-query retrieval -> existing pipeline
 ```
 
 This is retrieval preprocessing, not a document-answering tool and not a
@@ -157,28 +158,29 @@ Router replacement. It currently supports:
 
 - deterministic rule query extraction for page/table/image/statistics and
   keyword-style queries;
-- optional LLM query expansion that reuses the Phase 5C-2 Router LLM API
-  client/configuration;
+- optional LLM semantic query rewriting that reuses the Phase 5C-2 Router LLM
+  API client/configuration but receives only the user question;
 - query fusion with deduplication, maximum 8 final queries, and rule-query
-  priority;
+  priority plus `query_sources` source tracking;
 - multi-query BM25 retrieval and dense/hybrid retrieval when query embeddings
   are available for each final query;
 - optional CLI exposure via `--enable-query-planning` and
   `--query-planner-mode {rule,llm,hybrid}`.
 
-The LLM query expander:
+The LLM Query Rewriter:
 
 ```text
-role = Query Expansion / Query Rewriting Assistant
+role = semantic Query Rewriter
+input = {"question": "..."}
 output = JSON array of strings only
-visible input = question, task_type, lightweight document_profile, rule_queries
-fallback = rule queries when config/API/output is unavailable or invalid
+fallback = rule queries when config/API/output is unavailable, invalid, empty, or echoes input payload
 ```
 
-The LLM query expander does not receive full document text, retrieved
-evidence, OCR full text, image pixels, user file contents, or local_fact_qa
-results. It does not answer questions, generate citations, call tools, or
-override the Phase 5 visual boundary.
+The LLM Query Rewriter does not receive task_type, document_profile,
+rule_queries, RouterPlan, full document text, retrieved evidence, OCR full
+text, image pixels, user file contents, or local_fact_qa results. It does not
+answer questions, generate citations, select tools, call tools, or override
+the Phase 5 visual boundary.
 
 Phase 5C-3 does not implement `document_summary`, `table_lookup`,
 `simple_calculation`, VLM, AnswerPolicy changes, ingestion changes,

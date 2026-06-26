@@ -782,7 +782,7 @@ def _router_used_external_api(router_plan: dict[str, Any]) -> bool:
 def _query_planner_used_external_api(query_planner: dict[str, Any]) -> bool:
     if not query_planner:
         return False
-    return str(query_planner.get("llm_status") or "") in {"used", "api_error", "invalid_output"}
+    return str(query_planner.get("llm_status") or "") in {"used", "api_error", "invalid_output", "echoed_payload"}
 
 
 def run_cli(args: argparse.Namespace) -> dict[str, Any]:

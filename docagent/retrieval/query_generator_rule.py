@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Mapping
 
 from docagent.retrieval.query_rewrite import rewrite_query
 
@@ -19,7 +18,6 @@ def generate_rule_queries(
     question: str,
     *,
     task_type: str = "",
-    document_profile: Mapping[str, Any] | None = None,
     answer_type_hint: str | None = None,
 ) -> list[str]:
     """Generate deterministic retrieval queries from task type and keywords."""
@@ -52,15 +50,6 @@ def generate_rule_queries(
         queries.append(keyword_query)
     if normalized_question:
         queries.append(normalized_question)
-
-    if document_profile:
-        profile_terms = []
-        if document_profile.get("table_count"):
-            profile_terms.append("tables")
-        if document_profile.get("image_count"):
-            profile_terms.append("figures images")
-        if profile_terms and keyword_query:
-            queries.append(f"{keyword_query} {' '.join(profile_terms)}")
 
     return _dedup(queries)
 

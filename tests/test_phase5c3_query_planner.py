@@ -64,9 +64,15 @@ def test_mock_llm_valid_json_list_is_used_in_hybrid_plan() -> None:
     )
 
     assert fake.calls
+    assert fake.calls[0]["user_payload"] == {"question": "What is this document about?"}
+    assert "task_type" not in fake.calls[0]["user_payload"]
+    assert "document_profile" not in fake.calls[0]["user_payload"]
+    assert "rule_queries" not in fake.calls[0]["user_payload"]
     assert plan.llm_status == "used"
     assert "cancer incidence Africa" in plan.llm_queries
     assert plan.final_queries[: len(plan.rule_queries)] == plan.rule_queries[: len(plan.final_queries)]
+    assert plan.query_sources["rule"]
+    assert "cancer incidence Africa" in plan.query_sources["llm"]
 
 
 @pytest.mark.parametrize(
@@ -87,6 +93,25 @@ def test_llm_query_expander_parses_supported_output_formats(response: str, expec
     assert plan.llm_queries == expected
     assert plan.final_queries[: len(plan.rule_queries)] == plan.rule_queries[: len(plan.final_queries)]
     assert all(query in plan.final_queries for query in expected)
+
+
+def test_llm_query_expander_rejects_echoed_router_like_payload() -> None:
+    echoed = json.dumps(
+        {
+            "question": "What is the invoice date?",
+            "task_type": "local_fact_qa",
+            "document_profile": {"page_count": 5, "table_count": 0, "image_count": 0},
+            "rule_queries": ["what is the invoice date", "What is the invoice date?"],
+        }
+    )
+
+    plan = _plan_with_llm_response(echoed)
+
+    assert plan.llm_status == "echoed_payload"
+    assert plan.llm_error_type == "query_planner_llm_echoed_payload"
+    assert plan.llm_queries == []
+    assert "query_planner_llm_echoed_payload" in plan.warnings
+    assert plan.final_queries == plan.rule_queries[: len(plan.final_queries)]
 
 
 def test_llm_query_expander_filters_non_strings_and_dedups() -> None:
@@ -154,6 +179,37 @@ def test_empty_llm_response_falls_back_to_rule_queries() -> None:
 
     assert plan.final_queries == plan.rule_queries[: len(plan.final_queries)]
     assert "query_planner_fallback_rule_queries" in plan.warnings
+    assert "query_planner_llm_empty_queries" in plan.warnings
+
+
+def test_llm_mode_uses_only_llm_queries_when_successful() -> None:
+    plan = plan_queries(
+        question="What is the invoice date?",
+        task_type="local_fact_qa",
+        mode="llm",
+        llm_client=FakeLLMClient('["invoice date", "billing date"]'),
+    )
+
+    assert plan.final_queries == ["invoice date", "billing date"]
+    assert plan.query_sources["rule"] == []
+    assert plan.query_sources["llm"] == ["invoice date", "billing date"]
+
+
+def test_rule_mode_does_not_call_llm() -> None:
+    fake = FakeLLMClient('["invoice date"]')
+
+    plan = plan_queries(
+        question="What is the invoice date?",
+        task_type="local_fact_qa",
+        mode="rule",
+        llm_client=fake,
+    )
+
+    assert fake.calls == []
+    assert plan.llm_status == "skipped"
+    assert plan.llm_queries == []
+    assert plan.final_queries == plan.rule_queries[: len(plan.final_queries)]
+    assert plan.query_sources["llm"] == []
 
 
 def test_query_fusion_dedups_limits_and_preserves_rule_priority() -> None:
