@@ -234,7 +234,7 @@ minimal LLM decision into the full internal Router plan.
 
 Phase 5C-2 status:
 
-- external LLM fallback is implemented and disabled by default;
+- external LLM fallback is accepted and disabled by default;
 - `rule_router.py` remains the deterministic baseline;
 - `llm_router.py` first runs the rule router, then optionally calls the LLM
   only when explicitly allowed and the rule plan is low-confidence,
@@ -243,6 +243,23 @@ Phase 5C-2 status:
   the visual unsupported boundary do not call the LLM;
 - the LLM sees only `question`, `available_tools`, the initial `rule_plan`,
   and lightweight `document_profile` fields;
+
+Accepted server real API smoke evidence:
+
+```text
+command = phase5c2_router_llm_schema_smoke
+status = success
+artifact = outputs/logs/phase5c2_router_llm_schema_smoke.json
+cli_artifact_dir = /root/autodl-tmp/docagent/outputs/cli_smoke/docagent_cli_20260626_093156_bbb1c380
+cli_status = success
+task_type = local_fact_qa
+router_source = llm_fallback
+llm_router_status = used
+llm_router_error_type = null
+validation_errors = []
+normalization_warnings = []
+warnings = llm_router_used, dry_run_no_answer_generated, page_metadata_inconsistent
+```
 - the LLM does not see full document text, retrieved evidence, OCR full text,
   image pixels, user file contents, or `local_fact_qa` outputs;
 - invalid JSON, illegal task type, unavailable tool selection with no safe

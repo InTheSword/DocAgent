@@ -13,7 +13,7 @@ Phase 4D-C accepted -> Phase 4D-D deferred -> Phase 5 active
 
 ```text
 Phase 5 Personal-use DocAgent MVP
--> Phase 5C-2 LLM-assisted Router fallback implemented
+-> Phase 5C-2 LLM-assisted Router fallback accepted
 -> keep the accepted rule router as the deterministic default
 -> use external LLM only for explicitly enabled low-confidence routing fallback
 -> stop before Phase 5E document_summary, table_lookup, simple_calculation,
@@ -79,7 +79,7 @@ Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
 Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
-Phase 5C-2 LLM-assisted Router fallback -> implemented
+Phase 5C-2 LLM-assisted Router fallback -> accepted
 Phase 5E Document Summary MVP -> not_started
 Phase 5F full CLI acceptance -> not_started
 CDC -> not_started
@@ -831,8 +831,8 @@ output-backed execution.
 local_fact_qa answer quality remains a separate known limitation.
 Dense index is not built in the lightweight smoke; index_status may remain
 not_started.
-Phase 5E document_summary and Phase 5C-2 LLM-assisted Router fallback remain
-not_started; Phase 5G server regression was later accepted.
+Phase 5E document_summary remains not_started. Phase 5C-2 LLM-assisted Router
+fallback and Phase 5G server regression were accepted later.
 ```
 
 Phase 5F-3 accepted MinerU/parser-backed file-to-answer smoke:
@@ -905,8 +905,8 @@ but Phase 5E document_summary is not implemented, so CLI falls back to
 local_fact_qa dry-run. This does not block execution-smoke acceptance.
 local_fact_qa answer quality is not benchmark-validated by this smoke.
 The GLOBOCAN sample structure_quality is passed_with_warnings.
-Phase 5E document_summary and Phase 5C-2 LLM-assisted Router fallback remain
-not_started; Phase 5G server regression was later accepted.
+Phase 5E document_summary remains not_started. Phase 5C-2 LLM-assisted Router
+fallback and Phase 5G server regression were accepted later.
 ```
 
 Phase 4D-C scaffold / command preparation:
@@ -1004,9 +1004,10 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Start Phase 5G multi-task regression only after explicit task approval.
-2. Start Phase 5E document_summary or Phase 5C-2 LLM-assisted Router fallback
-   only after explicit task approval.
+1. Start Phase 5E document_summary or another named MVP closure step only
+   after explicit task approval.
+2. Keep Phase 5C-2 LLM-assisted Router fallback disabled by default unless
+   explicitly configured and allowed.
 3. Keep Phase 5F-3 server smoke accepted as execution-stability evidence, not
    online MinerU OCR or benchmark-level answer-quality evidence.
 4. Keep Phase 5F-1 server smoke accepted as execution-stability evidence, not
@@ -1038,13 +1039,14 @@ Phase 4D-B1.3 server sanity accepted
 + Phase 5F-2 server file-to-answer smoke accepted as execution stability evidence
 + Phase 5F-3 MinerU-backed file-to-answer implementation accepted
 + Phase 5F-3 server smoke accepted as execution stability evidence
++ Phase 5C-2 LLM-assisted Router fallback accepted after real API smoke
 + targeted and regression tests pass
 + status documents updated
 + branch pushed
-+ stop before Phase 5E implementation, LLM Router fallback, table lookup,
-   simple_calculation, Reader prompt changes, AnswerPolicy integration changes,
-   training, CDC, Demo, per-qid repairs, further 90-sample probe tuning, and
-   any global `candidate_spans` default change
++ stop before Phase 5E implementation, table lookup, simple_calculation,
+   Reader prompt changes, AnswerPolicy integration changes, training, CDC,
+   Demo, per-qid repairs, further 90-sample probe tuning, and any global
+   `candidate_spans` default change
 ```
 
 ## Phase Documents

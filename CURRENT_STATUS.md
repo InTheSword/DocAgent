@@ -84,7 +84,7 @@ recorded 2 unsupported known-limitations cases, failed 0 cases, emitted valid
 JSON for all 10 cases, and wrote 9 CLI artifacts without external API, VLM,
 training, or full E2E execution.
 
-Phase 5C-2 LLM-assisted Router fallback is implemented in
+Phase 5C-2 LLM-assisted Router fallback is accepted in
 `docagent/router/llm_client.py`, `docagent/router/llm_router.py`, and
 `scripts/docagent_cli.py`. The accepted rule router remains the deterministic
 baseline; LLM fallback is disabled by default and requires explicit
@@ -100,6 +100,24 @@ non-standard confidence is normalized or warned about, but does not by itself
 fail validation. Invalid JSON, illegal task type, unavailable tool selection
 with no safe fallback, visual-understanding requests, missing config, and API
 errors fall back to the rule plan.
+
+Phase 5C-2 accepted server real API smoke evidence:
+
+```text
+command = phase5c2_router_llm_schema_smoke
+status = success
+artifact = outputs/logs/phase5c2_router_llm_schema_smoke.json
+cli_artifact_dir = /root/autodl-tmp/docagent/outputs/cli_smoke/docagent_cli_20260626_093156_bbb1c380
+cli_status = success
+task_type = local_fact_qa
+router_source = llm_fallback
+llm_router_status = used
+llm_router_error_type = null
+validation_errors = []
+normalization_warnings = []
+warnings = llm_router_used, dry_run_no_answer_generated, page_metadata_inconsistent
+acceptance_boundary = router fallback execution stability, not answer quality
+```
 
 Phase 5G accepted server regression evidence:
 
@@ -173,7 +191,7 @@ Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
 Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
-Phase 5C-2 LLM-assisted Router fallback -> implemented
+Phase 5C-2 LLM-assisted Router fallback -> accepted
 Phase 5E Document Summary MVP -> not_started
 Phase 5F full CLI acceptance -> not_started
 CDC -> not_started
@@ -487,9 +505,10 @@ Current conclusion:
   accepted for existing MinerU output-backed execution.
 - Phase 5G CLI regression baseline and server regression are accepted as
   execution-stability evidence, not benchmark answer-quality evidence.
-- Phase 5E document_summary, Phase 5C-2 LLM-assisted Router fallback, table
-  lookup, simple calculation, online MinerU OCR execution, and local_fact_qa
-  answer quality improvement remain not_started.
+- Phase 5C-2 LLM-assisted Router fallback is accepted after real API smoke.
+- Phase 5E document_summary, table lookup, simple calculation, online MinerU
+  OCR execution, and local_fact_qa answer quality improvement remain
+  not_started.
 
 Phase 4D-C accepted server result:
 

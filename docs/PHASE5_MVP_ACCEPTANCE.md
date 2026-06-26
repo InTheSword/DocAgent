@@ -304,13 +304,13 @@ Phase 5F-2 file-to-answer ingestion integration -> accepted
 Phase 5F-2 server file-to-answer smoke -> accepted
 Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
-Phase 5C-2 LLM-assisted Router fallback -> implemented
+Phase 5C-2 LLM-assisted Router fallback -> accepted
 Phase 5F full CLI acceptance -> not_started
 ```
 
 ## Exit Criteria For Phase 5C-2
 
-Phase 5C-2 LLM-assisted Router fallback is implemented when:
+Phase 5C-2 LLM-assisted Router fallback is accepted when:
 
 - `docagent/router/llm_router.py` runs the accepted rule router first and only
   considers LLM fallback for low-confidence, ambiguous, complex, or
@@ -334,6 +334,24 @@ Phase 5C-2 LLM-assisted Router fallback is implemented when:
 Phase 5C-2 does not implement Phase 5E document_summary, table lookup, simple
 calculation, local_fact_qa answer-quality fixes, VLM, training, full GRPO E2E,
 AnswerPolicy prompt changes, or candidate answer extraction changes.
+
+Accepted Phase 5C-2 server real API smoke evidence:
+
+```text
+command = phase5c2_router_llm_schema_smoke
+status = success
+artifact = outputs/logs/phase5c2_router_llm_schema_smoke.json
+cli_artifact_dir = /root/autodl-tmp/docagent/outputs/cli_smoke/docagent_cli_20260626_093156_bbb1c380
+cli_status = success
+task_type = local_fact_qa
+router_source = llm_fallback
+llm_router_status = used
+llm_router_error_type = null
+validation_errors = []
+normalization_warnings = []
+warnings = llm_router_used, dry_run_no_answer_generated, page_metadata_inconsistent
+acceptance_boundary = router fallback execution stability, not answer quality
+```
 
 ## Exit Criteria For Phase 5D
 
@@ -439,7 +457,7 @@ Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
 Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
-Phase 5C-2 LLM-assisted Router fallback -> implemented
+Phase 5C-2 LLM-assisted Router fallback -> accepted
 Phase 5F full CLI acceptance -> not_started
 ```
 
@@ -611,8 +629,8 @@ output-backed execution.
 local_fact_qa answer quality remains a separate known limitation.
 Dense index is not built in the lightweight smoke; index_status may remain
 not_started.
-Phase 5E document_summary and Phase 5C-2 LLM-assisted Router fallback remain
-not_started; Phase 5G server regression was later accepted.
+Phase 5E document_summary remains not_started. Phase 5C-2 LLM-assisted Router
+fallback and Phase 5G server regression were accepted later.
 ```
 
 ## Exit Criteria For Phase 5F-3
@@ -781,7 +799,7 @@ Boundary:
   report.
 - Missing local GLOBOCAN / MinerU fixture paths are recorded as skipped.
 - Phase 5E `document_summary` remains not_started.
-- Phase 5C-2 LLM-assisted Router fallback is implemented and disabled by
+- Phase 5C-2 LLM-assisted Router fallback is accepted and disabled by
   default unless explicitly configured and allowed.
 - table lookup, simple calculation, VLM, training, and full GRPO E2E remain
   out of scope.
@@ -822,7 +840,7 @@ Status:
 Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
 Phase 5E document_summary -> not_started
-Phase 5C-2 LLM-assisted Router fallback -> implemented
+Phase 5C-2 LLM-assisted Router fallback -> accepted
 online MinerU OCR execution -> not_started
 local_fact_qa answer quality improvement -> not_started
 ```

@@ -50,12 +50,12 @@ Phase 5F-2 file-to-answer ingestion integration -> accepted
 Phase 5F-2 server file-to-answer smoke -> accepted
 Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
-Phase 5C-2 LLM-assisted Router fallback -> implemented
+Phase 5C-2 LLM-assisted Router fallback -> accepted
 ```
 
 ## Phase 5C-2 LLM-assisted Router Fallback Status
 
-Phase 5C-2 optional Router LLM fallback is implemented in:
+Phase 5C-2 optional Router LLM fallback is accepted in:
 
 ```text
 docagent/router/llm_client.py
@@ -100,11 +100,31 @@ local_fact_qa outputs
 Fallback validation:
 
 ```text
-LLM output must match the RouterDecision schema.
-selected_tools must exist in available_tools.
+LLM-facing output is a minimal routing decision: task_type, optional
+query_rewrite, optional selected_tools, and optional diagnostics.
+llm_router.py canonicalizes the minimal decision into the full internal
+RouterDecision schema.
+selected_tools must exist in available_tools or be safely inferred.
 requires_visual_understanding must remain false.
-invalid JSON, schema validation failure, missing config, or API failure falls
-back to the rule plan.
+invalid JSON, canonicalization / validation failure, missing config, or API
+failure falls back to the rule plan.
+```
+
+Accepted server real API smoke evidence:
+
+```text
+command = phase5c2_router_llm_schema_smoke
+status = success
+artifact = outputs/logs/phase5c2_router_llm_schema_smoke.json
+cli_artifact_dir = /root/autodl-tmp/docagent/outputs/cli_smoke/docagent_cli_20260626_093156_bbb1c380
+cli_status = success
+task_type = local_fact_qa
+router_source = llm_fallback
+llm_router_status = used
+llm_router_error_type = null
+validation_errors = []
+normalization_warnings = []
+warnings = llm_router_used, dry_run_no_answer_generated, page_metadata_inconsistent
 ```
 
 This does not implement `document_summary`, `table_lookup`,
@@ -259,7 +279,7 @@ Phase 5F-2 file-to-answer ingestion integration -> accepted
 Phase 5F-2 server file-to-answer smoke -> accepted
 Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
-Phase 5C-2 LLM-assisted Router fallback -> implemented
+Phase 5C-2 LLM-assisted Router fallback -> accepted
 Phase 5F full CLI acceptance -> not_started
 Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
@@ -311,8 +331,8 @@ Known limitations:
   quality evaluation.
 - If the local GLOBOCAN PDF or existing MinerU output directory is absent, the
   MinerU file-to-answer case is marked skipped instead of fabricated.
-- `document_summary`, table lookup, simple calculation, LLM Router fallback,
-  VLM, training, and full GRPO E2E remain out of scope.
+- `document_summary`, table lookup, simple calculation, VLM, training, and
+  full GRPO E2E remain out of scope.
 
 Accepted server regression:
 
@@ -802,7 +822,7 @@ Phase 5E document_summary
 table_lookup
 simple_calculation
 structured extraction tools
-LLM-assisted Router fallback
+LLM-assisted Router fallback (accepted later in Phase 5C-2)
 external LLM API
 VLM
 training
@@ -860,9 +880,9 @@ Current limitations:
 PDF/image ingestion inside docagent_cli is not implemented in Phase 5F-2.
 MinerU-backed PDF ingestion should still use scripts/ingest_document.py until
 a configured CLI MinerU path is explicitly added.
-Phase 5E document_summary, table_lookup, simple_calculation,
-LLM-assisted Router fallback, VLM, training, and full GRPO E2E remain
-not_started.
+Phase 5E document_summary, table_lookup, simple_calculation, VLM, training,
+and full GRPO E2E remain not_started. LLM-assisted Router fallback was
+accepted later in Phase 5C-2.
 ```
 
 Accepted server smoke evidence:
@@ -1036,7 +1056,7 @@ document_summary is not implemented; summary-like questions may fall back to
 local_fact_qa dry-run with warnings.
 local_fact_qa answer quality is not benchmark-validated by this smoke.
 The GLOBOCAN sample structure_quality is passed_with_warnings.
-Phase 5E document_summary, table_lookup, simple_calculation,
-LLM-assisted Router fallback, VLM, training, and full GRPO E2E remain
-not_started.
+Phase 5E document_summary, table_lookup, simple_calculation, VLM, training,
+and full GRPO E2E remain not_started. LLM-assisted Router fallback was
+accepted later in Phase 5C-2.
 ```

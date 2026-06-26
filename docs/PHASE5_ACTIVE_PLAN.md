@@ -4,7 +4,7 @@
 
 Phase 4D-C has been accepted and recorded.
 
-Current Phase 5 status after Phase 5C-2 local implementation:
+Current Phase 5 status after Phase 5C-2 server real API smoke:
 
 ```text
 Phase 5A architecture audit and contracts -> accepted
@@ -21,7 +21,7 @@ Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
 Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
-Phase 5C-2 LLM-assisted Router fallback -> implemented
+Phase 5C-2 LLM-assisted Router fallback -> accepted
 Phase 5E document_summary -> not_started
 Phase 5F full CLI acceptance -> not_started
 ```
@@ -678,6 +678,24 @@ DOCAGENT_ROUTER_LLM_TIMEOUT_SECONDS
 --router-llm-env-file .secrets/router_llm.env
 ```
 
+Accepted server real API smoke evidence:
+
+```text
+command = phase5c2_router_llm_schema_smoke
+status = success
+artifact = outputs/logs/phase5c2_router_llm_schema_smoke.json
+cli_artifact_dir = /root/autodl-tmp/docagent/outputs/cli_smoke/docagent_cli_20260626_093156_bbb1c380
+cli_status = success
+task_type = local_fact_qa
+router_source = llm_fallback
+llm_router_status = used
+llm_router_error_type = null
+validation_errors = []
+normalization_warnings = []
+warnings = llm_router_used, dry_run_no_answer_generated, page_metadata_inconsistent
+acceptance_boundary = router fallback execution stability, not answer quality
+```
+
 Boundary:
 
 ```text
@@ -885,8 +903,9 @@ Boundary:
 document_summary remains Phase 5E not_started.
 table_lookup and simple_calculation remain not_started.
 structured_extraction returns structured unsupported when current tools are insufficient.
-LLM-assisted Router fallback remains future Phase 5C-2 work and is not implemented.
-No external LLM API, VLM, training, full GRPO E2E, AnswerPolicy prompt change, or candidate answer extraction change is included.
+LLM-assisted Router fallback was not implemented in Phase 5F-1; it was accepted
+later in Phase 5C-2 and remains disabled by default.
+No VLM, training, full GRPO E2E, AnswerPolicy prompt change, or candidate answer extraction change is included.
 ```
 
 #### Phase 5F-2: File-to-answer ingestion integration
@@ -916,7 +935,7 @@ Boundary:
 ```text
 Phase 5F-2 does not implement MinerU-backed PDF ingestion inside docagent_cli.
 Phase 5F-2 does not implement Phase 5E document_summary.
-Phase 5F-2 does not implement LLM-assisted Router fallback, table lookup, simple calculation, VLM, training, full GRPO E2E, AnswerPolicy prompt changes, or candidate answer extraction changes.
+Phase 5F-2 does not implement LLM-assisted Router fallback, table lookup, simple calculation, VLM, training, full GRPO E2E, AnswerPolicy prompt changes, or candidate answer extraction changes. LLM-assisted Router fallback was accepted later in Phase 5C-2.
 ```
 
 Accepted server smoke evidence:
@@ -1079,7 +1098,8 @@ Boundary:
 Phase 5F-3 does not implement Phase 5E document_summary.
 Phase 5F-3 does not implement LLM-assisted Router fallback, table lookup,
 simple calculation, VLM, training, full GRPO E2E, AnswerPolicy prompt changes,
-or candidate answer extraction changes.
+or candidate answer extraction changes. LLM-assisted Router fallback was
+accepted later in Phase 5C-2.
 Live MinerU API/installation is not added to the stable docagent environment.
 ```
 
@@ -1198,7 +1218,7 @@ Missing local GLOBOCAN / MinerU output fixtures are recorded as skipped.
 document_summary remains Phase 5E not_started.
 table_lookup and simple_calculation remain not_started.
 visual_pixel_qa remains unsupported and may fall back to local_fact_qa dry-run.
-LLM-assisted Router fallback is implemented in Phase 5C-2 and remains disabled
+LLM-assisted Router fallback is accepted in Phase 5C-2 and remains disabled
 by default unless explicitly configured and allowed.
 ```
 
@@ -1235,8 +1255,9 @@ Phase 5F-1 unified CLI MVP and server CLI smoke are accepted.
 Phase 5F-2 file-to-answer ingestion integration and server smoke are accepted for lightweight .txt files.
 Phase 5F-3 MinerU-backed file-to-answer implementation and server smoke are accepted for existing MinerU output-backed execution.
 Phase 5G CLI regression baseline and server regression are accepted as execution stability evidence.
-Next step requires explicit approval: Phase 5E document_summary, real API smoke
-for Phase 5C-2 LLM-assisted Router fallback, or another named MVP closure step.
+Phase 5C-2 LLM-assisted Router fallback and server real API smoke are accepted.
+Next step requires explicit approval: Phase 5E document_summary or another
+named MVP closure step.
 Do not implement document_summary, table lookup, calculation, VLM, training, or
 full E2E as part of Phase 5C-2.
 ```

@@ -8,12 +8,13 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
-## 2026-06-26: Phase 5C-2 LLM-assisted Router Fallback Implemented
+## 2026-06-26: Phase 5C-2 LLM-assisted Router Fallback Accepted
 
-Decision: implement optional LLM-assisted Router fallback while preserving the
-accepted rule-first Router as the deterministic baseline. The fallback is
-disabled by default, requires explicit opt-in, and only returns a routing
-decision. It does not answer document questions or execute document tools.
+Decision: accept optional LLM-assisted Router fallback after local tests,
+schema narrowing, and server real API smoke passed. The accepted rule-first
+Router remains the deterministic baseline. The fallback is disabled by default,
+requires explicit opt-in, and only returns a routing decision. It does not
+answer document questions or execute document tools.
 
 Implementation:
 
@@ -34,6 +35,23 @@ DOCAGENT_ROUTER_LLM_TIMEOUT_SECONDS
 --router-llm-env-file .secrets/router_llm.env
 ```
 
+Accepted server smoke evidence:
+
+```text
+command = phase5c2_router_llm_schema_smoke
+status = success
+artifact = outputs/logs/phase5c2_router_llm_schema_smoke.json
+cli_artifact_dir = /root/autodl-tmp/docagent/outputs/cli_smoke/docagent_cli_20260626_093156_bbb1c380
+cli_status = success
+task_type = local_fact_qa
+router_source = llm_fallback
+llm_router_status = used
+llm_router_error_type = null
+validation_errors = []
+normalization_warnings = []
+warnings = llm_router_used, dry_run_no_answer_generated, page_metadata_inconsistent
+```
+
 Boundary:
 
 - default CLI behavior remains rule-only;
@@ -41,7 +59,8 @@ Boundary:
   `rule_plan`, and lightweight `document_profile` fields;
 - full document text, retrieved evidence, OCR full text, image pixels, user
   file contents, and `local_fact_qa` outputs are not sent to the Router LLM;
-- LLM output must pass schema validation before use;
+- LLM-facing output is a minimal routing decision and must pass
+  canonicalization plus internal RouterPlan validation before use;
 - invalid JSON, unavailable selected tools, `requires_visual_understanding`,
   missing config, or API failure falls back to the rule plan;
 - Phase 5E document_summary, table lookup, simple calculation, VLM,
@@ -51,7 +70,7 @@ Boundary:
 Current status:
 
 ```text
-Phase 5C-2 LLM-assisted Router fallback -> implemented
+Phase 5C-2 LLM-assisted Router fallback -> accepted
 Phase 5E document_summary -> not_started
 online MinerU OCR execution -> not_started
 local_fact_qa answer quality improvement -> not_started
