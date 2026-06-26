@@ -21,6 +21,10 @@ class QueryPlannerOutput:
     mode: str = "hybrid"
     warnings: list[str] = field(default_factory=list)
     llm_status: str = "not_started"
+    llm_error_type: str | None = None
+    llm_raw_response_preview: str = ""
+    llm_parsed_queries_preview: list[str] = field(default_factory=list)
+    llm_normalization_warnings: list[str] = field(default_factory=list)
     error: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -32,6 +36,10 @@ class QueryPlannerOutput:
             "mode": self.mode,
             "warnings": list(dict.fromkeys(self.warnings)),
             "llm_status": self.llm_status,
+            "llm_error_type": self.llm_error_type,
+            "llm_raw_response_preview": self.llm_raw_response_preview,
+            "llm_parsed_queries_preview": list(self.llm_parsed_queries_preview),
+            "llm_normalization_warnings": list(dict.fromkeys(self.llm_normalization_warnings)),
             "error": dict(self.error),
         }
 
@@ -65,6 +73,10 @@ def plan_queries(
 
     llm_queries: list[str] = []
     llm_status = "not_started"
+    llm_error_type: str | None = None
+    llm_raw_response_preview = ""
+    llm_parsed_queries_preview: list[str] = []
+    llm_normalization_warnings: list[str] = []
     error: dict[str, Any] = {}
     if normalized_mode in {"llm", "hybrid"}:
         llm_queries, diagnostics = generate_llm_queries(
@@ -79,6 +91,14 @@ def plan_queries(
         )
         llm_status = str(diagnostics.get("status") or "not_started")
         warnings.extend(str(item) for item in diagnostics.get("warnings") or [])
+        llm_error_type = diagnostics.get("llm_error_type") or None
+        llm_raw_response_preview = str(diagnostics.get("llm_raw_response_preview") or "")
+        llm_parsed_queries_preview = [
+            str(item) for item in diagnostics.get("llm_parsed_queries_preview") or []
+        ]
+        llm_normalization_warnings = [
+            str(item) for item in diagnostics.get("llm_normalization_warnings") or []
+        ]
         error = dict(diagnostics.get("error") or {})
 
     if normalized_mode == "rule":
@@ -102,5 +122,9 @@ def plan_queries(
         mode=normalized_mode,
         warnings=list(dict.fromkeys(warnings)),
         llm_status=llm_status,
+        llm_error_type=llm_error_type,
+        llm_raw_response_preview=llm_raw_response_preview,
+        llm_parsed_queries_preview=llm_parsed_queries_preview,
+        llm_normalization_warnings=llm_normalization_warnings,
         error=error,
     )

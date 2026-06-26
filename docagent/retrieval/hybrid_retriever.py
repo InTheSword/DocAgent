@@ -226,6 +226,10 @@ def _coerce_query_plan(value: QueryPlannerOutput | dict[str, object] | None) -> 
         mode=str(value.get("mode") or "hybrid"),
         warnings=[str(item) for item in value.get("warnings") or []],
         llm_status=str(value.get("llm_status") or "not_started"),
+        llm_error_type=value.get("llm_error_type") or None,
+        llm_raw_response_preview=str(value.get("llm_raw_response_preview") or ""),
+        llm_parsed_queries_preview=[str(item) for item in value.get("llm_parsed_queries_preview") or []],
+        llm_normalization_warnings=[str(item) for item in value.get("llm_normalization_warnings") or []],
         error=dict(value.get("error") or {}),
     )
 

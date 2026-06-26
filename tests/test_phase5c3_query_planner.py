@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from docagent.ingestion.document_registry import DocumentRecord
 from docagent.retrieval.hybrid_retriever import HybridRetriever
 from docagent.retrieval.query_fusion import fuse_queries
@@ -67,6 +69,63 @@ def test_mock_llm_valid_json_list_is_used_in_hybrid_plan() -> None:
     assert plan.final_queries[: len(plan.rule_queries)] == plan.rule_queries[: len(plan.final_queries)]
 
 
+@pytest.mark.parametrize(
+    ("response", "expected"),
+    [
+        ('["invoice date", "financial year"]', ["invoice date", "financial year"]),
+        ('```json\n["invoice date", "financial year"]\n```', ["invoice date", "financial year"]),
+        ('Here are the retrieval queries:\n["invoice date", "financial year"]', ["invoice date", "financial year"]),
+        ('{"queries": ["invoice date", "financial year"]}', ["invoice date", "financial year"]),
+        ('{"final_queries": ["invoice date", "financial year"]}', ["invoice date", "financial year"]),
+        ('{"retrieval_queries": ["invoice date", "financial year"]}', ["invoice date", "financial year"]),
+    ],
+)
+def test_llm_query_expander_parses_supported_output_formats(response: str, expected: list[str]) -> None:
+    plan = _plan_with_llm_response(response)
+
+    assert plan.llm_status == "used"
+    assert plan.llm_queries == expected
+    assert plan.final_queries[: len(plan.rule_queries)] == plan.rule_queries[: len(plan.final_queries)]
+    assert all(query in plan.final_queries for query in expected)
+
+
+def test_llm_query_expander_filters_non_strings_and_dedups() -> None:
+    plan = _plan_with_llm_response('["invoice date", 123, "", "Invoice Date", "```bad```", "financial year"]')
+
+    assert plan.llm_status == "used"
+    assert plan.llm_queries == ["invoice date", "financial year"]
+    assert "query_planner_llm_non_string_filtered" in plan.llm_normalization_warnings
+    assert "query_planner_llm_empty_query_filtered" in plan.llm_normalization_warnings
+    assert "query_planner_llm_duplicate_query_filtered" in plan.llm_normalization_warnings
+    assert "query_planner_llm_markdown_query_filtered" in plan.llm_normalization_warnings
+
+
+def test_llm_query_expander_limits_and_truncates_queries() -> None:
+    long_query = "x" * 240
+    response = json.dumps([long_query, *[f"query {index}" for index in range(20)]])
+
+    plan = _plan_with_llm_response(response)
+
+    assert len(plan.llm_queries) == 8
+    assert len(plan.llm_queries[0]) == 200
+    assert "query_planner_llm_query_truncated" in plan.llm_normalization_warnings
+
+
+def test_llm_query_diagnostics_redact_sensitive_preview() -> None:
+    response = 'api_key=sk-secretvalue token=my-token Authorization: Bearer bearer-secret\n["invoice date"]'
+
+    plan = _plan_with_llm_response(response)
+    payload = plan.to_dict()
+
+    assert plan.llm_status == "used"
+    assert payload["llm_parsed_queries_preview"] == ["invoice date"]
+    preview = payload["llm_raw_response_preview"]
+    assert "sk-secretvalue" not in preview
+    assert "my-token" not in preview
+    assert "bearer-secret" not in preview
+    assert len(preview) <= 1000
+
+
 def test_invalid_json_falls_back_to_rule_queries() -> None:
     fake = FakeLLMClient("not json")
 
@@ -80,6 +139,7 @@ def test_invalid_json_falls_back_to_rule_queries() -> None:
     assert plan.llm_queries == []
     assert plan.final_queries == plan.rule_queries[: len(plan.final_queries)]
     assert "query_planner_llm_invalid_output" in plan.warnings
+    assert plan.llm_error_type == "query_planner_llm_invalid_output"
 
 
 def test_empty_llm_response_falls_back_to_rule_queries() -> None:
@@ -187,6 +247,15 @@ def _block(block_id: str, text: str) -> EvidenceBlock:
         text=text,
         page_id=1,
         location=EvidenceLocation(page=1, block_id=block_id),
+    )
+
+
+def _plan_with_llm_response(response: str):
+    return plan_queries(
+        question="What is the invoice date?",
+        task_type="local_fact_qa",
+        mode="hybrid",
+        llm_client=FakeLLMClient(response),
     )
 
 
