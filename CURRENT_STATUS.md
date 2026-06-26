@@ -70,7 +70,7 @@ and CLI artifacts. The accepted server smoke validates existing MinerU
 output-backed execution, not online MinerU OCR execution or benchmark answer
 quality.
 
-Phase 5G CLI regression baseline is implemented in
+Phase 5G CLI regression baseline is accepted in
 `scripts/run_phase5g_cli_regression.py`. The runner reads default or JSONL
 regression cases, calls `scripts/docagent_cli.py`, validates stdout JSON,
 task type, tools used, artifact writing, structured errors, skipped cases, and
@@ -78,7 +78,41 @@ known limitations, then writes `regression_cases.jsonl`,
 `regression_results.jsonl`, `regression_summary.json`,
 `regression_summary.md`, and `preview.json` under
 `outputs/regression/phase5g_cli/<run_id>/`. This is an execution stability
-baseline, not a benchmark answer-quality report.
+baseline, not a benchmark answer-quality report. The accepted server
+regression run `phase5g_cli_20260626_022925_9eca480b` completed 8 cases,
+recorded 2 unsupported known-limitations cases, failed 0 cases, emitted valid
+JSON for all 10 cases, and wrote 9 CLI artifacts without external API, VLM,
+training, or full E2E execution.
+
+Phase 5G accepted server regression evidence:
+
+```text
+run_id = phase5g_cli_20260626_022925_9eca480b
+status = success
+case_count = 10
+completed_count = 8
+failed_count = 0
+skipped_count = 0
+unsupported_count = 2
+json_valid_count = 10
+artifact_write_count = 9
+task_type_distribution = document_statistics:3, document_summary:1, local_fact_qa:2, page_lookup:1, table_lookup_or_calculation:1
+tools_used_distribution = count_pages:3, get_page_text:1, local_fact_qa:2
+failure_taxonomy = {}
+unsupported_taxonomy = document_summary_not_implemented:1, table_lookup_not_implemented:1
+skipped_taxonomy = {}
+known_limitation_counts = document_summary_not_implemented:1, dry_run_no_answer_generated:2, fallback_to_local_fact_qa:3, table_lookup_not_implemented:1, visual_understanding_unsupported:1
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+artifact_dir = /root/autodl-tmp/docagent/outputs/regression/phase5g_cli/phase5g_cli_20260626_022925_9eca480b
+cases_path = /root/autodl-tmp/docagent/outputs/regression/phase5g_cli/phase5g_cli_20260626_022925_9eca480b/regression_cases.jsonl
+results_path = /root/autodl-tmp/docagent/outputs/regression/phase5g_cli/phase5g_cli_20260626_022925_9eca480b/regression_results.jsonl
+summary_path = /root/autodl-tmp/docagent/outputs/regression/phase5g_cli/phase5g_cli_20260626_022925_9eca480b/regression_summary.json
+summary_md_path = /root/autodl-tmp/docagent/outputs/regression/phase5g_cli/phase5g_cli_20260626_022925_9eca480b/regression_summary.md
+preview_path = /root/autodl-tmp/docagent/outputs/regression/phase5g_cli/phase5g_cli_20260626_022925_9eca480b/preview.json
+```
 
 Status:
 
@@ -120,7 +154,8 @@ Phase 5F-2 file-to-answer ingestion integration -> accepted
 Phase 5F-2 server file-to-answer smoke -> accepted
 Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
-Phase 5G CLI regression baseline -> implemented
+Phase 5G CLI regression baseline -> accepted
+Phase 5G server regression -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5E Document Summary MVP -> not_started
 Phase 5F full CLI acceptance -> not_started
@@ -433,10 +468,11 @@ Current conclusion:
   unsupported parser paths.
 - Phase 5F-3 MinerU-backed file-to-answer implementation and server smoke are
   accepted for existing MinerU output-backed execution.
-- Phase 5G CLI regression baseline is implemented locally.
+- Phase 5G CLI regression baseline and server regression are accepted as
+  execution-stability evidence, not benchmark answer-quality evidence.
 - Phase 5E document_summary, Phase 5C-2 LLM-assisted Router fallback, table
-  lookup, simple calculation, and Phase 5G server regression smoke remain
-  not_started.
+  lookup, simple calculation, online MinerU OCR execution, and local_fact_qa
+  answer quality improvement remain not_started.
 
 Phase 4D-C accepted server result:
 

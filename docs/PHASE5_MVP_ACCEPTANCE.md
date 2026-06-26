@@ -410,7 +410,8 @@ Phase 5F-2 file-to-answer ingestion integration -> accepted
 Phase 5F-2 server file-to-answer smoke -> accepted
 Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
-Phase 5G CLI regression baseline -> implemented
+Phase 5G CLI regression baseline -> accepted
+Phase 5G server regression -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5F full CLI acceptance -> not_started
 ```
@@ -583,8 +584,8 @@ output-backed execution.
 local_fact_qa answer quality remains a separate known limitation.
 Dense index is not built in the lightweight smoke; index_status may remain
 not_started.
-Phase 5E document_summary, Phase 5C-2 LLM-assisted Router fallback, and
-Phase 5G server regression smoke remain not_started.
+Phase 5E document_summary and Phase 5C-2 LLM-assisted Router fallback remain
+not_started; Phase 5G server regression was later accepted.
 ```
 
 ## Exit Criteria For Phase 5F-3
@@ -756,6 +757,47 @@ Boundary:
 - Phase 5C-2 LLM-assisted Router fallback remains not_started.
 - table lookup, simple calculation, VLM, training, and full GRPO E2E remain
   out of scope.
+
+Accepted server regression evidence:
+
+```text
+run_id = phase5g_cli_20260626_022925_9eca480b
+status = success
+case_count = 10
+completed_count = 8
+failed_count = 0
+skipped_count = 0
+unsupported_count = 2
+json_valid_count = 10
+artifact_write_count = 9
+task_type_distribution = document_statistics:3, document_summary:1, local_fact_qa:2, page_lookup:1, table_lookup_or_calculation:1
+tools_used_distribution = count_pages:3, get_page_text:1, local_fact_qa:2
+failure_taxonomy = {}
+unsupported_taxonomy = document_summary_not_implemented:1, table_lookup_not_implemented:1
+skipped_taxonomy = {}
+known_limitation_counts = document_summary_not_implemented:1, dry_run_no_answer_generated:2, fallback_to_local_fact_qa:3, table_lookup_not_implemented:1, visual_understanding_unsupported:1
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+artifact_dir = /root/autodl-tmp/docagent/outputs/regression/phase5g_cli/phase5g_cli_20260626_022925_9eca480b
+cases_path = /root/autodl-tmp/docagent/outputs/regression/phase5g_cli/phase5g_cli_20260626_022925_9eca480b/regression_cases.jsonl
+results_path = /root/autodl-tmp/docagent/outputs/regression/phase5g_cli/phase5g_cli_20260626_022925_9eca480b/regression_results.jsonl
+summary_path = /root/autodl-tmp/docagent/outputs/regression/phase5g_cli/phase5g_cli_20260626_022925_9eca480b/regression_summary.json
+summary_md_path = /root/autodl-tmp/docagent/outputs/regression/phase5g_cli/phase5g_cli_20260626_022925_9eca480b/regression_summary.md
+preview_path = /root/autodl-tmp/docagent/outputs/regression/phase5g_cli/phase5g_cli_20260626_022925_9eca480b/preview.json
+```
+
+Status:
+
+```text
+Phase 5G CLI regression baseline -> accepted
+Phase 5G server regression -> accepted
+Phase 5E document_summary -> not_started
+Phase 5C-2 LLM-assisted Router fallback -> not_started
+online MinerU OCR execution -> not_started
+local_fact_qa answer quality improvement -> not_started
+```
 
 ## Exit Criteria For Phase 5 MVP
 

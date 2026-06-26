@@ -4,7 +4,7 @@
 
 Phase 4D-C has been accepted and recorded.
 
-Current Phase 5 status after Phase 5G CLI regression baseline implementation:
+Current Phase 5 status after Phase 5G server CLI regression acceptance:
 
 ```text
 Phase 5A architecture audit and contracts -> accepted
@@ -19,7 +19,8 @@ Phase 5F-2 file-to-answer ingestion integration -> accepted
 Phase 5F-2 server file-to-answer smoke -> accepted
 Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
-Phase 5G CLI regression baseline -> implemented
+Phase 5G CLI regression baseline -> accepted
+Phase 5G server regression -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> not_started
 Phase 5E document_summary -> not_started
 Phase 5F full CLI acceptance -> not_started
@@ -1041,7 +1042,8 @@ Validate that the MVP works beyond one demo question.
 Implementation status:
 
 ```text
-Phase 5G CLI regression baseline -> implemented
+Phase 5G CLI regression baseline -> accepted
+Phase 5G server regression -> accepted
 runner = scripts/run_phase5g_cli_regression.py
 tests = tests/test_phase5g_cli_regression.py
 artifact_root = outputs/regression/phase5g_cli/<run_id>/
@@ -1086,10 +1088,42 @@ task_type_distribution
 tools_used_distribution
 failure_taxonomy
 known_limitation_counts
+unsupported_taxonomy
+skipped_taxonomy
 used_external_api = false
 used_vlm = false
 used_training = false
 used_full_e2e = false
+```
+
+Accepted server regression evidence:
+
+```text
+run_id = phase5g_cli_20260626_022925_9eca480b
+status = success
+case_count = 10
+completed_count = 8
+failed_count = 0
+skipped_count = 0
+unsupported_count = 2
+json_valid_count = 10
+artifact_write_count = 9
+task_type_distribution = document_statistics:3, document_summary:1, local_fact_qa:2, page_lookup:1, table_lookup_or_calculation:1
+tools_used_distribution = count_pages:3, get_page_text:1, local_fact_qa:2
+failure_taxonomy = {}
+unsupported_taxonomy = document_summary_not_implemented:1, table_lookup_not_implemented:1
+skipped_taxonomy = {}
+known_limitation_counts = document_summary_not_implemented:1, dry_run_no_answer_generated:2, fallback_to_local_fact_qa:3, table_lookup_not_implemented:1, visual_understanding_unsupported:1
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+artifact_dir = /root/autodl-tmp/docagent/outputs/regression/phase5g_cli/phase5g_cli_20260626_022925_9eca480b
+cases_path = /root/autodl-tmp/docagent/outputs/regression/phase5g_cli/phase5g_cli_20260626_022925_9eca480b/regression_cases.jsonl
+results_path = /root/autodl-tmp/docagent/outputs/regression/phase5g_cli/phase5g_cli_20260626_022925_9eca480b/regression_results.jsonl
+summary_path = /root/autodl-tmp/docagent/outputs/regression/phase5g_cli/phase5g_cli_20260626_022925_9eca480b/regression_summary.json
+summary_md_path = /root/autodl-tmp/docagent/outputs/regression/phase5g_cli/phase5g_cli_20260626_022925_9eca480b/regression_summary.md
+preview_path = /root/autodl-tmp/docagent/outputs/regression/phase5g_cli/phase5g_cli_20260626_022925_9eca480b/preview.json
 ```
 
 Known limitations:
@@ -1135,9 +1169,8 @@ Immediate next step:
 Phase 5F-1 unified CLI MVP and server CLI smoke are accepted.
 Phase 5F-2 file-to-answer ingestion integration and server smoke are accepted for lightweight .txt files.
 Phase 5F-3 MinerU-backed file-to-answer implementation and server smoke are accepted for existing MinerU output-backed execution.
-Phase 5G CLI regression baseline is implemented locally.
-Next step requires explicit approval: server Phase 5G CLI regression smoke,
-Phase 5E document_summary, or Phase 5C-2 LLM-assisted Router fallback.
+Phase 5G CLI regression baseline and server regression are accepted as execution stability evidence.
+Next step requires explicit approval: Phase 5E document_summary, Phase 5C-2 LLM-assisted Router fallback, or another named MVP closure step.
 Do not implement document_summary, LLM Router fallback, table lookup,
 calculation, VLM, training, or full E2E as part of Phase 5G.
 ```

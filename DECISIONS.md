@@ -8,6 +8,71 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-26: Phase 5G Server CLI Regression Accepted
+
+Decision: accept Phase 5G CLI regression baseline after the server regression
+completed successfully. This validates multi-task CLI execution stability,
+structured JSON output, tool dispatch, artifact writing, unsupported-case
+classification, and known limitation tracking. It is not a benchmark answer
+quality report.
+
+Evidence:
+
+```text
+branch = codex/phase5g-cli-regression
+implementation_commit = a6bbee38df73259d29c117531dde435d15b3c877
+run_id = phase5g_cli_20260626_022925_9eca480b
+status = success
+case_count = 10
+completed_count = 8
+failed_count = 0
+skipped_count = 0
+unsupported_count = 2
+json_valid_count = 10
+artifact_write_count = 9
+task_type_distribution = document_statistics:3, document_summary:1, local_fact_qa:2, page_lookup:1, table_lookup_or_calculation:1
+tools_used_distribution = count_pages:3, get_page_text:1, local_fact_qa:2
+failure_taxonomy = {}
+unsupported_taxonomy = document_summary_not_implemented:1, table_lookup_not_implemented:1
+skipped_taxonomy = {}
+known_limitation_counts = document_summary_not_implemented:1, dry_run_no_answer_generated:2, fallback_to_local_fact_qa:3, table_lookup_not_implemented:1, visual_understanding_unsupported:1
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+artifact_dir = /root/autodl-tmp/docagent/outputs/regression/phase5g_cli/phase5g_cli_20260626_022925_9eca480b
+cases_path = /root/autodl-tmp/docagent/outputs/regression/phase5g_cli/phase5g_cli_20260626_022925_9eca480b/regression_cases.jsonl
+results_path = /root/autodl-tmp/docagent/outputs/regression/phase5g_cli/phase5g_cli_20260626_022925_9eca480b/regression_results.jsonl
+summary_path = /root/autodl-tmp/docagent/outputs/regression/phase5g_cli/phase5g_cli_20260626_022925_9eca480b/regression_summary.json
+summary_md_path = /root/autodl-tmp/docagent/outputs/regression/phase5g_cli/phase5g_cli_20260626_022925_9eca480b/regression_summary.md
+preview_path = /root/autodl-tmp/docagent/outputs/regression/phase5g_cli/phase5g_cli_20260626_022925_9eca480b/preview.json
+```
+
+Boundary:
+
+- Phase 5G is accepted as an execution regression baseline, not an answer
+  accuracy benchmark.
+- `document_summary_not_implemented` and `table_lookup_not_implemented` are
+  expected unsupported cases for the current MVP scope.
+- `dry_run_no_answer_generated`, `fallback_to_local_fact_qa`, and
+  `visual_understanding_unsupported` remain known limitations.
+- Phase 5E document_summary, Phase 5C-2 LLM-assisted Router fallback, online
+  MinerU OCR execution, and local_fact_qa answer-quality improvement remain
+  not_started.
+- No CLI, Router, ingestion, local_fact_qa, AnswerPolicy, candidate answer
+  extraction, VLM, training, or full GRPO E2E change is included.
+
+Current status:
+
+```text
+Phase 5G CLI regression baseline -> accepted
+Phase 5G server regression -> accepted
+Phase 5E document_summary -> not_started
+Phase 5C-2 LLM-assisted Router fallback -> not_started
+online MinerU OCR execution -> not_started
+local_fact_qa answer quality improvement -> not_started
+```
+
 ## 2026-06-26: Phase 5G CLI Regression Baseline Implemented
 
 Decision: implement Phase 5G as a lightweight multi-task CLI regression
