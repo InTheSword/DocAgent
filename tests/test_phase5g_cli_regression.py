@@ -71,6 +71,16 @@ def test_phase5g_runner_reads_cases_and_writes_reports(tmp_path: Path) -> None:
                 "known_limitation_allowed": True,
             },
             {
+                "case_id": "table_lookup_not_implemented",
+                "mode": "doc_id",
+                "doc_id": "$FIRST_DOC_ID",
+                "question": "What is the difference between 2020 and 2021 revenue?",
+                "expected_status": "error",
+                "expected_task_type": "table_lookup_or_calculation",
+                "expected_error_type": "table_lookup_not_implemented",
+                "known_limitation_allowed": True,
+            },
+            {
                 "case_id": "mineru_missing",
                 "mode": "file",
                 "file": str(tmp_path / "missing.pdf"),
@@ -120,6 +130,20 @@ def test_phase5g_runner_reads_cases_and_writes_reports(tmp_path: Path) -> None:
                     artifact_dir=str(artifact_dir),
                 ),
             )
+        if question == "What is the difference between 2020 and 2021 revenue?":
+            artifact_dir = output_dir / "table_case"
+            artifact_dir.mkdir(parents=True)
+            (artifact_dir / "result.json").write_text("{}", encoding="utf-8")
+            return CommandResult(
+                0,
+                _payload(
+                    status="error",
+                    task_type="table_lookup_or_calculation",
+                    warnings=["table_lookup_not_implemented"],
+                    error={"type": "table_lookup_not_implemented", "message": "not implemented"},
+                    artifact_dir=str(artifact_dir),
+                ),
+            )
         return CommandResult(0, "debug line\nnot json\n")
 
     summary = run_phase5g_regression(
@@ -132,22 +156,26 @@ def test_phase5g_runner_reads_cases_and_writes_reports(tmp_path: Path) -> None:
     )
 
     assert summary["status"] == "failed"
-    assert summary["case_count"] == 5
+    assert summary["case_count"] == 6
     assert summary["completed_count"] == 2
-    assert summary["unsupported_count"] == 1
+    assert summary["unsupported_count"] == 2
     assert summary["skipped_count"] == 1
     assert summary["failed_count"] == 1
-    assert summary["json_valid_count"] == 3
-    assert summary["artifact_write_count"] == 2
+    assert summary["json_valid_count"] == 4
+    assert summary["artifact_write_count"] == 3
     assert summary["task_type_distribution"] == {
         "document_statistics": 1,
         "document_summary": 1,
+        "table_lookup_or_calculation": 1,
     }
     assert summary["tools_used_distribution"] == {"count_pages": 1}
-    assert summary["failure_taxonomy"]["document_summary_not_implemented"] == 1
-    assert summary["failure_taxonomy"]["mineru_fixture_missing"] == 1
+    assert summary["failure_taxonomy"] == {"stdout_not_json": 1}
+    assert summary["unsupported_taxonomy"]["document_summary_not_implemented"] == 1
+    assert summary["unsupported_taxonomy"]["table_lookup_not_implemented"] == 1
+    assert summary["skipped_taxonomy"]["mineru_fixture_missing"] == 1
     assert summary["failure_taxonomy"]["stdout_not_json"] == 1
     assert summary["known_limitation_counts"]["document_summary_not_implemented"] == 1
+    assert summary["known_limitation_counts"]["table_lookup_not_implemented"] == 1
     assert summary["used_external_api"] is False
     assert summary["used_vlm"] is False
     assert summary["used_training"] is False
@@ -172,7 +200,7 @@ def test_phase5g_runner_records_visual_known_limitation(tmp_path: Path) -> None:
                 "case_id": "visual_pixel_qa_boundary",
                 "mode": "doc_id",
                 "doc_id": "doc1",
-                "question": "What color is shown in the chart?",
+                "question": "In the chart, what color is shown?",
                 "dry_run": True,
                 "expected_status": "success",
                 "expected_task_type": "local_fact_qa",

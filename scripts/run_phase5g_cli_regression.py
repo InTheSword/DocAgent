@@ -201,7 +201,7 @@ def _load_cases(cases_jsonl: Path | None, *, run_dir: Path, doc_id: str, txt_fix
             "case_id": "visual_pixel_qa_boundary",
             "mode": "doc_id",
             "doc_id": dynamic_doc_id,
-            "question": "What color is shown in the chart?",
+            "question": "In the chart, what color is shown?",
             "dry_run": True,
             "expected_status": "success",
             "expected_task_type": "local_fact_qa",
@@ -426,12 +426,18 @@ def _summarize(run_id: str, run_dir: Path, cases: list[dict[str, Any]], rows: li
     task_types = Counter(str(row.get("task_type") or "unknown") for row in rows if row.get("task_type"))
     tools = Counter(tool for row in rows for tool in (row.get("tools_used") or []))
     failures = Counter()
+    unsupported = Counter()
+    skipped = Counter()
     known = Counter()
     for row in rows:
-        if row.get("outcome") in {"failed", "skipped", "unsupported"}:
-            error = row.get("error") if isinstance(row.get("error"), dict) else {}
-            reason = row.get("skip_reason") or error.get("type") or (row.get("validation_failures") or ["unknown"])[0]
-            failures[str(reason)] += 1
+        error = row.get("error") if isinstance(row.get("error"), dict) else {}
+        reason = str(row.get("skip_reason") or error.get("type") or (row.get("validation_failures") or ["unknown"])[0])
+        if row.get("outcome") == "failed":
+            failures[reason] += 1
+        elif row.get("outcome") == "unsupported":
+            unsupported[reason] += 1
+        elif row.get("outcome") == "skipped":
+            skipped[reason] += 1
         for marker in row.get("known_limitations") or []:
             known[str(marker)] += 1
     summary = {
@@ -448,6 +454,8 @@ def _summarize(run_id: str, run_dir: Path, cases: list[dict[str, Any]], rows: li
         "task_type_distribution": dict(sorted(task_types.items())),
         "tools_used_distribution": dict(sorted(tools.items())),
         "failure_taxonomy": dict(sorted(failures.items())),
+        "unsupported_taxonomy": dict(sorted(unsupported.items())),
+        "skipped_taxonomy": dict(sorted(skipped.items())),
         "known_limitation_counts": dict(sorted(known.items())),
         "used_external_api": False,
         "used_vlm": False,
