@@ -58,18 +58,8 @@ def _payload(question: str, *, allow_llm: bool = False) -> dict:
 def _decision_json(**overrides) -> str:
     payload = {
         "task_type": "local_fact_qa",
-        "selected_tools": ["local_fact_qa"],
-        "requires_retrieval": True,
-        "requires_full_scan": False,
-        "requires_table_tool": False,
-        "requires_calculation": False,
-        "requires_visual_understanding": False,
-        "target_evidence_types": ["text", "table"],
         "query_rewrite": "invoice date",
-        "confidence": 0.91,
-        "reason": "Question asks for a specific fact.",
-        "fallback_used": True,
-        "warnings": [],
+        "selected_tools": ["local_fact_qa"],
     }
     payload.update(overrides)
     return json.dumps(payload)
@@ -202,9 +192,97 @@ def test_valid_mock_llm_output_can_replace_low_confidence_rule_plan() -> None:
     assert result["router_source"] == "llm_fallback"
     assert result["task_type"] == "local_fact_qa"
     assert result["selected_tools"] == ["local_fact_qa"]
+    assert result["requires_retrieval"] is True
+    assert result["requires_visual_understanding"] is False
+    assert result["confidence"] == 0.65
     assert "llm_router_used" in result["warnings"]
+    assert "llm_router_confidence_defaulted" in result["warnings"]
+    assert result["llm_router"]["normalization_warnings"] == ["llm_router_confidence_defaulted"]
     assert fake_client.calls[0]["user_payload"]["question"] == "Tell me about it"
     assert "document_text" not in fake_client.calls[0]["user_payload"]
+
+
+def test_llm_task_type_only_canonicalizes_full_router_plan() -> None:
+    fake_client = FakeRouterLLMClient(json.dumps({"task_type": "local_fact_qa"}))
+
+    result = plan_route_with_optional_llm(
+        _payload("Tell me about it", allow_llm=True),
+        llm_client=fake_client,
+    )
+
+    assert result["router_source"] == "llm_fallback"
+    assert result["task_type"] == "local_fact_qa"
+    assert result["selected_tools"] == ["local_fact_qa"]
+    assert result["requires_retrieval"] is True
+    assert result["target_evidence_types"] == ["text", "table"]
+    assert result["reason"].startswith("LLM fallback selected")
+    assert "llm_router_selected_tools_inferred" in result["warnings"]
+
+
+def test_llm_task_type_and_query_rewrite_passes_without_selected_tools() -> None:
+    fake_client = FakeRouterLLMClient(json.dumps({"task_type": "local_fact_qa", "query_rewrite": "invoice date"}))
+
+    result = plan_route_with_optional_llm(
+        _payload("Tell me about it", allow_llm=True),
+        llm_client=fake_client,
+    )
+
+    assert result["router_source"] == "llm_fallback"
+    assert result["query_rewrite"] == "invoice date"
+    assert result["selected_tools"] == ["local_fact_qa"]
+
+
+def test_confidence_string_percent_and_labels_are_normalized() -> None:
+    cases = [
+        ("0.8", 0.8),
+        ("80%", 0.8),
+        ("high", 0.85),
+        ("medium", 0.65),
+        ("low", 0.35),
+    ]
+    for raw_confidence, expected in cases:
+        fake_client = FakeRouterLLMClient(_decision_json(confidence=raw_confidence))
+
+        result = plan_route_with_optional_llm(
+            _payload("Tell me about it", allow_llm=True),
+            llm_client=fake_client,
+        )
+
+        assert result["router_source"] == "llm_fallback"
+        assert result["confidence"] == expected
+        assert "llm_router_validation_failed" not in result["warnings"]
+
+
+def test_unparseable_confidence_warns_without_validation_failure() -> None:
+    fake_client = FakeRouterLLMClient(_decision_json(confidence="very sure"))
+
+    result = plan_route_with_optional_llm(
+        _payload("Tell me about it", allow_llm=True),
+        llm_client=fake_client,
+    )
+
+    assert result["router_source"] == "llm_fallback"
+    assert result["confidence"] == 0.65
+    assert "llm_router_confidence_ignored" in result["warnings"]
+    assert result["llm_router"]["validation_errors"] == []
+
+
+def test_fenced_json_and_explanatory_text_are_extracted() -> None:
+    responses = [
+        '```json\n{"task_type": "local_fact_qa"}\n```',
+        'Routing decision follows:\n{"task_type": "local_fact_qa", "query_rewrite": "date"}\nDone.',
+        '```json\n{"task_type": "local_fact_qa"}\n```\nDone.',
+    ]
+    for response in responses:
+        fake_client = FakeRouterLLMClient(response)
+
+        result = plan_route_with_optional_llm(
+            _payload("Tell me about it", allow_llm=True),
+            llm_client=fake_client,
+        )
+
+        assert result["router_source"] == "llm_fallback"
+        assert result["task_type"] == "local_fact_qa"
 
 
 def test_invalid_mock_llm_json_falls_back_to_rule_plan() -> None:
@@ -216,12 +294,13 @@ def test_invalid_mock_llm_json_falls_back_to_rule_plan() -> None:
     )
 
     assert result["router_source"] == "rule_after_llm_failure"
-    assert "llm_router_invalid_output" in result["warnings"]
-    assert result["llm_router"]["status"] == "invalid_output"
+    assert "llm_router_invalid_json" in result["warnings"]
+    assert result["llm_router"]["status"] == "invalid_json"
+    assert result["llm_router"]["raw_response_preview"] == "not json"
 
 
-def test_mock_llm_unavailable_tool_fails_validation_and_falls_back() -> None:
-    fake_client = FakeRouterLLMClient(_decision_json(selected_tools=["missing_tool"]))
+def test_mock_llm_illegal_task_type_fails_validation_and_falls_back() -> None:
+    fake_client = FakeRouterLLMClient(json.dumps({"task_type": "visual_pixel_qa"}))
 
     result = plan_route_with_optional_llm(
         _payload("Tell me about it", allow_llm=True),
@@ -230,7 +309,32 @@ def test_mock_llm_unavailable_tool_fails_validation_and_falls_back() -> None:
 
     assert result["router_source"] == "rule_after_llm_failure"
     assert "llm_router_validation_failed" in result["warnings"]
-    assert "selected_tool_unavailable" in result["warnings"]
+    assert "unsupported_task_type" in result["llm_router"]["validation_errors"]
+
+
+def test_mock_llm_unavailable_tool_can_fallback_to_inferred_tool() -> None:
+    fake_client = FakeRouterLLMClient(_decision_json(selected_tools=["missing_tool"]))
+
+    result = plan_route_with_optional_llm(
+        _payload("Tell me about it", allow_llm=True),
+        llm_client=fake_client,
+    )
+
+    assert result["router_source"] == "llm_fallback"
+    assert result["selected_tools"] == ["local_fact_qa"]
+    assert "llm_router_selected_tools_unavailable" in result["warnings"]
+
+
+def test_mock_llm_unavailable_tool_fails_when_no_fallback_tool_exists() -> None:
+    fake_client = FakeRouterLLMClient(_decision_json(task_type="document_statistics", selected_tools=["missing_tool"]))
+    payload = _payload("Tell me about it", allow_llm=True)
+    payload["available_tools"] = ["local_fact_qa"]
+
+    result = plan_route_with_optional_llm(payload, llm_client=fake_client)
+
+    assert result["router_source"] == "rule_after_llm_failure"
+    assert "llm_router_validation_failed" in result["warnings"]
+    assert "selected_tool_unavailable" in result["llm_router"]["validation_errors"]
 
 
 def test_mock_llm_cannot_enable_visual_understanding() -> None:
@@ -242,7 +346,27 @@ def test_mock_llm_cannot_enable_visual_understanding() -> None:
     )
 
     assert result["router_source"] == "rule_after_llm_failure"
-    assert "visual_understanding_not_allowed" in result["warnings"]
+    assert "visual_understanding_not_allowed" in result["llm_router"]["validation_errors"]
+
+
+def test_llm_router_diagnostics_redact_sensitive_preview() -> None:
+    fake_client = FakeRouterLLMClient(
+        '{"task_type": "local_fact_qa", "query_rewrite": "Authorization: Bearer secret-token token=abc api_key=xyz"}'
+    )
+
+    result = plan_route_with_optional_llm(
+        _payload("Tell me about it", allow_llm=True),
+        llm_client=fake_client,
+    )
+
+    preview = result["llm_router"]["parsed_decision_preview"]["query_rewrite"]
+    raw_preview = result["llm_router"]["raw_response_preview"]
+    assert "secret-token" not in preview
+    assert "token=abc" not in preview
+    assert "api_key=xyz" not in preview
+    assert "secret-token" not in raw_preview
+    assert "token=abc" not in raw_preview
+    assert "api_key=xyz" not in raw_preview
 
 
 def test_visual_boundary_does_not_call_llm() -> None:

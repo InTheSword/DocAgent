@@ -92,9 +92,14 @@ baseline; LLM fallback is disabled by default and requires explicit
 The Router LLM only receives the question, available tools, initial rule plan,
 and lightweight document profile. It does not receive full document text,
 retrieved evidence, OCR full text, image pixels, user file contents, or
-`local_fact_qa` outputs. Invalid JSON, schema validation failure, unavailable
-tool selection, visual-understanding requests, missing config, and API errors
-fall back to the rule plan.
+`local_fact_qa` outputs. The LLM-facing output schema is intentionally narrow:
+`task_type`, optional `query_rewrite`, optional `selected_tools`, and optional
+diagnostics such as confidence / intent labels. `llm_router.py` canonicalizes
+that minimal decision into the full internal RouterPlan. Missing or
+non-standard confidence is normalized or warned about, but does not by itself
+fail validation. Invalid JSON, illegal task type, unavailable tool selection
+with no safe fallback, visual-understanding requests, missing config, and API
+errors fall back to the rule plan.
 
 Phase 5G accepted server regression evidence:
 

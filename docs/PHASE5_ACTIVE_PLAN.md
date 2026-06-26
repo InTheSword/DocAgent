@@ -647,9 +647,16 @@ If the rule plan is high-confidence for document_statistics, page_lookup, or
 the visual unsupported boundary, no LLM call is made.
 If the rule plan is low-confidence, ambiguous, complex, or tool-unavailable,
 the optional LLM router can be used only when explicitly enabled.
-LLM output is schema-validated before use.
-Invalid JSON, unavailable tool selection, requires_visual_understanding=true,
-API failure, or missing config falls back to the rule plan.
+LLM-facing output is narrowed to task_type, optional query_rewrite, and
+optional selected_tools. The system canonicalizes that minimal decision into
+the full internal RouterPlan.
+confidence is optional and normalized best-effort; missing or non-standard
+confidence does not by itself fail validation.
+Invalid JSON, illegal task_type, unavailable tool selection with no safe
+fallback, requires_visual_understanding=true, API failure, or missing config
+falls back to the rule plan.
+llm_router diagnostics include status, error, validation_errors,
+raw_response_preview, parsed_decision_preview, and normalization_warnings.
 ```
 
 CLI support:

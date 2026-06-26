@@ -142,7 +142,7 @@ Phase 5C-2 may add these JSON-serializable fields to the router plan:
 
 ```text
 router_source = rule | llm_fallback | rule_after_llm_failure
-llm_router.status = used | not_configured | api_error | invalid_output | validation_failed
+llm_router.status = used | not_configured | api_error | invalid_json | validation_failed
 ```
 
 Phase 5C implementation notes:
@@ -201,7 +201,36 @@ Not allowed by default:
 - override Phase 5 VLM restrictions.
 
 External fallback output must still pass the same schema validation as rule
-output.
+output after canonicalization.
+
+LLM-facing output schema:
+
+```json
+{
+  "task_type": "local_fact_qa",
+  "query_rewrite": "optional rewritten query",
+  "selected_tools": ["local_fact_qa"]
+}
+```
+
+Required LLM field:
+
+- `task_type`: one of the supported task types.
+
+Optional LLM fields:
+
+- `query_rewrite`: string; if absent, the system supplies an empty string or a
+  safe rewrite from the rule plan.
+- `selected_tools`: list of tool names; if absent, the system infers tools from
+  `task_type`, `available_tools`, and the rule plan.
+- `confidence`: optional; strings such as `"0.8"`, `"80%"`, `"high"`,
+  `"medium"`, and `"low"` are normalized when possible. Missing or
+  unparseable confidence does not fail validation.
+- `intent_labels`: optional diagnostic labels.
+
+The LLM is not required to output `requires_*`, `target_evidence_types`,
+`reason`, `fallback_used`, or `warnings`. `llm_router.py` canonicalizes the
+minimal LLM decision into the full internal Router plan.
 
 Phase 5C-2 status:
 
@@ -216,9 +245,11 @@ Phase 5C-2 status:
   and lightweight `document_profile` fields;
 - the LLM does not see full document text, retrieved evidence, OCR full text,
   image pixels, user file contents, or `local_fact_qa` outputs;
-- invalid JSON, schema validation failure, unavailable tool selection,
-  `requires_visual_understanding = true`, API failure, or missing config
-  falls back to the rule plan.
+- invalid JSON, illegal task type, unavailable tool selection with no safe
+  fallback, `requires_visual_understanding = true`, API failure, or missing
+  config falls back to the rule plan;
+- LLM responses may be fenced JSON or include short surrounding text; the
+  router extracts the first JSON object before validation.
 
 Configuration:
 
