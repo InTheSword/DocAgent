@@ -101,6 +101,24 @@ fail validation. Invalid JSON, illegal task type, unavailable tool selection
 with no safe fallback, visual-understanding requests, missing config, and API
 errors fall back to the rule plan.
 
+Phase 5C-3 Query Planning + Multi-Query Retrieval is implemented in
+`docagent/retrieval/query_planner.py`,
+`docagent/retrieval/query_generator_rule.py`,
+`docagent/retrieval/query_generator_llm.py`, and
+`docagent/retrieval/query_fusion.py`, with retrieval integration in
+`docagent/retrieval/hybrid_retriever.py`,
+`docagent/retrieval/index_manager.py`, and optional CLI exposure in
+`scripts/docagent_cli.py`. The rule extractor always produces deterministic
+retrieval queries from task type, page/table/image/statistics signals, and
+keywords. The LLM expander reuses the Phase 5C-2 OpenAI-compatible Router LLM
+configuration and client only for query expansion; it must output a JSON array
+of strings and does not answer document questions. Query fusion deduplicates
+rule and LLM queries, caps the final list at 8, and preserves rule-query
+priority. If LLM config is missing, the API fails, or the LLM output is
+invalid, retrieval falls back to rule queries. This phase does not change
+Router task classification, `local_fact_qa` answer logic, AnswerPolicy,
+ingestion, VLM logic, training, or full GRPO E2E.
+
 Phase 5C-2 accepted server real API smoke evidence:
 
 ```text
@@ -192,6 +210,7 @@ Phase 5F-3 server smoke -> accepted
 Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> accepted
+Phase 5C-3 Query Planning + Multi-Query Retrieval -> implemented
 Phase 5E Document Summary MVP -> not_started
 Phase 5F full CLI acceptance -> not_started
 CDC -> not_started
@@ -506,6 +525,9 @@ Current conclusion:
 - Phase 5G CLI regression baseline and server regression are accepted as
   execution-stability evidence, not benchmark answer-quality evidence.
 - Phase 5C-2 LLM-assisted Router fallback is accepted after real API smoke.
+- Phase 5C-3 Query Planning + Multi-Query Retrieval is implemented with
+  rule-first query extraction, optional LLM query expansion, multi-query BM25 /
+  dense retrieval fusion, and CLI opt-in via `--enable-query-planning`.
 - Phase 5E document_summary, table lookup, simple calculation, online MinerU
   OCR execution, and local_fact_qa answer quality improvement remain
   not_started.

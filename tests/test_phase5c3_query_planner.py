@@ -1,0 +1,240 @@
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+from docagent.ingestion.document_registry import DocumentRecord
+from docagent.retrieval.hybrid_retriever import HybridRetriever
+from docagent.retrieval.query_fusion import fuse_queries
+from docagent.retrieval.query_generator_rule import generate_rule_queries
+from docagent.retrieval.query_planner import plan_queries
+from docagent.schemas import EvidenceBlock, EvidenceLocation
+from docagent.storage.db import connect
+from docagent.storage.repositories import DocumentRepository
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class FakeLLMClient:
+    def __init__(self, response: str) -> None:
+        self.response = response
+        self.calls: list[dict] = []
+
+    def complete(self, *, system_prompt: str, user_payload: dict):
+        self.calls.append({"system_prompt": system_prompt, "user_payload": user_payload})
+        return self.response
+
+
+def test_rule_extractor_page_question_generates_page_query() -> None:
+    queries = generate_rule_queries("Show the text from page 1.", task_type="page_lookup")
+
+    assert "page 1" in queries
+    assert "text page 1" in queries
+
+
+def test_rule_extractor_table_question_generates_table_query() -> None:
+    queries = generate_rule_queries("What is the revenue in the table?", task_type="table_lookup_or_calculation")
+
+    assert any(query.startswith("table") for query in queries)
+    assert any("revenue" in query for query in queries)
+
+
+def test_rule_extractor_statistics_question_generates_metadata_query() -> None:
+    queries = generate_rule_queries("How many pages are in this document?", task_type="document_statistics")
+
+    assert any(query.startswith("metadata") for query in queries)
+    assert any(query.startswith("document statistics") for query in queries)
+
+
+def test_mock_llm_valid_json_list_is_used_in_hybrid_plan() -> None:
+    fake = FakeLLMClient('["cancer incidence Africa", "mortality rate Africa cancer"]')
+
+    plan = plan_queries(
+        question="What is this document about?",
+        task_type="local_fact_qa",
+        document_profile={"page_count": 2, "table_count": 1, "image_count": 0},
+        mode="hybrid",
+        llm_client=fake,
+    )
+
+    assert fake.calls
+    assert plan.llm_status == "used"
+    assert "cancer incidence Africa" in plan.llm_queries
+    assert plan.final_queries[: len(plan.rule_queries)] == plan.rule_queries[: len(plan.final_queries)]
+
+
+def test_invalid_json_falls_back_to_rule_queries() -> None:
+    fake = FakeLLMClient("not json")
+
+    plan = plan_queries(
+        question="What is the invoice date?",
+        task_type="local_fact_qa",
+        mode="hybrid",
+        llm_client=fake,
+    )
+
+    assert plan.llm_queries == []
+    assert plan.final_queries == plan.rule_queries[: len(plan.final_queries)]
+    assert "query_planner_llm_invalid_output" in plan.warnings
+
+
+def test_empty_llm_response_falls_back_to_rule_queries() -> None:
+    fake = FakeLLMClient("[]")
+
+    plan = plan_queries(
+        question="What is the invoice date?",
+        task_type="local_fact_qa",
+        mode="llm",
+        llm_client=fake,
+    )
+
+    assert plan.final_queries == plan.rule_queries[: len(plan.final_queries)]
+    assert "query_planner_fallback_rule_queries" in plan.warnings
+
+
+def test_query_fusion_dedups_limits_and_preserves_rule_priority() -> None:
+    fused = fuse_queries(
+        ["page 1", "revenue", "Revenue"],
+        ["mortality", "page 1", "incidence", "extra1", "extra2", "extra3", "extra4", "extra5"],
+        limit=4,
+    )
+
+    assert fused == ["page 1", "revenue", "mortality", "incidence"]
+
+
+def test_hybrid_retriever_uses_query_plan_for_multi_query_bm25() -> None:
+    blocks = [
+        _block("b1", "Invoice Date: March 12, 2020"),
+        _block("b2", "Payment terms are due on receipt."),
+    ]
+    plan = plan_queries(
+        question="When is payment due?",
+        task_type="local_fact_qa",
+        mode="hybrid",
+        llm_client=FakeLLMClient('["payment terms due receipt"]'),
+    )
+
+    result = HybridRetriever(blocks).retrieve_result(
+        doc_id="doc1",
+        question="When is payment due?",
+        top_k=1,
+        mode="bm25",
+        query_plan=plan,
+    )
+
+    assert result.candidates[0].block.block_id == "b2"
+    assert result.metadata["query_planner"]["final_queries"] == plan.final_queries
+
+
+def test_cli_query_planner_disabled_by_default(tmp_path: Path) -> None:
+    db_path = _repository_with_document(tmp_path)
+
+    payload = _run_cli(
+        "--db-path",
+        str(db_path),
+        "--doc-id",
+        "doc1",
+        "--question",
+        "What is the invoice date?",
+        "--dry-run",
+        "--output-dir",
+        str(tmp_path / "cli"),
+    )
+
+    assert "query_planner" not in payload
+    summary = json.loads(Path(payload["artifact_dir"], "summary.json").read_text(encoding="utf-8"))
+    assert summary["used_query_planning"] is False
+
+
+def test_cli_hybrid_query_planner_records_rule_fallback_when_llm_unconfigured(tmp_path: Path) -> None:
+    db_path = _repository_with_document(tmp_path)
+
+    payload = _run_cli(
+        "--db-path",
+        str(db_path),
+        "--doc-id",
+        "doc1",
+        "--question",
+        "What is the invoice date?",
+        "--dry-run",
+        "--enable-query-planning",
+        "--query-planner-mode",
+        "hybrid",
+        "--output-dir",
+        str(tmp_path / "cli"),
+    )
+
+    assert payload["query_planner"]["enabled"] is True
+    assert payload["query_planner"]["mode"] == "hybrid"
+    assert payload["query_planner"]["rule_queries"]
+    assert payload["query_planner"]["final_queries"]
+    assert payload["query_planner"]["llm_status"] == "not_configured"
+    assert "query_planning_enabled" in payload["warnings"]
+    summary = json.loads(Path(payload["artifact_dir"], "summary.json").read_text(encoding="utf-8"))
+    assert summary["used_query_planning"] is True
+    assert summary["query_planner_mode"] == "hybrid"
+
+
+def _block(block_id: str, text: str) -> EvidenceBlock:
+    return EvidenceBlock(
+        doc_id="doc1",
+        block_id=block_id,
+        block_type="text",
+        text=text,
+        page_id=1,
+        location=EvidenceLocation(page=1, block_id=block_id),
+    )
+
+
+def _repository_with_document(tmp_path: Path) -> Path:
+    db_path = tmp_path / "docagent.sqlite"
+    conn = connect(db_path)
+    repository = DocumentRepository(conn)
+    repository.upsert_document(
+        DocumentRecord(
+            doc_id="doc1",
+            sha256="a" * 64,
+            original_name="invoice.pdf",
+            mime_type="application/pdf",
+            file_size=123,
+            file_path=str(tmp_path / "documents" / "doc1" / "source" / "original.pdf"),
+            document_dir=str(tmp_path / "documents" / "doc1"),
+            page_count=1,
+            parser_backend="mineru_existing",
+            parse_status="parsed",
+            index_status="not_started",
+        )
+    )
+    repository.save_evidence_blocks(
+        [
+            _block("doc1_p001_date", "Invoice Date: March 12, 2020"),
+            _block("doc1_p001_payment", "Payment terms are due on receipt."),
+        ]
+    )
+    conn.close()
+    return db_path
+
+
+def _run_cli(*args: str) -> dict:
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("DOCAGENT_ROUTER_LLM_")
+    }
+    completed = subprocess.run(
+        [sys.executable, "scripts/docagent_cli.py", *args],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+    assert completed.returncode == 0, completed.stderr
+    output = completed.stdout.strip()
+    assert output.startswith("{")
+    assert output.endswith("}")
+    return json.loads(output)

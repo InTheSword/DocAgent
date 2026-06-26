@@ -51,6 +51,7 @@ Phase 5F-2 server file-to-answer smoke -> accepted
 Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> accepted
+Phase 5C-3 Query Planning + Multi-Query Retrieval -> implemented
 ```
 
 ## Phase 5C-2 LLM-assisted Router Fallback Status
@@ -130,6 +131,60 @@ warnings = llm_router_used, dry_run_no_answer_generated, page_metadata_inconsist
 This does not implement `document_summary`, `table_lookup`,
 `simple_calculation`, VLM, local_fact_qa answer-quality fixes, training, or
 full GRPO E2E.
+
+## Phase 5C-3 Query Planning and Multi-Query Retrieval Status
+
+Phase 5C-3 query planning is implemented in:
+
+```text
+docagent/retrieval/query_planner.py
+docagent/retrieval/query_generator_rule.py
+docagent/retrieval/query_generator_llm.py
+docagent/retrieval/query_fusion.py
+docagent/retrieval/hybrid_retriever.py
+docagent/retrieval/index_manager.py
+scripts/docagent_cli.py
+```
+
+Purpose:
+
+```text
+question -> query planner -> multi-query retrieval -> fusion -> existing pipeline
+```
+
+This is retrieval preprocessing, not a document-answering tool and not a
+Router replacement. It currently supports:
+
+- deterministic rule query extraction for page/table/image/statistics and
+  keyword-style queries;
+- optional LLM query expansion that reuses the Phase 5C-2 Router LLM API
+  client/configuration;
+- query fusion with deduplication, maximum 8 final queries, and rule-query
+  priority;
+- multi-query BM25 retrieval and dense/hybrid retrieval when query embeddings
+  are available for each final query;
+- optional CLI exposure via `--enable-query-planning` and
+  `--query-planner-mode {rule,llm,hybrid}`.
+
+The LLM query expander:
+
+```text
+role = Query Expansion / Query Rewriting Assistant
+output = JSON array of strings only
+visible input = question, task_type, lightweight document_profile, rule_queries
+fallback = rule queries when config/API/output is unavailable or invalid
+```
+
+The LLM query expander does not receive full document text, retrieved
+evidence, OCR full text, image pixels, user file contents, or local_fact_qa
+results. It does not answer questions, generate citations, call tools, or
+override the Phase 5 visual boundary.
+
+Phase 5C-3 does not implement `document_summary`, `table_lookup`,
+`simple_calculation`, VLM, AnswerPolicy changes, ingestion changes,
+local_fact_qa answer-quality changes, training, or full GRPO E2E. Status is
+`implemented` until a targeted server smoke validates the real configured
+query-planning path.
 
 ## Phase 5D local_fact_qa Wrapper Status
 

@@ -19,6 +19,8 @@ from docagent.ingestion.hashing import sha256_file
 from docagent.ingestion.service import DocumentIngestionService
 from docagent.parser.mineru_backend import MinerUParserBackend
 from docagent.parser.text_backend import TextParserBackend
+from docagent.retrieval.index_manager import IndexedDocumentRetriever
+from docagent.retrieval.query_planner import plan_queries
 from docagent.router.llm_router import DEFAULT_LLM_ROUTER_THRESHOLD, plan_route_with_optional_llm
 from docagent.storage.db import connect
 from docagent.storage.repositories import DocumentRepository, TraceRepository
@@ -550,16 +552,42 @@ def _run_local_fact_qa(
     router_plan: dict[str, Any],
     dry_run: bool,
     run_id: str,
+    enable_query_planning: bool = False,
+    query_planner_mode: str = "hybrid",
+    document_profile: dict[str, Any] | None = None,
+    query_planner_env_file: Path | None = None,
+    query_planner_model: str | None = None,
 ) -> dict[str, Any]:
     options: dict[str, Any] = {"dry_run": dry_run, "qid": run_id}
     if not dry_run:
         options["trace_path"] = str(db_path)
+    query_planner_payload: dict[str, Any] = {}
+    retriever = None
+    query_planner_warnings: list[str] = []
+    if enable_query_planning:
+        query_plan = plan_queries(
+            question=question,
+            task_type=str(router_plan.get("task_type") or "local_fact_qa"),
+            document_profile=document_profile or {},
+            mode=query_planner_mode,
+            env_file=query_planner_env_file,
+            model_override=query_planner_model,
+        )
+        query_planner_payload = {"enabled": True, **query_plan.to_dict()}
+        query_planner_warnings = ["query_planning_enabled", *query_plan.warnings]
+        if not dry_run:
+            retriever = IndexedDocumentRetriever(
+                repository.load_evidence_blocks(doc_id),
+                mode="bm25",
+                query_plan=query_plan,
+            )
     result = local_fact_qa(
         {"doc_id": doc_id, "question": question, "router_plan": router_plan, "options": options},
         document_repository=repository,
         trace_repository=None if dry_run else trace_repository,
+        retriever=retriever,
     )
-    return {
+    payload = {
         "status": "success" if result.get("status") == "success" else "error",
         "answer": result.get("answer") or "",
         "citations": result.get("citations") or [],
@@ -568,9 +596,12 @@ def _run_local_fact_qa(
         "tool_run_id": result.get("run_id") or "",
         "tool_trace_path": result.get("trace_path") or "",
         "structured_result": result,
-        "warnings": result.get("warnings") or [],
+        "warnings": list(dict.fromkeys(query_planner_warnings + (result.get("warnings") or []))),
         "error": result.get("error") or {},
     }
+    if query_planner_payload:
+        payload["query_planner"] = query_planner_payload
+    return payload
 
 
 def _unsupported_task(task_type: str) -> dict[str, Any]:
@@ -611,6 +642,11 @@ def _dispatch_tool(
     router_plan: dict[str, Any],
     dry_run: bool,
     run_id: str,
+    enable_query_planning: bool = False,
+    query_planner_mode: str = "hybrid",
+    document_profile: dict[str, Any] | None = None,
+    query_planner_env_file: Path | None = None,
+    query_planner_model: str | None = None,
 ) -> dict[str, Any]:
     task_type = str(router_plan.get("task_type") or "")
     if router_plan.get("status") == "error":
@@ -642,6 +678,11 @@ def _dispatch_tool(
             router_plan=router_plan,
             dry_run=dry_run,
             run_id=run_id,
+            enable_query_planning=enable_query_planning,
+            query_planner_mode=query_planner_mode,
+            document_profile=document_profile,
+            query_planner_env_file=query_planner_env_file,
+            query_planner_model=query_planner_model,
         )
     if task_type == "document_summary" and dry_run and "local_fact_qa" in set(str(tool) for tool in router_plan.get("selected_tools") or []):
         result = _run_local_fact_qa(
@@ -653,6 +694,11 @@ def _dispatch_tool(
             router_plan=router_plan,
             dry_run=dry_run,
             run_id=run_id,
+            enable_query_planning=enable_query_planning,
+            query_planner_mode=query_planner_mode,
+            document_profile=document_profile,
+            query_planner_env_file=query_planner_env_file,
+            query_planner_model=query_planner_model,
         )
         result["effective_task_type"] = "local_fact_qa"
         return result
@@ -696,7 +742,10 @@ def _finalize_qa_result(
         "ingestion_status": source.get("ingestion_status") or "",
         "ingestion_error": source.get("ingestion_error") or {},
         "used_router": bool(router_plan),
-        "used_external_api": _router_used_external_api(router_plan),
+        "used_query_planning": bool((result.get("query_planner") or {}).get("enabled")),
+        "query_planner_mode": str((result.get("query_planner") or {}).get("mode") or ""),
+        "query_count": len((result.get("query_planner") or {}).get("final_queries") or []),
+        "used_external_api": _router_used_external_api(router_plan) or _query_planner_used_external_api(result.get("query_planner") or {}),
         "used_vlm": False,
         "used_training": False,
         "used_full_e2e": False,
@@ -707,6 +756,7 @@ def _finalize_qa_result(
         "run_id": run_id,
         "source": source,
         "router_plan": router_plan,
+        "query_planner": result.get("query_planner") or {},
         "result_status": result.get("status"),
         "tools_used": result.get("tools_used") or [],
         "supporting_evidence_ids": result.get("supporting_evidence_ids") or [],
@@ -727,6 +777,12 @@ def _router_used_external_api(router_plan: dict[str, Any]) -> bool:
     if not isinstance(llm_router, dict):
         return False
     return str(llm_router.get("status") or "") in {"used", "api_error", "invalid_output", "validation_failed"}
+
+
+def _query_planner_used_external_api(query_planner: dict[str, Any]) -> bool:
+    if not query_planner:
+        return False
+    return str(query_planner.get("llm_status") or "") in {"used", "api_error", "invalid_output"}
 
 
 def run_cli(args: argparse.Namespace) -> dict[str, Any]:
@@ -942,6 +998,11 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
             router_plan=router_plan,
             dry_run=bool(args.dry_run),
             run_id=run_id,
+            enable_query_planning=bool(args.enable_query_planning),
+            query_planner_mode=str(args.query_planner_mode),
+            document_profile=profile,
+            query_planner_env_file=router_llm_env_file,
+            query_planner_model=str(args.router_llm_model or "") or None,
         )
 
         result = _base_result(
@@ -971,6 +1032,8 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
         result["error"] = tool_result.get("error") or {}
         if tool_result.get("structured_result") is not None:
             result["structured_result"] = tool_result.get("structured_result")
+        if tool_result.get("query_planner") is not None:
+            result["query_planner"] = tool_result.get("query_planner")
         if tool_result.get("tool_run_id"):
             result["tool_run_id"] = tool_result.get("tool_run_id")
         if tool_result.get("tool_trace_path"):
@@ -1006,6 +1069,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--router-llm-threshold", type=float, default=DEFAULT_LLM_ROUTER_THRESHOLD)
     parser.add_argument("--router-llm-model")
     parser.add_argument("--router-llm-env-file")
+    parser.add_argument("--enable-query-planning", action="store_true")
+    parser.add_argument("--query-planner-mode", choices=["rule", "llm", "hybrid"], default="hybrid")
     return parser
 
 

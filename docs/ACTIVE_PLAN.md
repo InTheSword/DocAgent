@@ -14,8 +14,10 @@ Phase 4D-C accepted -> Phase 4D-D deferred -> Phase 5 active
 ```text
 Phase 5 Personal-use DocAgent MVP
 -> Phase 5C-2 LLM-assisted Router fallback accepted
+-> Phase 5C-3 Query Planning + Multi-Query Retrieval implemented
 -> keep the accepted rule router as the deterministic default
 -> use external LLM only for explicitly enabled low-confidence routing fallback
+-> use the LLM query planner only for query expansion when explicitly enabled
 -> stop before Phase 5E document_summary, table_lookup, simple_calculation,
    VLM, local_fact_qa answer-quality fixes, training, and full GRPO E2E
 ```
@@ -80,6 +82,7 @@ Phase 5F-3 server smoke -> accepted
 Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> accepted
+Phase 5C-3 Query Planning + Multi-Query Retrieval -> implemented
 Phase 5E Document Summary MVP -> not_started
 Phase 5F full CLI acceptance -> not_started
 CDC -> not_started
@@ -1004,23 +1007,25 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Start Phase 5E document_summary or another named MVP closure step only
+1. Run a targeted Phase 5C-3 server smoke with `--enable-query-planning` before
+   marking query planning accepted.
+2. Start Phase 5E document_summary or another named MVP closure step only
    after explicit task approval.
-2. Keep Phase 5C-2 LLM-assisted Router fallback disabled by default unless
+3. Keep Phase 5C-2 LLM-assisted Router fallback disabled by default unless
    explicitly configured and allowed.
-3. Keep Phase 5F-3 server smoke accepted as execution-stability evidence, not
+4. Keep Phase 5F-3 server smoke accepted as execution-stability evidence, not
    online MinerU OCR or benchmark-level answer-quality evidence.
-4. Keep Phase 5F-1 server smoke accepted as execution-stability evidence, not
+5. Keep Phase 5F-1 server smoke accepted as execution-stability evidence, not
    benchmark-level answer-quality evidence.
-5. Keep Phase 4D-D deferred until MVP entrypoint, router, deterministic tools,
+6. Keep Phase 4D-D deferred until MVP entrypoint, router, deterministic tools,
    and multi-task regression are accepted.
-6. Keep Candidate-ID Reader postponed until reader-selection failures dominate
+7. Keep Candidate-ID Reader postponed until reader-selection failures dominate
    after candidate coverage issues are resolved.
-7. Keep optional full GRPO E2E postponed until candidate answer board quality
+8. Keep optional full GRPO E2E postponed until candidate answer board quality
    improves.
-8. Keep `page_children` as the default until more shard and document-type
+9. Keep `page_children` as the default until more shard and document-type
    validation supports a global default change.
-9. Keep CDC `not_started` until explicitly started.
+10. Keep CDC `not_started` until explicitly started.
 
 ## Stop Condition
 
@@ -1040,6 +1045,8 @@ Phase 4D-B1.3 server sanity accepted
 + Phase 5F-3 MinerU-backed file-to-answer implementation accepted
 + Phase 5F-3 server smoke accepted as execution stability evidence
 + Phase 5C-2 LLM-assisted Router fallback accepted after real API smoke
++ Phase 5C-3 Query Planning + Multi-Query Retrieval implemented with targeted
+  local tests
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

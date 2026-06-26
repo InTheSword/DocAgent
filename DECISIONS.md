@@ -8,6 +8,70 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-26: Phase 5C-3 Query Planning + Multi-Query Retrieval Implemented
+
+Decision: implement query planning as retrieval preprocessing between Router
+task classification and the existing retrieval / workflow path. The Router
+continues to decide task type. Query Planner only generates search-oriented
+queries and does not answer document questions.
+
+Implementation:
+
+```text
+docagent/retrieval/query_planner.py
+docagent/retrieval/query_generator_rule.py
+docagent/retrieval/query_generator_llm.py
+docagent/retrieval/query_fusion.py
+docagent/retrieval/hybrid_retriever.py
+docagent/retrieval/index_manager.py
+scripts/docagent_cli.py
+tests/test_phase5c3_query_planner.py
+```
+
+Behavior:
+
+```text
+question -> rule query extraction
+         -> optional LLM query expansion
+         -> query fusion
+         -> multi-query retrieval
+         -> existing local_fact_qa / workflow path
+```
+
+The rule extractor always runs and generates deterministic queries from
+task_type, page/table/image/statistics cues, lightweight document_profile, and
+keywords. The LLM query expander reuses the Phase 5C-2 Router LLM
+OpenAI-compatible client and configuration. It must output a JSON array of
+strings only. Missing config, API errors, invalid JSON, empty responses, or
+non-string outputs fall back to rule queries.
+
+CLI:
+
+```text
+--enable-query-planning
+--query-planner-mode {rule,llm,hybrid}
+```
+
+Boundary:
+
+- no Router classification changes;
+- no `local_fact_qa` answer-generation change;
+- no AnswerPolicy, candidate answer extraction, ingestion, VLM, training, or
+  full GRPO E2E changes;
+- no Phase 5E `document_summary`, `table_lookup`, or `simple_calculation`
+  implementation;
+- status is `implemented` until a targeted server smoke validates the real
+  configured query-planning path.
+
+Current status:
+
+```text
+Phase 5C-3 Query Planning + Multi-Query Retrieval -> implemented
+Phase 5E document_summary -> not_started
+table_lookup -> not_started
+local_fact_qa answer quality improvement -> not_started
+```
+
 ## 2026-06-26: Phase 5C-2 LLM-assisted Router Fallback Accepted
 
 Decision: accept optional LLM-assisted Router fallback after local tests,

@@ -280,6 +280,70 @@ DOCAGENT_ROUTER_LLM_TIMEOUT_SECONDS
 
 The API key must not be committed or printed. `.secrets/` is git-ignored.
 
+## Query Planning Boundary
+
+Phase 5C-3 adds retrieval query planning after Router task classification. It
+does not replace or alter the Phase 5C / 5C-2 Router contract.
+
+Pipeline position:
+
+```text
+question
+-> Router / Planner task_type decision
+-> Query Planner for retrieval queries
+-> multi-query retrieval / fusion
+-> existing tool or workflow path
+```
+
+Query Planner output:
+
+```json
+{
+  "question": "string",
+  "rule_queries": ["page 1", "table revenue"],
+  "llm_queries": ["revenue table 2022"],
+  "final_queries": ["page 1", "table revenue", "revenue table 2022"],
+  "mode": "hybrid",
+  "warnings": [],
+  "llm_status": "used"
+}
+```
+
+Rule query generation is deterministic and must always be available. It may
+use task type, explicit page/table/image/statistics cues, lightweight
+document_profile fields, and keyword extraction.
+
+The optional LLM query expander reuses the Phase 5C-2 Router LLM client and
+configuration:
+
+```text
+DOCAGENT_ROUTER_LLM_API_KEY
+DOCAGENT_ROUTER_LLM_BASE_URL
+DOCAGENT_ROUTER_LLM_MODEL
+DOCAGENT_ROUTER_LLM_TIMEOUT_SECONDS
+--router-llm-env-file .secrets/router_llm.env
+```
+
+The LLM query expander is not a Router. It may rewrite one question into
+short retrieval-oriented query strings only. It must output a JSON array of
+strings, and it must not answer the question, create citations, receive full
+document text, receive retrieved evidence, receive OCR full text, inspect
+image pixels, or call tools. Missing config, API errors, invalid JSON, empty
+arrays, or non-string outputs fall back to rule queries.
+
+Fusion policy:
+
+```text
+final_queries = rule_queries + llm_queries
+deduplicate
+limit to 8
+rule queries keep priority
+```
+
+Phase 5C-3 does not implement `document_summary`, `table_lookup`,
+`simple_calculation`, VLM, answer generation changes, or Router LLM default
+enablement.
+
 ## Routing Failure Fallback Behavior
 
 If routing fails validation:

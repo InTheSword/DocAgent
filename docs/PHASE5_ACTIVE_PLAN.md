@@ -4,7 +4,7 @@
 
 Phase 4D-C has been accepted and recorded.
 
-Current Phase 5 status after Phase 5C-2 server real API smoke:
+Current Phase 5 status after Phase 5C-3 query planning implementation:
 
 ```text
 Phase 5A architecture audit and contracts -> accepted
@@ -22,6 +22,7 @@ Phase 5F-3 server smoke -> accepted
 Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> accepted
+Phase 5C-3 Query Planning + Multi-Query Retrieval -> implemented
 Phase 5E document_summary -> not_started
 Phase 5F full CLI acceptance -> not_started
 ```
@@ -710,6 +711,68 @@ Phase 5E document_summary remains not_started.
 local_fact_qa answer quality improvement remains not_started.
 ```
 
+#### Phase 5C-3: Query Planning + Multi-Query Retrieval
+
+Implementation:
+
+```text
+docagent/retrieval/query_planner.py
+docagent/retrieval/query_generator_rule.py
+docagent/retrieval/query_generator_llm.py
+docagent/retrieval/query_fusion.py
+docagent/retrieval/hybrid_retriever.py
+docagent/retrieval/index_manager.py
+scripts/docagent_cli.py
+```
+
+Implemented behavior:
+
+```text
+question -> query planner -> rule queries / optional LLM expansion
+         -> query fusion -> multi-query retrieval -> existing workflow
+```
+
+The rule extractor always runs and generates deterministic retrieval queries
+from task type, explicit page/table/image/statistics cues, lightweight
+document_profile, and keyword extraction. The LLM query expander reuses the
+Phase 5C-2 OpenAI-compatible Router LLM config and client. It is used only as
+a Query Expansion / Query Rewriting Assistant and must output a JSON array of
+strings. It does not route tasks, answer questions, create citations, or
+receive full document text / retrieved evidence / OCR full text / image pixels.
+
+Fusion policy:
+
+```text
+final_queries = rule_queries + llm_queries
+deduplicate case-insensitively
+limit to 8 queries
+preserve rule-query priority
+fallback to rule queries when LLM is unavailable or invalid
+```
+
+CLI support:
+
+```text
+--enable-query-planning
+--query-planner-mode {rule,llm,hybrid}
+```
+
+`--query-planner-mode` defaults to `hybrid` when query planning is enabled.
+The default CLI path remains unchanged unless `--enable-query-planning` is
+provided. `summary.json` records `used_query_planning`,
+`query_planner_mode`, and `query_count`; the top-level CLI result includes a
+`query_planner` object for local_fact_qa paths.
+
+Boundary:
+
+```text
+Phase 5C-3 does not modify Router task classification.
+Phase 5C-3 does not modify local_fact_qa answer generation logic.
+Phase 5C-3 does not modify AnswerPolicy, ingestion, VLM, training, or full GRPO E2E.
+Phase 5C-3 does not implement Phase 5E document_summary, table_lookup, or simple_calculation.
+Server real API / retrieval smoke is still required before marking accepted.
+```
+
 ### Phase 5D: Reuse Hybrid RAG as local_fact_qa Tool
 
 Goal:
@@ -1256,10 +1319,12 @@ Phase 5F-2 file-to-answer ingestion integration and server smoke are accepted fo
 Phase 5F-3 MinerU-backed file-to-answer implementation and server smoke are accepted for existing MinerU output-backed execution.
 Phase 5G CLI regression baseline and server regression are accepted as execution stability evidence.
 Phase 5C-2 LLM-assisted Router fallback and server real API smoke are accepted.
+Phase 5C-3 Query Planning + Multi-Query Retrieval is implemented and awaits
+server smoke before acceptance.
 Next step requires explicit approval: Phase 5E document_summary or another
 named MVP closure step.
 Do not implement document_summary, table lookup, calculation, VLM, training, or
-full E2E as part of Phase 5C-2.
+full E2E as part of Phase 5C-3.
 ```
 
 Phase 4D-D remains deferred until after Phase 5 MVP is accepted.
