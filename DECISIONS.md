@@ -8,6 +8,96 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-27: Phase 5H Full Workflow Validation Baseline Implemented
+
+Decision: add a server-oriented full workflow smoke runner without changing
+Router classification, Query Rewriter logic, retrieval logic, local_fact_qa
+answer generation, AnswerPolicy, ingestion, VLM, training, or full GRPO E2E.
+
+Implementation:
+
+```text
+script = scripts/run_phase5h_full_workflow_smoke.py
+default_doc_id = c1fc1c5e040ec894
+default_output_root = outputs/smoke/phase5h_full_workflow
+default_execution_mode = non-dry-run
+cases = 15
+```
+
+Validated chain:
+
+```text
+user_request
+-> scripts/docagent_cli.py --question <user_request>
+-> Router
+-> Query Planner / Query Rewriter when applicable
+-> multi-query retrieval
+-> local_fact_qa or deterministic tool or structured unsupported boundary
+-> answer / citations / evidence metadata / CLI artifacts
+```
+
+Terminology:
+
+```text
+CLI field name = question
+Phase 5H semantic meaning = user_request
+allowed request forms = interrogative, imperative, declarative, extraction,
+                        calculation, summary, Chinese, ambiguous
+```
+
+Coverage:
+
+```text
+fact QA
+date request
+amount / number / percentage request
+page_lookup
+document_statistics
+summary boundary
+Chinese summary and extraction requests
+declarative request
+imperative extraction request
+calculation intent
+table_lookup boundary
+duplicate-prone short request
+```
+
+Calculation boundary:
+
+```text
+calculation_intent cases validate retrieval plus structured unsupported
+boundary behavior only.
+They do not mark table_lookup or simple_calculation as implemented.
+```
+
+Artifacts:
+
+```text
+phase5h_cases.jsonl
+phase5h_results.jsonl
+phase5h_summary.json
+preview.json
+```
+
+Status:
+
+```text
+Phase 5H Full Workflow Validation Baseline -> implemented
+server non-dry-run smoke -> not_started
+Phase 5E document_summary -> not_started
+table_lookup/simple_calculation -> not_started
+answer quality validation -> not_started
+full E2E / GRPO / VLM / training -> not_executed
+```
+
+Boundary:
+
+- this is a validation baseline, not a new answer capability;
+- pass/fail is case-type specific and does not claim benchmark answer quality;
+- unsupported summary/table/calculation cases pass only when they are
+  structured and do not crash;
+- real acceptance requires a server smoke result artifact to be recorded later.
+
 ## 2026-06-27: Phase 5C-3 Query Rewriter Schema, Retry, and Smoke Boundary
 
 Decision: keep Query Rewriter separate from Router, but use a more stable

@@ -100,6 +100,16 @@ Required input fields:
 - `question`
 - `available_tools`
 
+Field semantics:
+
+```text
+The field name remains question for CLI and Router compatibility.
+Semantically, Phase 5H treats question as user_request.
+It is not limited to interrogative questions; it may be an imperative request,
+declarative request, extraction task, calculation intent, summary request,
+Chinese request, or ambiguous short request.
+```
+
 Optional input fields:
 
 - `document_profile`
@@ -423,6 +433,65 @@ local_fact_qa validation. The multi-question query rewriter smoke runner is
 Phase 5C-3 does not implement `document_summary`, `table_lookup`,
 `simple_calculation`, VLM, answer generation changes, or Router LLM default
 enablement.
+
+## Phase 5H Full Workflow Validation Baseline
+
+Phase 5H adds a validation runner, not a Router behavior change:
+
+```text
+scripts/run_phase5h_full_workflow_smoke.py
+```
+
+The runner calls the existing CLI instead of bypassing the Router:
+
+```text
+user_request
+-> scripts/docagent_cli.py --question <user_request>
+-> Router
+-> Query Planner / Query Rewriter when applicable
+-> multi-query retrieval
+-> local_fact_qa or deterministic tool or structured unsupported boundary
+-> answer / citations / evidence metadata / CLI artifacts
+```
+
+Default request-form coverage:
+
+```text
+interrogative
+imperative
+declarative
+extraction
+calculation
+summary
+Chinese
+ambiguous
+```
+
+Validation boundary:
+
+```text
+local_fact_qa cases validate that the full non-dry-run chain can produce a
+structured answer and artifact. They do not benchmark answer quality.
+
+page_lookup and document_statistics cases validate deterministic tool routing
+and execution, not semantic query expansion.
+
+calculation-intent cases validate routing/retrieval/structured unsupported
+boundary behavior only. They do not mark table_lookup or simple_calculation as
+implemented.
+
+summary/table/calculation unsupported cases must return structured warnings or
+errors and must not crash or masquerade as fully supported capabilities.
+```
+
+Status:
+
+```text
+Phase 5H Full Workflow Validation Baseline -> implemented
+server non-dry-run smoke -> not_started
+Phase 5E document_summary -> not_started
+table_lookup/simple_calculation -> not_started
+```
 
 ## Routing Failure Fallback Behavior
 

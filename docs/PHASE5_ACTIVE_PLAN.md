@@ -4,7 +4,7 @@
 
 Phase 4D-C has been accepted and recorded.
 
-Current Phase 5 status after Phase 5C-3 query planning acceptance:
+Current Phase 5 status after Phase 5H full workflow validation baseline implementation:
 
 ```text
 Phase 5A architecture audit and contracts -> accepted
@@ -23,6 +23,7 @@ Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> accepted
 Phase 5C-3 Query Planning + Multi-Query Retrieval -> accepted
+Phase 5H Full Workflow Validation Baseline -> implemented
 Phase 5E document_summary -> not_started
 Phase 5F full CLI acceptance -> not_started
 ```
@@ -1340,6 +1341,93 @@ LLM-assisted Router fallback is accepted in Phase 5C-2 and remains disabled
 by default unless explicitly configured and allowed.
 ```
 
+### Phase 5H: Full Workflow Validation Baseline
+
+Goal:
+
+```text
+Establish a reproducible full workflow validation baseline for:
+user_request -> Router -> Query Rewriter / Query Planner -> multi-query
+retrieval -> local_fact_qa / deterministic tool / structured unsupported
+boundary -> answer, citations, metadata, and trace/CLI artifacts.
+```
+
+Implementation status:
+
+```text
+Phase 5H Full Workflow Validation Baseline -> implemented
+runner = scripts/run_phase5h_full_workflow_smoke.py
+default_doc_id = c1fc1c5e040ec894
+default_output_root = outputs/smoke/phase5h_full_workflow/<run_id>/
+default_mode = non_dry_run
+server_smoke = not_started
+```
+
+Terminology:
+
+```text
+The CLI field remains named question.
+In Phase 5H, question semantically means user_request.
+It can be an interrogative question, imperative request, declarative request,
+extraction task, calculation intent, summary request, Chinese request, or
+ambiguous short request.
+```
+
+Default case coverage:
+
+```text
+ordinary fact QA
+date request without the invoice example
+amount / number / percentage request
+page_lookup deterministic path
+document_statistics deterministic path
+summary unsupported boundary
+Chinese summary and extraction requests
+declarative request
+imperative extraction request
+calculation intent
+table_lookup boundary
+duplicate-prone short request
+```
+
+Artifacts:
+
+```text
+phase5h_cases.jsonl
+phase5h_results.jsonl
+phase5h_summary.json
+preview.json
+```
+
+Pass/fail policy:
+
+```text
+local_fact_qa / retrieval cases require CLI success, local_fact_qa tool usage,
+query planner output when semantic_query_expected is true, final_queries, and
+a non-empty answer preview in non-dry-run mode.
+
+page_lookup and document_statistics cases require correct task_type,
+deterministic tool usage, and CLI success. They do not require LLM semantic
+query expansion.
+
+calculation-intent cases validate routing/retrieval/structured unsupported
+boundary only. They do not require correct calculation answers and do not mark
+table_lookup or simple_calculation as implemented.
+
+unsupported summary/table/calculation boundaries pass only if they are
+structured and do not crash. They are not benchmark answer-quality evidence.
+```
+
+Out of scope:
+
+```text
+Phase 5E document_summary remains not_started.
+table_lookup and simple_calculation remain not_started.
+online MinerU full parsing remains not_started.
+Answer quality validation remains not_started.
+VLM, training, and full GRPO E2E are not executed.
+```
+
 ## 13. Implementation Discipline
 
 Phase 5 must avoid local trap debugging.
@@ -1378,8 +1466,13 @@ Phase 5C-3 Query Planning + Multi-Query Retrieval is accepted. Single-case LLM
 semantic query expansion smoke and multi-question Query Rewriter smoke both
 passed; full business-flow validation and answer quality benchmarking remain
 not completed.
+Phase 5H Full Workflow Validation Baseline is implemented in
+scripts/run_phase5h_full_workflow_smoke.py to validate the non-dry-run chain
+from user_request through Router, Query Planner, retrieval, local_fact_qa /
+deterministic tools, citations, and artifacts. Server smoke remains
+not_started.
 Do not implement document_summary, table lookup, calculation, VLM, training, or
-full E2E as part of Phase 5C-3.
+full E2E as part of Phase 5H.
 ```
 
 Phase 4D-D remains deferred until after Phase 5 MVP is accepted.
