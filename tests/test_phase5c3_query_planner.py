@@ -22,13 +22,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class FakeLLMClient:
-    def __init__(self, response: str) -> None:
-        self.response = response
+    def __init__(self, response: str | list[str]) -> None:
+        self.responses = [response] if isinstance(response, str) else list(response)
         self.calls: list[dict] = []
 
     def complete(self, *, system_prompt: str, user_payload: dict):
         self.calls.append({"system_prompt": system_prompt, "user_payload": user_payload})
-        return self.response
+        index = min(len(self.calls) - 1, len(self.responses) - 1)
+        return self.responses[index]
 
 
 def test_rule_extractor_page_question_generates_page_query() -> None:
@@ -69,9 +70,11 @@ def test_mock_llm_valid_json_list_is_used_in_hybrid_plan() -> None:
     assert "document_profile" not in fake.calls[0]["user_payload"]
     assert "rule_queries" not in fake.calls[0]["user_payload"]
     assert "3 to 5" in fake.calls[0]["system_prompt"]
-    assert "Do NOT simply repeat the user question" in fake.calls[0]["system_prompt"]
+    assert "Do not repeat the original question as a query" in fake.calls[0]["system_prompt"]
     assert plan.llm_status == "used"
     assert "cancer incidence Africa" in plan.llm_queries
+    assert plan.llm_retry_count == 0
+    assert len(plan.llm_attempts) == 1
     assert plan.final_queries[: len(plan.rule_queries)] == plan.rule_queries[: len(plan.final_queries)]
     assert plan.query_sources["rule"]
     assert "cancer incidence Africa" in plan.query_sources["llm"]
@@ -142,10 +145,73 @@ def test_llm_query_expander_warns_when_llm_only_repeats_rule_query() -> None:
     payload = plan.to_dict()
 
     assert plan.llm_status == "used"
+    assert plan.llm_retry_count == 1
+    assert len(payload["llm_attempts"]) == 2
     assert plan.llm_queries == ["What is the invoice date?"]
     assert plan.query_sources["llm"] == []
     assert payload["llm_unique_queries"] == []
     assert payload["llm_duplicate_queries"] == ["What is the invoice date?"]
+    assert payload["llm_added_unique_query_count"] == 0
+    assert "query_planner_llm_no_unique_queries" in plan.warnings
+
+
+def test_llm_query_expander_retries_duplicate_first_attempt_and_uses_unique_retry() -> None:
+    fake = FakeLLMClient(
+        [
+            '{"queries": ["What is the invoice date?"]}',
+            '{"queries": ["invoice issue date", "billing date", "date field"]}',
+        ]
+    )
+
+    plan = plan_queries(
+        question="What is the invoice date?",
+        task_type="local_fact_qa",
+        mode="hybrid",
+        llm_client=fake,
+    )
+    payload = plan.to_dict()
+
+    assert len(fake.calls) == 2
+    assert fake.calls[0]["user_payload"] == {"question": "What is the invoice date?"}
+    assert fake.calls[1]["user_payload"] == {
+        "question": "What is the invoice date?",
+        "avoid_exact_queries": ["what is the invoice date", "What is the invoice date?"],
+    }
+    assert "task_type" not in fake.calls[1]["user_payload"]
+    assert "document_profile" not in fake.calls[1]["user_payload"]
+    assert "RouterPlan" not in fake.calls[1]["user_payload"]
+    assert "avoid_exact_queries" in fake.calls[1]["system_prompt"]
+    assert plan.llm_retry_count == 1
+    assert payload["llm_attempts"][0]["duplicate_queries"] == ["What is the invoice date?"]
+    assert payload["llm_attempts"][0]["unique_queries"] == []
+    assert payload["llm_attempts"][1]["unique_queries"] == ["invoice issue date", "billing date", "date field"]
+    assert plan.llm_queries == ["invoice issue date", "billing date", "date field"]
+    assert plan.query_sources["llm"] == ["invoice issue date", "billing date", "date field"]
+    assert plan.llm_added_unique_query_count == 3
+    assert "query_planner_llm_no_unique_queries" not in plan.warnings
+
+
+def test_llm_query_expander_warns_when_retry_is_still_duplicate() -> None:
+    fake = FakeLLMClient(
+        [
+            '{"queries": ["What is the invoice date?"]}',
+            '{"queries": ["what is the invoice date?"]}',
+        ]
+    )
+
+    plan = plan_queries(
+        question="What is the invoice date?",
+        task_type="local_fact_qa",
+        mode="hybrid",
+        llm_client=fake,
+    )
+    payload = plan.to_dict()
+
+    assert len(fake.calls) == 2
+    assert plan.llm_retry_count == 1
+    assert plan.query_sources["llm"] == []
+    assert payload["llm_unique_queries"] == []
+    assert payload["llm_duplicate_queries"] == ["what is the invoice date?"]
     assert payload["llm_added_unique_query_count"] == 0
     assert "query_planner_llm_no_unique_queries" in plan.warnings
 
@@ -159,6 +225,8 @@ def test_llm_query_expander_records_unique_queries_added_by_fusion() -> None:
     assert payload["llm_unique_queries"] == ["invoice issue date", "billing date"]
     assert payload["llm_duplicate_queries"] == []
     assert payload["llm_added_unique_query_count"] == 2
+    assert payload["llm_retry_count"] == 0
+    assert len(payload["llm_attempts"]) == 1
     assert plan.final_queries[: len(plan.rule_queries)] == plan.rule_queries[: len(plan.final_queries)]
     assert plan.final_queries[-2:] == ["invoice issue date", "billing date"]
 
@@ -213,6 +281,10 @@ def test_llm_query_diagnostics_redact_sensitive_preview() -> None:
     assert "sk-secretvalue" not in preview
     assert "my-token" not in preview
     assert "bearer-secret" not in preview
+    attempt_preview = payload["llm_attempts"][0]["raw_response_preview"]
+    assert "sk-secretvalue" not in attempt_preview
+    assert "my-token" not in attempt_preview
+    assert "bearer-secret" not in attempt_preview
     assert len(preview) <= 1000
 
 
