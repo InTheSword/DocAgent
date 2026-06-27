@@ -123,6 +123,41 @@ queries. This phase does not change Router task classification,
 `local_fact_qa` answer logic, AnswerPolicy, ingestion, VLM logic, training, or
 full GRPO E2E.
 
+Phase 5C-3 single-case LLM semantic query expansion server smoke passed on
+AutoDL, but Phase 5C-3 is not marked as full business-flow accepted yet. The
+accepted observation is limited to one dry-run CLI case with query planning
+enabled:
+
+```text
+command = phase5c3_query_retry_smoke
+status = success
+doc_id = c1fc1c5e040ec894
+question = What date or financial year is mentioned in the shareholder notice about unclaimed dividend?
+task_type = local_fact_qa
+query_planner_mode = hybrid
+llm_status = used
+llm_retry_count = 0
+llm_added_unique_query_count = 5
+llm_queries = unclaimed dividend financial year; shareholder notice unclaimed dividend; unpaid dividend transfer date; financial year dividend notice; dividend unclaimed notice date
+warnings = query_planning_enabled; dry_run_no_answer_generated; page_metadata_inconsistent
+artifact = outputs/logs/phase5c3_query_retry_cli.json
+cli_artifact_dir = /root/autodl-tmp/docagent/outputs/cli_smoke/docagent_cli_20260627_065700_775efc88
+judgment = Phase 5C-3 single-case LLM semantic query expansion smoke passed
+```
+
+Current Query Rewriter contract:
+
+```text
+recommended LLM output schema = {"queries": ["...", "..."]}
+first attempt user payload = {"question": "..."}
+retry user payload = {"question": "...", "avoid_exact_queries": [...]}
+not sent = document_profile, task_type, RouterPlan, available_tools,
+           retrieved evidence, OCR full text, document full text
+hybrid mode = rule_queries + llm_queries -> fusion -> final_queries
+multi-question smoke runner = scripts/run_phase5c3_query_rewriter_smoke.py
+multi-question smoke status = prepared, not yet server-executed in this record
+```
+
 Phase 5C-2 accepted server real API smoke evidence:
 
 ```text
@@ -532,7 +567,8 @@ Current conclusion:
 - Phase 5C-3 Query Planning + Multi-Query Retrieval is implemented with
   Router-decoupled LLM Query Rewriter, rule structural anchors, query-source
   tracking, multi-query BM25 / dense retrieval fusion, and CLI opt-in via
-  `--enable-query-planning`.
+  `--enable-query-planning`. A single-case real API query-expansion smoke
+  passed, and the multi-question query rewriter smoke runner is prepared.
 - Phase 5E document_summary, table lookup, simple calculation, online MinerU
   OCR execution, and local_fact_qa answer quality improvement remain
   not_started.

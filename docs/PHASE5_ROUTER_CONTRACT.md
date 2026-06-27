@@ -308,6 +308,11 @@ Query Planner output:
     "rule": ["page 1", "table revenue"],
     "llm": ["revenue table 2022"]
   },
+  "llm_unique_queries": ["revenue table 2022"],
+  "llm_duplicate_queries": [],
+  "llm_added_unique_query_count": 1,
+  "llm_retry_count": 0,
+  "llm_attempts": [],
   "mode": "hybrid",
   "warnings": [],
   "llm_status": "used"
@@ -329,7 +334,8 @@ DOCAGENT_ROUTER_LLM_TIMEOUT_SECONDS
 --router-llm-env-file .secrets/router_llm.env
 ```
 
-The LLM Query Rewriter is not a Router. Its user payload contains only:
+The LLM Query Rewriter is not a Router. Its first-attempt user payload contains
+only:
 
 ```json
 {
@@ -337,13 +343,34 @@ The LLM Query Rewriter is not a Router. Its user payload contains only:
 }
 ```
 
+If the first attempt produces only duplicate queries relative to the rule
+queries / original question, the duplicate repair retry may use only:
+
+```json
+{
+  "question": "string",
+  "avoid_exact_queries": ["string"]
+}
+```
+
 It may rewrite one question into short retrieval-oriented query strings only.
-It must output a JSON array of strings and must not output task_type,
+The recommended LLM output schema is a JSON object:
+
+```json
+{
+  "queries": ["short retrieval query", "another retrieval query"]
+}
+```
+
+The parser remains compatible with top-level JSON arrays, fenced arrays,
+explanatory text containing an array, `queries/final_queries/retrieval_queries`
+objects, and safe loose query objects. The LLM must not output task_type,
 selected_tools, document_profile, rule_queries, RouterPlan, explanations,
 citations, or answers. It must not receive full document text, retrieved
 evidence, OCR full text, image pixels, user file content, or tool state.
-Missing config, API errors, invalid JSON, empty arrays, non-string outputs, or
-detected input-payload echo fall back to rule queries.
+Missing config, API errors, invalid JSON, empty arrays, non-string outputs,
+detected input-payload echo, or duplicate-only LLM output fall back to rule
+queries or trigger at most one duplicate repair retry.
 
 Fusion policy:
 
@@ -354,6 +381,24 @@ limit to 8
 rule queries keep priority
 query_sources records which final queries came from rule or llm
 ```
+
+Single-case server smoke evidence:
+
+```text
+command = phase5c3_query_retry_smoke
+status = success
+doc_id = c1fc1c5e040ec894
+question = What date or financial year is mentioned in the shareholder notice about unclaimed dividend?
+llm_status = used
+llm_retry_count = 0
+llm_added_unique_query_count = 5
+judgment = Phase 5C-3 single-case LLM semantic query expansion smoke passed
+```
+
+This evidence is not a full business-flow acceptance, answer-quality
+benchmark, multi-document benchmark, or non-dry-run local_fact_qa validation.
+The multi-question query rewriter smoke runner is
+`scripts/run_phase5c3_query_rewriter_smoke.py`.
 
 Phase 5C-3 does not implement `document_summary`, `table_lookup`,
 `simple_calculation`, VLM, answer generation changes, or Router LLM default

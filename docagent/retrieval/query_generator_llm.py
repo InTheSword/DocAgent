@@ -310,6 +310,6 @@ def _error_message(error_type: str) -> str:
     messages = {
         "query_planner_llm_echoed_payload": "Query rewriter echoed the input payload; using rule queries only.",
         "query_planner_llm_empty_queries": "Query rewriter returned no usable query strings; using rule queries only.",
-        "query_planner_llm_invalid_output": "Query rewriter did not return a valid JSON array of strings.",
+        "query_planner_llm_invalid_output": "Query rewriter did not return a valid query list.",
     }
     return messages.get(error_type, "Query rewriter output could not be used; using rule queries only.")

@@ -16,6 +16,7 @@ from docagent.retrieval.query_planner import plan_queries
 from docagent.schemas import EvidenceBlock, EvidenceLocation
 from docagent.storage.db import connect
 from docagent.storage.repositories import DocumentRepository
+from scripts.run_phase5c3_query_rewriter_smoke import SmokeCase, case_pass_reason, default_cases
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -430,6 +431,66 @@ def test_cli_hybrid_query_planner_records_rule_fallback_when_llm_unconfigured(tm
     summary = json.loads(Path(payload["artifact_dir"], "summary.json").read_text(encoding="utf-8"))
     assert summary["used_query_planning"] is True
     assert summary["query_planner_mode"] == "hybrid"
+
+
+def test_phase5c3_query_rewriter_smoke_cases_cover_required_categories() -> None:
+    cases = default_cases()
+    categories = {case.category for case in cases}
+
+    assert len(cases) >= 10
+    assert "unclaimed_dividend_shareholder_notice" in categories
+    assert "date" in categories
+    assert "amount_number_percentage" in categories
+    assert "page_lookup" in categories
+    assert "document_statistics" in categories
+    assert "table_related" in categories
+    assert "summary_broad" in categories
+    assert "ambiguous_summary" in categories
+    assert "chinese_or_mixed" in categories
+    assert "short_duplicate_prone" in categories
+
+
+def test_phase5c3_query_rewriter_smoke_case_classification() -> None:
+    semantic_case = SmokeCase("semantic", "What is the date?", "short_duplicate_prone", True)
+    deterministic_case = SmokeCase("stats", "How many pages does this document have?", "document_statistics", False)
+
+    passed, reason = case_pass_reason(
+        {
+            "status": "success",
+            "query_planner": {
+                "mode": "hybrid",
+                "llm_status": "used",
+                "llm_queries": ["effective date"],
+                "llm_unique_queries": ["effective date"],
+                "llm_added_unique_query_count": 1,
+                "query_sources": {"llm": ["effective date"]},
+            },
+        },
+        semantic_case,
+    )
+    assert passed is True
+    assert reason == "llm_semantic_expansion_observed"
+
+    passed, reason = case_pass_reason({"status": "success"}, deterministic_case)
+    assert passed is True
+    assert reason == "query_planner_not_invoked_for_deterministic_or_unsupported_task"
+
+    passed, reason = case_pass_reason(
+        {
+            "status": "success",
+            "query_planner": {
+                "mode": "hybrid",
+                "llm_status": "used",
+                "llm_queries": ["What is the date?"],
+                "llm_unique_queries": [],
+                "llm_added_unique_query_count": 0,
+                "query_sources": {"llm": []},
+            },
+        },
+        semantic_case,
+    )
+    assert passed is False
+    assert reason == "llm_unique_queries_empty"
 
 
 def _block(block_id: str, text: str) -> EvidenceBlock:

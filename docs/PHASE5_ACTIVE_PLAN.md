@@ -738,11 +738,16 @@ The rule extractor always runs and generates deterministic retrieval queries
 from the question, optional router task_type, explicit page/table/image/
 statistics cues, and keyword extraction. The LLM Query Rewriter reuses the
 Phase 5C-2 OpenAI-compatible Router LLM config and client, but it receives
-only `question` as user payload. It does not receive task_type,
-document_profile, rule_queries, RouterPlan, retrieved evidence, OCR full text,
-document full text, image pixels, or tool state. It must output retrieval
-query strings only and must not route tasks, select tools, answer questions,
-create citations, or echo the input payload.
+only `question` on the first attempt and only `question + avoid_exact_queries`
+on the duplicate-repair retry. It does not receive task_type, document_profile,
+rule_queries, RouterPlan, available_tools, retrieved evidence, OCR full text,
+document full text, image pixels, or tool state. It must output retrieval query
+strings only and must not route tasks, select tools, answer questions, create
+citations, or echo the input payload. The recommended LLM output schema is now
+`{"queries": ["...", "..."]}`; the parser remains backward-compatible with
+top-level JSON arrays, fenced arrays, explanatory text containing arrays,
+`queries/final_queries/retrieval_queries` objects, and safe loose query
+objects.
 
 Fusion policy:
 
@@ -773,9 +778,29 @@ LLM rewriter diagnostics:
 ```text
 llm_status = used / skipped / not_configured / invalid_output / echoed_payload / api_error
 llm_error_type = query_planner_llm_invalid_output | query_planner_llm_echoed_payload | query_planner_llm_empty_queries | query_planner_llm_api_error | query_planner_llm_not_configured
+llm_retry_count records whether a duplicate repair retry was used.
+llm_attempts records attempt-level status, redacted raw preview, parsed query preview, duplicate queries, unique queries, and normalization warnings.
+llm_unique_queries, llm_duplicate_queries, and llm_added_unique_query_count record whether LLM queries contributed new final retrieval queries.
 llm_raw_response_preview is capped and redacted.
 llm_parsed_queries_preview records parsed query strings only.
 llm_normalization_warnings records filtering, truncation, duplicate removal, or compatible object parsing.
+```
+
+Server smoke and broader-test boundary:
+
+```text
+single_case_command = phase5c3_query_retry_smoke
+single_case_status = success
+doc_id = c1fc1c5e040ec894
+question = What date or financial year is mentioned in the shareholder notice about unclaimed dividend?
+llm_status = used
+llm_retry_count = 0
+llm_added_unique_query_count = 5
+judgment = Phase 5C-3 single-case LLM semantic query expansion smoke passed
+multi_question_runner = scripts/run_phase5c3_query_rewriter_smoke.py
+multi_question_runner_status = prepared
+full_business_flow_acceptance = not_started
+answer_quality_benchmark = not_started
 ```
 
 Boundary:
@@ -785,7 +810,9 @@ Phase 5C-3 does not modify Router task classification.
 Phase 5C-3 does not modify local_fact_qa answer generation logic.
 Phase 5C-3 does not modify AnswerPolicy, ingestion, VLM, training, or full GRPO E2E.
 Phase 5C-3 does not implement Phase 5E document_summary, table_lookup, or simple_calculation.
-Server real API / retrieval smoke is still required before marking accepted.
+The single-case real API query-expansion smoke passed, but full business-flow
+acceptance remains not_started pending broader multi-question and non-dry-run
+coverage.
 ```
 
 ### Phase 5D: Reuse Hybrid RAG as local_fact_qa Tool
@@ -1334,10 +1361,9 @@ Phase 5F-2 file-to-answer ingestion integration and server smoke are accepted fo
 Phase 5F-3 MinerU-backed file-to-answer implementation and server smoke are accepted for existing MinerU output-backed execution.
 Phase 5G CLI regression baseline and server regression are accepted as execution stability evidence.
 Phase 5C-2 LLM-assisted Router fallback and server real API smoke are accepted.
-Phase 5C-3 Query Planning + Multi-Query Retrieval is implemented and awaits
-server smoke before acceptance.
-Next step requires explicit approval: Phase 5E document_summary or another
-named MVP closure step.
+Phase 5C-3 Query Planning + Multi-Query Retrieval is implemented. A single-case
+LLM semantic query expansion server smoke passed, and the multi-question smoke
+runner is prepared; full business-flow acceptance remains not_started.
 Do not implement document_summary, table lookup, calculation, VLM, training, or
 full E2E as part of Phase 5C-3.
 ```

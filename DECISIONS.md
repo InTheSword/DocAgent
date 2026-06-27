@@ -8,6 +8,53 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-27: Phase 5C-3 Query Rewriter Schema, Retry, and Smoke Boundary
+
+Decision: keep Query Rewriter separate from Router, but use a more stable
+OpenAI-compatible output contract and one duplicate-repair retry for semantic
+query expansion.
+
+Current contract:
+
+```text
+recommended LLM output schema = {"queries": ["...", "..."]}
+first attempt input = {"question": "..."}
+retry input = {"question": "...", "avoid_exact_queries": [...]}
+not sent = document_profile, task_type, RouterPlan, available_tools,
+           retrieved evidence, OCR full text, document full text
+```
+
+Hybrid query planning remains:
+
+```text
+rule_queries + llm_queries -> fusion -> final_queries
+rule query priority preserved
+query_sources records which final queries came from rule or llm
+```
+
+Server evidence:
+
+```text
+command = phase5c3_query_retry_smoke
+status = success
+doc_id = c1fc1c5e040ec894
+question = What date or financial year is mentioned in the shareholder notice about unclaimed dividend?
+llm_status = used
+llm_retry_count = 0
+llm_added_unique_query_count = 5
+artifact = outputs/logs/phase5c3_query_retry_cli.json
+```
+
+Boundary:
+
+- this is accepted as a single-case LLM semantic query expansion smoke;
+- it is not a full business-flow acceptance or answer-quality benchmark;
+- multi-question query rewriter smoke is prepared in
+  `scripts/run_phase5c3_query_rewriter_smoke.py` for broader stability
+  observation;
+- no Router task classification, local_fact_qa answer logic, AnswerPolicy,
+  ingestion, VLM, training, or full GRPO E2E changes are part of this decision.
+
 ## 2026-06-26: Phase 5C-3 Query Rewriter / Query Planner Decoupled
 
 Decision: refactor Phase 5C-3 query planning responsibilities so the Router
