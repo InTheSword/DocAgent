@@ -16,12 +16,11 @@ def reciprocal_rank_fusion(
             candidate.sources.append(source)
             candidate.ranks[source] = rank
             candidate.rrf_score = (candidate.rrf_score or 0.0) + 1.0 / (rrf_k + rank)
-            if source == "bm25":
-                candidate.bm25_score = score
-            elif source == "dense":
-                candidate.dense_score = score
+            if source == "bm25" or source.startswith("bm25:"):
+                candidate.bm25_score = max(candidate.bm25_score or 0.0, score)
+            elif source == "dense" or source.startswith("dense:"):
+                candidate.dense_score = max(candidate.dense_score or 0.0, score)
     return sorted(
         by_block_id.values(),
         key=lambda item: (-(item.rrf_score or 0.0), min(item.ranks.values()), item.block.block_id),
     )
-

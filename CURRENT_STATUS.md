@@ -101,6 +101,90 @@ fail validation. Invalid JSON, illegal task type, unavailable tool selection
 with no safe fallback, visual-understanding requests, missing config, and API
 errors fall back to the rule plan.
 
+Phase 5C-3 Query Planning + Multi-Query Retrieval is accepted in
+`docagent/retrieval/query_planner.py`,
+`docagent/retrieval/query_generator_rule.py`,
+`docagent/retrieval/query_generator_llm.py`, and
+`docagent/retrieval/query_fusion.py`, with retrieval integration in
+`docagent/retrieval/hybrid_retriever.py`,
+`docagent/retrieval/index_manager.py`, and optional CLI exposure in
+`scripts/docagent_cli.py`. The rule extractor always produces deterministic
+structural anchor queries from the question, optional router task type,
+page/table/image/statistics signals, and keywords. The LLM Query Rewriter is
+decoupled from Router context: it reuses the Phase 5C-2 OpenAI-compatible
+Router LLM configuration and client, but receives only `question` and must
+output retrieval query strings. It does not receive task_type,
+document_profile, rule_queries, RouterPlan, full document text, retrieved
+evidence, OCR full text, image pixels, or tool state. Query fusion deduplicates
+rule and LLM queries, caps the final list at 8, preserves rule-query priority,
+and records `query_sources`. If LLM config is missing, the API fails, output is
+invalid/empty, or the LLM echoes the input payload, retrieval falls back to rule
+queries. This phase does not change Router task classification,
+`local_fact_qa` answer logic, AnswerPolicy, ingestion, VLM logic, training, or
+full GRPO E2E.
+
+Phase 5C-3 single-case LLM semantic query expansion server smoke and
+multi-question Query Rewriter smoke passed on AutoDL. Phase 5C-3 Query
+Rewriter / Query Planner is accepted for query-planning execution stability.
+The acceptance boundary does not include full business workflow validation,
+non-dry-run Router + Query Planning + Retrieval + local_fact_qa validation, or
+answer quality benchmarking.
+
+```text
+command = phase5c3_query_retry_smoke
+status = success
+doc_id = c1fc1c5e040ec894
+question = What date or financial year is mentioned in the shareholder notice about unclaimed dividend?
+task_type = local_fact_qa
+query_planner_mode = hybrid
+llm_status = used
+llm_retry_count = 0
+llm_added_unique_query_count = 5
+llm_queries = unclaimed dividend financial year; shareholder notice unclaimed dividend; unpaid dividend transfer date; financial year dividend notice; dividend unclaimed notice date
+warnings = query_planning_enabled; dry_run_no_answer_generated; page_metadata_inconsistent
+artifact = outputs/logs/phase5c3_query_retry_cli.json
+cli_artifact_dir = /root/autodl-tmp/docagent/outputs/cli_smoke/docagent_cli_20260627_065700_775efc88
+judgment = Phase 5C-3 single-case LLM semantic query expansion smoke passed
+```
+
+Multi-question Query Rewriter server smoke evidence:
+
+```text
+command = phase5c3_query_rewriter_multi_smoke
+status = success
+run_id = phase5c3_query_rewriter_20260627_080409_7bc51dc6
+artifact_dir = outputs/smoke/phase5c3_query_rewriter/phase5c3_query_rewriter_20260627_080409_7bc51dc6
+case_count = 10
+passed_count = 10
+failed_count = 0
+semantic_case_count = 7
+semantic_passed_count = 7
+failure_reasons = {}
+task_type_distribution = local_fact_qa:8, page_lookup:1, document_statistics:1
+router_task_type_distribution = local_fact_qa:8, page_lookup:1, document_statistics:1
+artifacts = query_rewriter_cases.jsonl; query_rewriter_results.jsonl; query_rewriter_summary.json; preview.json
+judgment = Phase 5C-3 multi-question Query Rewriter smoke passed
+```
+
+Current Query Rewriter contract:
+
+```text
+recommended LLM output schema = {"queries": ["...", "..."]}
+first attempt user payload = {"question": "..."}
+retry user payload = {"question": "...", "avoid_exact_queries": [...]}
+not sent = document_profile, task_type, RouterPlan, available_tools,
+           retrieved evidence, OCR full text, document full text
+hybrid mode = rule_queries + llm_queries -> fusion -> final_queries
+query_sources.rule / query_sources.llm record final-query source
+multi-query retrieval executes the final_queries list and fuses retrieval results with RRF
+multi-question smoke runner = scripts/run_phase5c3_query_rewriter_smoke.py
+multi-question smoke status = passed
+full business workflow validation = not completed
+non-dry-run Router + Query Planning + Retrieval + local_fact_qa validation = not completed
+answer quality validation = not completed
+full E2E / GRPO / VLM / training = not executed
+```
+
 Phase 5C-2 accepted server real API smoke evidence:
 
 ```text
@@ -192,6 +276,7 @@ Phase 5F-3 server smoke -> accepted
 Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> accepted
+Phase 5C-3 Query Planning + Multi-Query Retrieval -> accepted
 Phase 5E Document Summary MVP -> not_started
 Phase 5F full CLI acceptance -> not_started
 CDC -> not_started
@@ -506,6 +591,11 @@ Current conclusion:
 - Phase 5G CLI regression baseline and server regression are accepted as
   execution-stability evidence, not benchmark answer-quality evidence.
 - Phase 5C-2 LLM-assisted Router fallback is accepted after real API smoke.
+- Phase 5C-3 Query Planning + Multi-Query Retrieval is accepted with
+  Router-decoupled LLM Query Rewriter, rule structural anchors, query-source
+  tracking, multi-query BM25 / dense retrieval fusion, and CLI opt-in via
+  `--enable-query-planning`. Single-case real API query-expansion smoke and
+  multi-question Query Rewriter smoke both passed.
 - Phase 5E document_summary, table lookup, simple calculation, online MinerU
   OCR execution, and local_fact_qa answer quality improvement remain
   not_started.

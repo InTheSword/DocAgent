@@ -280,6 +280,150 @@ DOCAGENT_ROUTER_LLM_TIMEOUT_SECONDS
 
 The API key must not be committed or printed. `.secrets/` is git-ignored.
 
+## Query Planning Boundary
+
+Phase 5C-3 adds retrieval query planning after Router task classification. It
+does not replace or alter the Phase 5C / 5C-2 Router contract.
+
+Pipeline position:
+
+```text
+question
+-> Router / Planner task_type decision
+-> Rule Query Extractor for structural anchor queries
+-> optional LLM Query Rewriter for semantic retrieval queries
+-> multi-query retrieval / fusion
+-> existing tool or workflow path
+```
+
+Query Planner output:
+
+```json
+{
+  "question": "string",
+  "rule_queries": ["page 1", "table revenue"],
+  "llm_queries": ["revenue table 2022"],
+  "final_queries": ["page 1", "table revenue", "revenue table 2022"],
+  "query_sources": {
+    "rule": ["page 1", "table revenue"],
+    "llm": ["revenue table 2022"]
+  },
+  "llm_unique_queries": ["revenue table 2022"],
+  "llm_duplicate_queries": [],
+  "llm_added_unique_query_count": 1,
+  "llm_retry_count": 0,
+  "llm_attempts": [],
+  "mode": "hybrid",
+  "warnings": [],
+  "llm_status": "used"
+}
+```
+
+Rule query generation is deterministic and must always be available. It may
+use the question, optional router task type, explicit page/table/image/
+statistics cues, and keyword extraction. It does not depend on LLM output.
+
+The optional LLM Query Rewriter reuses the Phase 5C-2 Router LLM client and
+configuration:
+
+```text
+DOCAGENT_ROUTER_LLM_API_KEY
+DOCAGENT_ROUTER_LLM_BASE_URL
+DOCAGENT_ROUTER_LLM_MODEL
+DOCAGENT_ROUTER_LLM_TIMEOUT_SECONDS
+--router-llm-env-file .secrets/router_llm.env
+```
+
+The LLM Query Rewriter is not a Router. Its first-attempt user payload contains
+only:
+
+```json
+{
+  "question": "string"
+}
+```
+
+If the first attempt produces only duplicate queries relative to the rule
+queries / original question, the duplicate repair retry may use only:
+
+```json
+{
+  "question": "string",
+  "avoid_exact_queries": ["string"]
+}
+```
+
+It may rewrite one question into short retrieval-oriented query strings only.
+The recommended LLM output schema is a JSON object:
+
+```json
+{
+  "queries": ["short retrieval query", "another retrieval query"]
+}
+```
+
+The parser remains compatible with top-level JSON arrays, fenced arrays,
+explanatory text containing an array, `queries/final_queries/retrieval_queries`
+objects, and safe loose query objects. The LLM must not output task_type,
+selected_tools, document_profile, rule_queries, RouterPlan, explanations,
+citations, or answers. It must not receive full document text, retrieved
+evidence, OCR full text, image pixels, user file content, or tool state.
+Missing config, API errors, invalid JSON, empty arrays, non-string outputs,
+detected input-payload echo, or duplicate-only LLM output fall back to rule
+queries or trigger at most one duplicate repair retry.
+
+Fusion policy:
+
+```text
+final_queries = rule_queries + llm_queries
+deduplicate
+limit to 8
+rule queries keep priority
+query_sources records which final queries came from rule or llm
+```
+
+Single-case server smoke evidence:
+
+```text
+command = phase5c3_query_retry_smoke
+status = success
+doc_id = c1fc1c5e040ec894
+question = What date or financial year is mentioned in the shareholder notice about unclaimed dividend?
+llm_status = used
+llm_retry_count = 0
+llm_added_unique_query_count = 5
+judgment = Phase 5C-3 single-case LLM semantic query expansion smoke passed
+```
+
+Multi-question Query Rewriter smoke evidence:
+
+```text
+command = phase5c3_query_rewriter_multi_smoke
+status = success
+run_id = phase5c3_query_rewriter_20260627_080409_7bc51dc6
+artifact_dir = outputs/smoke/phase5c3_query_rewriter/phase5c3_query_rewriter_20260627_080409_7bc51dc6
+case_count = 10
+passed_count = 10
+failed_count = 0
+semantic_case_count = 7
+semantic_passed_count = 7
+failure_reasons = {}
+task_type_distribution = local_fact_qa:8, page_lookup:1, document_statistics:1
+router_task_type_distribution = local_fact_qa:8, page_lookup:1, document_statistics:1
+artifacts = query_rewriter_cases.jsonl; query_rewriter_results.jsonl; query_rewriter_summary.json; preview.json
+judgment = Phase 5C-3 multi-question Query Rewriter smoke passed
+```
+
+Phase 5C-3 Query Rewriter / Query Planner is accepted for query-planning
+execution stability. This evidence is not full business-flow validation,
+answer-quality benchmark, multi-document benchmark, or non-dry-run
+local_fact_qa validation. The multi-question query rewriter smoke runner is
+`scripts/run_phase5c3_query_rewriter_smoke.py`.
+
+Phase 5C-3 does not implement `document_summary`, `table_lookup`,
+`simple_calculation`, VLM, answer generation changes, or Router LLM default
+enablement.
+
 ## Routing Failure Fallback Behavior
 
 If routing fails validation:

@@ -8,6 +8,190 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-27: Phase 5C-3 Query Rewriter Schema, Retry, and Smoke Boundary
+
+Decision: keep Query Rewriter separate from Router, but use a more stable
+OpenAI-compatible output contract and one duplicate-repair retry for semantic
+query expansion.
+
+Current contract:
+
+```text
+recommended LLM output schema = {"queries": ["...", "..."]}
+first attempt input = {"question": "..."}
+retry input = {"question": "...", "avoid_exact_queries": [...]}
+not sent = document_profile, task_type, RouterPlan, available_tools,
+           retrieved evidence, OCR full text, document full text
+```
+
+Hybrid query planning remains:
+
+```text
+rule_queries + llm_queries -> fusion -> final_queries
+rule query priority preserved
+query_sources records which final queries came from rule or llm
+```
+
+Server evidence:
+
+```text
+command = phase5c3_query_retry_smoke
+status = success
+doc_id = c1fc1c5e040ec894
+question = What date or financial year is mentioned in the shareholder notice about unclaimed dividend?
+llm_status = used
+llm_retry_count = 0
+llm_added_unique_query_count = 5
+artifact = outputs/logs/phase5c3_query_retry_cli.json
+```
+
+Multi-question server evidence:
+
+```text
+command = phase5c3_query_rewriter_multi_smoke
+status = success
+run_id = phase5c3_query_rewriter_20260627_080409_7bc51dc6
+artifact_dir = outputs/smoke/phase5c3_query_rewriter/phase5c3_query_rewriter_20260627_080409_7bc51dc6
+case_count = 10
+passed_count = 10
+failed_count = 0
+semantic_case_count = 7
+semantic_passed_count = 7
+failure_reasons = {}
+task_type_distribution = local_fact_qa:8, page_lookup:1, document_statistics:1
+router_task_type_distribution = local_fact_qa:8, page_lookup:1, document_statistics:1
+artifacts = query_rewriter_cases.jsonl; query_rewriter_results.jsonl; query_rewriter_summary.json; preview.json
+```
+
+Status:
+
+```text
+Phase 5C-3 single-case LLM semantic query expansion smoke -> accepted
+Phase 5C-3 multi-question Query Rewriter smoke -> accepted
+Phase 5C-3 Query Rewriter / Query Planner -> accepted
+```
+
+Boundary:
+
+- this is accepted as query-planning execution stability evidence;
+- it is not a full business-flow validation or answer-quality benchmark;
+- multi-question query rewriter smoke is prepared in
+  `scripts/run_phase5c3_query_rewriter_smoke.py` and has passed on the
+  recorded server run;
+- full business workflow validation, non-dry-run Router + Query Planning +
+  Retrieval + local_fact_qa validation, answer-quality validation, full E2E,
+  GRPO, VLM, and training remain not completed / not executed;
+- no Router task classification, local_fact_qa answer logic, AnswerPolicy,
+  ingestion, VLM, training, or full GRPO E2E changes are part of this decision.
+
+## 2026-06-26: Phase 5C-3 Query Rewriter / Query Planner Decoupled
+
+Decision: refactor Phase 5C-3 query planning responsibilities so the Router
+continues to own task classification, the LLM Query Rewriter only generates
+semantic retrieval queries, the Rule Query Extractor generates structural
+anchor queries, and Fusion combines the two query sources.
+
+Refined design:
+
+```text
+Router -> task_type
+Rule Query Extractor -> structural anchors from question + optional task_type
+LLM Query Rewriter -> semantic retrieval queries from question only
+Query Fusion -> final_queries and query_sources
+```
+
+LLM Query Rewriter boundary:
+
+```text
+input = {"question": "..."}
+output = JSON array of strings
+not sent = task_type, document_profile, rule_queries, RouterPlan,
+           available_tools, retrieved evidence, OCR full text, document full text,
+           image pixels, tool state
+```
+
+Echo handling:
+
+```text
+If the LLM returns an object that echoes input/router-like payload fields such
+as question, task_type, document_profile, or rule_queries without a compatible
+queries/final_queries/retrieval_queries list, the output is rejected with
+query_planner_llm_echoed_payload and retrieval falls back to rule queries.
+```
+
+Boundary:
+
+- no Router task classification changes;
+- no local_fact_qa answer-generation changes;
+- no AnswerPolicy, candidate answer extraction, ingestion, VLM, training, or
+  full GRPO E2E changes;
+- Phase 5E document_summary, table_lookup, and simple_calculation remain
+  not_started.
+
+## 2026-06-26: Phase 5C-3 Query Planning + Multi-Query Retrieval Implemented
+
+Decision: implement query planning as retrieval preprocessing between Router
+task classification and the existing retrieval / workflow path. The Router
+continues to decide task type. Query Planner only generates search-oriented
+queries and does not answer document questions.
+
+Implementation:
+
+```text
+docagent/retrieval/query_planner.py
+docagent/retrieval/query_generator_rule.py
+docagent/retrieval/query_generator_llm.py
+docagent/retrieval/query_fusion.py
+docagent/retrieval/hybrid_retriever.py
+docagent/retrieval/index_manager.py
+scripts/docagent_cli.py
+tests/test_phase5c3_query_planner.py
+```
+
+Behavior:
+
+```text
+question -> rule query extraction
+         -> optional LLM query expansion
+         -> query fusion
+         -> multi-query retrieval
+         -> existing local_fact_qa / workflow path
+```
+
+The rule extractor always runs and generates deterministic queries from
+task_type, page/table/image/statistics cues, lightweight document_profile, and
+keywords. The LLM query expander reuses the Phase 5C-2 Router LLM
+OpenAI-compatible client and configuration. It must output a JSON array of
+strings only. Missing config, API errors, invalid JSON, empty responses, or
+non-string outputs fall back to rule queries.
+
+CLI:
+
+```text
+--enable-query-planning
+--query-planner-mode {rule,llm,hybrid}
+```
+
+Boundary:
+
+- no Router classification changes;
+- no `local_fact_qa` answer-generation change;
+- no AnswerPolicy, candidate answer extraction, ingestion, VLM, training, or
+  full GRPO E2E changes;
+- no Phase 5E `document_summary`, `table_lookup`, or `simple_calculation`
+  implementation;
+- status is `implemented` until a targeted server smoke validates the real
+  configured query-planning path.
+
+Current status:
+
+```text
+Phase 5C-3 Query Planning + Multi-Query Retrieval -> implemented
+Phase 5E document_summary -> not_started
+table_lookup -> not_started
+local_fact_qa answer quality improvement -> not_started
+```
+
 ## 2026-06-26: Phase 5C-2 LLM-assisted Router Fallback Accepted
 
 Decision: accept optional LLM-assisted Router fallback after local tests,
