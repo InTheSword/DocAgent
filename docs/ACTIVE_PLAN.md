@@ -15,6 +15,7 @@ Phase 4D-C accepted -> Phase 4D-D deferred -> Phase 5 active
 Phase 5 Personal-use DocAgent MVP
 -> Phase 5C-2 LLM-assisted Router fallback accepted
 -> Phase 5C-3 Query Planning + Multi-Query Retrieval accepted
+-> Phase 5H Full Workflow Validation Baseline accepted
 -> keep the accepted rule router as the deterministic default
 -> use external LLM only for explicitly enabled low-confidence routing fallback
 -> use the LLM query planner only for query expansion when explicitly enabled
@@ -83,6 +84,7 @@ Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> accepted
 Phase 5C-3 Query Planning + Multi-Query Retrieval -> accepted
+Phase 5H Full Workflow Validation Baseline -> accepted
 Phase 5E Document Summary MVP -> not_started
 Phase 5F full CLI acceptance -> not_started
 CDC -> not_started
@@ -912,6 +914,52 @@ Phase 5E document_summary remains not_started. Phase 5C-2 LLM-assisted Router
 fallback and Phase 5G server regression were accepted later.
 ```
 
+Phase 5H accepted full workflow validation baseline:
+
+```text
+branch = codex/phase5h-full-workflow-validation-baseline
+entrypoint = scripts/run_phase5h_full_workflow_smoke.py
+default_doc_id = c1fc1c5e040ec894
+default_output_root = outputs/smoke/phase5h_full_workflow
+default_mode = non_dry_run
+case_count = 15
+status = accepted
+server_smoke = accepted
+server_smoke_run_id = phase5h_full_workflow_20260627_102757_80a9b5bf
+server_smoke_status = success
+server_smoke_passed_count = 15
+server_smoke_failed_count = 0
+server_smoke_non_dry_run_cases = 15
+server_smoke_json_valid_count = 15
+server_smoke_artifact_write_count = 15
+server_smoke_used_external_api = true
+server_smoke_used_vlm = false
+server_smoke_used_training = false
+server_smoke_used_full_e2e = false
+server_smoke_artifact_dir = /root/autodl-tmp/docagent/outputs/smoke/phase5h_full_workflow/phase5h_full_workflow_20260627_102757_80a9b5bf
+```
+
+Phase 5H validates the existing chain:
+
+```text
+user_request -> CLI --question -> Router -> Query Planner -> multi-query
+retrieval -> local_fact_qa / deterministic tool / structured unsupported
+boundary -> answer, citations, metadata, and artifacts
+```
+
+The CLI field is still named `question`, but Phase 5H treats it semantically
+as `user_request`. It can be an interrogative question, imperative request,
+declarative request, extraction task, calculation intent, summary request,
+Chinese request, or ambiguous short request.
+
+Calculation-intent cases are retrieval plus unsupported-boundary validation
+only. They do not mean `table_lookup` or `simple_calculation` is implemented.
+
+Phase 5H validates full workflow execution stability, not answer quality.
+Golden QA benchmark, answer quality validation, document_summary,
+table_lookup/simple_calculation, online MinerU full parsing, VLM, training,
+and full GRPO E2E remain not completed or not_started as applicable.
+
 Phase 4D-C scaffold / command preparation:
 
 ```text
@@ -1010,23 +1058,25 @@ absolute_path_hit_count = 0
 1. Keep Phase 5C-3 Query Planning + Multi-Query Retrieval accepted as
    query-planning execution-stability evidence after the single-case and
    multi-question server smokes.
-2. Start Phase 5E document_summary or another named MVP closure step only
+2. Keep Phase 5H accepted as full workflow execution-stability evidence, not
+   answer-quality or golden-benchmark evidence.
+3. Start Phase 5E document_summary or another named MVP closure step only
    after explicit task approval.
-3. Keep Phase 5C-2 LLM-assisted Router fallback disabled by default unless
+4. Keep Phase 5C-2 LLM-assisted Router fallback disabled by default unless
    explicitly configured and allowed.
-4. Keep Phase 5F-3 server smoke accepted as execution-stability evidence, not
+5. Keep Phase 5F-3 server smoke accepted as execution-stability evidence, not
    online MinerU OCR or benchmark-level answer-quality evidence.
-5. Keep Phase 5F-1 server smoke accepted as execution-stability evidence, not
+6. Keep Phase 5F-1 server smoke accepted as execution-stability evidence, not
    benchmark-level answer-quality evidence.
-6. Keep Phase 4D-D deferred until MVP entrypoint, router, deterministic tools,
+7. Keep Phase 4D-D deferred until MVP entrypoint, router, deterministic tools,
    and multi-task regression are accepted.
-7. Keep Candidate-ID Reader postponed until reader-selection failures dominate
+8. Keep Candidate-ID Reader postponed until reader-selection failures dominate
    after candidate coverage issues are resolved.
-8. Keep optional full GRPO E2E postponed until candidate answer board quality
+9. Keep optional full GRPO E2E postponed until candidate answer board quality
    improves.
-9. Keep `page_children` as the default until more shard and document-type
+10. Keep `page_children` as the default until more shard and document-type
    validation supports a global default change.
-10. Keep CDC `not_started` until explicitly started.
+11. Keep CDC `not_started` until explicitly started.
 
 ## Stop Condition
 
@@ -1048,6 +1098,8 @@ Phase 4D-B1.3 server sanity accepted
 + Phase 5C-2 LLM-assisted Router fallback accepted after real API smoke
 + Phase 5C-3 Query Planning + Multi-Query Retrieval accepted after targeted
   local tests plus single-case and multi-question server query-rewriter smokes
++ Phase 5H Full Workflow Validation Baseline accepted after 15-case
+  non-dry-run server smoke
 + targeted and regression tests pass
 + status documents updated
 + branch pushed
