@@ -45,13 +45,42 @@ llm_added_unique_query_count = 5
 artifact = outputs/logs/phase5c3_query_retry_cli.json
 ```
 
+Multi-question server evidence:
+
+```text
+command = phase5c3_query_rewriter_multi_smoke
+status = success
+run_id = phase5c3_query_rewriter_20260627_080409_7bc51dc6
+artifact_dir = outputs/smoke/phase5c3_query_rewriter/phase5c3_query_rewriter_20260627_080409_7bc51dc6
+case_count = 10
+passed_count = 10
+failed_count = 0
+semantic_case_count = 7
+semantic_passed_count = 7
+failure_reasons = {}
+task_type_distribution = local_fact_qa:8, page_lookup:1, document_statistics:1
+router_task_type_distribution = local_fact_qa:8, page_lookup:1, document_statistics:1
+artifacts = query_rewriter_cases.jsonl; query_rewriter_results.jsonl; query_rewriter_summary.json; preview.json
+```
+
+Status:
+
+```text
+Phase 5C-3 single-case LLM semantic query expansion smoke -> accepted
+Phase 5C-3 multi-question Query Rewriter smoke -> accepted
+Phase 5C-3 Query Rewriter / Query Planner -> accepted
+```
+
 Boundary:
 
-- this is accepted as a single-case LLM semantic query expansion smoke;
-- it is not a full business-flow acceptance or answer-quality benchmark;
+- this is accepted as query-planning execution stability evidence;
+- it is not a full business-flow validation or answer-quality benchmark;
 - multi-question query rewriter smoke is prepared in
-  `scripts/run_phase5c3_query_rewriter_smoke.py` for broader stability
-  observation;
+  `scripts/run_phase5c3_query_rewriter_smoke.py` and has passed on the
+  recorded server run;
+- full business workflow validation, non-dry-run Router + Query Planning +
+  Retrieval + local_fact_qa validation, answer-quality validation, full E2E,
+  GRPO, VLM, and training remain not completed / not executed;
 - no Router task classification, local_fact_qa answer logic, AnswerPolicy,
   ingestion, VLM, training, or full GRPO E2E changes are part of this decision.
 

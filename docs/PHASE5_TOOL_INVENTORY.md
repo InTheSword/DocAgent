@@ -51,7 +51,7 @@ Phase 5F-2 server file-to-answer smoke -> accepted
 Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> accepted
-Phase 5C-3 Query Planning + Multi-Query Retrieval -> implemented
+Phase 5C-3 Query Planning + Multi-Query Retrieval -> accepted
 ```
 
 ## Phase 5C-2 LLM-assisted Router Fallback Status
@@ -134,16 +134,18 @@ full GRPO E2E.
 
 ## Phase 5C-3 Query Planning and Multi-Query Retrieval Status
 
-Phase 5C-3 query planning is implemented in:
+Phase 5C-3 query planning is accepted in:
 
 ```text
 docagent/retrieval/query_planner.py
 docagent/retrieval/query_generator_rule.py
 docagent/retrieval/query_generator_llm.py
 docagent/retrieval/query_fusion.py
+docagent/retrieval/fusion.py
 docagent/retrieval/hybrid_retriever.py
 docagent/retrieval/index_manager.py
 scripts/docagent_cli.py
+scripts/run_phase5c3_query_rewriter_smoke.py
 ```
 
 Purpose:
@@ -171,10 +173,17 @@ The LLM Query Rewriter:
 
 ```text
 role = semantic Query Rewriter
-input = {"question": "..."}
-output = JSON array of strings only
+first_attempt_input = {"question": "..."}
+retry_input = {"question": "...", "avoid_exact_queries": [...]}
+recommended_output_schema = {"queries": ["...", "..."]}
 fallback = rule queries when config/API/output is unavailable, invalid, empty, or echoes input payload
 ```
+
+The parser remains backward compatible with top-level JSON arrays, fenced JSON
+arrays, `queries` / `final_queries` / `retrieval_queries` objects, and safe
+loose query objects. The recommended LLM-facing schema is now
+`{"queries": [...]}` because it proved more stable with the configured
+OpenAI-compatible chat model.
 
 The LLM Query Rewriter does not receive task_type, document_profile,
 rule_queries, RouterPlan, full document text, retrieved evidence, OCR full
@@ -182,11 +191,42 @@ text, image pixels, user file contents, or local_fact_qa results. It does not
 answer questions, generate citations, select tools, call tools, or override
 the Phase 5 visual boundary.
 
+Hybrid mode combines `rule_queries + llm_queries -> fusion -> final_queries`.
+`query_sources.rule` and `query_sources.llm` record the queries that actually
+enter `final_queries`. Retrieval runs each query in `final_queries`, then
+merges retrieved candidates with reciprocal-rank fusion in the existing
+retrieval stack.
+
+Accepted server smoke evidence:
+
+```text
+single_case_command = phase5c3_query_retry_smoke
+single_case_status = success
+single_case_doc_id = c1fc1c5e040ec894
+single_case_question = What date or financial year is mentioned in the shareholder notice about unclaimed dividend?
+single_case_query_planner_mode = hybrid
+single_case_llm_status = used
+single_case_llm_added_unique_query_count = 5
+single_case_query_sources_llm = non_empty
+
+multi_question_command = phase5c3_query_rewriter_multi_smoke
+multi_question_status = success
+multi_question_run_id = phase5c3_query_rewriter_20260627_080409_7bc51dc6
+multi_question_artifact_dir = outputs/smoke/phase5c3_query_rewriter/phase5c3_query_rewriter_20260627_080409_7bc51dc6
+multi_question_case_count = 10
+multi_question_passed_count = 10
+multi_question_failed_count = 0
+multi_question_semantic_case_count = 7
+multi_question_semantic_passed_count = 7
+multi_question_task_type_distribution = local_fact_qa:8, page_lookup:1, document_statistics:1
+```
+
 Phase 5C-3 does not implement `document_summary`, `table_lookup`,
 `simple_calculation`, VLM, AnswerPolicy changes, ingestion changes,
-local_fact_qa answer-quality changes, training, or full GRPO E2E. Status is
-`implemented` until a targeted server smoke validates the real configured
-query-planning path.
+local_fact_qa answer-quality changes, training, or full GRPO E2E. Full
+business workflow validation, non-dry-run validation for Router + Query
+Planning + Retrieval + local_fact_qa, and answer-quality benchmarking remain
+not completed.
 
 ## Phase 5D local_fact_qa Wrapper Status
 

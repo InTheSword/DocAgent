@@ -4,7 +4,7 @@
 
 Phase 4D-C has been accepted and recorded.
 
-Current Phase 5 status after Phase 5C-3 query planning implementation:
+Current Phase 5 status after Phase 5C-3 query planning acceptance:
 
 ```text
 Phase 5A architecture audit and contracts -> accepted
@@ -22,7 +22,7 @@ Phase 5F-3 server smoke -> accepted
 Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> accepted
-Phase 5C-3 Query Planning + Multi-Query Retrieval -> implemented
+Phase 5C-3 Query Planning + Multi-Query Retrieval -> accepted
 Phase 5E document_summary -> not_started
 Phase 5F full CLI acceptance -> not_started
 ```
@@ -798,9 +798,20 @@ llm_retry_count = 0
 llm_added_unique_query_count = 5
 judgment = Phase 5C-3 single-case LLM semantic query expansion smoke passed
 multi_question_runner = scripts/run_phase5c3_query_rewriter_smoke.py
-multi_question_runner_status = prepared
-full_business_flow_acceptance = not_started
+multi_question_command = phase5c3_query_rewriter_multi_smoke
+multi_question_status = success
+multi_question_run_id = phase5c3_query_rewriter_20260627_080409_7bc51dc6
+multi_question_case_count = 10
+multi_question_passed_count = 10
+multi_question_failed_count = 0
+semantic_case_count = 7
+semantic_passed_count = 7
+judgment = Phase 5C-3 multi-question Query Rewriter smoke passed
+phase5c3_query_rewriter_planner_status = accepted
+full_business_flow_validation = not_completed
+non_dry_run_router_query_planning_retrieval_local_fact_qa_validation = not_completed
 answer_quality_benchmark = not_started
+full_e2e_grpo_vlm_training = not_executed
 ```
 
 Boundary:
@@ -810,9 +821,11 @@ Phase 5C-3 does not modify Router task classification.
 Phase 5C-3 does not modify local_fact_qa answer generation logic.
 Phase 5C-3 does not modify AnswerPolicy, ingestion, VLM, training, or full GRPO E2E.
 Phase 5C-3 does not implement Phase 5E document_summary, table_lookup, or simple_calculation.
-The single-case real API query-expansion smoke passed, but full business-flow
-acceptance remains not_started pending broader multi-question and non-dry-run
-coverage.
+The single-case real API query-expansion smoke and multi-question Query
+Rewriter smoke passed. Phase 5C-3 Query Rewriter / Query Planner is accepted
+for query-planning execution stability. Full business workflow validation,
+non-dry-run Router + Query Planning + Retrieval + local_fact_qa validation, and
+answer quality benchmarking remain not completed.
 ```
 
 ### Phase 5D: Reuse Hybrid RAG as local_fact_qa Tool
@@ -1361,9 +1374,10 @@ Phase 5F-2 file-to-answer ingestion integration and server smoke are accepted fo
 Phase 5F-3 MinerU-backed file-to-answer implementation and server smoke are accepted for existing MinerU output-backed execution.
 Phase 5G CLI regression baseline and server regression are accepted as execution stability evidence.
 Phase 5C-2 LLM-assisted Router fallback and server real API smoke are accepted.
-Phase 5C-3 Query Planning + Multi-Query Retrieval is implemented. A single-case
-LLM semantic query expansion server smoke passed, and the multi-question smoke
-runner is prepared; full business-flow acceptance remains not_started.
+Phase 5C-3 Query Planning + Multi-Query Retrieval is accepted. Single-case LLM
+semantic query expansion smoke and multi-question Query Rewriter smoke both
+passed; full business-flow validation and answer quality benchmarking remain
+not completed.
 Do not implement document_summary, table lookup, calculation, VLM, training, or
 full E2E as part of Phase 5C-3.
 ```

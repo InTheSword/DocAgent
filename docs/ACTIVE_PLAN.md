@@ -14,7 +14,7 @@ Phase 4D-C accepted -> Phase 4D-D deferred -> Phase 5 active
 ```text
 Phase 5 Personal-use DocAgent MVP
 -> Phase 5C-2 LLM-assisted Router fallback accepted
--> Phase 5C-3 Query Planning + Multi-Query Retrieval implemented
+-> Phase 5C-3 Query Planning + Multi-Query Retrieval accepted
 -> keep the accepted rule router as the deterministic default
 -> use external LLM only for explicitly enabled low-confidence routing fallback
 -> use the LLM query planner only for query expansion when explicitly enabled
@@ -82,7 +82,7 @@ Phase 5F-3 server smoke -> accepted
 Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> accepted
-Phase 5C-3 Query Planning + Multi-Query Retrieval -> implemented
+Phase 5C-3 Query Planning + Multi-Query Retrieval -> accepted
 Phase 5E Document Summary MVP -> not_started
 Phase 5F full CLI acceptance -> not_started
 CDC -> not_started
@@ -1007,8 +1007,9 @@ absolute_path_hit_count = 0
 
 ## Next Priorities
 
-1. Run a targeted Phase 5C-3 server smoke with `--enable-query-planning` before
-   marking query planning accepted.
+1. Keep Phase 5C-3 Query Planning + Multi-Query Retrieval accepted as
+   query-planning execution-stability evidence after the single-case and
+   multi-question server smokes.
 2. Start Phase 5E document_summary or another named MVP closure step only
    after explicit task approval.
 3. Keep Phase 5C-2 LLM-assisted Router fallback disabled by default unless
@@ -1045,8 +1046,8 @@ Phase 4D-B1.3 server sanity accepted
 + Phase 5F-3 MinerU-backed file-to-answer implementation accepted
 + Phase 5F-3 server smoke accepted as execution stability evidence
 + Phase 5C-2 LLM-assisted Router fallback accepted after real API smoke
-+ Phase 5C-3 Query Planning + Multi-Query Retrieval implemented with targeted
-  local tests
++ Phase 5C-3 Query Planning + Multi-Query Retrieval accepted after targeted
+  local tests plus single-case and multi-question server query-rewriter smokes
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

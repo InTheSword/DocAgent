@@ -395,9 +395,29 @@ llm_added_unique_query_count = 5
 judgment = Phase 5C-3 single-case LLM semantic query expansion smoke passed
 ```
 
-This evidence is not a full business-flow acceptance, answer-quality
-benchmark, multi-document benchmark, or non-dry-run local_fact_qa validation.
-The multi-question query rewriter smoke runner is
+Multi-question Query Rewriter smoke evidence:
+
+```text
+command = phase5c3_query_rewriter_multi_smoke
+status = success
+run_id = phase5c3_query_rewriter_20260627_080409_7bc51dc6
+artifact_dir = outputs/smoke/phase5c3_query_rewriter/phase5c3_query_rewriter_20260627_080409_7bc51dc6
+case_count = 10
+passed_count = 10
+failed_count = 0
+semantic_case_count = 7
+semantic_passed_count = 7
+failure_reasons = {}
+task_type_distribution = local_fact_qa:8, page_lookup:1, document_statistics:1
+router_task_type_distribution = local_fact_qa:8, page_lookup:1, document_statistics:1
+artifacts = query_rewriter_cases.jsonl; query_rewriter_results.jsonl; query_rewriter_summary.json; preview.json
+judgment = Phase 5C-3 multi-question Query Rewriter smoke passed
+```
+
+Phase 5C-3 Query Rewriter / Query Planner is accepted for query-planning
+execution stability. This evidence is not full business-flow validation,
+answer-quality benchmark, multi-document benchmark, or non-dry-run
+local_fact_qa validation. The multi-question query rewriter smoke runner is
 `scripts/run_phase5c3_query_rewriter_smoke.py`.
 
 Phase 5C-3 does not implement `document_summary`, `table_lookup`,
