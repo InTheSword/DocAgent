@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
-from docagent.retrieval.query_fusion import fuse_queries
+from docagent.retrieval.query_fusion import fuse_queries, normalize_query
 from docagent.retrieval.query_generator_llm import generate_llm_queries
 from docagent.retrieval.query_generator_rule import generate_rule_queries
 
@@ -19,6 +19,9 @@ class QueryPlannerOutput:
     llm_queries: list[str]
     final_queries: list[str]
     query_sources: dict[str, list[str]] = field(default_factory=dict)
+    llm_unique_queries: list[str] = field(default_factory=list)
+    llm_duplicate_queries: list[str] = field(default_factory=list)
+    llm_added_unique_query_count: int = 0
     mode: str = "hybrid"
     warnings: list[str] = field(default_factory=list)
     llm_status: str = "not_started"
@@ -38,6 +41,9 @@ class QueryPlannerOutput:
                 "rule": list((self.query_sources or {}).get("rule") or []),
                 "llm": list((self.query_sources or {}).get("llm") or []),
             },
+            "llm_unique_queries": list(self.llm_unique_queries),
+            "llm_duplicate_queries": list(self.llm_duplicate_queries),
+            "llm_added_unique_query_count": self.llm_added_unique_query_count,
             "mode": self.mode,
             "warnings": list(dict.fromkeys(self.warnings)),
             "llm_status": self.llm_status,
@@ -115,6 +121,9 @@ def plan_queries(
     if not final_queries:
         final_queries = [question.strip()]
     query_sources = _query_sources(rule_queries, llm_queries, final_queries)
+    llm_unique_queries, llm_duplicate_queries = _llm_query_uniqueness(rule_queries, llm_queries, query_sources)
+    if llm_status == "used" and llm_queries and not llm_unique_queries:
+        warnings.append("query_planner_llm_no_unique_queries")
 
     return QueryPlannerOutput(
         question=question,
@@ -122,6 +131,9 @@ def plan_queries(
         llm_queries=llm_queries,
         final_queries=final_queries,
         query_sources=query_sources,
+        llm_unique_queries=llm_unique_queries,
+        llm_duplicate_queries=llm_duplicate_queries,
+        llm_added_unique_query_count=len(llm_unique_queries),
         mode=normalized_mode,
         warnings=list(dict.fromkeys(warnings)),
         llm_status=llm_status,
@@ -134,13 +146,32 @@ def plan_queries(
 
 
 def _query_sources(rule_queries: list[str], llm_queries: list[str], final_queries: list[str]) -> dict[str, list[str]]:
-    rule_keys = {str(query).casefold(): query for query in rule_queries}
-    llm_keys = {str(query).casefold(): query for query in llm_queries}
+    rule_keys = {normalize_query(query).casefold(): query for query in rule_queries}
+    llm_keys = {normalize_query(query).casefold(): query for query in llm_queries}
     sources = {"rule": [], "llm": []}
     for query in final_queries:
-        key = str(query).casefold()
+        key = normalize_query(query).casefold()
         if key in rule_keys:
             sources["rule"].append(query)
         elif key in llm_keys:
             sources["llm"].append(query)
     return sources
+
+
+def _llm_query_uniqueness(
+    rule_queries: list[str],
+    llm_queries: list[str],
+    query_sources: dict[str, list[str]],
+) -> tuple[list[str], list[str]]:
+    rule_keys = {normalize_query(query).casefold() for query in rule_queries}
+    llm_unique = list((query_sources or {}).get("llm") or [])
+    duplicate_queries: list[str] = []
+    seen_duplicates: set[str] = set()
+    for query in llm_queries:
+        normalized = normalize_query(query)
+        key = normalized.casefold()
+        if not normalized or key not in rule_keys or key in seen_duplicates:
+            continue
+        duplicate_queries.append(normalized)
+        seen_duplicates.add(key)
+    return llm_unique, duplicate_queries

@@ -68,11 +68,15 @@ def test_mock_llm_valid_json_list_is_used_in_hybrid_plan() -> None:
     assert "task_type" not in fake.calls[0]["user_payload"]
     assert "document_profile" not in fake.calls[0]["user_payload"]
     assert "rule_queries" not in fake.calls[0]["user_payload"]
+    assert "3 to 5" in fake.calls[0]["system_prompt"]
+    assert "Do NOT simply repeat the user question" in fake.calls[0]["system_prompt"]
     assert plan.llm_status == "used"
     assert "cancer incidence Africa" in plan.llm_queries
     assert plan.final_queries[: len(plan.rule_queries)] == plan.rule_queries[: len(plan.final_queries)]
     assert plan.query_sources["rule"]
     assert "cancer incidence Africa" in plan.query_sources["llm"]
+    assert "cancer incidence Africa" in plan.llm_unique_queries
+    assert plan.llm_added_unique_query_count == len(plan.llm_unique_queries)
 
 
 @pytest.mark.parametrize(
@@ -131,6 +135,32 @@ def test_llm_query_expander_parses_loose_query_object() -> None:
     assert "query_planner_llm_loose_object_parsed" in plan.llm_normalization_warnings
     assert plan.final_queries[: len(plan.rule_queries)] == plan.rule_queries[: len(plan.final_queries)]
     assert all(query in plan.final_queries for query in plan.llm_queries)
+
+
+def test_llm_query_expander_warns_when_llm_only_repeats_rule_query() -> None:
+    plan = _plan_with_llm_response('["What is the invoice date?"]')
+    payload = plan.to_dict()
+
+    assert plan.llm_status == "used"
+    assert plan.llm_queries == ["What is the invoice date?"]
+    assert plan.query_sources["llm"] == []
+    assert payload["llm_unique_queries"] == []
+    assert payload["llm_duplicate_queries"] == ["What is the invoice date?"]
+    assert payload["llm_added_unique_query_count"] == 0
+    assert "query_planner_llm_no_unique_queries" in plan.warnings
+
+
+def test_llm_query_expander_records_unique_queries_added_by_fusion() -> None:
+    plan = _plan_with_llm_response('["invoice issue date", "billing date"]')
+    payload = plan.to_dict()
+
+    assert plan.llm_status == "used"
+    assert plan.query_sources["llm"] == ["invoice issue date", "billing date"]
+    assert payload["llm_unique_queries"] == ["invoice issue date", "billing date"]
+    assert payload["llm_duplicate_queries"] == []
+    assert payload["llm_added_unique_query_count"] == 2
+    assert plan.final_queries[: len(plan.rule_queries)] == plan.rule_queries[: len(plan.final_queries)]
+    assert plan.final_queries[-2:] == ["invoice issue date", "billing date"]
 
 
 def test_llm_query_expander_does_not_parse_context_object_as_loose_queries() -> None:

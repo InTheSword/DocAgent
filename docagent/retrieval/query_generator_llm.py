@@ -27,10 +27,12 @@ EXPLANATION_RE = re.compile(r"\b(here are|the following|i have|this query|these 
 
 SYSTEM_PROMPT = """You are a Query Rewriter in a document retrieval system.
 
-Your task is to rewrite the user question into multiple short retrieval queries.
+Your task is to generate 3 to 5 short retrieval queries for BM25 / dense retrieval.
 
 Rules:
 - Output ONLY a JSON array of strings.
+- Output 3 to 5 query strings when possible.
+- Each query must be short, keyword-like, specific, and suitable for retrieval.
 - Do NOT output a JSON object.
 - Do NOT output question, task_type, document_profile, or rule_queries.
 - Do NOT output Markdown.
@@ -38,16 +40,18 @@ Rules:
 - Do NOT answer the question.
 - Do NOT include reasoning.
 - Do NOT repeat the input payload.
-- Each query must be short, specific, suitable for BM25 / dense retrieval, and preserve key terms.
+- Do NOT simply repeat the user question.
+- Prefer synonyms, field names, entity terms, date terms, amount terms, topic terms, and compact keyword combinations.
 
 Example output:
 ["cancer incidence Africa", "Africa cancer statistics 2022", "mortality rate Africa cancer"]
 
 Bad:
 {"question": "...", "query": "..."}
+["What is the invoice date?"]
 
 Good:
-["invoice date", "invoice issue date", "billing date"]"""
+["invoice date", "invoice issue date", "billing date", "date field"]"""
 
 
 def generate_llm_queries(
