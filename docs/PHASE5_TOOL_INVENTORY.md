@@ -52,6 +52,7 @@ Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> accepted
 Phase 5C-3 Query Planning + Multi-Query Retrieval -> accepted
+Phase 5H Full Workflow Validation Baseline -> accepted
 ```
 
 ## Phase 5C-2 LLM-assisted Router Fallback Status

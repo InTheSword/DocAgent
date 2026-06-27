@@ -8,6 +8,96 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-28: Phase 5H Full Workflow Validation Baseline Accepted
+
+Decision: accept Phase 5H after the server non-dry-run full workflow smoke
+passed on the fixed document `c1fc1c5e040ec894`.
+
+Preflight:
+
+```text
+command = phase5h_preflight
+head = 1bc8515c3a37cdc870a01bc4c5ccde7da940276f
+head_matches_expected = true
+db_exists = true
+secret_exists = true
+script_exists = true
+fixed_doc_id = c1fc1c5e040ec894
+fixed_doc_exists = true
+```
+
+Server smoke:
+
+```text
+command = phase5h_full_workflow_smoke
+status = success
+run_id = phase5h_full_workflow_20260627_102757_80a9b5bf
+case_count = 15
+passed_count = 15
+failed_count = 0
+dry_run_cases = 0
+non_dry_run_cases = 15
+semantic_query_expected_count = 10
+calculation_intent_count = 2
+unsupported_boundary_count = 5
+json_valid_count = 15
+artifact_write_count = 15
+request_form_distribution = ambiguous:1, calculation:2, declarative:1, extraction:2, imperative:2, interrogative:5, summary:2
+task_type_distribution = document_statistics:1, local_fact_qa:12, page_lookup:1, table_lookup_or_calculation:1
+router_task_type_distribution = document_statistics:1, local_fact_qa:12, page_lookup:1, table_lookup_or_calculation:1
+tools_used_distribution = count_pages:1, get_page_text:1, local_fact_qa:12
+failure_stage_distribution = {}
+failure_reason_distribution = {}
+used_external_api = true
+used_vlm = false
+used_training = false
+used_full_e2e = false
+```
+
+Artifacts:
+
+```text
+/root/autodl-tmp/docagent/outputs/smoke/phase5h_full_workflow/phase5h_full_workflow_20260627_102757_80a9b5bf/phase5h_cases.jsonl
+/root/autodl-tmp/docagent/outputs/smoke/phase5h_full_workflow/phase5h_full_workflow_20260627_102757_80a9b5bf/phase5h_results.jsonl
+/root/autodl-tmp/docagent/outputs/smoke/phase5h_full_workflow/phase5h_full_workflow_20260627_102757_80a9b5bf/phase5h_summary.json
+/root/autodl-tmp/docagent/outputs/smoke/phase5h_full_workflow/phase5h_full_workflow_20260627_102757_80a9b5bf/preview.json
+```
+
+Accepted coverage:
+
+```text
+fact QA
+date request
+amount / number / percentage request
+page_lookup
+document_statistics
+summary boundary
+Chinese requests
+declarative requests
+imperative requests
+calculation intent
+table boundary
+duplicate-prone short query
+```
+
+Status:
+
+```text
+Phase 5H Full Workflow Validation Baseline -> accepted
+Phase 5H non-dry-run server smoke -> accepted
+```
+
+Boundary:
+
+- this accepts full workflow execution stability, not answer quality;
+- `question` remains the CLI field name but semantically means
+  `user_request`, not only an interrogative question;
+- calculation-intent cases validate retrieval plus structured unsupported
+  boundary behavior only and do not mark `simple_calculation` as implemented;
+- `document_summary`, `table_lookup`, `simple_calculation`, online MinerU full
+  parsing, golden QA benchmark, answer quality validation, VLM, training, and
+  full GRPO E2E remain not_started or not executed.
+
 ## 2026-06-27: Phase 5H Full Workflow Validation Baseline Implemented
 
 Decision: add a server-oriented full workflow smoke runner without changing

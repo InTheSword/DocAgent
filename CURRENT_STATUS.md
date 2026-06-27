@@ -179,13 +179,13 @@ query_sources.rule / query_sources.llm record final-query source
 multi-query retrieval executes the final_queries list and fuses retrieval results with RRF
 multi-question smoke runner = scripts/run_phase5c3_query_rewriter_smoke.py
 multi-question smoke status = passed
-full business workflow validation = not completed
-non-dry-run Router + Query Planning + Retrieval + local_fact_qa validation = not completed
+full business workflow validation baseline = accepted in Phase 5H
+non-dry-run Router + Query Planning + Retrieval + local_fact_qa validation baseline = accepted in Phase 5H
 answer quality validation = not completed
 full E2E / GRPO / VLM / training = not executed
 ```
 
-Phase 5H Full Workflow Validation Baseline is implemented in
+Phase 5H Full Workflow Validation Baseline is accepted in
 `scripts/run_phase5h_full_workflow_smoke.py`. This runner does not add core
 document-answering capability; it calls the existing `scripts/docagent_cli.py`
 for each case and validates the full execution chain:
@@ -233,11 +233,52 @@ phase5h_summary.json
 preview.json
 ```
 
-Phase 5H remains `implemented` until the server non-dry-run full workflow
-smoke is executed and accepted. Full business workflow validation, answer
-quality validation, document_summary, table_lookup/simple_calculation, online
-MinerU full parsing, VLM, training, and full GRPO E2E remain not completed or
-not_started as applicable.
+Phase 5H non-dry-run server full workflow smoke passed and is accepted:
+
+```text
+preflight_command = phase5h_preflight
+preflight_head = 1bc8515c3a37cdc870a01bc4c5ccde7da940276f
+preflight_head_matches_expected = true
+preflight_db_exists = true
+preflight_secret_exists = true
+preflight_script_exists = true
+preflight_fixed_doc_id = c1fc1c5e040ec894
+preflight_fixed_doc_exists = true
+
+command = phase5h_full_workflow_smoke
+status = success
+run_id = phase5h_full_workflow_20260627_102757_80a9b5bf
+case_count = 15
+passed_count = 15
+failed_count = 0
+dry_run_cases = 0
+non_dry_run_cases = 15
+semantic_query_expected_count = 10
+calculation_intent_count = 2
+unsupported_boundary_count = 5
+json_valid_count = 15
+artifact_write_count = 15
+request_form_distribution = ambiguous:1, calculation:2, declarative:1, extraction:2, imperative:2, interrogative:5, summary:2
+task_type_distribution = document_statistics:1, local_fact_qa:12, page_lookup:1, table_lookup_or_calculation:1
+router_task_type_distribution = document_statistics:1, local_fact_qa:12, page_lookup:1, table_lookup_or_calculation:1
+tools_used_distribution = count_pages:1, get_page_text:1, local_fact_qa:12
+failure_stage_distribution = {}
+failure_reason_distribution = {}
+used_external_api = true
+used_vlm = false
+used_training = false
+used_full_e2e = false
+artifact_dir = /root/autodl-tmp/docagent/outputs/smoke/phase5h_full_workflow/phase5h_full_workflow_20260627_102757_80a9b5bf
+artifacts = phase5h_cases.jsonl; phase5h_results.jsonl; phase5h_summary.json; preview.json
+```
+
+Phase 5H acceptance validates structured execution across Router, Query
+Planner, retrieval, local_fact_qa, deterministic tools, unsupported-boundary
+handling, and artifact writing. Answer quality validation, golden QA benchmark,
+document_summary, table_lookup/simple_calculation, online MinerU full parsing,
+VLM, training, and full GRPO E2E remain not completed or not_started as
+applicable. Calculation-intent cases remain retrieval plus unsupported-boundary
+validation only and do not mean `simple_calculation` has been implemented.
 
 Phase 5C-2 accepted server real API smoke evidence:
 
@@ -331,7 +372,7 @@ Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> accepted
 Phase 5C-3 Query Planning + Multi-Query Retrieval -> accepted
-Phase 5H Full Workflow Validation Baseline -> implemented
+Phase 5H Full Workflow Validation Baseline -> accepted
 Phase 5E Document Summary MVP -> not_started
 Phase 5F full CLI acceptance -> not_started
 CDC -> not_started
@@ -651,11 +692,11 @@ Current conclusion:
   tracking, multi-query BM25 / dense retrieval fusion, and CLI opt-in via
   `--enable-query-planning`. Single-case real API query-expansion smoke and
   multi-question Query Rewriter smoke both passed.
-- Phase 5H Full Workflow Validation Baseline is implemented as a non-dry-run
+- Phase 5H Full Workflow Validation Baseline is accepted as a non-dry-run
   smoke runner that exercises the existing CLI path from user request through
   Router, Query Planner, retrieval, local_fact_qa/deterministic tools, answer,
-  citations, and artifacts. It is not accepted until the server smoke result is
-  recorded.
+  citations, and artifacts. The accepted server run passed 15/15 non-dry-run
+  cases with valid JSON and artifact output for every case.
 - Phase 5E document_summary, table lookup, simple calculation, online MinerU
   OCR execution, and local_fact_qa answer quality improvement remain
   not_started.

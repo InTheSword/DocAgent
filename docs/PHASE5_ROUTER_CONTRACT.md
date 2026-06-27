@@ -484,13 +484,44 @@ summary/table/calculation unsupported cases must return structured warnings or
 errors and must not crash or masquerade as fully supported capabilities.
 ```
 
+Accepted server smoke:
+
+```text
+command = phase5h_full_workflow_smoke
+status = success
+run_id = phase5h_full_workflow_20260627_102757_80a9b5bf
+case_count = 15
+passed_count = 15
+failed_count = 0
+dry_run_cases = 0
+non_dry_run_cases = 15
+semantic_query_expected_count = 10
+calculation_intent_count = 2
+unsupported_boundary_count = 5
+json_valid_count = 15
+artifact_write_count = 15
+request_form_distribution = ambiguous:1, calculation:2, declarative:1, extraction:2, imperative:2, interrogative:5, summary:2
+task_type_distribution = document_statistics:1, local_fact_qa:12, page_lookup:1, table_lookup_or_calculation:1
+router_task_type_distribution = document_statistics:1, local_fact_qa:12, page_lookup:1, table_lookup_or_calculation:1
+tools_used_distribution = count_pages:1, get_page_text:1, local_fact_qa:12
+failure_stage_distribution = {}
+failure_reason_distribution = {}
+used_external_api = true
+used_vlm = false
+used_training = false
+used_full_e2e = false
+artifact_dir = /root/autodl-tmp/docagent/outputs/smoke/phase5h_full_workflow/phase5h_full_workflow_20260627_102757_80a9b5bf
+```
+
 Status:
 
 ```text
-Phase 5H Full Workflow Validation Baseline -> implemented
-server non-dry-run smoke -> not_started
+Phase 5H Full Workflow Validation Baseline -> accepted
+server non-dry-run smoke -> accepted
 Phase 5E document_summary -> not_started
 table_lookup/simple_calculation -> not_started
+answer quality validation -> not_completed
+golden QA benchmark -> not_started
 ```
 
 ## Routing Failure Fallback Behavior

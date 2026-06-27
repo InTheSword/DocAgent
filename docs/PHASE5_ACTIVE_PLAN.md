@@ -4,7 +4,7 @@
 
 Phase 4D-C has been accepted and recorded.
 
-Current Phase 5 status after Phase 5H full workflow validation baseline implementation:
+Current Phase 5 status after Phase 5H full workflow validation baseline acceptance:
 
 ```text
 Phase 5A architecture audit and contracts -> accepted
@@ -23,7 +23,7 @@ Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> accepted
 Phase 5C-3 Query Planning + Multi-Query Retrieval -> accepted
-Phase 5H Full Workflow Validation Baseline -> implemented
+Phase 5H Full Workflow Validation Baseline -> accepted
 Phase 5E document_summary -> not_started
 Phase 5F full CLI acceptance -> not_started
 ```
@@ -809,8 +809,8 @@ semantic_case_count = 7
 semantic_passed_count = 7
 judgment = Phase 5C-3 multi-question Query Rewriter smoke passed
 phase5c3_query_rewriter_planner_status = accepted
-full_business_flow_validation = not_completed
-non_dry_run_router_query_planning_retrieval_local_fact_qa_validation = not_completed
+full_business_flow_validation_baseline = accepted_later_in_phase5h
+non_dry_run_router_query_planning_retrieval_local_fact_qa_validation_baseline = accepted_later_in_phase5h
 answer_quality_benchmark = not_started
 full_e2e_grpo_vlm_training = not_executed
 ```
@@ -824,9 +824,10 @@ Phase 5C-3 does not modify AnswerPolicy, ingestion, VLM, training, or full GRPO 
 Phase 5C-3 does not implement Phase 5E document_summary, table_lookup, or simple_calculation.
 The single-case real API query-expansion smoke and multi-question Query
 Rewriter smoke passed. Phase 5C-3 Query Rewriter / Query Planner is accepted
-for query-planning execution stability. Full business workflow validation,
-non-dry-run Router + Query Planning + Retrieval + local_fact_qa validation, and
-answer quality benchmarking remain not completed.
+for query-planning execution stability. Full workflow validation baseline and
+non-dry-run Router + Query Planning + Retrieval + local_fact_qa validation
+baseline were accepted later in Phase 5H. Answer quality benchmarking remains
+not completed.
 ```
 
 ### Phase 5D: Reuse Hybrid RAG as local_fact_qa Tool
@@ -1355,12 +1356,24 @@ boundary -> answer, citations, metadata, and trace/CLI artifacts.
 Implementation status:
 
 ```text
-Phase 5H Full Workflow Validation Baseline -> implemented
+Phase 5H Full Workflow Validation Baseline -> accepted
 runner = scripts/run_phase5h_full_workflow_smoke.py
 default_doc_id = c1fc1c5e040ec894
 default_output_root = outputs/smoke/phase5h_full_workflow/<run_id>/
 default_mode = non_dry_run
-server_smoke = not_started
+server_smoke = accepted
+server_smoke_run_id = phase5h_full_workflow_20260627_102757_80a9b5bf
+server_smoke_status = success
+server_smoke_case_count = 15
+server_smoke_passed_count = 15
+server_smoke_failed_count = 0
+server_smoke_non_dry_run_cases = 15
+server_smoke_json_valid_count = 15
+server_smoke_artifact_write_count = 15
+server_smoke_used_external_api = true
+server_smoke_used_vlm = false
+server_smoke_used_training = false
+server_smoke_used_full_e2e = false
 ```
 
 Terminology:
@@ -1393,10 +1406,26 @@ duplicate-prone short request
 Artifacts:
 
 ```text
+artifact_dir = /root/autodl-tmp/docagent/outputs/smoke/phase5h_full_workflow/phase5h_full_workflow_20260627_102757_80a9b5bf
 phase5h_cases.jsonl
 phase5h_results.jsonl
 phase5h_summary.json
 preview.json
+```
+
+Accepted server smoke metrics:
+
+```text
+command = phase5h_full_workflow_smoke
+status = success
+request_form_distribution = ambiguous:1, calculation:2, declarative:1, extraction:2, imperative:2, interrogative:5, summary:2
+task_type_distribution = document_statistics:1, local_fact_qa:12, page_lookup:1, table_lookup_or_calculation:1
+router_task_type_distribution = document_statistics:1, local_fact_qa:12, page_lookup:1, table_lookup_or_calculation:1
+tools_used_distribution = count_pages:1, get_page_text:1, local_fact_qa:12
+calculation_intent_count = 2
+unsupported_boundary_count = 5
+failure_stage_distribution = {}
+failure_reason_distribution = {}
 ```
 
 Pass/fail policy:
@@ -1418,9 +1447,13 @@ unsupported summary/table/calculation boundaries pass only if they are
 structured and do not crash. They are not benchmark answer-quality evidence.
 ```
 
-Out of scope:
+Acceptance boundary:
 
 ```text
+Phase 5H accepts full workflow execution stability over 15 non-dry-run server
+cases.
+It does not validate answer quality.
+It does not create a golden QA benchmark.
 Phase 5E document_summary remains not_started.
 table_lookup and simple_calculation remain not_started.
 online MinerU full parsing remains not_started.
@@ -1464,13 +1497,13 @@ Phase 5G CLI regression baseline and server regression are accepted as execution
 Phase 5C-2 LLM-assisted Router fallback and server real API smoke are accepted.
 Phase 5C-3 Query Planning + Multi-Query Retrieval is accepted. Single-case LLM
 semantic query expansion smoke and multi-question Query Rewriter smoke both
-passed; full business-flow validation and answer quality benchmarking remain
-not completed.
-Phase 5H Full Workflow Validation Baseline is implemented in
+passed; full business-flow baseline validation was accepted later in Phase 5H,
+while answer quality benchmarking remains not completed.
+Phase 5H Full Workflow Validation Baseline is accepted in
 scripts/run_phase5h_full_workflow_smoke.py to validate the non-dry-run chain
 from user_request through Router, Query Planner, retrieval, local_fact_qa /
-deterministic tools, citations, and artifacts. Server smoke remains
-not_started.
+deterministic tools, citations, and artifacts. The accepted server run passed
+15/15 non-dry-run cases with valid JSON and artifact output for every case.
 Do not implement document_summary, table lookup, calculation, VLM, training, or
 full E2E as part of Phase 5H.
 ```
