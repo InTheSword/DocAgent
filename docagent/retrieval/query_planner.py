@@ -41,7 +41,7 @@ class QueryPlannerOutput:
             "mode": self.mode,
             "warnings": list(dict.fromkeys(self.warnings)),
             "llm_status": self.llm_status,
-            "llm_error_type": self.llm_error_type,
+            "llm_error_type": self.llm_error_type or "",
             "llm_raw_response_preview": self.llm_raw_response_preview,
             "llm_parsed_queries_preview": list(self.llm_parsed_queries_preview),
             "llm_normalization_warnings": list(dict.fromkeys(self.llm_normalization_warnings)),

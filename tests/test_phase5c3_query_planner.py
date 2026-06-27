@@ -114,6 +114,41 @@ def test_llm_query_expander_rejects_echoed_router_like_payload() -> None:
     assert plan.final_queries == plan.rule_queries[: len(plan.final_queries)]
 
 
+def test_llm_query_expander_parses_loose_query_object() -> None:
+    response = json.dumps(
+        {
+            "question": "latest invoice date",
+            "invoice issue date query": "invoice date field retrieval",
+        }
+    )
+
+    plan = _plan_with_llm_response(response)
+    payload = plan.to_dict()
+
+    assert plan.llm_status == "used"
+    assert payload["llm_error_type"] == ""
+    assert plan.llm_queries == ["latest invoice date", "invoice date field retrieval"]
+    assert "query_planner_llm_loose_object_parsed" in plan.llm_normalization_warnings
+    assert plan.final_queries[: len(plan.rule_queries)] == plan.rule_queries[: len(plan.final_queries)]
+    assert all(query in plan.final_queries for query in plan.llm_queries)
+
+
+def test_llm_query_expander_does_not_parse_context_object_as_loose_queries() -> None:
+    response = json.dumps(
+        {
+            "document_profile": {"page_count": 5},
+            "rule_queries": ["what is the invoice date"],
+        }
+    )
+
+    plan = _plan_with_llm_response(response)
+
+    assert plan.llm_status == "echoed_payload"
+    assert plan.llm_error_type == "query_planner_llm_echoed_payload"
+    assert plan.llm_queries == []
+    assert plan.final_queries == plan.rule_queries[: len(plan.final_queries)]
+
+
 def test_llm_query_expander_filters_non_strings_and_dedups() -> None:
     plan = _plan_with_llm_response('["invoice date", 123, "", "Invoice Date", "```bad```", "financial year"]')
 

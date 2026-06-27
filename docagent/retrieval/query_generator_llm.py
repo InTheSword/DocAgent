@@ -12,8 +12,9 @@ RAW_RESPONSE_PREVIEW_LIMIT = 1000
 MAX_LLM_QUERIES = 8
 MAX_QUERY_CHARS = 200
 QUERY_OBJECT_KEYS = ("queries", "final_queries", "retrieval_queries")
-ECHO_PAYLOAD_KEYS = {
-    "question",
+ECHO_STRONG_CONTEXT_KEYS = {"document_profile", "rule_queries", "router_plan", "available_tools", "selected_tools"}
+ECHO_ROUTER_KEYS = {"question", "task_type", "document_profile", "rule_queries", "available_tools", "router_plan", "selected_tools"}
+LOOSE_OBJECT_SKIP_KEYS = {
     "task_type",
     "document_profile",
     "rule_queries",
@@ -21,6 +22,8 @@ ECHO_PAYLOAD_KEYS = {
     "router_plan",
     "selected_tools",
 }
+QUERY_LIKE_KEY_RE = re.compile(r"\b(query|search|retrieval|keyword|date|invoice|field)\b", flags=re.IGNORECASE)
+EXPLANATION_RE = re.compile(r"\b(here are|the following|i have|this query|these queries|because|explanation)\b", flags=re.IGNORECASE)
 
 SYSTEM_PROMPT = """You are a Query Rewriter in a document retrieval system.
 
@@ -29,6 +32,7 @@ Your task is to rewrite the user question into multiple short retrieval queries.
 Rules:
 - Output ONLY a JSON array of strings.
 - Do NOT output a JSON object.
+- Do NOT output question, task_type, document_profile, or rule_queries.
 - Do NOT output Markdown.
 - Do NOT explain.
 - Do NOT answer the question.
@@ -37,7 +41,13 @@ Rules:
 - Each query must be short, specific, suitable for BM25 / dense retrieval, and preserve key terms.
 
 Example output:
-["cancer incidence Africa", "Africa cancer statistics 2022", "mortality rate Africa cancer"]"""
+["cancer incidence Africa", "Africa cancer statistics 2022", "mortality rate Africa cancer"]
+
+Bad:
+{"question": "...", "query": "..."}
+
+Good:
+["invoice date", "invoice issue date", "billing date"]"""
 
 
 def generate_llm_queries(
@@ -119,7 +129,7 @@ def _parse_query_response(raw: str) -> tuple[list[str], list[str], str | None]:
                 warnings.append(f"query_planner_llm_used_{key}")
                 break
         else:
-            return [], warnings, "query_planner_llm_invalid_output"
+            payload = _loose_object_queries(payload, warnings)
     queries = _clean_queries(payload, warnings)
     if not queries:
         return [], warnings, "query_planner_llm_empty_queries"
@@ -130,7 +140,41 @@ def _looks_like_echo_payload(payload: Mapping[str, Any]) -> bool:
     keys = set(payload.keys())
     if any(key in keys for key in QUERY_OBJECT_KEYS):
         return False
-    return bool(keys & ECHO_PAYLOAD_KEYS)
+    if keys & ECHO_STRONG_CONTEXT_KEYS:
+        return True
+    router_like_count = len(keys & ECHO_ROUTER_KEYS)
+    return router_like_count >= 2 and "task_type" in keys
+
+
+def _loose_object_queries(payload: Mapping[str, Any], warnings: list[str]) -> list[str]:
+    queries: list[str] = []
+    for key, value in payload.items():
+        key_text = str(key or "").strip()
+        collected_value = False
+        if key_text in LOOSE_OBJECT_SKIP_KEYS:
+            warnings.append("query_planner_llm_context_field_ignored")
+            continue
+        if isinstance(value, str):
+            value_text = " ".join(value.split()).strip()
+            if value_text and not _looks_explanatory(value_text):
+                queries.append(value_text)
+                collected_value = True
+        elif isinstance(value, list):
+            warnings.append("query_planner_llm_nested_list_ignored")
+        elif isinstance(value, Mapping):
+            warnings.append("query_planner_llm_nested_object_ignored")
+        if not collected_value and QUERY_LIKE_KEY_RE.search(key_text) and key_text not in LOOSE_OBJECT_SKIP_KEYS:
+            if key_text and not _looks_explanatory(key_text):
+                queries.append(key_text)
+    if queries:
+        warnings.append("query_planner_llm_loose_object_parsed")
+    return queries
+
+
+def _looks_explanatory(text: str) -> bool:
+    if EXPLANATION_RE.search(text):
+        return True
+    return len(text.split()) > 16
 
 
 def _extract_first_json_payload(raw: str) -> Any | None:
