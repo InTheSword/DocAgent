@@ -16,7 +16,7 @@ Phase 5 Personal-use DocAgent MVP
 -> Phase 5C-2 LLM-assisted Router fallback accepted
 -> Phase 5C-3 Query Planning + Multi-Query Retrieval accepted
 -> Phase 5H Full Workflow Validation Baseline accepted
--> Phase 5I Answer Quality Golden Benchmark runner implemented
+-> Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner implemented
 -> keep the accepted rule router as the deterministic default
 -> use external LLM only for explicitly enabled low-confidence routing fallback
 -> use the LLM query planner only for query expansion when explicitly enabled
@@ -86,8 +86,10 @@ Phase 5G server regression -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> accepted
 Phase 5C-3 Query Planning + Multi-Query Retrieval -> accepted
 Phase 5H Full Workflow Validation Baseline -> accepted
-Phase 5I Answer Quality Golden Benchmark runner -> implemented
-Phase 5I server benchmark -> not_started
+Phase 5I old-semantics server benchmark -> benchmark_evaluated
+Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner -> implemented
+Phase 5I-A corrected-semantics server benchmark -> not_started
+Phase 5I-B Final Answer Quality Benchmark -> not_started
 Phase 5E Document Summary MVP -> not_started
 Phase 5F full CLI acceptance -> not_started
 CDC -> not_started
@@ -959,12 +961,14 @@ Calculation-intent cases are retrieval plus unsupported-boundary validation
 only. They do not mean `table_lookup` or `simple_calculation` is implemented.
 
 Phase 5H validates full workflow execution stability, not answer quality.
-Phase 5I now starts the golden QA benchmark baseline, but server execution is
-still not_started. document_summary, table_lookup/simple_calculation, online
-MinerU full parsing, VLM, training, and full GRPO E2E remain not_started or
-not executed as applicable.
+Phase 5I-A now defines the current benchmark as pre-LLM evidence readiness.
+The server benchmark has run once, but its earlier `answer_keyword_missing`
+records must be reinterpreted because final answer generation is not evaluated
+in this stage. document_summary, table_lookup/simple_calculation, online MinerU
+full parsing, VLM, training, final answer quality benchmarking, and full GRPO
+E2E remain not_started or not executed as applicable.
 
-Phase 5I implemented boundary:
+Phase 5I-A implemented boundary:
 
 ```text
 branch = codex/phase5i-answer-quality-golden-benchmark
@@ -972,17 +976,21 @@ runner = scripts/run_phase5i_answer_quality_benchmark.py
 default_doc_id = c1fc1c5e040ec894
 default_output_root = outputs/benchmark/phase5i_answer_quality/<run_id>/
 default_mode = non_dry_run
+evaluation_scope = pre_llm_evidence_readiness
+final_answer_generation_enabled = false
+final_answer_quality_evaluated = false
 case_count = 26
-server_benchmark = not_started
+old_semantics_server_benchmark = benchmark_evaluated
+corrected_semantics_server_benchmark = not_started
 status = implemented
 ```
 
-Phase 5I evaluates the accepted Phase 5H full workflow as a black box:
+Phase 5I-A evaluates the accepted Phase 5H full workflow as a black box:
 
 ```text
 user_request -> CLI --question -> Router -> Query Planner -> multi-query
 retrieval -> local_fact_qa / deterministic tool / structured unsupported
-boundary -> answer, citations, metadata, and artifacts
+boundary -> evidence package, citations, metadata, and artifacts
 ```
 
 Phase 5I writes:
@@ -996,12 +1004,15 @@ manual_review.md
 ```
 
 The lightweight rules check task_type, final_queries, evidence keywords,
-answer keywords, citation pages, structured unsupported boundaries,
-abstention, CLI success, artifact writing, and failure-stage attribution.
-Cases that cannot be automatically judged are marked
-`manual_review_required`. Phase 5I does not implement document_summary,
+citation pages, structured unsupported boundaries, insufficient-evidence
+signals, CLI success, artifact writing, downstream-required flags, and
+failure-stage attribution. `answer_keyword_hit` is informational by default and
+does not cause hard failure unless `--evaluate-final-answer` is explicitly
+enabled. Cases with evidence found but final answer generation not evaluated
+are marked for manual review. Phase 5I-A does not implement document_summary,
 table_lookup, simple_calculation, local_fact_qa answer fixes, Router task
-classification changes, AnswerPolicy changes, VLM, training, or full GRPO E2E.
+classification changes, AnswerPolicy changes, VLM, training, final answer
+quality benchmarking, or full GRPO E2E.
 
 Phase 4D-C scaffold / command preparation:
 
@@ -1103,8 +1114,8 @@ absolute_path_hit_count = 0
    multi-question server smokes.
 2. Keep Phase 5H accepted as full workflow execution-stability evidence, not
    answer-quality or golden-benchmark evidence.
-3. Run the Phase 5I server benchmark on the fixed accepted document and record
-   the answer-quality baseline artifacts before interpreting quality.
+3. Re-run the Phase 5I-A server benchmark on the fixed accepted document and
+   record the pre-LLM evidence readiness artifacts before interpreting quality.
 4. Start Phase 5E document_summary or another named MVP closure step only
    after explicit task approval.
 5. Keep Phase 5C-2 LLM-assisted Router fallback disabled by default unless
@@ -1145,8 +1156,10 @@ Phase 4D-B1.3 server sanity accepted
   local tests plus single-case and multi-question server query-rewriter smokes
 + Phase 5H Full Workflow Validation Baseline accepted after 15-case
   non-dry-run server smoke
-+ Phase 5I Answer Quality Golden Benchmark runner implemented locally
-+ Phase 5I server benchmark not_started
++ Phase 5I old-semantics server benchmark benchmark_evaluated and reinterpreted
++ Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner implemented locally
++ Phase 5I-A corrected-semantics server benchmark not_started
++ Phase 5I-B Final Answer Quality Benchmark not_started
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

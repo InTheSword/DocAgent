@@ -20,6 +20,7 @@ DEFAULT_DB_PATH = ROOT / "outputs" / "docagent.db"
 DEFAULT_DOC_ID = "c1fc1c5e040ec894"
 DEFAULT_OUTPUT_ROOT = ROOT / "outputs" / "benchmark" / "phase5i_answer_quality"
 DEFAULT_CLI_PATH = ROOT / "scripts" / "docagent_cli.py"
+EVALUATION_SCOPE = "pre_llm_evidence_readiness"
 
 UNSUPPORTED_ERROR_TYPES = {
     "document_summary_not_implemented",
@@ -77,10 +78,69 @@ class GoldenCase:
     expected_answer_keywords: list[str]
     forbidden_answer_keywords: list[str]
     notes: str = ""
+    required_evidence_keywords: list[str] | None = None
+    optional_answer_keywords: list[str] | None = None
+    downstream_task_type: str = ""
+    requires_downstream_answer: bool | None = None
+    requires_downstream_summary: bool | None = None
+    requires_downstream_calculation: bool | None = None
+    requires_downstream_table_lookup: bool | None = None
 
     @property
     def cli_question_field(self) -> str:
         return self.user_request
+
+    @property
+    def effective_required_evidence_keywords(self) -> list[str]:
+        return self.required_evidence_keywords if self.required_evidence_keywords is not None else self.expected_evidence_keywords
+
+    @property
+    def effective_optional_answer_keywords(self) -> list[str]:
+        return self.optional_answer_keywords if self.optional_answer_keywords is not None else self.expected_answer_keywords
+
+    @property
+    def downstream_answer_required(self) -> bool:
+        if self.requires_downstream_answer is not None:
+            return self.requires_downstream_answer
+        return self.answerable and self.expected_task_type == "local_fact_qa" and self.expected_answer_type in {"extractive", "numeric"}
+
+    @property
+    def downstream_summary_required(self) -> bool:
+        if self.requires_downstream_summary is not None:
+            return self.requires_downstream_summary
+        return self.expected_task_type == "document_summary" or self.request_form == "summary"
+
+    @property
+    def downstream_calculation_required(self) -> bool:
+        if self.requires_downstream_calculation is not None:
+            return self.requires_downstream_calculation
+        lowered = f"{self.case_id} {self.user_request} {self.request_form}".casefold()
+        return "calculation" in lowered or "calculate" in lowered or "difference" in lowered
+
+    @property
+    def downstream_table_required(self) -> bool:
+        if self.requires_downstream_table_lookup is not None:
+            return self.requires_downstream_table_lookup
+        if self.downstream_calculation_required:
+            return False
+        lowered = f"{self.case_id} {self.user_request}".casefold()
+        return self.expected_task_type == "table_lookup_or_calculation" or "table" in lowered or "row" in lowered
+
+    @property
+    def effective_downstream_task_type(self) -> str:
+        if self.downstream_task_type:
+            return self.downstream_task_type
+        if self.downstream_summary_required:
+            return "document_summary"
+        if self.downstream_calculation_required:
+            return "simple_calculation"
+        if self.downstream_table_required:
+            return "table_lookup"
+        if self.downstream_answer_required:
+            return "final_answer_generation"
+        if self.expected_answer_type == "abstain":
+            return "insufficient_evidence_decision"
+        return ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -94,8 +154,15 @@ class GoldenCase:
             "unsupported_ok": self.unsupported_ok,
             "expected_page": self.expected_page,
             "expected_evidence_keywords": self.expected_evidence_keywords,
+            "required_evidence_keywords": self.effective_required_evidence_keywords,
             "expected_answer_keywords": self.expected_answer_keywords,
+            "optional_answer_keywords": self.effective_optional_answer_keywords,
             "forbidden_answer_keywords": self.forbidden_answer_keywords,
+            "downstream_task_type": self.effective_downstream_task_type,
+            "requires_downstream_answer": self.downstream_answer_required,
+            "requires_downstream_summary": self.downstream_summary_required,
+            "requires_downstream_calculation": self.downstream_calculation_required,
+            "requires_downstream_table_lookup": self.downstream_table_required,
             "notes": self.notes,
         }
 
@@ -114,6 +181,17 @@ class GoldenCase:
             expected_answer_keywords=[str(item) for item in payload.get("expected_answer_keywords") or []],
             forbidden_answer_keywords=[str(item) for item in payload.get("forbidden_answer_keywords") or []],
             notes=str(payload.get("notes") or ""),
+            required_evidence_keywords=[str(item) for item in payload.get("required_evidence_keywords") or []]
+            if "required_evidence_keywords" in payload
+            else None,
+            optional_answer_keywords=[str(item) for item in payload.get("optional_answer_keywords") or []]
+            if "optional_answer_keywords" in payload
+            else None,
+            downstream_task_type=str(payload.get("downstream_task_type") or ""),
+            requires_downstream_answer=_optional_bool(payload.get("requires_downstream_answer")),
+            requires_downstream_summary=_optional_bool(payload.get("requires_downstream_summary")),
+            requires_downstream_calculation=_optional_bool(payload.get("requires_downstream_calculation")),
+            requires_downstream_table_lookup=_optional_bool(payload.get("requires_downstream_table_lookup")),
         )
 
 
@@ -506,6 +584,18 @@ def _optional_int(value: Any) -> int | None:
     return int(value)
 
 
+def _optional_bool(value: Any) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        normalized = value.strip().casefold()
+        if normalized in {"true", "1", "yes"}:
+            return True
+        if normalized in {"false", "0", "no"}:
+            return False
+    return bool(value)
+
+
 def _write_json(path: Path, payload: dict[str, Any] | list[Any]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), encoding="utf-8")
 
@@ -737,12 +827,14 @@ def _stage_for_reason(reason: str) -> str:
         return "router"
     if "query" in reason or "llm" in reason:
         return "query_planner"
-    if "evidence" in reason:
+    if reason in {"retrieved_evidence_empty"}:
         return "retrieval"
-    if "answer" in reason or "abstention" in reason or "forbidden" in reason:
-        return "answer_generation"
+    if "evidence" in reason or "insufficient_evidence" in reason:
+        return "evidence_readiness"
+    if "answer_keyword" in reason or "final_answer" in reason or "manual_review" in reason:
+        return "downstream_answer_not_evaluated"
     if "citation" in reason or "page" in reason:
-        return "citation"
+        return "citation_metadata"
     if "unsupported" in reason or "not_implemented" in reason or "boundary" in reason:
         return "unsupported_boundary"
     if "stdout" in reason or "returncode" in reason or "artifact" in reason:
@@ -750,14 +842,23 @@ def _stage_for_reason(reason: str) -> str:
     return "metadata"
 
 
-def _manual_review_reason(case: GoldenCase, reasons: list[str], *, answer_keyword_hit: bool | None) -> str:
+def _manual_review_reason(
+    case: GoldenCase,
+    reasons: list[str],
+    *,
+    answer_keyword_hit: bool | None,
+    evidence_ready: bool,
+    final_answer_quality_evaluated: bool,
+) -> str:
+    if case.downstream_answer_required and evidence_ready and not final_answer_quality_evaluated:
+        return "downstream_answer_required_final_answer_not_evaluated"
     if case.request_form == "ambiguous" and case.expected_answer_type not in {"unsupported", "abstain"}:
         return "ambiguous_request"
-    if case.answerable and case.expected_answer_type in {"extractive", "numeric"} and not case.expected_answer_keywords:
+    if case.answerable and case.expected_answer_type in {"extractive", "numeric"} and not case.effective_optional_answer_keywords:
         return "missing_exact_answer_keywords"
-    if any(reason in {"answer_keyword_missing", "evidence_keyword_missing", "citation_page_mismatch"} for reason in reasons):
+    if any(reason in {"evidence_keyword_missing", "citation_page_mismatch", "citation_metadata_missing"} for reason in reasons):
         return "keyword_or_citation_rule_failed"
-    if case.answerable and answer_keyword_hit is None:
+    if case.answerable and answer_keyword_hit is None and final_answer_quality_evaluated:
         return "answer_quality_not_auto_judged"
     return ""
 
@@ -768,6 +869,7 @@ def _evaluate_case(
     payload: dict[str, Any] | None,
     parse_error: str,
     returncode: int,
+    evaluate_final_answer: bool,
 ) -> dict[str, Any]:
     router = _router_plan(payload)
     query_planner = _query_planner(payload)
@@ -780,8 +882,11 @@ def _evaluate_case(
     cli_task_type = str((payload or {}).get("task_type") or "")
     artifact_written = _artifact_written(payload)
 
-    evidence_keyword_hit = _contains_all(evidence, case.expected_evidence_keywords)
-    answer_keyword_hit = _contains_all(answer, case.expected_answer_keywords)
+    required_evidence_keywords = case.effective_required_evidence_keywords
+    optional_answer_keywords = case.effective_optional_answer_keywords
+    evidence_keyword_hit = _contains_all(evidence, required_evidence_keywords)
+    answer_keyword_hit = _contains_all(answer, optional_answer_keywords)
+    answer_keyword_evaluated = bool(evaluate_final_answer and optional_answer_keywords)
     citation_page_hit = None
     if case.expected_page is not None:
         citation_page_hit = case.expected_page in _citation_pages(citations)
@@ -792,6 +897,22 @@ def _evaluate_case(
     if case.expected_answer_type == "abstain":
         abstention_pass = _is_abstention(payload)
     forbidden_hit = _contains_any(answer, case.forbidden_answer_keywords)
+
+    downstream_answer_required = case.downstream_answer_required
+    downstream_summary_required = case.downstream_summary_required
+    downstream_calculation_required = case.downstream_calculation_required
+    downstream_table_required = case.downstream_table_required
+    downstream_required_reason = ""
+    if downstream_answer_required:
+        downstream_required_reason = "final_answer_generation_required_after_evidence_package"
+    elif downstream_summary_required:
+        downstream_required_reason = "document_summary_module_required"
+    elif downstream_calculation_required:
+        downstream_required_reason = "simple_calculation_module_required"
+    elif downstream_table_required:
+        downstream_required_reason = "table_lookup_module_required"
+    elif case.expected_answer_type == "abstain":
+        downstream_required_reason = "insufficient_evidence_decision_required"
 
     reasons: list[str] = []
     if parse_error:
@@ -810,8 +931,8 @@ def _evaluate_case(
             reasons.append("unsupported_boundary_missing")
     elif case.expected_answer_type == "abstain":
         if abstention_pass is not True:
-            reasons.append("abstention_missing")
-        if forbidden_hit:
+            reasons.append("insufficient_evidence_signal_missing")
+        if evaluate_final_answer and forbidden_hit:
             reasons.append("forbidden_answer_keyword_present")
     else:
         if payload is not None and payload.get("status") != "success":
@@ -825,27 +946,77 @@ def _evaluate_case(
                 reasons.append("retrieved_evidence_empty")
         if evidence_keyword_hit is False:
             reasons.append("evidence_keyword_missing")
-        if answer_keyword_hit is False:
+        if answer_keyword_evaluated and answer_keyword_hit is False:
             reasons.append("answer_keyword_missing")
         if citation_page_hit is False:
             reasons.append("citation_page_mismatch")
-        if forbidden_hit:
+        if evaluate_final_answer and forbidden_hit:
             reasons.append("forbidden_answer_keyword_present")
-        if not answer and case.expected_task_type != "page_lookup":
-            reasons.append("answer_preview_empty")
 
-    manual_reason = _manual_review_reason(case, reasons, answer_keyword_hit=answer_keyword_hit)
+    has_evidence_package = _retrieved_evidence_count(payload) > 0 or bool(citations)
+    evidence_ready = False
+    evidence_packaging_status = "not_ready"
+    if case.expected_answer_type == "unsupported" or case.unsupported_ok:
+        evidence_ready = bool(unsupported_boundary_pass)
+        evidence_packaging_status = "unsupported_boundary_ready" if evidence_ready else "unsupported_boundary_missing"
+    elif case.expected_answer_type == "abstain":
+        evidence_ready = bool(abstention_pass)
+        evidence_packaging_status = "insufficient_evidence_signal_ready" if evidence_ready else "insufficient_evidence_signal_missing"
+    elif case.expected_task_type == "local_fact_qa":
+        evidence_ready = (
+            payload is not None
+            and payload.get("status") == "success"
+            and actual_task_type == case.expected_task_type
+            and bool(query_planner.get("enabled"))
+            and bool(query_planner.get("final_queries"))
+            and has_evidence_package
+            and evidence_keyword_hit is not False
+            and citation_page_hit is not False
+            and bool(citations)
+        )
+        if evidence_ready:
+            evidence_packaging_status = "ready_for_downstream_answer"
+        elif not has_evidence_package:
+            evidence_packaging_status = "retrieved_evidence_empty"
+        elif evidence_keyword_hit is False:
+            evidence_packaging_status = "evidence_keyword_missing"
+        elif citation_page_hit is False or not citations:
+            evidence_packaging_status = "citation_metadata_questionable"
+        else:
+            evidence_packaging_status = "not_ready"
+    else:
+        evidence_ready = payload is not None and payload.get("status") == "success" and actual_task_type == case.expected_task_type
+        evidence_packaging_status = "deterministic_tool_ready" if evidence_ready else "not_ready"
+
+    if case.answerable and case.expected_task_type == "local_fact_qa" and payload is not None and not citations:
+        reasons.append("citation_metadata_missing")
+
+    manual_reason = _manual_review_reason(
+        case,
+        reasons,
+        answer_keyword_hit=answer_keyword_hit,
+        evidence_ready=evidence_ready,
+        final_answer_quality_evaluated=evaluate_final_answer,
+    )
     manual_review_required = bool(manual_reason)
-    if manual_review_required and not reasons:
-        reasons.append("manual_review_required")
 
     pass_fail = "passed" if not reasons else "failed"
     failure_reason = ";".join(dict.fromkeys(reasons))
     failure_stage = _stage_for_reason(reasons[0]) if reasons else ""
 
     return {
+        "evaluation_scope": EVALUATION_SCOPE,
         "actual_task_type": actual_task_type,
         "cli_task_type": cli_task_type,
+        "downstream_task_type": case.effective_downstream_task_type,
+        "downstream_answer_required": downstream_answer_required,
+        "downstream_summary_required": downstream_summary_required,
+        "downstream_calculation_required": downstream_calculation_required,
+        "downstream_table_required": downstream_table_required,
+        "downstream_required_reason": downstream_required_reason,
+        "final_answer_generation_enabled": bool(evaluate_final_answer),
+        "final_answer_quality_evaluated": bool(evaluate_final_answer),
+        "answer_keyword_evaluated": answer_keyword_evaluated,
         "router_source": str(router.get("router_source") or ""),
         "query_planner_enabled": bool(query_planner.get("enabled")),
         "query_planner_mode": str(query_planner.get("mode") or ""),
@@ -865,12 +1036,17 @@ def _evaluate_case(
         "citation_pages": _citation_pages(citations),
         "expected_page": case.expected_page,
         "expected_evidence_keywords": case.expected_evidence_keywords,
+        "required_evidence_keywords": required_evidence_keywords,
         "expected_answer_keywords": case.expected_answer_keywords,
+        "optional_answer_keywords": optional_answer_keywords,
         "evidence_keyword_hit": evidence_keyword_hit,
         "answer_keyword_hit": answer_keyword_hit,
         "citation_page_hit": citation_page_hit,
         "unsupported_boundary_pass": unsupported_boundary_pass,
         "abstention_pass": abstention_pass,
+        "evidence_ready": evidence_ready,
+        "evidence_readiness_pass": pass_fail == "passed",
+        "evidence_packaging_status": evidence_packaging_status,
         "manual_review_required": manual_review_required,
         "manual_review_reason": manual_reason,
         "pass_fail": pass_fail,
@@ -901,6 +1077,7 @@ def run_case(
     python_executable: str,
     timeout_seconds: int,
     command_runner: CommandRunner,
+    evaluate_final_answer: bool,
 ) -> dict[str, Any]:
     command = _build_cli_command(
         case=case,
@@ -914,7 +1091,13 @@ def run_case(
     )
     completed = command_runner(command, ROOT, timeout_seconds)
     payload, parse_error = _parse_stdout(completed.stdout)
-    evaluated = _evaluate_case(case=case, payload=payload, parse_error=parse_error, returncode=completed.returncode)
+    evaluated = _evaluate_case(
+        case=case,
+        payload=payload,
+        parse_error=parse_error,
+        returncode=completed.returncode,
+        evaluate_final_answer=evaluate_final_answer,
+    )
     evaluated["stdout_preview"] = completed.stdout.strip()[:1000]
     evaluated["stderr_preview"] = completed.stderr.strip()[:1000]
     evaluated["command"] = command
@@ -932,6 +1115,7 @@ def build_summary(
     cases: list[GoldenCase],
     results: list[dict[str, Any]],
     dry_run: bool,
+    evaluate_final_answer: bool,
 ) -> dict[str, Any]:
     pass_fail_counts = Counter(str(row.get("pass_fail") or "") for row in results)
     request_forms = Counter(case.request_form for case in cases)
@@ -953,7 +1137,12 @@ def build_summary(
     summary = {
         "command": "phase5i_answer_quality_benchmark",
         "status": "success",
+        "evaluation_scope": EVALUATION_SCOPE,
+        "final_answer_generation_enabled": bool(evaluate_final_answer),
+        "final_answer_quality_evaluated": bool(evaluate_final_answer),
+        "evidence_readiness_status": "passed" if pass_fail_counts.get("failed", 0) == 0 else "baseline_has_failures",
         "quality_status": "passed" if pass_fail_counts.get("failed", 0) == 0 else "baseline_has_failures",
+        "quality_status_semantics": "pre_llm_evidence_readiness_not_final_answer_quality",
         "run_id": run_id,
         "artifact_dir": str(artifact_dir),
         "case_count": len(cases),
@@ -962,6 +1151,20 @@ def build_summary(
         "answerable_case_count": sum(1 for case in cases if case.answerable),
         "unsupported_case_count": sum(1 for case in cases if case.expected_answer_type == "unsupported" or case.unsupported_ok),
         "abstention_case_count": sum(1 for case in cases if case.expected_answer_type == "abstain"),
+        "downstream_llm_required_count": sum(
+            1
+            for row in results
+            if row.get("downstream_answer_required")
+            or row.get("downstream_summary_required")
+            or row.get("downstream_calculation_required")
+            or row.get("downstream_table_required")
+        ),
+        "downstream_answer_required_count": _count_true(results, "downstream_answer_required"),
+        "downstream_summary_required_count": _count_true(results, "downstream_summary_required"),
+        "downstream_calculation_required_count": _count_true(results, "downstream_calculation_required"),
+        "downstream_table_required_count": _count_true(results, "downstream_table_required"),
+        "evidence_ready_count": _count_true(results, "evidence_ready"),
+        "evidence_readiness_pass_count": _count_true(results, "evidence_readiness_pass"),
         "task_type_correct_count": task_type_correct_count,
         "task_type_accuracy": round(task_type_correct_count / len(cases), 4) if cases else 0.0,
         "evidence_keyword_hit_count": _count_true(results, "evidence_keyword_hit"),
@@ -1008,7 +1211,11 @@ def _write_manual_review(path: Path, results: list[dict[str, Any]]) -> None:
     lines = [
         "# Phase 5I Manual Review",
         "",
-        "This file lists cases where lightweight keyword/citation rules are insufficient or failed.",
+        f"- evaluation_scope: `{EVALUATION_SCOPE}`",
+        "- final_answer_generation_enabled: `false` by default",
+        "- final_answer_quality_evaluated: `false` by default",
+        "",
+        "This file lists evidence readiness, citation metadata, router, unsupported-boundary, and downstream-review cases.",
         "",
     ]
     if not review_rows:
@@ -1024,6 +1231,10 @@ def _write_manual_review(path: Path, results: list[dict[str, Any]]) -> None:
                 f"- pass_fail: {row.get('pass_fail')}",
                 f"- failure_reason: {row.get('failure_reason') or ''}",
                 f"- manual_review_reason: {row.get('manual_review_reason') or ''}",
+                f"- evidence_ready: {row.get('evidence_ready')}",
+                f"- evidence_packaging_status: {row.get('evidence_packaging_status') or ''}",
+                f"- downstream_required_reason: {row.get('downstream_required_reason') or ''}",
+                f"- final_answer_quality_evaluated: {row.get('final_answer_quality_evaluated')}",
                 f"- expected_answer_keywords: {json.dumps(row.get('expected_answer_keywords') or [], ensure_ascii=False)}",
                 f"- expected_evidence_keywords: {json.dumps(row.get('expected_evidence_keywords') or [], ensure_ascii=False)}",
                 f"- citations: {json.dumps(row.get('citations') or [], ensure_ascii=False)[:1000]}",
@@ -1031,6 +1242,13 @@ def _write_manual_review(path: Path, results: list[dict[str, Any]]) -> None:
                 "",
             ]
         )
+        if row.get("downstream_answer_required") and row.get("evidence_ready") and not row.get("final_answer_quality_evaluated"):
+            lines.extend(
+                [
+                    "Evidence found; final answer generation not evaluated in Phase 5I-A.",
+                    "",
+                ]
+            )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -1044,6 +1262,7 @@ def run_phase5i_benchmark(
     cases_jsonl: Path | None = None,
     max_cases: int | None = None,
     dry_run: bool = False,
+    evaluate_final_answer: bool = False,
     python_executable: str = sys.executable,
     timeout_seconds: int = 180,
     command_runner: CommandRunner = _default_command_runner,
@@ -1071,10 +1290,18 @@ def run_phase5i_benchmark(
             python_executable=python_executable,
             timeout_seconds=timeout_seconds,
             command_runner=command_runner,
+            evaluate_final_answer=evaluate_final_answer,
         )
         for case in cases
     ]
-    summary = build_summary(run_id=run_id, artifact_dir=artifact_dir, cases=cases, results=results, dry_run=dry_run)
+    summary = build_summary(
+        run_id=run_id,
+        artifact_dir=artifact_dir,
+        cases=cases,
+        results=results,
+        dry_run=dry_run,
+        evaluate_final_answer=evaluate_final_answer,
+    )
     preview = {
         "run_id": run_id,
         "summary": summary,
@@ -1105,7 +1332,7 @@ def run_phase5i_benchmark(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run the Phase 5I answer quality golden QA benchmark.")
+    parser = argparse.ArgumentParser(description="Run the Phase 5I-A pre-LLM evidence readiness benchmark.")
     parser.add_argument("--db-path", default=str(DEFAULT_DB_PATH))
     parser.add_argument("--doc-id", default=DEFAULT_DOC_ID)
     parser.add_argument("--router-llm-env-file", default=".secrets/router_llm.env")
@@ -1115,6 +1342,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-cases", type=int)
     parser.add_argument("--dry-run", dest="dry_run", action="store_true", default=False)
     parser.add_argument("--no-dry-run", dest="dry_run", action="store_false")
+    parser.add_argument(
+        "--evaluate-final-answer",
+        action="store_true",
+        help="Treat answer_preview keyword checks as hard final-answer checks. Disabled by default.",
+    )
     parser.add_argument("--python-executable", default=sys.executable)
     parser.add_argument("--timeout-seconds", type=int, default=180)
     return parser
@@ -1132,6 +1364,7 @@ def main(argv: list[str] | None = None) -> int:
         cases_jsonl=_project_path(args.cases_jsonl) if args.cases_jsonl else None,
         max_cases=args.max_cases,
         dry_run=bool(args.dry_run),
+        evaluate_final_answer=bool(args.evaluate_final_answer),
         python_executable=str(args.python_executable),
         timeout_seconds=int(args.timeout_seconds),
     )

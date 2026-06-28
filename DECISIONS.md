@@ -8,10 +8,27 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
-## 2026-06-28: Phase 5I Answer Quality Golden Benchmark Runner Implemented
+## 2026-06-28: Phase 5I Evaluation Semantics Aligned to Evidence Readiness
 
-Decision: start Phase 5I by adding a small golden QA benchmark runner on top of
-the accepted Phase 5H full workflow baseline.
+Decision: define current Phase 5I as a Pre-LLM Evidence Readiness Benchmark,
+not a Final Answer Quality Benchmark. The script name remains
+`scripts/run_phase5i_answer_quality_benchmark.py` for compatibility.
+
+Reason:
+
+```text
+The current pipeline under test is:
+user_request -> Router -> Query Rewriter -> Retrieval -> Evidence Packaging /
+local_fact_qa output -> citations / artifacts.
+
+It does not yet evaluate a downstream final-answer LLM, document summary LLM,
+table lookup module, or simple calculation module.
+```
+
+The first server run succeeded operationally but produced many
+`answer_keyword_missing` failures. Those records should be reinterpreted as
+downstream-answer-not-evaluated signals when evidence is present, not as final
+QA quality failures.
 
 Implementation:
 
@@ -20,8 +37,10 @@ script = scripts/run_phase5i_answer_quality_benchmark.py
 default_doc_id = c1fc1c5e040ec894
 default_output_root = outputs/benchmark/phase5i_answer_quality
 default_execution_mode = non_dry_run
+evaluation_scope = pre_llm_evidence_readiness
+final_answer_generation_enabled = false
+final_answer_quality_evaluated = false
 golden_cases = 26
-server_benchmark = not_started
 ```
 
 The runner calls the existing CLI for each case:
@@ -73,35 +92,39 @@ Evaluation rules:
 task_type equality
 final_queries presence for local_fact_qa
 expected evidence keyword hit
-expected answer keyword hit
+answer keyword hit is informational by default
 expected citation page hit
 structured unsupported / limitation warning or error
-abstention / insufficient-evidence marker for unanswerable cases
+insufficient-evidence signal for unanswerable cases
 CLI JSON success
 artifact writing
-manual_review_required for weak automatic judgment
+downstream_answer_required / downstream_summary_required /
+downstream_calculation_required / downstream_table_required flags
+manual_review_required for evidence found but final answer not evaluated
 ```
 
 Status:
 
 ```text
-Phase 5I Answer Quality Golden Benchmark runner -> implemented
-Phase 5I server benchmark -> not_started
+Phase 5I old-semantics server benchmark -> benchmark_evaluated
+Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner -> implemented
+Phase 5I-A corrected-semantics server benchmark -> not_started
+Phase 5I-B Final Answer Quality Benchmark -> not_started
 Phase 5E document_summary -> not_started
 table_lookup/simple_calculation -> not_started
 ```
 
 Boundary:
 
-- this establishes a reproducible answer-quality evaluation baseline, not a
-  new document-answering capability;
+- this establishes a reproducible evidence-readiness baseline, not a new
+  document-answering capability and not final answer quality evidence;
 - Phase 5I does not modify Router task classification, Query Rewriter behavior,
   retrieval logic, `local_fact_qa` answer generation, AnswerPolicy, ingestion,
   VLM, training, or full GRPO E2E;
 - calculation/table/summary cases are evaluated only as unsupported boundary
-  or limitation cases;
-- benchmark execution and answer-quality interpretation require server
-  artifacts and are not accepted yet.
+  or downstream-required limitation cases;
+- final answer quality benchmarking should be run only after the downstream
+  answer module is connected.
 
 ## 2026-06-28: Phase 5H Full Workflow Validation Baseline Accepted
 

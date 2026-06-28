@@ -520,13 +520,15 @@ Phase 5H Full Workflow Validation Baseline -> accepted
 server non-dry-run smoke -> accepted
 Phase 5E document_summary -> not_started
 table_lookup/simple_calculation -> not_started
-golden QA benchmark runner -> implemented
-server answer quality benchmark -> not_started
+old-semantics Phase 5I server benchmark -> benchmark_evaluated
+pre-LLM evidence readiness benchmark runner -> implemented
+corrected-semantics evidence readiness server benchmark -> not_started
+final answer quality benchmark -> not_started
 ```
 
-## Phase 5I Answer Quality Golden Benchmark
+## Phase 5I-A Pre-LLM Evidence Readiness Benchmark
 
-Phase 5I adds an evaluation runner, not a Router behavior change:
+Phase 5I-A adds an evaluation runner, not a Router behavior change:
 
 ```text
 scripts/run_phase5i_answer_quality_benchmark.py
@@ -536,6 +538,9 @@ It treats the Router and Query Planner as black-box components inside the
 accepted CLI workflow. The runner records:
 
 ```text
+evaluation_scope = pre_llm_evidence_readiness
+final_answer_generation_enabled = false
+final_answer_quality_evaluated = false
 expected_task_type
 actual_task_type
 router_source
@@ -547,6 +552,13 @@ answer_preview
 citations
 warnings
 error
+downstream_answer_required
+downstream_summary_required
+downstream_calculation_required
+downstream_table_required
+evidence_ready
+evidence_readiness_pass
+evidence_packaging_status
 failure_stage
 failure_reason
 ```
@@ -556,24 +568,29 @@ Automatic evaluation is deliberately lightweight:
 ```text
 1. Router task_type must equal expected_task_type.
 2. local_fact_qa cases should expose enabled query planning and final_queries.
-3. Evidence and answer text are checked only with expected keyword lists.
+3. Evidence text is checked with required evidence keyword lists.
 4. Citation pages are checked only when an expected_page is declared.
 5. document_summary, table_lookup, simple_calculation, and structured
-   extraction cases pass only as unsupported boundaries or limitations.
-6. unanswerable cases pass only when the output abstains or reports
-   insufficient evidence.
-7. Cases with weak automatic evidence are marked manual_review_required.
+   extraction cases pass only as unsupported boundaries, limitations, or
+   downstream-required signals.
+6. unanswerable cases check only for an insufficient-evidence signal.
+7. answer_keyword_hit is informational by default and is not a hard failure
+   unless --evaluate-final-answer is explicitly enabled.
+8. Cases with evidence found but final answer generation not evaluated are
+   marked manual_review_required.
 ```
 
 Boundary:
 
 ```text
-Phase 5I does not change Router classification rules.
+Phase 5I-A does not change Router classification rules.
 It does not enable LLM Router fallback by default.
 It does not change Query Rewriter prompts or fusion.
 It does not modify local_fact_qa, AnswerPolicy, document_summary,
 table_lookup, simple_calculation, VLM, training, or full GRPO E2E.
 Calculation/table/summary cases remain unsupported-boundary checks.
+Phase 5I-B final answer quality benchmarking remains not_started until a
+downstream answer module is connected.
 ```
 
 ## Routing Failure Fallback Behavior

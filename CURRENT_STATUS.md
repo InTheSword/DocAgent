@@ -274,28 +274,31 @@ artifacts = phase5h_cases.jsonl; phase5h_results.jsonl; phase5h_summary.json; pr
 
 Phase 5H acceptance validates structured execution across Router, Query
 Planner, retrieval, local_fact_qa, deterministic tools, unsupported-boundary
-handling, and artifact writing. Answer quality validation, golden QA benchmark,
+handling, and artifact writing. Final answer quality validation,
 document_summary, table_lookup/simple_calculation, online MinerU full parsing,
 VLM, training, and full GRPO E2E remain not completed or not_started as
 applicable. Calculation-intent cases remain retrieval plus unsupported-boundary
 validation only and do not mean `simple_calculation` has been implemented.
 
-Phase 5I Answer Quality Evaluation / Golden QA Benchmark is implemented locally
-in `scripts/run_phase5i_answer_quality_benchmark.py`. It starts answer quality
-baseline work by calling the accepted `scripts/docagent_cli.py` full workflow
-against a fixed `doc_id` and 26 manually defined golden cases. The runner uses
-lightweight, reproducible checks for Router task type, Query Planner final
-queries, evidence keyword hits, answer keyword hits, citation page hits,
-structured unsupported boundaries, abstention behavior, CLI success, artifact
-writing, and failure-stage attribution. It writes `phase5i_cases.jsonl`,
-`phase5i_results.jsonl`, `phase5i_summary.json`, `preview.json`, and
-`manual_review.md` under
-`outputs/benchmark/phase5i_answer_quality/<run_id>/`. Phase 5I does not add
-core answer capability and does not modify Router classification,
-`local_fact_qa` answer logic, AnswerPolicy, document_summary, table lookup,
-simple calculation, VLM, training, or full GRPO E2E. Server benchmark execution
-is not_started, so Phase 5I is not accepted and does not mean final answer
-quality has met a product-quality bar.
+Phase 5I-A Pre-LLM Evidence Readiness Benchmark is implemented locally in
+`scripts/run_phase5i_answer_quality_benchmark.py`. The script name is retained
+for compatibility, but the default evaluation scope is now
+`pre_llm_evidence_readiness`, with `final_answer_generation_enabled=false` and
+`final_answer_quality_evaluated=false`. It calls the accepted
+`scripts/docagent_cli.py` full workflow against a fixed `doc_id` and 26
+manually defined cases, then evaluates Router task type, Query Planner final
+queries, retrieval/evidence keyword hits, citation metadata, structured
+unsupported boundaries, insufficient-evidence signals, CLI success, artifact
+writing, and downstream requirement flags. `answer_keyword_hit` is retained as
+an informational/manual-review field and is not a default hard failure unless
+`--evaluate-final-answer` is explicitly enabled. The server run that produced
+many `answer_keyword_missing` records should be interpreted as an evidence
+readiness baseline with downstream answer generation not evaluated, not as a
+final QA quality failure report. Phase 5I-A does not add core answer
+capability and does not modify Router classification, `local_fact_qa` answer
+logic, AnswerPolicy, document_summary, table lookup, simple calculation, VLM,
+training, or full GRPO E2E. Phase 5I-B final answer quality benchmarking
+remains not_started until a downstream answer module is connected.
 
 Phase 5C-2 accepted server real API smoke evidence:
 
@@ -390,8 +393,10 @@ Phase 5G server regression -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> accepted
 Phase 5C-3 Query Planning + Multi-Query Retrieval -> accepted
 Phase 5H Full Workflow Validation Baseline -> accepted
-Phase 5I Answer Quality Golden Benchmark runner -> implemented
-Phase 5I server benchmark -> not_started
+Phase 5I old-semantics server benchmark -> benchmark_evaluated
+Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner -> implemented
+Phase 5I-A corrected-semantics server benchmark -> not_started
+Phase 5I-B Final Answer Quality Benchmark -> not_started
 Phase 5E Document Summary MVP -> not_started
 Phase 5F full CLI acceptance -> not_started
 CDC -> not_started

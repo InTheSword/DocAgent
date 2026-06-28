@@ -4,7 +4,7 @@
 
 Phase 4D-C has been accepted and recorded.
 
-Current Phase 5 status after Phase 5I answer-quality benchmark runner implementation:
+Current Phase 5 status after Phase 5I-A evidence-readiness benchmark semantics correction:
 
 ```text
 Phase 5A architecture audit and contracts -> accepted
@@ -24,8 +24,10 @@ Phase 5G server regression -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> accepted
 Phase 5C-3 Query Planning + Multi-Query Retrieval -> accepted
 Phase 5H Full Workflow Validation Baseline -> accepted
-Phase 5I Answer Quality Golden Benchmark runner -> implemented
-Phase 5I server benchmark -> not_started
+Phase 5I old-semantics server benchmark -> benchmark_evaluated
+Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner -> implemented
+Phase 5I-A corrected-semantics server benchmark -> not_started
+Phase 5I-B Final Answer Quality Benchmark -> not_started
 Phase 5E document_summary -> not_started
 Phase 5F full CLI acceptance -> not_started
 ```
@@ -1463,26 +1465,35 @@ Answer quality validation remains not_started.
 VLM, training, and full GRPO E2E are not executed.
 ```
 
-### Phase 5I: Answer Quality Evaluation / Golden QA Benchmark
+### Phase 5I-A: Pre-LLM Evidence Readiness Benchmark
 
 Goal:
 
 ```text
-Build a reproducible small golden QA benchmark on top of the accepted Phase 5H
-full workflow baseline.
+Build a reproducible small pre-LLM evidence readiness benchmark on top of the
+accepted Phase 5H full workflow baseline.
 ```
 
 Implementation status:
 
 ```text
-Phase 5I Answer Quality Golden Benchmark runner -> implemented
+Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner -> implemented
 runner = scripts/run_phase5i_answer_quality_benchmark.py
 default_doc_id = c1fc1c5e040ec894
 default_output_root = outputs/benchmark/phase5i_answer_quality/<run_id>/
 default_mode = non_dry_run
+evaluation_scope = pre_llm_evidence_readiness
+final_answer_generation_enabled = false
+final_answer_quality_evaluated = false
 case_count = 26
-server_benchmark = not_started
+old_semantics_server_benchmark = benchmark_evaluated
+corrected_semantics_server_benchmark = not_started
 ```
+
+The old-semantics server benchmark completed successfully as a command run, but
+its failure taxonomy mixed evidence readiness with final answer quality. Its
+large `answer_keyword_missing` count should be read as
+`downstream_answer_required` when evidence is present, not as final QA failure.
 
 The runner calls `scripts/docagent_cli.py` rather than bypassing the system
 under test:
@@ -1494,7 +1505,7 @@ user_request
 -> Query Planner / Query Rewriter
 -> multi-query retrieval
 -> local_fact_qa / deterministic tool / structured unsupported boundary
--> answer / citations / evidence metadata / CLI artifacts
+-> evidence package / citations / evidence metadata / CLI artifacts
 ```
 
 Default case coverage:
@@ -1531,15 +1542,26 @@ manual_review.md
 Summary metrics include:
 
 ```text
+evaluation_scope
+final_answer_generation_enabled
+final_answer_quality_evaluated
 case_count
 passed_count
 failed_count
 answerable_case_count
 unsupported_case_count
 abstention_case_count
+downstream_llm_required_count
+downstream_answer_required_count
+downstream_summary_required_count
+downstream_calculation_required_count
+downstream_table_required_count
+evidence_ready_count
+evidence_readiness_pass_count
+evidence_readiness_status
 task_type_accuracy
 evidence_keyword_hit_count
-answer_keyword_hit_count
+answer_keyword_hit_count (informational by default)
 citation_page_hit_count
 unsupported_boundary_pass_count
 abstention_pass_count
@@ -1552,24 +1574,28 @@ Evaluation policy:
 ```text
 Use lightweight reproducible rules only:
 task_type equality, final_queries presence for local_fact_qa, evidence keyword
-hits, answer keyword hits, expected citation page hits, structured unsupported
-warnings/errors, abstention markers, CLI JSON success, and artifact writing.
-If automatic rules cannot judge answer quality, mark manual_review_required.
-Do not force ambiguous or weakly judged answers to pass.
+hits, expected citation page hits, structured unsupported warnings/errors,
+insufficient-evidence signals, CLI JSON success, artifact writing, and
+downstream-required flags.
+`answer_keyword_hit` is informational by default. It is not a hard failure
+unless `--evaluate-final-answer` is explicitly enabled.
+If evidence is found but final answer generation is not evaluated, mark
+manual_review_required and record downstream_answer_required.
 ```
 
 Boundary:
 
 ```text
-Phase 5I creates an evaluation baseline, not a new answering feature.
+Phase 5I-A creates an evidence readiness baseline, not a new answering feature
+and not final answer quality evidence.
 It does not modify Router classification, Query Rewriter behavior,
 retrieval logic, local_fact_qa answer generation, AnswerPolicy, ingestion,
 VLM, training, or full GRPO E2E.
 document_summary, table_lookup, and simple_calculation remain not_started.
-calculation/table/summary cases are evaluated only as unsupported boundaries
-or limitations.
-Phase 5I is not accepted until the server benchmark artifacts are produced and
-recorded.
+calculation/table/summary cases are evaluated only as unsupported boundaries,
+limitations, or downstream-required signals.
+Phase 5I-B Final Answer Quality Benchmark remains not_started until a
+downstream answer module is connected.
 ```
 
 ## 13. Implementation Discipline
@@ -1609,18 +1635,19 @@ Phase 5C-2 LLM-assisted Router fallback and server real API smoke are accepted.
 Phase 5C-3 Query Planning + Multi-Query Retrieval is accepted. Single-case LLM
 semantic query expansion smoke and multi-question Query Rewriter smoke both
 passed; full business-flow baseline validation was accepted later in Phase 5H,
-while answer quality benchmarking is now started by Phase 5I but not accepted.
+while final answer quality benchmarking remains not_started.
 Phase 5H Full Workflow Validation Baseline is accepted in
 scripts/run_phase5h_full_workflow_smoke.py to validate the non-dry-run chain
 from user_request through Router, Query Planner, retrieval, local_fact_qa /
 deterministic tools, citations, and artifacts. The accepted server run passed
 15/15 non-dry-run cases with valid JSON and artifact output for every case.
-Phase 5I Answer Quality Golden Benchmark runner is implemented in
-scripts/run_phase5i_answer_quality_benchmark.py with 26 golden cases and
-lightweight reproducible quality checks. The next action is to run the server
-benchmark and record artifacts. Do not implement document_summary, table lookup,
-calculation, local_fact_qa answer fixes, Router task changes, AnswerPolicy
-changes, VLM, training, or full E2E as part of Phase 5I.
+Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner is implemented in
+scripts/run_phase5i_answer_quality_benchmark.py with 26 cases and lightweight
+reproducible evidence-readiness checks. The next action is to re-run the server
+benchmark and record evidence-readiness artifacts under
+evaluation_scope=pre_llm_evidence_readiness. Do not implement document_summary,
+table lookup, calculation, local_fact_qa answer fixes, Router task changes,
+AnswerPolicy changes, VLM, training, or full E2E as part of Phase 5I-A.
 ```
 
 Phase 4D-D remains deferred until after Phase 5 MVP is accepted.
