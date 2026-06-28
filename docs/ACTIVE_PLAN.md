@@ -16,6 +16,7 @@ Phase 5 Personal-use DocAgent MVP
 -> Phase 5C-2 LLM-assisted Router fallback accepted
 -> Phase 5C-3 Query Planning + Multi-Query Retrieval accepted
 -> Phase 5H Full Workflow Validation Baseline accepted
+-> Phase 5I Answer Quality Golden Benchmark runner implemented
 -> keep the accepted rule router as the deterministic default
 -> use external LLM only for explicitly enabled low-confidence routing fallback
 -> use the LLM query planner only for query expansion when explicitly enabled
@@ -85,6 +86,8 @@ Phase 5G server regression -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> accepted
 Phase 5C-3 Query Planning + Multi-Query Retrieval -> accepted
 Phase 5H Full Workflow Validation Baseline -> accepted
+Phase 5I Answer Quality Golden Benchmark runner -> implemented
+Phase 5I server benchmark -> not_started
 Phase 5E Document Summary MVP -> not_started
 Phase 5F full CLI acceptance -> not_started
 CDC -> not_started
@@ -956,9 +959,49 @@ Calculation-intent cases are retrieval plus unsupported-boundary validation
 only. They do not mean `table_lookup` or `simple_calculation` is implemented.
 
 Phase 5H validates full workflow execution stability, not answer quality.
-Golden QA benchmark, answer quality validation, document_summary,
-table_lookup/simple_calculation, online MinerU full parsing, VLM, training,
-and full GRPO E2E remain not completed or not_started as applicable.
+Phase 5I now starts the golden QA benchmark baseline, but server execution is
+still not_started. document_summary, table_lookup/simple_calculation, online
+MinerU full parsing, VLM, training, and full GRPO E2E remain not_started or
+not executed as applicable.
+
+Phase 5I implemented boundary:
+
+```text
+branch = codex/phase5i-answer-quality-golden-benchmark
+runner = scripts/run_phase5i_answer_quality_benchmark.py
+default_doc_id = c1fc1c5e040ec894
+default_output_root = outputs/benchmark/phase5i_answer_quality/<run_id>/
+default_mode = non_dry_run
+case_count = 26
+server_benchmark = not_started
+status = implemented
+```
+
+Phase 5I evaluates the accepted Phase 5H full workflow as a black box:
+
+```text
+user_request -> CLI --question -> Router -> Query Planner -> multi-query
+retrieval -> local_fact_qa / deterministic tool / structured unsupported
+boundary -> answer, citations, metadata, and artifacts
+```
+
+Phase 5I writes:
+
+```text
+phase5i_cases.jsonl
+phase5i_results.jsonl
+phase5i_summary.json
+preview.json
+manual_review.md
+```
+
+The lightweight rules check task_type, final_queries, evidence keywords,
+answer keywords, citation pages, structured unsupported boundaries,
+abstention, CLI success, artifact writing, and failure-stage attribution.
+Cases that cannot be automatically judged are marked
+`manual_review_required`. Phase 5I does not implement document_summary,
+table_lookup, simple_calculation, local_fact_qa answer fixes, Router task
+classification changes, AnswerPolicy changes, VLM, training, or full GRPO E2E.
 
 Phase 4D-C scaffold / command preparation:
 
@@ -1060,23 +1103,25 @@ absolute_path_hit_count = 0
    multi-question server smokes.
 2. Keep Phase 5H accepted as full workflow execution-stability evidence, not
    answer-quality or golden-benchmark evidence.
-3. Start Phase 5E document_summary or another named MVP closure step only
+3. Run the Phase 5I server benchmark on the fixed accepted document and record
+   the answer-quality baseline artifacts before interpreting quality.
+4. Start Phase 5E document_summary or another named MVP closure step only
    after explicit task approval.
-4. Keep Phase 5C-2 LLM-assisted Router fallback disabled by default unless
+5. Keep Phase 5C-2 LLM-assisted Router fallback disabled by default unless
    explicitly configured and allowed.
-5. Keep Phase 5F-3 server smoke accepted as execution-stability evidence, not
+6. Keep Phase 5F-3 server smoke accepted as execution-stability evidence, not
    online MinerU OCR or benchmark-level answer-quality evidence.
-6. Keep Phase 5F-1 server smoke accepted as execution-stability evidence, not
+7. Keep Phase 5F-1 server smoke accepted as execution-stability evidence, not
    benchmark-level answer-quality evidence.
-7. Keep Phase 4D-D deferred until MVP entrypoint, router, deterministic tools,
+8. Keep Phase 4D-D deferred until MVP entrypoint, router, deterministic tools,
    and multi-task regression are accepted.
-8. Keep Candidate-ID Reader postponed until reader-selection failures dominate
+9. Keep Candidate-ID Reader postponed until reader-selection failures dominate
    after candidate coverage issues are resolved.
-9. Keep optional full GRPO E2E postponed until candidate answer board quality
+10. Keep optional full GRPO E2E postponed until candidate answer board quality
    improves.
-10. Keep `page_children` as the default until more shard and document-type
+11. Keep `page_children` as the default until more shard and document-type
    validation supports a global default change.
-11. Keep CDC `not_started` until explicitly started.
+12. Keep CDC `not_started` until explicitly started.
 
 ## Stop Condition
 
@@ -1100,6 +1145,8 @@ Phase 4D-B1.3 server sanity accepted
   local tests plus single-case and multi-question server query-rewriter smokes
 + Phase 5H Full Workflow Validation Baseline accepted after 15-case
   non-dry-run server smoke
++ Phase 5I Answer Quality Golden Benchmark runner implemented locally
++ Phase 5I server benchmark not_started
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

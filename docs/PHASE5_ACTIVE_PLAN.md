@@ -4,7 +4,7 @@
 
 Phase 4D-C has been accepted and recorded.
 
-Current Phase 5 status after Phase 5H full workflow validation baseline acceptance:
+Current Phase 5 status after Phase 5I answer-quality benchmark runner implementation:
 
 ```text
 Phase 5A architecture audit and contracts -> accepted
@@ -24,6 +24,8 @@ Phase 5G server regression -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> accepted
 Phase 5C-3 Query Planning + Multi-Query Retrieval -> accepted
 Phase 5H Full Workflow Validation Baseline -> accepted
+Phase 5I Answer Quality Golden Benchmark runner -> implemented
+Phase 5I server benchmark -> not_started
 Phase 5E document_summary -> not_started
 Phase 5F full CLI acceptance -> not_started
 ```
@@ -1461,6 +1463,115 @@ Answer quality validation remains not_started.
 VLM, training, and full GRPO E2E are not executed.
 ```
 
+### Phase 5I: Answer Quality Evaluation / Golden QA Benchmark
+
+Goal:
+
+```text
+Build a reproducible small golden QA benchmark on top of the accepted Phase 5H
+full workflow baseline.
+```
+
+Implementation status:
+
+```text
+Phase 5I Answer Quality Golden Benchmark runner -> implemented
+runner = scripts/run_phase5i_answer_quality_benchmark.py
+default_doc_id = c1fc1c5e040ec894
+default_output_root = outputs/benchmark/phase5i_answer_quality/<run_id>/
+default_mode = non_dry_run
+case_count = 26
+server_benchmark = not_started
+```
+
+The runner calls `scripts/docagent_cli.py` rather than bypassing the system
+under test:
+
+```text
+user_request
+-> CLI --question <user_request>
+-> Router
+-> Query Planner / Query Rewriter
+-> multi-query retrieval
+-> local_fact_qa / deterministic tool / structured unsupported boundary
+-> answer / citations / evidence metadata / CLI artifacts
+```
+
+Default case coverage:
+
+```text
+explicit fact QA
+date / year questions
+amount / number / percentage questions
+page location
+document statistics
+Chinese requests
+imperative requests
+declarative requests
+ambiguous requests
+unanswerable questions
+summary boundary
+table boundary
+calculation intent boundary
+short duplicate-prone query
+insufficient-evidence abstention
+structured extraction boundary
+```
+
+Artifacts:
+
+```text
+phase5i_cases.jsonl
+phase5i_results.jsonl
+phase5i_summary.json
+preview.json
+manual_review.md
+```
+
+Summary metrics include:
+
+```text
+case_count
+passed_count
+failed_count
+answerable_case_count
+unsupported_case_count
+abstention_case_count
+task_type_accuracy
+evidence_keyword_hit_count
+answer_keyword_hit_count
+citation_page_hit_count
+unsupported_boundary_pass_count
+abstention_pass_count
+failure_stage_distribution
+failure_reason_distribution
+```
+
+Evaluation policy:
+
+```text
+Use lightweight reproducible rules only:
+task_type equality, final_queries presence for local_fact_qa, evidence keyword
+hits, answer keyword hits, expected citation page hits, structured unsupported
+warnings/errors, abstention markers, CLI JSON success, and artifact writing.
+If automatic rules cannot judge answer quality, mark manual_review_required.
+Do not force ambiguous or weakly judged answers to pass.
+```
+
+Boundary:
+
+```text
+Phase 5I creates an evaluation baseline, not a new answering feature.
+It does not modify Router classification, Query Rewriter behavior,
+retrieval logic, local_fact_qa answer generation, AnswerPolicy, ingestion,
+VLM, training, or full GRPO E2E.
+document_summary, table_lookup, and simple_calculation remain not_started.
+calculation/table/summary cases are evaluated only as unsupported boundaries
+or limitations.
+Phase 5I is not accepted until the server benchmark artifacts are produced and
+recorded.
+```
+
 ## 13. Implementation Discipline
 
 Phase 5 must avoid local trap debugging.
@@ -1498,14 +1609,18 @@ Phase 5C-2 LLM-assisted Router fallback and server real API smoke are accepted.
 Phase 5C-3 Query Planning + Multi-Query Retrieval is accepted. Single-case LLM
 semantic query expansion smoke and multi-question Query Rewriter smoke both
 passed; full business-flow baseline validation was accepted later in Phase 5H,
-while answer quality benchmarking remains not completed.
+while answer quality benchmarking is now started by Phase 5I but not accepted.
 Phase 5H Full Workflow Validation Baseline is accepted in
 scripts/run_phase5h_full_workflow_smoke.py to validate the non-dry-run chain
 from user_request through Router, Query Planner, retrieval, local_fact_qa /
 deterministic tools, citations, and artifacts. The accepted server run passed
 15/15 non-dry-run cases with valid JSON and artifact output for every case.
-Do not implement document_summary, table lookup, calculation, VLM, training, or
-full E2E as part of Phase 5H.
+Phase 5I Answer Quality Golden Benchmark runner is implemented in
+scripts/run_phase5i_answer_quality_benchmark.py with 26 golden cases and
+lightweight reproducible quality checks. The next action is to run the server
+benchmark and record artifacts. Do not implement document_summary, table lookup,
+calculation, local_fact_qa answer fixes, Router task changes, AnswerPolicy
+changes, VLM, training, or full E2E as part of Phase 5I.
 ```
 
 Phase 4D-D remains deferred until after Phase 5 MVP is accepted.

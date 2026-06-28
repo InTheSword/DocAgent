@@ -8,6 +8,101 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-28: Phase 5I Answer Quality Golden Benchmark Runner Implemented
+
+Decision: start Phase 5I by adding a small golden QA benchmark runner on top of
+the accepted Phase 5H full workflow baseline.
+
+Implementation:
+
+```text
+script = scripts/run_phase5i_answer_quality_benchmark.py
+default_doc_id = c1fc1c5e040ec894
+default_output_root = outputs/benchmark/phase5i_answer_quality
+default_execution_mode = non_dry_run
+golden_cases = 26
+server_benchmark = not_started
+```
+
+The runner calls the existing CLI for each case:
+
+```text
+user_request
+-> scripts/docagent_cli.py --question <user_request>
+-> Router
+-> Query Planner / Query Rewriter
+-> multi-query retrieval
+-> local_fact_qa / deterministic tool / structured unsupported boundary
+-> answer / citations / evidence metadata / CLI artifacts
+```
+
+Default case coverage:
+
+```text
+fact QA
+date / year
+amount / number / percentage
+page lookup
+document statistics
+Chinese requests
+imperative requests
+declarative requests
+ambiguous requests
+unanswerable questions
+summary boundary
+table boundary
+calculation intent boundary
+short duplicate-prone query
+insufficient-evidence abstention
+structured extraction boundary
+```
+
+Artifacts:
+
+```text
+phase5i_cases.jsonl
+phase5i_results.jsonl
+phase5i_summary.json
+preview.json
+manual_review.md
+```
+
+Evaluation rules:
+
+```text
+task_type equality
+final_queries presence for local_fact_qa
+expected evidence keyword hit
+expected answer keyword hit
+expected citation page hit
+structured unsupported / limitation warning or error
+abstention / insufficient-evidence marker for unanswerable cases
+CLI JSON success
+artifact writing
+manual_review_required for weak automatic judgment
+```
+
+Status:
+
+```text
+Phase 5I Answer Quality Golden Benchmark runner -> implemented
+Phase 5I server benchmark -> not_started
+Phase 5E document_summary -> not_started
+table_lookup/simple_calculation -> not_started
+```
+
+Boundary:
+
+- this establishes a reproducible answer-quality evaluation baseline, not a
+  new document-answering capability;
+- Phase 5I does not modify Router task classification, Query Rewriter behavior,
+  retrieval logic, `local_fact_qa` answer generation, AnswerPolicy, ingestion,
+  VLM, training, or full GRPO E2E;
+- calculation/table/summary cases are evaluated only as unsupported boundary
+  or limitation cases;
+- benchmark execution and answer-quality interpretation require server
+  artifacts and are not accepted yet.
+
 ## 2026-06-28: Phase 5H Full Workflow Validation Baseline Accepted
 
 Decision: accept Phase 5H after the server non-dry-run full workflow smoke

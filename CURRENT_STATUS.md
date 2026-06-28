@@ -1,6 +1,6 @@
 # Current Status
 
-Updated: 2026-06-27
+Updated: 2026-06-28
 
 ## Phase 4D-C Accepted / Phase 5 Active
 
@@ -280,6 +280,23 @@ VLM, training, and full GRPO E2E remain not completed or not_started as
 applicable. Calculation-intent cases remain retrieval plus unsupported-boundary
 validation only and do not mean `simple_calculation` has been implemented.
 
+Phase 5I Answer Quality Evaluation / Golden QA Benchmark is implemented locally
+in `scripts/run_phase5i_answer_quality_benchmark.py`. It starts answer quality
+baseline work by calling the accepted `scripts/docagent_cli.py` full workflow
+against a fixed `doc_id` and 26 manually defined golden cases. The runner uses
+lightweight, reproducible checks for Router task type, Query Planner final
+queries, evidence keyword hits, answer keyword hits, citation page hits,
+structured unsupported boundaries, abstention behavior, CLI success, artifact
+writing, and failure-stage attribution. It writes `phase5i_cases.jsonl`,
+`phase5i_results.jsonl`, `phase5i_summary.json`, `preview.json`, and
+`manual_review.md` under
+`outputs/benchmark/phase5i_answer_quality/<run_id>/`. Phase 5I does not add
+core answer capability and does not modify Router classification,
+`local_fact_qa` answer logic, AnswerPolicy, document_summary, table lookup,
+simple calculation, VLM, training, or full GRPO E2E. Server benchmark execution
+is not_started, so Phase 5I is not accepted and does not mean final answer
+quality has met a product-quality bar.
+
 Phase 5C-2 accepted server real API smoke evidence:
 
 ```text
@@ -373,6 +390,8 @@ Phase 5G server regression -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> accepted
 Phase 5C-3 Query Planning + Multi-Query Retrieval -> accepted
 Phase 5H Full Workflow Validation Baseline -> accepted
+Phase 5I Answer Quality Golden Benchmark runner -> implemented
+Phase 5I server benchmark -> not_started
 Phase 5E Document Summary MVP -> not_started
 Phase 5F full CLI acceptance -> not_started
 CDC -> not_started

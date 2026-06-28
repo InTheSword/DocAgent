@@ -520,8 +520,60 @@ Phase 5H Full Workflow Validation Baseline -> accepted
 server non-dry-run smoke -> accepted
 Phase 5E document_summary -> not_started
 table_lookup/simple_calculation -> not_started
-answer quality validation -> not_completed
-golden QA benchmark -> not_started
+golden QA benchmark runner -> implemented
+server answer quality benchmark -> not_started
+```
+
+## Phase 5I Answer Quality Golden Benchmark
+
+Phase 5I adds an evaluation runner, not a Router behavior change:
+
+```text
+scripts/run_phase5i_answer_quality_benchmark.py
+```
+
+It treats the Router and Query Planner as black-box components inside the
+accepted CLI workflow. The runner records:
+
+```text
+expected_task_type
+actual_task_type
+router_source
+query_planner_enabled
+final_queries
+tools_used
+retrieved_evidence_count
+answer_preview
+citations
+warnings
+error
+failure_stage
+failure_reason
+```
+
+Automatic evaluation is deliberately lightweight:
+
+```text
+1. Router task_type must equal expected_task_type.
+2. local_fact_qa cases should expose enabled query planning and final_queries.
+3. Evidence and answer text are checked only with expected keyword lists.
+4. Citation pages are checked only when an expected_page is declared.
+5. document_summary, table_lookup, simple_calculation, and structured
+   extraction cases pass only as unsupported boundaries or limitations.
+6. unanswerable cases pass only when the output abstains or reports
+   insufficient evidence.
+7. Cases with weak automatic evidence are marked manual_review_required.
+```
+
+Boundary:
+
+```text
+Phase 5I does not change Router classification rules.
+It does not enable LLM Router fallback by default.
+It does not change Query Rewriter prompts or fusion.
+It does not modify local_fact_qa, AnswerPolicy, document_summary,
+table_lookup, simple_calculation, VLM, training, or full GRPO E2E.
+Calculation/table/summary cases remain unsupported-boundary checks.
 ```
 
 ## Routing Failure Fallback Behavior
