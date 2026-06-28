@@ -6,6 +6,10 @@ from docagent.models.base import (
     HeuristicAnswerPolicy,
     ModelLoadError,
 )
+from docagent.models.openai_compatible_answer_policy import (
+    OpenAICompatibleAnswerPolicy,
+    OpenAICompatibleAnswerPolicyConfig,
+)
 from docagent.models.qwen_answer_policy import QwenAnswerPolicy, QwenAnswerPolicyConfig
 
 __all__ = [
@@ -15,6 +19,8 @@ __all__ = [
     "GenerationResult",
     "HeuristicAnswerPolicy",
     "ModelLoadError",
+    "OpenAICompatibleAnswerPolicy",
+    "OpenAICompatibleAnswerPolicyConfig",
     "QwenAnswerPolicy",
     "QwenAnswerPolicyConfig",
 ]

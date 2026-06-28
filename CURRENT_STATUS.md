@@ -365,8 +365,37 @@ The `baseline_has_failures` result is an evidence-readiness baseline, not a
 final QA quality failure report. Phase 5I-A does not add core answer
 capability and does not modify Router classification, `local_fact_qa` answer
 logic, AnswerPolicy, document_summary, table lookup, simple calculation, VLM,
-training, or full GRPO E2E. Phase 5I-B final answer quality benchmarking
-remains not_started until a downstream answer module is connected.
+training, or full GRPO E2E.
+
+## Phase 5I-B Model-backed Answer Quality Baseline
+
+Status: skipped_api_missing
+
+Phase 5I-B introduces a small-scenario final answer quality evaluation runner
+in `scripts/run_phase5i_b_model_answer_quality.py`. Unlike Phase 5I-A evidence
+readiness, this phase is designed to enable model-backed answer generation and
+evaluate final answer correctness, format validity, citation validity,
+location accuracy, and failure taxonomy. The implementation adds a 14-case
+fixture scenario set under `data/scenario_sets/phase5i_b/`, answer-quality
+helpers under `docagent/eval/`, and an OpenAI-compatible AnswerPolicy adapter
+under `docagent/models/openai_compatible_answer_policy.py`.
+
+The local code path and fake-policy tests pass, but the real OpenAI-compatible
+API smoke is `skipped_api_missing` because `.secrets/answer_policy.env` is not
+present. The generated local report is
+`outputs/phase5i_b_model_answer_quality/acceptance_report.json` and records
+`used_model_answer_generation=false`, `used_external_api=false`,
+`used_fake_policy=false`, and `final_answer_quality_evaluated=false`.
+
+Boundary:
+
+- small scenario baseline only;
+- not a leaderboard benchmark;
+- not a commercial-quality proof;
+- not training;
+- not VLM;
+- not table lookup or simple calculation;
+- not UI.
 
 Phase 5C-2 accepted server real API smoke evidence:
 
@@ -464,7 +493,7 @@ Phase 5H Full Workflow Validation Baseline -> accepted
 Phase 5I old-semantics server benchmark -> benchmark_evaluated
 Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner -> accepted
 Phase 5I-A corrected-semantics server benchmark -> accepted
-Phase 5I-B Final Answer Quality Benchmark -> not_started
+Phase 5I-B Model-backed Answer Quality Baseline -> skipped_api_missing
 Phase 5E Document Summary MVP -> implemented
 Phase 5E-A Document Summary Acceptance Pack -> implemented
 Phase 5F full CLI acceptance -> not_started

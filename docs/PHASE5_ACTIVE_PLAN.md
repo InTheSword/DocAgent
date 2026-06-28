@@ -4,7 +4,7 @@
 
 Phase 4D-C has been accepted and recorded.
 
-Current Phase 5 status after Phase 5I-A evidence-readiness benchmark server execution:
+Current Phase 5 status after Phase 5I-B local implementation and missing-API smoke:
 
 ```text
 Phase 5A architecture audit and contracts -> accepted
@@ -27,7 +27,7 @@ Phase 5H Full Workflow Validation Baseline -> accepted
 Phase 5I old-semantics server benchmark -> benchmark_evaluated
 Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner -> accepted
 Phase 5I-A corrected-semantics server benchmark -> accepted
-Phase 5I-B Final Answer Quality Benchmark -> not_started
+Phase 5I-B Model-backed Answer Quality Baseline -> skipped_api_missing
 Phase 5E document_summary -> implemented
 Phase 5E-A document_summary acceptance pack -> implemented
 Phase 5F full CLI acceptance -> not_started
@@ -1681,8 +1681,67 @@ implemented later as a separate deterministic local tool; table_lookup and
 simple_calculation remain not_started.
 Phase 5I-A calculation/table/summary cases are historical unsupported
 boundaries, limitations, or downstream-required signals.
-Phase 5I-B Final Answer Quality Benchmark remains not_started until a
-downstream answer module is connected.
+Phase 5I-B Model-backed Answer Quality Baseline is implemented locally, but
+the real OpenAI-compatible API smoke is `skipped_api_missing` until
+`.secrets/answer_policy.env` is provided.
+```
+
+### Phase 5I-B: Model-backed Answer Quality Baseline
+
+Goal:
+
+```text
+Create a small-scenario final answer quality baseline that runs the
+local_fact_qa path with an explicitly injected AnswerPolicy and evaluates
+answer correctness, format validity, citation validity, location accuracy,
+failure taxonomy, and raw training-candidate exports.
+```
+
+Implementation status:
+
+```text
+Phase 5I-B Model-backed Answer Quality Baseline -> skipped_api_missing
+runner = scripts/run_phase5i_b_model_answer_quality.py
+scenario_set = data/scenario_sets/phase5i_b/phase5i_b_cases.jsonl
+scenario_doc = data/scenario_sets/phase5i_b/docs/sample_climate_report.txt
+scenario_case_count = 14
+extractive_count = 12
+refusal_count = 2
+zh_question_count = 2
+en_question_count = 12
+openai_compatible_policy = docagent/models/openai_compatible_answer_policy.py
+metrics = docagent/eval/answer_quality.py
+schema = docagent/eval/scenario_schema.py
+failure_taxonomy = docagent/eval/failure_taxonomy.py
+output_dir = outputs/phase5i_b_model_answer_quality
+acceptance_report = outputs/phase5i_b_model_answer_quality/acceptance_report.json
+model_config_masked = outputs/phase5i_b_model_answer_quality/model_config_masked.json
+used_model_answer_generation = false
+used_external_api = false
+used_fake_policy = false
+final_answer_quality_evaluated = false
+skip_reason = .secrets/answer_policy.env missing
+```
+
+Local validation:
+
+```text
+python -m py_compile scripts/run_phase5i_b_model_answer_quality.py = passed
+tests/test_phase5i_b_answer_quality_metrics.py = passed
+tests/test_phase5i_b_scenario_schema.py = passed
+tests/test_phase5i_b_model_answer_quality_runner.py = passed
+openai_compatible missing-config smoke = skipped_api_missing
+```
+
+Boundary:
+
+```text
+Phase 5I-B is a small-scenario baseline, not a leaderboard benchmark and not
+a commercial-quality proof. Fake policy runs are allowed only for local tests
+and are not real model acceptance. The missing-config smoke does not call an
+external API and does not evaluate final answer quality. This phase does not
+train, run GRPO, use VLM, implement table_lookup/simple_calculation, or build
+UI.
 ```
 
 ## 13. Implementation Discipline
@@ -1722,7 +1781,8 @@ Phase 5C-2 LLM-assisted Router fallback and server real API smoke are accepted.
 Phase 5C-3 Query Planning + Multi-Query Retrieval is accepted. Single-case LLM
 semantic query expansion smoke and multi-question Query Rewriter smoke both
 passed; full business-flow baseline validation was accepted later in Phase 5H,
-while final answer quality benchmarking remains not_started.
+while Phase 5I-B later added a small-scenario answer-quality baseline runner
+whose real API smoke is currently skipped because answer_policy.env is missing.
 Phase 5H Full Workflow Validation Baseline is accepted in
 scripts/run_phase5h_full_workflow_smoke.py to validate the non-dry-run chain
 from user_request through Router, Query Planner, retrieval, local_fact_qa /
@@ -1735,8 +1795,10 @@ final_answer_generation_enabled=false, and
 final_answer_quality_evaluated=false. `baseline_has_failures` remains the
 evidence-readiness baseline state and does not mean final answer quality was
 evaluated. Phase 5E document_summary was implemented later as a separate
-milestone; do not implement table lookup, calculation, local_fact_qa answer
-fixes, AnswerPolicy changes, VLM, training, or full E2E as part of Phase 5I-A.
+milestone. Phase 5I-B was implemented later as a small-scenario final answer
+quality runner, not a leaderboard benchmark. Do not implement table lookup,
+calculation, local_fact_qa answer fixes, VLM, training, or full E2E as part of
+the Phase 5I-A record.
 ```
 
 Phase 4D-D remains deferred until after Phase 5 MVP is accepted.

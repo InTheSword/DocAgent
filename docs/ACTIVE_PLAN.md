@@ -20,6 +20,8 @@ Phase 5 Personal-use DocAgent MVP
 -> keep the accepted rule router as the deterministic default
 -> use external LLM only for explicitly enabled low-confidence routing fallback
 -> use the LLM query planner only for query expansion when explicitly enabled
+-> Phase 5I-B Model-backed Answer Quality Baseline implemented locally;
+   real API smoke skipped because answer_policy.env is missing
 -> Phase 5E Document Summary MVP implemented locally
 -> Phase 5E-A Document Summary Acceptance Pack implemented locally
 -> stop before table_lookup, simple_calculation, VLM,
@@ -91,7 +93,7 @@ Phase 5H Full Workflow Validation Baseline -> accepted
 Phase 5I old-semantics server benchmark -> benchmark_evaluated
 Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner -> accepted
 Phase 5I-A corrected-semantics server benchmark -> accepted
-Phase 5I-B Final Answer Quality Benchmark -> not_started
+Phase 5I-B Model-backed Answer Quality Baseline -> skipped_api_missing
 Phase 5E Document Summary MVP -> implemented
 Phase 5E-A Document Summary Acceptance Pack -> implemented
 Phase 5F full CLI acceptance -> not_started
@@ -1110,6 +1112,36 @@ Step F optional full E2E = GPU required for Qwen3 + GRPO adapter
 
 ## Local Validation
 
+Phase 5I-B Model-backed Answer Quality Baseline local validation:
+
+```text
+resource_boundary = server_optional
+runner = scripts/run_phase5i_b_model_answer_quality.py
+scenario_set = data/scenario_sets/phase5i_b/phase5i_b_cases.jsonl
+case_count = 14
+extractive_count = 12
+refusal_count = 2
+zh_question_count = 2
+en_question_count = 12
+output_dir = outputs/phase5i_b_model_answer_quality
+acceptance_report = outputs/phase5i_b_model_answer_quality/acceptance_report.json
+status = skipped_api_missing
+used_model_answer_generation = false
+used_external_api = false
+used_fake_policy = false
+final_answer_quality_evaluated = false
+api_missing_reason = .secrets/answer_policy.env missing
+not_leaderboard = true
+```
+
+Validation commands:
+
+```text
+python -m py_compile scripts/run_phase5i_b_model_answer_quality.py
+python -m pytest tests/test_phase5i_b_answer_quality_metrics.py tests/test_phase5i_b_scenario_schema.py tests/test_phase5i_b_model_answer_quality_runner.py -q
+python scripts/run_phase5i_b_model_answer_quality.py --scenario-path data/scenario_sets/phase5i_b/phase5i_b_cases.jsonl --db-path outputs/phase5i_b_model_answer_quality/docagent.db --output-dir outputs/phase5i_b_model_answer_quality --allow-external-api --answer-policy-provider openai_compatible --answer-policy-env-file .secrets/answer_policy.env --enable-query-planning --query-planner-mode rule
+```
+
 Phase 5E Document Summary MVP local validation:
 
 ```text
@@ -1187,24 +1219,27 @@ absolute_path_hit_count = 0
    answer-quality or golden-benchmark evidence.
 3. Keep Phase 5I-A accepted as an evidence-readiness benchmark baseline; do
    not interpret it as final answer quality acceptance.
-4. Keep Phase 5E document_summary as a locally implemented deterministic
+4. Provide `.secrets/answer_policy.env` and run the Phase 5I-B
+   OpenAI-compatible model-backed smoke before claiming acceptance_candidate
+   or real answer-quality evidence.
+5. Keep Phase 5E document_summary as a locally implemented deterministic
    extractive summary tool; do not interpret it as final answer quality
    acceptance.
-5. Keep Phase 5C-2 LLM-assisted Router fallback disabled by default unless
+6. Keep Phase 5C-2 LLM-assisted Router fallback disabled by default unless
    explicitly configured and allowed.
-6. Keep Phase 5F-3 server smoke accepted as execution-stability evidence, not
+7. Keep Phase 5F-3 server smoke accepted as execution-stability evidence, not
    online MinerU OCR or benchmark-level answer-quality evidence.
-7. Keep Phase 5F-1 server smoke accepted as execution-stability evidence, not
+8. Keep Phase 5F-1 server smoke accepted as execution-stability evidence, not
    benchmark-level answer-quality evidence.
-8. Keep Phase 4D-D deferred until MVP entrypoint, router, deterministic tools,
+9. Keep Phase 4D-D deferred until MVP entrypoint, router, deterministic tools,
    and multi-task regression are accepted.
-9. Keep Candidate-ID Reader postponed until reader-selection failures dominate
+10. Keep Candidate-ID Reader postponed until reader-selection failures dominate
    after candidate coverage issues are resolved.
-10. Keep optional full GRPO E2E postponed until candidate answer board quality
+11. Keep optional full GRPO E2E postponed until candidate answer board quality
    improves.
-11. Keep `page_children` as the default until more shard and document-type
+12. Keep `page_children` as the default until more shard and document-type
    validation supports a global default change.
-12. Keep CDC `not_started` until explicitly started.
+13. Keep CDC `not_started` until explicitly started.
 
 ## Stop Condition
 
@@ -1232,7 +1267,9 @@ Phase 4D-B1.3 server sanity accepted
 + Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner accepted
 + Phase 5I-A corrected-semantics server benchmark accepted with
   evidence_readiness_status = baseline_has_failures
-+ Phase 5I-B Final Answer Quality Benchmark not_started
++ Phase 5I-B Model-backed Answer Quality Baseline implemented locally with
+  real API smoke skipped_api_missing because .secrets/answer_policy.env is
+  missing
 + Phase 5E Document Summary MVP implemented with local targeted and Phase 5
   regression tests passing
 + targeted and regression tests pass
