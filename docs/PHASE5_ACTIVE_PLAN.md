@@ -4,7 +4,7 @@
 
 Phase 4D-C has been accepted and recorded.
 
-Current Phase 5 status after Phase 5I-A evidence-readiness benchmark semantics correction:
+Current Phase 5 status after Phase 5I-A evidence-readiness benchmark server execution:
 
 ```text
 Phase 5A architecture audit and contracts -> accepted
@@ -25,8 +25,8 @@ Phase 5C-2 LLM-assisted Router fallback -> accepted
 Phase 5C-3 Query Planning + Multi-Query Retrieval -> accepted
 Phase 5H Full Workflow Validation Baseline -> accepted
 Phase 5I old-semantics server benchmark -> benchmark_evaluated
-Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner -> implemented
-Phase 5I-A corrected-semantics server benchmark -> not_started
+Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner -> accepted
+Phase 5I-A corrected-semantics server benchmark -> accepted
 Phase 5I-B Final Answer Quality Benchmark -> not_started
 Phase 5E document_summary -> not_started
 Phase 5F full CLI acceptance -> not_started
@@ -1477,7 +1477,7 @@ accepted Phase 5H full workflow baseline.
 Implementation status:
 
 ```text
-Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner -> implemented
+Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner -> accepted
 runner = scripts/run_phase5i_answer_quality_benchmark.py
 default_doc_id = c1fc1c5e040ec894
 default_output_root = outputs/benchmark/phase5i_answer_quality/<run_id>/
@@ -1487,13 +1487,44 @@ final_answer_generation_enabled = false
 final_answer_quality_evaluated = false
 case_count = 26
 old_semantics_server_benchmark = benchmark_evaluated
-corrected_semantics_server_benchmark = not_started
+corrected_semantics_server_benchmark = accepted
+server_execution_status = success
+evidence_readiness_status = baseline_has_failures
+run_id = phase5i_answer_quality_20260628_024037_e6ccd282
+passed_count = 16
+failed_count = 10
+evidence_ready_count = 16
+evidence_readiness_pass_count = 16
+task_type_accuracy = 0.7692
+failure_stage_distribution = evidence_readiness:4, router:6
+failure_reason_distribution = evidence_keyword_missing:1,
+  insufficient_evidence_signal_missing:3,
+  task_type_mismatch:local_fact_qa!=document_statistics:1,
+  task_type_mismatch:local_fact_qa!=document_summary:3,
+  task_type_mismatch:local_fact_qa!=table_lookup_or_calculation:2,
+  unsupported_boundary_missing:5
 ```
 
 The old-semantics server benchmark completed successfully as a command run, but
 its failure taxonomy mixed evidence readiness with final answer quality. Its
 large `answer_keyword_missing` count should be read as
 `downstream_answer_required` when evidence is present, not as final QA failure.
+
+The corrected-semantics server run completed successfully on commit
+`0d45e389f098b3cfb72b289a2be8b3ce6aa4770c`. Preflight verified the database,
+router LLM secret file, benchmark script, and fixed document
+`c1fc1c5e040ec894`. The readable artifacts are under:
+
+```text
+outputs/benchmark/phase5i_answer_quality/phase5i_answer_quality_20260628_024037_e6ccd282/
+phase5i_summary.json
+manual_review.md
+preview.json
+```
+
+`manual_review.md` records the corrected scope flags and the phrase
+`Evidence found; final answer generation not evaluated in Phase 5I-A.` for
+downstream answer-generation review cases.
 
 The runner calls `scripts/docagent_cli.py` rather than bypassing the system
 under test:
@@ -1641,13 +1672,15 @@ scripts/run_phase5h_full_workflow_smoke.py to validate the non-dry-run chain
 from user_request through Router, Query Planner, retrieval, local_fact_qa /
 deterministic tools, citations, and artifacts. The accepted server run passed
 15/15 non-dry-run cases with valid JSON and artifact output for every case.
-Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner is implemented in
-scripts/run_phase5i_answer_quality_benchmark.py with 26 cases and lightweight
-reproducible evidence-readiness checks. The next action is to re-run the server
-benchmark and record evidence-readiness artifacts under
-evaluation_scope=pre_llm_evidence_readiness. Do not implement document_summary,
-table lookup, calculation, local_fact_qa answer fixes, Router task changes,
-AnswerPolicy changes, VLM, training, or full E2E as part of Phase 5I-A.
+Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner and corrected-semantics
+server execution are accepted. The accepted run records
+evaluation_scope=pre_llm_evidence_readiness,
+final_answer_generation_enabled=false, and
+final_answer_quality_evaluated=false. `baseline_has_failures` remains the
+evidence-readiness baseline state and does not mean final answer quality was
+evaluated. Do not implement document_summary, table lookup, calculation,
+local_fact_qa answer fixes, Router task changes, AnswerPolicy changes, VLM,
+training, or full E2E as part of Phase 5I-A.
 ```
 
 Phase 4D-D remains deferred until after Phase 5 MVP is accepted.

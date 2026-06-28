@@ -521,8 +521,8 @@ server non-dry-run smoke -> accepted
 Phase 5E document_summary -> not_started
 table_lookup/simple_calculation -> not_started
 old-semantics Phase 5I server benchmark -> benchmark_evaluated
-pre-LLM evidence readiness benchmark runner -> implemented
-corrected-semantics evidence readiness server benchmark -> not_started
+pre-LLM evidence readiness benchmark runner -> accepted
+corrected-semantics evidence readiness server benchmark -> accepted
 final answer quality benchmark -> not_started
 ```
 
@@ -535,12 +535,28 @@ scripts/run_phase5i_answer_quality_benchmark.py
 ```
 
 It treats the Router and Query Planner as black-box components inside the
-accepted CLI workflow. The runner records:
+accepted CLI workflow. The accepted corrected-semantics server run records:
 
 ```text
 evaluation_scope = pre_llm_evidence_readiness
 final_answer_generation_enabled = false
 final_answer_quality_evaluated = false
+run_id = phase5i_answer_quality_20260628_024037_e6ccd282
+status = success
+evidence_readiness_status = baseline_has_failures
+case_count = 26
+passed_count = 16
+failed_count = 10
+evidence_ready_count = 16
+evidence_readiness_pass_count = 16
+task_type_accuracy = 0.7692
+failure_stage_distribution = evidence_readiness:4, router:6
+failure_reason_distribution = evidence_keyword_missing:1,
+  insufficient_evidence_signal_missing:3,
+  task_type_mismatch:local_fact_qa!=document_statistics:1,
+  task_type_mismatch:local_fact_qa!=document_summary:3,
+  task_type_mismatch:local_fact_qa!=table_lookup_or_calculation:2,
+  unsupported_boundary_missing:5
 expected_task_type
 actual_task_type
 router_source
@@ -578,6 +594,14 @@ Automatic evaluation is deliberately lightweight:
    unless --evaluate-final-answer is explicitly enabled.
 8. Cases with evidence found but final answer generation not evaluated are
    marked manual_review_required.
+```
+
+The readable server artifacts are:
+
+```text
+outputs/benchmark/phase5i_answer_quality/phase5i_answer_quality_20260628_024037_e6ccd282/phase5i_summary.json
+outputs/benchmark/phase5i_answer_quality/phase5i_answer_quality_20260628_024037_e6ccd282/manual_review.md
+outputs/benchmark/phase5i_answer_quality/phase5i_answer_quality_20260628_024037_e6ccd282/preview.json
 ```
 
 Boundary:

@@ -107,17 +107,63 @@ Status:
 
 ```text
 Phase 5I old-semantics server benchmark -> benchmark_evaluated
-Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner -> implemented
-Phase 5I-A corrected-semantics server benchmark -> not_started
+Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner -> accepted
+Phase 5I-A corrected-semantics server benchmark -> accepted
 Phase 5I-B Final Answer Quality Benchmark -> not_started
 Phase 5E document_summary -> not_started
 table_lookup/simple_calculation -> not_started
+```
+
+Corrected-semantics server execution:
+
+```text
+preflight_command = phase5i_evidence_readiness_preflight
+preflight_head = 0d45e389f098b3cfb72b289a2be8b3ce6aa4770c
+head_matches_expected = true
+db_exists = true
+secret_exists = true
+script_exists = true
+fixed_doc_id = c1fc1c5e040ec894
+fixed_doc_exists = true
+
+benchmark_command = phase5i_answer_quality_benchmark
+status = success
+evaluation_scope = pre_llm_evidence_readiness
+final_answer_generation_enabled = false
+final_answer_quality_evaluated = false
+evidence_readiness_status = baseline_has_failures
+quality_status_semantics = pre_llm_evidence_readiness_not_final_answer_quality
+run_id = phase5i_answer_quality_20260628_024037_e6ccd282
+case_count = 26
+passed_count = 16
+failed_count = 10
+evidence_ready_count = 16
+evidence_readiness_pass_count = 16
+task_type_accuracy = 0.7692
+failure_stage_distribution = evidence_readiness:4, router:6
+failure_reason_distribution = evidence_keyword_missing:1,
+  insufficient_evidence_signal_missing:3,
+  task_type_mismatch:local_fact_qa!=document_statistics:1,
+  task_type_mismatch:local_fact_qa!=document_summary:3,
+  task_type_mismatch:local_fact_qa!=table_lookup_or_calculation:2,
+  unsupported_boundary_missing:5
+summary_path = outputs/benchmark/phase5i_answer_quality/phase5i_answer_quality_20260628_024037_e6ccd282/phase5i_summary.json
+manual_review_exists = true
+preview_exists = true
+manual_review_confirms_final_answer_generation_not_evaluated = true
+used_external_api = true
+used_vlm = false
+used_training = false
+used_full_e2e = false
 ```
 
 Boundary:
 
 - this establishes a reproducible evidence-readiness baseline, not a new
   document-answering capability and not final answer quality evidence;
+- the accepted Phase 5I-A result means the runner, artifacts, and evaluation
+  semantics are accepted, even though the evidence-readiness baseline still has
+  router and evidence-readiness failures;
 - Phase 5I does not modify Router task classification, Query Rewriter behavior,
   retrieval logic, `local_fact_qa` answer generation, AnswerPolicy, ingestion,
   VLM, training, or full GRPO E2E;
