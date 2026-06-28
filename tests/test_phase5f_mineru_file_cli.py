@@ -114,7 +114,7 @@ def test_mineru_existing_file_ingestion_routes_to_page_lookup(tmp_path: Path) ->
     assert payload["metadata_consistency"]["status"] == "ok"
 
 
-def test_mineru_existing_file_ingestion_supports_local_fact_qa_dry_run_fallback(tmp_path: Path) -> None:
+def test_mineru_existing_file_ingestion_supports_document_summary_dry_run(tmp_path: Path) -> None:
     source, db_path, document_root, output_dir = _paths(tmp_path)
 
     payload, _raw = _run_cli(
@@ -123,11 +123,11 @@ def test_mineru_existing_file_ingestion_supports_local_fact_qa_dry_run_fallback(
     )
 
     assert payload["status"] == "success"
-    assert payload["task_type"] == "local_fact_qa"
+    assert payload["task_type"] == "document_summary"
     assert payload["router_plan"]["task_type"] == "document_summary"
-    assert payload["router_plan"]["selected_tools"] == ["local_fact_qa"]
-    assert payload["tools_used"] == ["local_fact_qa"]
+    assert payload["router_plan"]["selected_tools"] == ["document_summary"]
+    assert payload["tools_used"] == ["document_summary"]
     assert payload["answer"] == ""
-    assert payload["supporting_evidence_ids"]
-    assert "fallback_to_local_fact_qa" in payload["warnings"]
+    assert payload["supporting_evidence_ids"] == []
+    assert "fallback_to_local_fact_qa" not in payload["warnings"]
     assert "dry_run_no_answer_generated" in payload["warnings"]

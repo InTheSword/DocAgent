@@ -237,7 +237,7 @@ def test_file_argument_missing_file_returns_structured_error(tmp_path: Path) -> 
     assert Path(payload["artifact_dir"], "result.json").is_file()
 
 
-def test_document_summary_question_returns_not_implemented(tmp_path: Path) -> None:
+def test_document_summary_question_runs_summary_tool(tmp_path: Path) -> None:
     db_path = _repository_with_document(tmp_path)
 
     payload = _run_cli(
@@ -252,10 +252,13 @@ def test_document_summary_question_returns_not_implemented(tmp_path: Path) -> No
         str(tmp_path / "cli"),
     )
 
-    assert payload["status"] == "error"
+    assert payload["status"] == "success"
     assert payload["task_type"] == "document_summary"
-    assert payload["error"]["type"] == "document_summary_not_implemented"
-    assert "document_summary_not_implemented" in payload["warnings"]
+    assert payload["router_plan"]["selected_tools"] == ["document_summary"]
+    assert payload["tools_used"] == ["document_summary"]
+    assert payload["summary"]["key_points"]
+    assert payload["citations"]
+    assert payload["error"] == {}
 
 
 def test_table_calculation_question_returns_not_implemented(tmp_path: Path) -> None:

@@ -84,6 +84,30 @@ recorded 2 unsupported known-limitations cases, failed 0 cases, emitted valid
 JSON for all 10 cases, and wrote 9 CLI artifacts without external API, VLM,
 training, or full E2E execution.
 
+Phase 5E Document Summary MVP is implemented in
+`docagent/tools/document_summary.py` and wired through `scripts/docagent_cli.py`.
+It is a deterministic extractive summary path: the tool loads persisted
+EvidenceBlocks from `DocumentRepository`, groups evidence by page, selects a
+bounded set of representative textual blocks, and returns `answer`, `summary`,
+`key_points`, `page_summaries`, `citations`, `warnings`, and `trace`.
+`document_summary` is now included in CLI `available_tools`, so obvious summary
+requests route to the summary tool instead of the old generic unsupported path.
+The implementation does not call external APIs, LLM answer generation, VLM,
+AnswerPolicy, training, GRPO, table lookup, simple calculation, or online
+MinerU OCR. Local Phase 5 tests pass; no server smoke has been run for this
+local-only deterministic milestone.
+
+Phase 5E-A Document Summary Acceptance Pack is implemented in
+`scripts/run_phase5e_document_summary_acceptance.py`. The runner executes a
+real non-dry-run `.txt` ingestion plus summary through `scripts/docagent_cli.py`,
+validates `document_summary` routing, parses `result.json`, `summary.json`,
+`router_plan.json`, and `trace.json`, checks citations against persisted
+EvidenceBlocks, and writes
+`outputs/phase5e_document_summary_acceptance/acceptance_report.json`.
+The local acceptance report is a packaging and grounding check only; it does
+not evaluate final answer quality or use external LLM answer generation, VLM,
+training, GRPO, table lookup, simple calculation, or online MinerU OCR.
+
 Phase 5C-2 LLM-assisted Router fallback is accepted in
 `docagent/router/llm_client.py`, `docagent/router/llm_router.py`, and
 `scripts/docagent_cli.py`. The accepted rule router remains the deterministic
@@ -441,7 +465,8 @@ Phase 5I old-semantics server benchmark -> benchmark_evaluated
 Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner -> accepted
 Phase 5I-A corrected-semantics server benchmark -> accepted
 Phase 5I-B Final Answer Quality Benchmark -> not_started
-Phase 5E Document Summary MVP -> not_started
+Phase 5E Document Summary MVP -> implemented
+Phase 5E-A Document Summary Acceptance Pack -> implemented
 Phase 5F full CLI acceptance -> not_started
 CDC -> not_started
 MVP CLI / trace integration -> not_started
@@ -715,8 +740,9 @@ Known Phase 5F-3 limitations:
 ```text
 Phase 5F-3 accepts existing MinerU output-backed file-to-answer execution.
 Online MinerU OCR/parser execution from raw PDF remains a later task.
-document_summary is not implemented; summary-like questions may fall back to
-local_fact_qa dry-run with warnings.
+At Phase 5F-3 acceptance time, document_summary was not implemented and
+summary-like questions could fall back to local_fact_qa dry-run with warnings.
+Phase 5E document_summary was implemented later as a deterministic local tool.
 local_fact_qa answer quality is not benchmark-validated by this smoke.
 The GLOBOCAN sample structure_quality is passed_with_warnings.
 ```
@@ -765,9 +791,9 @@ Current conclusion:
   Router, Query Planner, retrieval, local_fact_qa/deterministic tools, answer,
   citations, and artifacts. The accepted server run passed 15/15 non-dry-run
   cases with valid JSON and artifact output for every case.
-- Phase 5E document_summary, table lookup, simple calculation, online MinerU
-  OCR execution, and local_fact_qa answer quality improvement remain
-  not_started.
+- Phase 5E document_summary is implemented locally as a deterministic
+  extractive summary tool. Table lookup, simple calculation, online MinerU OCR
+  execution, and local_fact_qa answer quality improvement remain not_started.
 
 Phase 4D-C accepted server result:
 

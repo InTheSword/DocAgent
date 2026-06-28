@@ -8,6 +8,7 @@ from docagent.tools.document_tools import (
     get_page_text,
     list_pages,
 )
+from docagent.tools.document_summary import summarize_document
 
 __all__ = [
     "count_blocks",
@@ -16,4 +17,5 @@ __all__ = [
     "count_tables",
     "get_page_text",
     "list_pages",
+    "summarize_document",
 ]

@@ -20,8 +20,10 @@ Phase 5 Personal-use DocAgent MVP
 -> keep the accepted rule router as the deterministic default
 -> use external LLM only for explicitly enabled low-confidence routing fallback
 -> use the LLM query planner only for query expansion when explicitly enabled
--> stop before Phase 5E document_summary, table_lookup, simple_calculation,
-   VLM, local_fact_qa answer-quality fixes, training, and full GRPO E2E
+-> Phase 5E Document Summary MVP implemented locally
+-> Phase 5E-A Document Summary Acceptance Pack implemented locally
+-> stop before table_lookup, simple_calculation, VLM,
+   local_fact_qa answer-quality fixes, training, and full GRPO E2E
 ```
 
 ## Current Status
@@ -90,7 +92,8 @@ Phase 5I old-semantics server benchmark -> benchmark_evaluated
 Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner -> accepted
 Phase 5I-A corrected-semantics server benchmark -> accepted
 Phase 5I-B Final Answer Quality Benchmark -> not_started
-Phase 5E Document Summary MVP -> not_started
+Phase 5E Document Summary MVP -> implemented
+Phase 5E-A Document Summary Acceptance Pack -> implemented
 Phase 5F full CLI acceptance -> not_started
 CDC -> not_started
 MVP CLI / trace integration -> not_started
@@ -841,8 +844,9 @@ output-backed execution.
 local_fact_qa answer quality remains a separate known limitation.
 Dense index is not built in the lightweight smoke; index_status may remain
 not_started.
-Phase 5E document_summary remains not_started. Phase 5C-2 LLM-assisted Router
-fallback and Phase 5G server regression were accepted later.
+At Phase 5F-2 acceptance time, Phase 5E document_summary remained not_started.
+Phase 5E was implemented later; Phase 5C-2 LLM-assisted Router fallback and
+Phase 5G server regression were also accepted later.
 ```
 
 Phase 5F-3 accepted MinerU/parser-backed file-to-answer smoke:
@@ -911,12 +915,13 @@ Known Phase 5F-3 limitations:
 Phase 5F-3 accepts existing MinerU output-backed file-to-answer execution.
 Online MinerU OCR/parser execution from raw PDF remains a later task.
 Router correctly classifies "What is this document about?" as document_summary,
-but Phase 5E document_summary is not implemented, so CLI falls back to
-local_fact_qa dry-run. This does not block execution-smoke acceptance.
+but at Phase 5F-3 acceptance time Phase 5E document_summary was not
+implemented, so CLI fell back to local_fact_qa dry-run. This did not block
+that execution-smoke acceptance.
 local_fact_qa answer quality is not benchmark-validated by this smoke.
 The GLOBOCAN sample structure_quality is passed_with_warnings.
-Phase 5E document_summary remains not_started. Phase 5C-2 LLM-assisted Router
-fallback and Phase 5G server regression were accepted later.
+Phase 5E document_summary was implemented later. Phase 5C-2 LLM-assisted
+Router fallback and Phase 5G server regression were also accepted later.
 ```
 
 Phase 5H accepted full workflow validation baseline:
@@ -1105,6 +1110,40 @@ Step F optional full E2E = GPU required for Qwen3 + GRPO adapter
 
 ## Local Validation
 
+Phase 5E Document Summary MVP local validation:
+
+```text
+resource_boundary = local_only
+document_summary_tool = implemented
+cli_dispatch = implemented
+acceptance_pack = implemented
+artifact_outputs = result.json, summary.json, router_plan.json, trace.json
+acceptance_report = outputs/phase5e_document_summary_acceptance/acceptance_report.json
+used_external_api = false
+used_llm_answer_generation = false
+used_vlm = false
+used_training = false
+used_grpo = false
+used_table_lookup = false
+used_simple_calculation = false
+used_online_mineru_ocr = false
+final_answer_quality_evaluated = false
+server_smoke = not_started
+```
+
+Validation commands:
+
+```text
+python scripts/run_phase5e_document_summary_acceptance.py --output-dir outputs/phase5e_document_summary_acceptance
+python -m pytest tests/test_phase5e_document_summary_acceptance.py -q
+python -m pytest tests/test_phase5e_document_summary_tool.py -q
+python -m pytest tests/test_phase5e_document_summary_cli.py -q
+python -m pytest tests/test_phase5f_cli.py tests/test_phase5_document_tools.py tests/test_phase5_router.py -q
+python -m pytest tests/test_phase5g_cli_regression.py -q
+python -m pytest tests/test_phase5f_file_ingestion_cli.py tests/test_phase5f_mineru_file_cli.py -q
+$files = Get-ChildItem -LiteralPath 'D:\Projects\docagent\tests' -Filter 'test_phase5*.py' | ForEach-Object { $_.FullName }; python -m pytest @files -q
+```
+
 Local `main` validation covers code and documentation state. The accepted Gate
 4 artifacts are server-side outputs; the local absence of these ignored paths
 does not indicate missing tracked code:
@@ -1148,8 +1187,9 @@ absolute_path_hit_count = 0
    answer-quality or golden-benchmark evidence.
 3. Keep Phase 5I-A accepted as an evidence-readiness benchmark baseline; do
    not interpret it as final answer quality acceptance.
-4. Start Phase 5E document_summary or another named MVP closure step only
-   after explicit task approval.
+4. Keep Phase 5E document_summary as a locally implemented deterministic
+   extractive summary tool; do not interpret it as final answer quality
+   acceptance.
 5. Keep Phase 5C-2 LLM-assisted Router fallback disabled by default unless
    explicitly configured and allowed.
 6. Keep Phase 5F-3 server smoke accepted as execution-stability evidence, not
@@ -1193,10 +1233,12 @@ Phase 4D-B1.3 server sanity accepted
 + Phase 5I-A corrected-semantics server benchmark accepted with
   evidence_readiness_status = baseline_has_failures
 + Phase 5I-B Final Answer Quality Benchmark not_started
++ Phase 5E Document Summary MVP implemented with local targeted and Phase 5
+  regression tests passing
 + targeted and regression tests pass
 + status documents updated
 + branch pushed
-+ stop before Phase 5E implementation, table lookup, simple_calculation,
++ stop before table lookup, simple_calculation,
    Reader prompt changes, AnswerPolicy integration changes, training, CDC,
    Demo, per-qid repairs, further 90-sample probe tuning, and any global
    `candidate_spans` default change

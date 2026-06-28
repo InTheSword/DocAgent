@@ -61,14 +61,13 @@ def test_phase5g_runner_reads_cases_and_writes_reports(tmp_path: Path) -> None:
                 "expected_tools_any": ["count_pages"],
             },
             {
-                "case_id": "summary_not_implemented",
+                "case_id": "summary",
                 "mode": "doc_id",
                 "doc_id": "$FIRST_DOC_ID",
                 "question": "Summarize this document.",
-                "expected_status": "error",
+                "expected_status": "success",
                 "expected_task_type": "document_summary",
-                "expected_error_type": "document_summary_not_implemented",
-                "known_limitation_allowed": True,
+                "expected_tools_any": ["document_summary"],
             },
             {
                 "case_id": "table_lookup_not_implemented",
@@ -123,10 +122,8 @@ def test_phase5g_runner_reads_cases_and_writes_reports(tmp_path: Path) -> None:
             return CommandResult(
                 0,
                 _payload(
-                    status="error",
                     task_type="document_summary",
-                    warnings=["document_summary_not_implemented"],
-                    error={"type": "document_summary_not_implemented", "message": "not implemented"},
+                    tools_used=["document_summary"],
                     artifact_dir=str(artifact_dir),
                 ),
             )
@@ -157,8 +154,8 @@ def test_phase5g_runner_reads_cases_and_writes_reports(tmp_path: Path) -> None:
 
     assert summary["status"] == "failed"
     assert summary["case_count"] == 6
-    assert summary["completed_count"] == 2
-    assert summary["unsupported_count"] == 2
+    assert summary["completed_count"] == 3
+    assert summary["unsupported_count"] == 1
     assert summary["skipped_count"] == 1
     assert summary["failed_count"] == 1
     assert summary["json_valid_count"] == 4
@@ -168,13 +165,11 @@ def test_phase5g_runner_reads_cases_and_writes_reports(tmp_path: Path) -> None:
         "document_summary": 1,
         "table_lookup_or_calculation": 1,
     }
-    assert summary["tools_used_distribution"] == {"count_pages": 1}
+    assert summary["tools_used_distribution"] == {"count_pages": 1, "document_summary": 1}
     assert summary["failure_taxonomy"] == {"stdout_not_json": 1}
-    assert summary["unsupported_taxonomy"]["document_summary_not_implemented"] == 1
     assert summary["unsupported_taxonomy"]["table_lookup_not_implemented"] == 1
     assert summary["skipped_taxonomy"]["mineru_fixture_missing"] == 1
     assert summary["failure_taxonomy"]["stdout_not_json"] == 1
-    assert summary["known_limitation_counts"]["document_summary_not_implemented"] == 1
     assert summary["known_limitation_counts"]["table_lookup_not_implemented"] == 1
     assert summary["used_external_api"] is False
     assert summary["used_vlm"] is False

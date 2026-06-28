@@ -28,7 +28,8 @@ Phase 5I old-semantics server benchmark -> benchmark_evaluated
 Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner -> accepted
 Phase 5I-A corrected-semantics server benchmark -> accepted
 Phase 5I-B Final Answer Quality Benchmark -> not_started
-Phase 5E document_summary -> not_started
+Phase 5E document_summary -> implemented
+Phase 5E-A document_summary acceptance pack -> implemented
 Phase 5F full CLI acceptance -> not_started
 ```
 
@@ -712,7 +713,8 @@ It does not receive full document text, retrieved evidence, OCR full text, image
 pixels, local_fact_qa results, or user file contents.
 It does not answer document questions, generate citations, call tools, override
 the Phase 5 visual boundary, or modify local_fact_qa / AnswerPolicy behavior.
-Phase 5E document_summary remains not_started.
+At Phase 5C-2 acceptance time, Phase 5E document_summary was still not_started;
+it was implemented later as a deterministic local tool.
 local_fact_qa answer quality improvement remains not_started.
 ```
 
@@ -923,6 +925,53 @@ Returns summary with page references.
 Can run on at least one real PDF or existing ingested document.
 ```
 
+Implementation status:
+
+```text
+Phase 5E Document Summary MVP -> implemented
+Phase 5E-A Document Summary Acceptance Pack -> implemented
+resource_boundary = local_only
+tool = docagent/tools/document_summary.py
+acceptance_runner = scripts/run_phase5e_document_summary_acceptance.py
+cli_dispatch = scripts/docagent_cli.py document_summary path
+strategy = extractive_page_preview_v1
+summary_source = DocumentRepository.load_evidence_blocks
+outputs = answer, summary, key_points, page_summaries, citations, warnings, trace
+artifacts = result.json, summary.json, router_plan.json, trace.json
+acceptance_report = outputs/phase5e_document_summary_acceptance/acceptance_report.json
+used_external_api = false
+used_llm = false
+used_vlm = false
+used_training = false
+used_grpo = false
+used_table_lookup = false
+used_simple_calculation = false
+used_online_mineru_ocr = false
+final_answer_quality_evaluated = false
+server_smoke = not_started
+```
+
+Local validation:
+
+```text
+scripts/run_phase5e_document_summary_acceptance.py = passed
+tests/test_phase5e_document_summary_acceptance.py = passed
+tests/test_phase5e_document_summary_tool.py = passed
+tests/test_phase5e_document_summary_cli.py = passed
+tests/test_phase5f_cli.py + tests/test_phase5_document_tools.py + tests/test_phase5_router.py = passed
+tests/test_phase5g_cli_regression.py = passed
+tests/test_phase5f_file_ingestion_cli.py + tests/test_phase5f_mineru_file_cli.py = passed
+tests/test_phase5*.py = passed
+```
+
+Boundary:
+
+```text
+This is a deterministic extractive summary tool, not final answer quality
+benchmarking. It does not implement table_lookup, simple_calculation, online
+MinerU OCR, VLM, AnswerPolicy prompt changes, training, or full GRPO E2E.
+```
+
 ### Phase 5F: Unified CLI
 
 Goal:
@@ -1024,7 +1073,8 @@ or source/page-window metadata semantics.
 Boundary:
 
 ```text
-document_summary remains Phase 5E not_started.
+At Phase 5F-1 acceptance time, document_summary remained Phase 5E not_started;
+it was implemented later as a deterministic local tool.
 table_lookup and simple_calculation remain not_started.
 structured_extraction returns structured unsupported when current tools are insufficient.
 LLM-assisted Router fallback was not implemented in Phase 5F-1; it was accepted
@@ -1233,8 +1283,9 @@ Accepted limitations:
 Phase 5F-3 accepts existing MinerU output-backed file-to-answer execution.
 Online MinerU OCR/parser execution from raw PDF remains a later task.
 Router correctly classifies "What is this document about?" as document_summary,
-but Phase 5E document_summary is not implemented, so CLI falls back to
-local_fact_qa dry-run. This does not block execution-smoke acceptance.
+but at Phase 5F-3 acceptance time Phase 5E document_summary was not implemented,
+so CLI fell back to local_fact_qa dry-run. This did not block that execution
+smoke acceptance; Phase 5E was implemented later.
 local_fact_qa answer quality is not benchmark-validated by this smoke.
 The GLOBOCAN sample structure_quality is passed_with_warnings.
 ```
@@ -1339,7 +1390,8 @@ Known limitations:
 ```text
 Phase 5G is an execution regression baseline, not a benchmark accuracy report.
 Missing local GLOBOCAN / MinerU output fixtures are recorded as skipped.
-document_summary remains Phase 5E not_started.
+At Phase 5G acceptance time, document_summary remained Phase 5E not_started;
+the default local regression was updated after Phase 5E implementation.
 table_lookup and simple_calculation remain not_started.
 visual_pixel_qa remains unsupported and may fall back to local_fact_qa dry-run.
 LLM-assisted Router fallback is accepted in Phase 5C-2 and remains disabled
@@ -1458,7 +1510,8 @@ Phase 5H accepts full workflow execution stability over 15 non-dry-run server
 cases.
 It does not validate answer quality.
 It does not create a golden QA benchmark.
-Phase 5E document_summary remains not_started.
+At Phase 5H acceptance time, Phase 5E document_summary remained not_started;
+Phase 5E was implemented later and does not change the answer-quality boundary.
 table_lookup and simple_calculation remain not_started.
 online MinerU full parsing remains not_started.
 Answer quality validation remains not_started.
@@ -1622,9 +1675,12 @@ and not final answer quality evidence.
 It does not modify Router classification, Query Rewriter behavior,
 retrieval logic, local_fact_qa answer generation, AnswerPolicy, ingestion,
 VLM, training, or full GRPO E2E.
-document_summary, table_lookup, and simple_calculation remain not_started.
-calculation/table/summary cases are evaluated only as unsupported boundaries,
-limitations, or downstream-required signals.
+At Phase 5I-A acceptance time, document_summary, table_lookup, and
+simple_calculation remained not_started. Phase 5E document_summary was
+implemented later as a separate deterministic local tool; table_lookup and
+simple_calculation remain not_started.
+Phase 5I-A calculation/table/summary cases are historical unsupported
+boundaries, limitations, or downstream-required signals.
 Phase 5I-B Final Answer Quality Benchmark remains not_started until a
 downstream answer module is connected.
 ```
@@ -1678,9 +1734,9 @@ evaluation_scope=pre_llm_evidence_readiness,
 final_answer_generation_enabled=false, and
 final_answer_quality_evaluated=false. `baseline_has_failures` remains the
 evidence-readiness baseline state and does not mean final answer quality was
-evaluated. Do not implement document_summary, table lookup, calculation,
-local_fact_qa answer fixes, Router task changes, AnswerPolicy changes, VLM,
-training, or full E2E as part of Phase 5I-A.
+evaluated. Phase 5E document_summary was implemented later as a separate
+milestone; do not implement table lookup, calculation, local_fact_qa answer
+fixes, AnswerPolicy changes, VLM, training, or full E2E as part of Phase 5I-A.
 ```
 
 Phase 4D-D remains deferred until after Phase 5 MVP is accepted.

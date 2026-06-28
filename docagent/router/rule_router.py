@@ -427,7 +427,11 @@ def _is_structured_extraction(normalized: str) -> bool:
 def _is_document_summary(normalized: str) -> bool:
     return _matches(
         normalized,
-        r"\b(summarize|summary|overview)\b.*\b(document|pdf|file)?\b|\bwhat is this (pdf|document) about\b|\bkey points\b",
+        r"\b(summarize|summary|overview|recap|abstract|takeaways?)\b"
+        r"|\bwhat is this (pdf|document|file)( mainly)? about\b"
+        r"|\bwhat is this (pdf|document|file) mainly about\b"
+        r"|\bkey points?\b|\bmain points?\b"
+        r"|总结|概括|摘要|主要内容|主要讲什么|这份(文件|文档).*讲什么",
     )
 
 

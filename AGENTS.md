@@ -21,6 +21,7 @@ Read additional documents only when the task requires them.
 |---|---|
 | `docs/IMPLEMENTATION_PLAN.md` | deciding project scope, changing milestones, or updating the roadmap |
 | `docs/SERVER_SETUP.md` | proposing server commands, checking environments, installing packages, downloading models, or running real models/tools |
+| `docs/GPU_SERVER_BOUNDARY.md` | classifying whether implementation, tests, evaluation, or artifacts require GPU/server resources |
 | `docs/DATASETS.md` | downloading, converting, splitting, rebuilding, or evaluating datasets |
 | `docs/PHASE3_ACTIVE_PLAN.md` | checking detailed Phase 3 implementation notes or updating the Phase 3 working record |
 | `docs/PHASE2_ACTIVE_PLAN.md` | checking archived Phase 2 status or legacy Phase 2 stop conditions |
@@ -97,7 +98,8 @@ Before a non-trivial change, briefly state:
 4. dependencies;
 5. acceptance test;
 6. out-of-scope work;
-7. stop condition.
+7. GPU/server validation boundary;
+8. stop condition.
 
 Do not enter another milestone without explicit user approval.
 
@@ -133,6 +135,21 @@ targeted unit tests
 ```
 
 Do not increase test count as a goal by itself.
+
+Before implementing or validating a feature, classify the work as local-only,
+server-optional, or server-required using `docs/GPU_SERVER_BOUNDARY.md`.
+Product requests may omit this boundary; Codex owns the classification during
+implementation and validation.
+
+If the feature touches real BGE-M3, reranker, Qwen, SFT, GRPO, VLM, online
+MinerU, or large real-model evaluation, add or reuse a real server validation
+path and compact artifact contract. Local mocks, fixtures, hash dense,
+keyword reranker, heuristic AnswerPolicy, and dry-run tests are not sufficient
+for real-component acceptance.
+
+If the feature is deterministic, API-only, CLI glue, SQLite/JSON contract work,
+or another non-GPU function, implement and verify locally with targeted and
+regression tests unless the active plan explicitly requires server smoke.
 
 When a failure occurs, classify it first:
 
@@ -217,6 +234,12 @@ Failure response:
 
 Do not routinely request full terminal logs, prompts, EvidenceBlocks, traces, or generations.
 
+For new server tasks, prefer a curated sync bundle under
+`outputs/sync/<run_id>/` with compact `result.json`, `manifest.json`,
+`summary.json`, `summary.md`, previews, failure samples, and log tails. Do not
+sync raw datasets, full output trees, model weights, databases, complete logs,
+or secrets.
+
 ## 10. Completion rule
 
 A real component may be marked `accepted` only after:
@@ -244,6 +267,7 @@ Update only when relevant:
 - `DECISIONS.md`: a durable architecture or dependency decision changes;
 - `IMPLEMENTATION_PLAN.md`: roadmap or phase status changes;
 - `SERVER_SETUP.md`: stable server facts change;
+- `GPU_SERVER_BOUNDARY.md`: GPU/server validation boundary or sync-artifact policy changes;
 - `DATASETS.md`: dataset source, split, or role changes;
 - `AGENTS.md`: repository-wide rules change.
 

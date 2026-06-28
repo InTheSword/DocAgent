@@ -11,7 +11,14 @@ data/raw/
 data/processed/
 data/benchmark/*.jsonl
 data/real_documents/
-outputs/
+outputs/*
+!outputs/sync/
+!outputs/sync/**
+outputs/sync/**/*.log
+outputs/sync/**/*.sqlite
+outputs/sync/**/*.db
+outputs/sync/**/*.zip
+outputs/sync/**/raw/
 outputs/mineru_api/
 outputs/reports/
 models/

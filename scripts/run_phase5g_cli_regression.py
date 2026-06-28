@@ -178,14 +178,13 @@ def _load_cases(cases_jsonl: Path | None, *, run_dir: Path, doc_id: str, txt_fix
             "skip_if_missing_paths": [str(DEFAULT_MINERU_FILE), str(DEFAULT_MINERU_OUTPUT)],
         },
         {
-            "case_id": "document_summary_not_implemented",
+            "case_id": "document_summary",
             "mode": "doc_id",
             "doc_id": dynamic_doc_id,
             "question": "Summarize this document.",
-            "expected_status": "error",
+            "expected_status": "success",
             "expected_task_type": "document_summary",
-            "expected_error_type": "document_summary_not_implemented",
-            "known_limitation_allowed": True,
+            "expected_tools_any": ["document_summary"],
         },
         {
             "case_id": "table_lookup_not_implemented",

@@ -32,6 +32,7 @@ from docagent.tools.document_tools import (
     get_page_text,
     list_pages,
 )
+from docagent.tools.document_summary import summarize_document
 from docagent.tools.local_fact_qa import local_fact_qa
 
 
@@ -43,6 +44,7 @@ AVAILABLE_TOOLS = [
     "count_images",
     "get_page_text",
     "list_pages",
+    "document_summary",
 ]
 DEFAULT_OUTPUT_DIR = ROOT / "outputs" / "cli"
 DEFAULT_DOCUMENT_ROOT = ROOT / "data" / "documents"
@@ -604,12 +606,49 @@ def _run_local_fact_qa(
     return payload
 
 
+def _run_document_summary(
+    *,
+    repository: DocumentRepository,
+    doc_id: str,
+    question: str,
+    dry_run: bool,
+) -> dict[str, Any]:
+    if dry_run:
+        return {
+            "status": "success",
+            "answer": "",
+            "citations": [],
+            "supporting_evidence_ids": [],
+            "tools_used": ["document_summary"],
+            "structured_result": {"task_type": "document_summary", "status": "dry_run", "summary": None},
+            "warnings": ["dry_run_no_answer_generated"],
+            "error": {},
+        }
+
+    result = summarize_document(repository=repository, doc_id=doc_id, question=question)
+    error = result.get("error") if isinstance(result.get("error"), dict) else {}
+    status = "success" if result.get("status") == "completed" else str(result.get("status") or "error")
+    return {
+        "status": status,
+        "answer": result.get("answer") or "",
+        "citations": result.get("citations") or [],
+        "supporting_evidence_ids": result.get("supporting_evidence_ids") or [],
+        "tools_used": ["document_summary"],
+        "structured_result": result,
+        "summary": result.get("summary"),
+        "trace": result.get("trace") or {},
+        "warnings": result.get("warnings") or [],
+        "error": {
+            "type": str(error.get("code") or ""),
+            "message": str(error.get("message") or ""),
+        }
+        if error
+        else {},
+    }
+
+
 def _unsupported_task(task_type: str) -> dict[str, Any]:
     mapping = {
-        "document_summary": (
-            "document_summary_not_implemented",
-            "document_summary remains Phase 5E and is not implemented in this CLI MVP.",
-        ),
         "table_lookup_or_calculation": (
             "table_lookup_not_implemented",
             "table_lookup and simple_calculation are not implemented in this CLI MVP.",
@@ -684,25 +723,9 @@ def _dispatch_tool(
             query_planner_env_file=query_planner_env_file,
             query_planner_model=query_planner_model,
         )
-    if task_type == "document_summary" and dry_run and "local_fact_qa" in set(str(tool) for tool in router_plan.get("selected_tools") or []):
-        result = _run_local_fact_qa(
-            repository=repository,
-            trace_repository=trace_repository,
-            db_path=db_path,
-            doc_id=doc_id,
-            question=question,
-            router_plan=router_plan,
-            dry_run=dry_run,
-            run_id=run_id,
-            enable_query_planning=enable_query_planning,
-            query_planner_mode=query_planner_mode,
-            document_profile=document_profile,
-            query_planner_env_file=query_planner_env_file,
-            query_planner_model=query_planner_model,
-        )
-        result["effective_task_type"] = "local_fact_qa"
-        return result
-    if task_type in {"document_summary", "table_lookup_or_calculation", "structured_extraction"}:
+    if task_type == "document_summary":
+        return _run_document_summary(repository=repository, doc_id=doc_id, question=question, dry_run=dry_run)
+    if task_type in {"table_lookup_or_calculation", "structured_extraction"}:
         unsupported = _unsupported_task(task_type)
         unsupported["warnings"] = list(dict.fromkeys((router_plan.get("warnings") or []) + [unsupported["error"]["type"]]))
         return unsupported
@@ -752,6 +775,10 @@ def _finalize_qa_result(
         "warnings": result.get("warnings") or [],
         "error": result.get("error") or {},
     }
+    if result.get("summary") is not None:
+        summary["summary"] = result.get("summary")
+        summary["citations"] = result.get("citations") or []
+        summary["trace"] = result.get("trace") or {}
     trace = {
         "run_id": run_id,
         "source": source,
@@ -762,6 +789,8 @@ def _finalize_qa_result(
         "supporting_evidence_ids": result.get("supporting_evidence_ids") or [],
         "error": result.get("error") or {},
     }
+    if result.get("trace") is not None:
+        trace["document_summary"] = result.get("trace")
 
     _write_json(router_plan_path, router_plan)
     _write_json(summary_path, summary)
@@ -1032,6 +1061,10 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
         result["error"] = tool_result.get("error") or {}
         if tool_result.get("structured_result") is not None:
             result["structured_result"] = tool_result.get("structured_result")
+        if tool_result.get("summary") is not None:
+            result["summary"] = tool_result.get("summary")
+        if tool_result.get("trace") is not None:
+            result["trace"] = tool_result.get("trace")
         if tool_result.get("query_planner") is not None:
             result["query_planner"] = tool_result.get("query_planner")
         if tool_result.get("tool_run_id"):
