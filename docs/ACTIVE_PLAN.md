@@ -20,6 +20,10 @@ Phase 5 Personal-use DocAgent MVP
 -> keep the accepted rule router as the deterministic default
 -> use external LLM only for explicitly enabled low-confidence routing fallback
 -> use the LLM query planner only for query expansion when explicitly enabled
+-> Phase 5I-B Full Model-enhanced QA Path implemented locally;
+   server full-path smoke with real Router/Rewriter API and Qwen is pending
+-> keep final-answer correctness metrics diagnostic-only until the Qwen input /
+   output contract and future training data design are revisited
 -> Phase 5E Document Summary MVP implemented locally
 -> Phase 5E-A Document Summary Acceptance Pack implemented locally
 -> stop before table_lookup, simple_calculation, VLM,
@@ -91,6 +95,7 @@ Phase 5H Full Workflow Validation Baseline -> accepted
 Phase 5I old-semantics server benchmark -> benchmark_evaluated
 Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner -> accepted
 Phase 5I-A corrected-semantics server benchmark -> accepted
+Phase 5I-B Full Model-enhanced QA Path -> implemented
 Phase 5I-B Final Answer Quality Benchmark -> not_started
 Phase 5E Document Summary MVP -> implemented
 Phase 5E-A Document Summary Acceptance Pack -> implemented
@@ -1232,6 +1237,8 @@ Phase 4D-B1.3 server sanity accepted
 + Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner accepted
 + Phase 5I-A corrected-semantics server benchmark accepted with
   evidence_readiness_status = baseline_has_failures
++ Phase 5I-B Full Model-enhanced QA Path implemented locally; server
+  full-path smoke pending
 + Phase 5I-B Final Answer Quality Benchmark not_started
 + Phase 5E Document Summary MVP implemented with local targeted and Phase 5
   regression tests passing
@@ -1239,7 +1246,7 @@ Phase 4D-B1.3 server sanity accepted
 + status documents updated
 + branch pushed
 + stop before table lookup, simple_calculation,
-   Reader prompt changes, AnswerPolicy integration changes, training, CDC,
+   Reader prompt changes, external Answer API integration, training, CDC,
    Demo, per-qid repairs, further 90-sample probe tuning, and any global
    `candidate_spans` default change
 ```

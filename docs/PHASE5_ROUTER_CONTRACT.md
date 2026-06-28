@@ -613,8 +613,11 @@ It does not change Query Rewriter prompts or fusion.
 It does not modify local_fact_qa, AnswerPolicy, document_summary,
 table_lookup, simple_calculation, VLM, training, or full GRPO E2E.
 Calculation/table/summary cases remain unsupported-boundary checks.
-Phase 5I-B final answer quality benchmarking remains not_started until a
-downstream answer module is connected.
+Phase 5I-B later adds local full-model-path validation for Router LLM fallback,
+hybrid LLM Query Rewriter, and local/server Qwen AnswerPolicy dispatch. It does
+not make final answer correctness a hard acceptance metric; the hard Final
+Answer Quality Benchmark remains not_started until the Qwen input/output
+contract and training data design are revisited.
 ```
 
 ## Routing Failure Fallback Behavior

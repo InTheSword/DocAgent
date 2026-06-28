@@ -209,8 +209,42 @@ def test_doc_id_local_fact_qa_dry_run_returns_unified_json(tmp_path: Path) -> No
     assert payload["task_type"] == "local_fact_qa"
     assert payload["tools_used"] == ["local_fact_qa"]
     assert payload["answer"] == ""
+    assert payload["answer_policy_mode"] == "heuristic"
+    assert payload["used_qwen_answer_policy"] is False
+    assert payload["used_external_answer_api"] is False
+    assert payload["retrieval_candidate_count"] == len(payload["supporting_evidence_ids"])
+    assert payload["citation_count"] == len(payload["citations"])
     assert "dry_run_no_answer_generated" in payload["warnings"]
     assert payload["supporting_evidence_ids"]
+
+
+def test_full_model_path_missing_llm_config_returns_structured_error(tmp_path: Path) -> None:
+    db_path = _repository_with_document(tmp_path)
+
+    payload = _run_cli(
+        tmp_path,
+        "--db-path",
+        str(db_path),
+        "--doc-id",
+        "doc1",
+        "--question",
+        "What is the invoice date?",
+        "--full-model-path",
+        "--router-llm-env-file",
+        str(tmp_path / "missing-router.env"),
+        "--output-dir",
+        str(tmp_path / "cli"),
+    )
+
+    assert payload["status"] == "error"
+    assert payload["error"]["type"] == "llm_planning_config_missing"
+    assert payload["full_model_path"] is True
+    assert "full_model_path_requires_llm_planning_config" in payload["warnings"]
+    assert payload["answer_policy_mode"] == "heuristic"
+    summary = json.loads(Path(payload["artifact_dir"], "summary.json").read_text(encoding="utf-8"))
+    assert summary["full_model_path"] is True
+    assert summary["used_llm_router"] is False
+    assert summary["used_llm_query_rewriter"] is False
 
 
 def test_file_argument_missing_file_returns_structured_error(tmp_path: Path) -> None:

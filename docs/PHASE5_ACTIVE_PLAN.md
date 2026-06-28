@@ -27,6 +27,7 @@ Phase 5H Full Workflow Validation Baseline -> accepted
 Phase 5I old-semantics server benchmark -> benchmark_evaluated
 Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner -> accepted
 Phase 5I-A corrected-semantics server benchmark -> accepted
+Phase 5I-B Full Model-enhanced QA Path -> implemented
 Phase 5I-B Final Answer Quality Benchmark -> not_started
 Phase 5E document_summary -> implemented
 Phase 5E-A document_summary acceptance pack -> implemented
@@ -1681,8 +1682,13 @@ implemented later as a separate deterministic local tool; table_lookup and
 simple_calculation remain not_started.
 Phase 5I-A calculation/table/summary cases are historical unsupported
 boundaries, limitations, or downstream-required signals.
-Phase 5I-B Final Answer Quality Benchmark remains not_started until a
-downstream answer module is connected.
+Phase 5I-B Full Model-enhanced QA Path is implemented locally after Phase 5E-A.
+It wires the CLI and Phase 5I runner so full-path validation can keep LLM Router
+fallback and hybrid LLM Query Rewriter enabled while using the local/server
+Qwen AnswerPolicy path for QA generation. Server full-path smoke remains
+pending. Final-answer correctness remains diagnostic-only; the hard Final
+Answer Quality Benchmark remains not_started until the Qwen input/output
+contract and training data design are revisited.
 ```
 
 ## 13. Implementation Discipline
