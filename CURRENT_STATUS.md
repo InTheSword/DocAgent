@@ -195,10 +195,13 @@ prepared TAT-QA `local_fact_qa` evidence cases and
 diagnostic artifacts (`result.json`, `results.jsonl`, `summary.json`,
 `summary.md`, `preview.json`, `failures_sample.jsonl`, `manifest.json`) and
 can create an optional compact `outputs/sync/<run_id>/` bundle for server
-result return. It explicitly skips MP-DocVQA manifest rows until raw
-PDF/MinerU/retrieval evidence is available. Local smoke uses heuristic/fake
-policies only. Status is `implemented`; real Qwen baseline, prompt-quality
-acceptance, and formal benchmark status are still `not_started`.
+result return. Per-row diagnostics include compact final answers, citation
+validation, raw output previews, token/latency metadata, selected/dropped
+block ids, and evidence context hashes, without syncing full prompts or logs.
+It explicitly skips MP-DocVQA manifest rows until raw PDF/MinerU/retrieval
+evidence is available. Local smoke uses heuristic/fake policies only. Status is
+`implemented`; real Qwen baseline, prompt-quality acceptance, and formal
+benchmark status are still `not_started`.
 
 Phase 5F full CLI acceptance is accepted in
 `scripts/run_phase5f_full_cli_acceptance.py`. The runner reuses the Phase 5G

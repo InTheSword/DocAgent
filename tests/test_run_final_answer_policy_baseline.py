@@ -186,10 +186,18 @@ def test_answer_policy_baseline_writes_diagnostic_artifacts(tmp_path: Path) -> N
     rows = {row["sample_id"]: row for row in read_jsonl(run_dir / "results.jsonl")}
     assert rows["text_q"]["pass_fail"] == "passed"
     assert rows["text_q"]["citation_block_hit"] is True
+    assert rows["text_q"]["final_answer_compact"]["answer"] == "vessel values divided by net borrowings"
+    assert rows["text_q"]["final_answer_compact"]["citation_validation"]["allowlist_size"] == 1
+    assert rows["text_q"]["raw_model_output_preview"].startswith("{")
+    assert rows["text_q"]["prompt_token_count"] == 1
+    assert rows["text_q"]["completion_token_count"] == 1
+    assert rows["text_q"]["evidence_context_hash"]
+    assert rows["text_q"]["selected_block_ids"] == ["tatqa_doc_p1"]
     assert rows["table_q"]["evaluation_mode"] == "answer_policy_with_tool_results"
     assert rows["table_q"]["tool_status"] == "success"
     assert rows["table_q"]["model_tool_result_count"] == 1
     assert rows["table_q"]["pass_fail"] == "passed"
+    assert rows["table_q"]["final_answer_compact"]["citation_block_ids"] == ["table_doc_table"]
     assert rows["mp_q"]["evaluation_mode"] == "skipped_requires_raw_pdf_mineru_retrieval"
     result = json.loads((run_dir / "result.json").read_text(encoding="utf-8"))
     assert result["metrics"]["evaluated_count"] == 2

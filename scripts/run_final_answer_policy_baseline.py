@@ -37,6 +37,7 @@ DEFAULT_TATQA_SAMPLES = ROOT / "outputs" / "final_eval" / "tatqa_dev_subset" / "
 DEFAULT_TATQA_MANIFEST = ROOT / "outputs" / "final_eval" / "tatqa_dev_subset" / "sample_manifest.jsonl"
 DEFAULT_MPDOCVQA_MANIFEST = ROOT / "outputs" / "final_eval" / "mpdocvqa_val_subset" / "sample_manifest.jsonl"
 DEFAULT_QWEN_BASE_MODEL_PATH = "/root/autodl-tmp/models/Qwen3-1.7B"
+RAW_OUTPUT_PREVIEW_CHARS = 1000
 
 
 def repo_path(path: str | Path | None) -> Path | None:
@@ -179,6 +180,29 @@ def compact_tool_result(result: dict[str, Any]) -> dict[str, Any]:
             "structured_result": result.get("structured_result") or {},
             "warnings": result.get("warnings") or [],
             "error": result.get("error") or {},
+        }.items()
+        if value not in (None, "", [], {})
+    }
+
+
+def compact_text(value: Any, *, limit: int = RAW_OUTPUT_PREVIEW_CHARS) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) <= limit:
+        return text
+    return f"{text[:limit].rstrip()}...<truncated>"
+
+
+def compact_final_answer(final_answer: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in {
+            "answer": final_answer.get("answer"),
+            "reasoning_summary": final_answer.get("reasoning_summary") or final_answer.get("reason"),
+            "citation_block_ids": final_answer.get("citation_block_ids") or [],
+            "citations": final_answer.get("citations") or [],
+            "evidence_used": final_answer.get("evidence_used") or [],
+            "evidence_location": final_answer.get("evidence_location") or {},
+            "citation_validation": final_answer.get("citation_validation") or {},
         }.items()
         if value not in (None, "", [], {})
     }
@@ -329,9 +353,18 @@ def evaluate_tatqa_sample(
         "citation_evaluated": citation_evaluated,
         "citation_block_hit": citation_block_hit,
         "citation_block_ids": sorted(citation_ids),
+        "final_answer_compact": compact_final_answer(final_answer),
         "final_answer_keys": sorted(final_answer),
         "prompt_version": state.generation_metadata.get("prompt_version"),
         "parse_result": state.parse_result,
+        "raw_model_output_preview": compact_text(state.generation_metadata.get("raw_model_output")),
+        "prompt_token_count": state.generation_metadata.get("prompt_token_count"),
+        "completion_token_count": state.generation_metadata.get("completion_token_count"),
+        "finish_reason": state.generation_metadata.get("finish_reason"),
+        "latency_ms": state.generation_metadata.get("latency_ms"),
+        "evidence_context_hash": state.generation_metadata.get("evidence_context_hash"),
+        "selected_block_ids": [str(item) for item in state.generation_metadata.get("selected_block_ids") or []],
+        "dropped_block_ids": [str(item) for item in state.generation_metadata.get("dropped_block_ids") or []],
         "retrieved_block_ids": [block.block_id for block in state.retrieved_blocks],
         "model_tool_result_count": int(state.generation_metadata.get("tool_result_count") or len(tool_results)),
         "trace_step_count": len(state.trace),

@@ -1385,6 +1385,9 @@ server_target = Qwen base prompt-v2 baseline over prepared TAT-QA
 artifact_outputs = result.json, results.jsonl, summary.json, summary.md,
   preview.json, failures_sample.jsonl, manifest.json, optional
   outputs/sync/<run_id>/ compact bundle
+diagnostics = per-row compact final answer, citation validation, raw output
+  preview, token/latency metadata, selected/dropped block ids, and evidence
+  context hash for Qwen failure review without full prompt/log sync
 status = implemented
 used_qwen_local = false
 server_qwen_baseline = not_started
