@@ -15,9 +15,10 @@ from docagent.models.output_parser import has_thinking_text as model_has_thinkin
 from docagent.models.output_parser import parse_generation_output
 from docagent.rewards.answer_reward import answer_reward
 from docagent.rewards.combined import docqa_reward
+from docagent.rewards.format_reward import format_reward
 from docagent.rewards.location_reward import location_reward
-from docagent.tools.format_check import check_answer_format
 from docagent.utils.jsonl import read_jsonl, write_jsonl
+from docagent.workflow.answer_contract import primary_location_from_output
 from scripts.build_sft_dataset import EXTRACTION_RULES_TEXT
 
 
@@ -146,16 +147,16 @@ def evaluate_prediction(prediction: dict[str, Any] | None, gold: dict[str, Any],
             "location_ok": False,
             "reward": 0.0,
         }
-    format_check = check_answer_format(prediction)
+    schema_score = format_reward(prediction)
     gold_answer = str(gold.get("answer", ""))
     pred_answer = str(prediction.get("answer", ""))
-    gold_location = gold.get("evidence_location") or {}
-    pred_location = prediction.get("evidence_location") or {}
+    gold_location = primary_location_from_output(gold)
+    pred_location = primary_location_from_output(prediction)
     ans_score = answer_reward(pred_answer, gold_answer, answer_type)
     loc_score = location_reward(pred_location, gold_location)
     return {
         "json_ok": True,
-        "schema_ok": bool(format_check["success"]),
+        "schema_ok": schema_score == 1.0,
         "answer_em": exact_match(pred_answer, gold_answer),
         "answer_f1": token_f1(pred_answer, gold_answer),
         "answer_score": ans_score,

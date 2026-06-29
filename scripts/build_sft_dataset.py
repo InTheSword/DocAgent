@@ -14,9 +14,6 @@ from docagent.schemas import DocAgentSample, EvidenceBlock
 from docagent.utils.jsonl import read_jsonl, write_jsonl
 from docagent.workflow.prompts import (
     EXTRACTION_RULES_TEXT,
-    OUTPUT_SCHEMA,
-    SYSTEM_PROMPT,
-    build_location_target,
     centered_evidence_window,
     compile_answer_prompt,
     contains_answer,
@@ -103,13 +100,27 @@ def build_reason(sample: DocAgentSample, block: EvidenceBlock | None, evidence: 
 def build_assistant_target(sample: DocAgentSample) -> dict[str, Any]:
     gold_block = select_gold_block(sample)
     answer = normalize_answer(sample.answer)
-    location = build_location_target(gold_block) if gold_block else {}
     evidence = extract_target_evidence(gold_block, answer) if gold_block else ""
+    evidence_used = []
+    if gold_block is not None:
+        evidence_used.append(
+            {
+                key: value
+                for key, value in {
+                    "doc_id": gold_block.doc_id,
+                    "page": gold_block.location.page if gold_block.location.page is not None else gold_block.page_id,
+                    "block_id": gold_block.block_id,
+                    "block_type": gold_block.block_type,
+                    "text_preview": evidence,
+                }.items()
+                if value not in {None, ""}
+            }
+        )
     return {
         "answer": answer,
-        "evidence_location": location,
-        "evidence": evidence,
-        "reason": build_reason(sample, gold_block, evidence),
+        "reasoning_summary": build_reason(sample, gold_block, evidence),
+        "citation_block_ids": [gold_block.block_id] if gold_block else [],
+        "evidence_used": evidence_used,
     }
 
 

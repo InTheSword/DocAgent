@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT))
 
 from docagent.eval.answer_metrics import normalize_text
 from docagent.utils.jsonl import read_jsonl
+from docagent.workflow.answer_contract import primary_location_from_output
 
 
 def get_messages(record: dict[str, Any]) -> list[dict[str, Any]]:
@@ -70,6 +71,23 @@ def location_ids(location: Any) -> list[str]:
     return ids
 
 
+def target_evidence_text(target: dict[str, Any]) -> str:
+    legacy = str(target.get("evidence") or "")
+    if legacy:
+        return legacy
+    evidence_used = target.get("evidence_used")
+    if isinstance(evidence_used, list):
+        previews = [
+            str(item.get("text_preview") or "")
+            for item in evidence_used
+            if isinstance(item, dict) and str(item.get("text_preview") or "").strip()
+        ]
+        return " ".join(previews)
+    if isinstance(evidence_used, str):
+        return evidence_used
+    return ""
+
+
 def answer_in_text(answer: Any, text: Any) -> bool:
     answer_norm = normalize_text(str(answer or ""))
     text_norm = normalize_text(str(text or ""))
@@ -90,7 +108,7 @@ def audit_record(record: dict[str, Any], max_evidence_chars: int) -> list[str]:
     if target_source == "assistant" and get_assistant_target(record) is None:
         issues.append("assistant_target_invalid_json")
 
-    location = target.get("evidence_location")
+    location = primary_location_from_output(target)
     if not isinstance(location, dict):
         issues.append("location_not_object")
     else:
@@ -98,7 +116,7 @@ def audit_record(record: dict[str, Any], max_evidence_chars: int) -> list[str]:
         if ids and not any(item in user_content for item in ids):
             issues.append("location_not_in_prompt")
 
-    evidence = str(target.get("evidence") or "")
+    evidence = target_evidence_text(target)
     if target_source == "assistant":
         if len(evidence) > max_evidence_chars:
             issues.append("evidence_too_long")
@@ -141,8 +159,8 @@ def summarize(records: list[dict[str, Any]], max_evidence_chars: int) -> dict[st
                         "answer_type": answer_type,
                         "target_source": target_source,
                         "answer": target.get("answer"),
-                        "location": target.get("evidence_location"),
-                        "evidence": str(target.get("evidence") or "")[:500],
+                        "location": primary_location_from_output(target),
+                        "evidence": target_evidence_text(target)[:500],
                     }
                 )
 

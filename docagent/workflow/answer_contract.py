@@ -40,6 +40,30 @@ def candidate_citation_ids(output: dict[str, Any] | None) -> list[str]:
     return list(dict.fromkeys(ids))
 
 
+def primary_location_from_output(output: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(output, dict):
+        return {}
+    legacy_location = output.get("evidence_location")
+    if isinstance(legacy_location, dict):
+        return dict(legacy_location)
+    for key in ("citations", "evidence_used"):
+        value = output.get(key)
+        if not isinstance(value, list):
+            continue
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            location = _location_fields(item)
+            if location:
+                return location
+    citation_ids = output.get("citation_block_ids")
+    if isinstance(citation_ids, list):
+        for block_id in citation_ids:
+            if str(block_id or "").strip():
+                return {"block_id": str(block_id)}
+    return {}
+
+
 def is_candidate_output(output: dict[str, Any] | None) -> bool:
     if not isinstance(output, dict):
         return False
@@ -133,3 +157,18 @@ def filtered_citation_blocks(
 def _preview(block: EvidenceBlock, limit: int = 220) -> str:
     text = " ".join(block.retrieval_text.split())
     return text[:limit]
+
+
+def _location_fields(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in {
+            "doc_id": item.get("doc_id"),
+            "page": item.get("page"),
+            "block_id": item.get("block_id"),
+            "table_id": item.get("table_id"),
+            "image_id": item.get("image_id"),
+            "bbox": item.get("bbox"),
+        }.items()
+        if value is not None and value != ""
+    }

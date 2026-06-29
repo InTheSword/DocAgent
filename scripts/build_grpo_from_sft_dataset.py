@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from docagent.utils.jsonl import read_jsonl, write_jsonl
+from docagent.workflow.answer_contract import primary_location_from_output
 
 
 def assistant_target(record: dict[str, Any]) -> dict[str, Any]:
@@ -46,7 +47,7 @@ def convert_record(record: dict[str, Any]) -> dict[str, Any]:
         "source": record.get("source"),
         "messages": prompt_messages,
         "gold_answer": target.get("answer", ""),
-        "gold_location": target.get("evidence_location") or {},
+        "gold_location": primary_location_from_output(target),
         "answer_type": infer_answer_type(prompt_messages),
         "reward_schema": ["format_reward", "answer_reward", "location_reward"],
         "metadata": {

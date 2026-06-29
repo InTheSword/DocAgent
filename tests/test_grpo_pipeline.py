@@ -34,12 +34,30 @@ def _sft_record() -> dict:
     }
 
 
+def _candidate_sft_record() -> dict:
+    record = _sft_record()
+    record["messages"][-1]["content"] = (
+        '{"answer": "GOLD_LEAK", "reasoning_summary": "cited", '
+        '"citation_block_ids": ["b1"], '
+        '"evidence_used": [{"block_id": "b1", "text_preview": "GOLD_LEAK"}]}'
+    )
+    return record
+
+
 def test_convert_sft_record_to_grpo_record_removes_assistant_target() -> None:
     converted = convert_record(_sft_record())
 
     assert converted["gold_answer"] == "GOLD_LEAK"
     assert converted["gold_location"] == {"block_id": "b1"}
     assert converted["answer_type"] == "extractive"
+    assert [message["role"] for message in converted["messages"]] == ["system", "user"]
+
+
+def test_convert_candidate_sft_record_to_grpo_record_uses_citation_location() -> None:
+    converted = convert_record(_candidate_sft_record())
+
+    assert converted["gold_answer"] == "GOLD_LEAK"
+    assert converted["gold_location"] == {"block_id": "b1"}
     assert [message["role"] for message in converted["messages"]] == ["system", "user"]
 
 

@@ -88,12 +88,18 @@ def test_sft_grpo_and_runtime_share_prompt_compiler() -> None:
 
     sft = build_sft_record(sample, max_evidence_blocks=5, max_block_chars=300, gold_first=False)
     grpo = build_grpo_record(sample, max_evidence_blocks=5, max_block_chars=300, gold_first=False)
+    target = json.loads(sft["messages"][-1]["content"])
 
     assert sft["messages"][:2] == expected.messages
     assert grpo["messages"] == expected.messages
     assert sft["prompt_version"] == PROMPT_VERSION
     assert grpo["prompt_version"] == PROMPT_VERSION
     assert sft["evidence_context_hash"] == expected.evidence_context["evidence_context_hash"]
+    assert "citation_block_ids" in expected.messages[1]["content"]
+    assert "evidence_location" not in expected.messages[1]["content"]
+    assert target["citation_block_ids"] == ["b1"]
+    assert target["evidence_used"][0]["block_id"] == "b1"
+    assert "reasoning_summary" in target
 
 
 def test_context_hash_is_stable_and_order_sensitive() -> None:

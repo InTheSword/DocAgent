@@ -7,9 +7,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from docagent.schemas import EvidenceBlock
+from docagent.workflow.answer_contract import ANSWER_CANDIDATE_SCHEMA
 
 
-PROMPT_VERSION = "docagent_answer_v1"
+PROMPT_VERSION = "docagent_answer_v2_candidate_citations"
 DEFAULT_TASK_TYPE = "local_fact_qa"
 
 SYSTEM_PROMPT = (
@@ -28,15 +29,10 @@ EXTRACTION_RULES_TEXT = (
 RANK_AWARE_EXTRACTION_RULES_TEXT = (
     "- Prefer evidence from pages with higher retrieval rank; use lower-ranked pages only when the question intent fits them better.\n"
     "- If multiple pages contain similar fields, choose the field type requested by the question, such as index, percentage, source, date, or heading.\n"
-    "- evidence_location must point to the block where the final answer actually comes from."
+    "- citation_block_ids must point to the block where the final answer actually comes from."
 )
 
-OUTPUT_SCHEMA = {
-    "answer": "short answer string copied or normalized from evidence",
-    "evidence_location": {"page": 1, "block_id": "candidate_block_id"},
-    "evidence": "minimal supporting span, compact row, or calculation inputs",
-    "reason": "one sentence explaining why the evidence supports the answer",
-}
+OUTPUT_SCHEMA = ANSWER_CANDIDATE_SCHEMA
 
 
 @dataclass(frozen=True)
@@ -329,7 +325,7 @@ def compile_answer_prompt(
         tool_section = f"\n\n## Tool Results\n{tool_text}"
     user_content = (
         "## Task\n"
-        "Answer the question from the evidence candidates and cite the exact supporting location.\n\n"
+        "Answer the question from the evidence candidates and cite the exact supporting block ids.\n\n"
         "## Question\n"
         f"{question}\n\n"
         "## Answer Type\n"
@@ -342,9 +338,11 @@ def compile_answer_prompt(
         "Rules:\n"
         f"{extraction_rules}\n"
         "- answer must be concise and grounded in the evidence.\n"
-        "- evidence_location must be a JSON object copied from one evidence header.\n"
-        "- evidence must be the shortest sufficient supporting span or compact table row, no more than 300 characters.\n"
-        "- reason must explain the answer-source relation in one sentence."
+        "- citation_block_ids must be a list of block_id values copied exactly from evidence headers.\n"
+        "- Put the strongest source block first in citation_block_ids.\n"
+        "- evidence_used must be a list of objects with block_id and a short text_preview from the cited evidence.\n"
+        "- reasoning_summary must explain the answer-source relation in one short sentence.\n"
+        "- If the evidence is insufficient, say so in answer and cite the closest evidence only when it supports the limitation."
     )
     if append_no_think:
         user_content = (

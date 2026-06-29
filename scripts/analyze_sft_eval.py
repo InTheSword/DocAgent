@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from docagent.utils.jsonl import read_jsonl
+from docagent.workflow.answer_contract import primary_location_from_output
 
 
 def as_location_type(value: Any) -> str:
@@ -31,7 +32,9 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
         metrics = record.get("metrics") or {}
         answer_type = str(record.get("answer_type") or "unknown")
         prediction = record.get("prediction") or {}
-        location_types[as_location_type(prediction.get("evidence_location"))] += 1
+        pred_location = primary_location_from_output(prediction)
+        gold_location = primary_location_from_output((record.get("gold") or {}))
+        location_types[as_location_type(pred_location)] += 1
 
         for key in ("json_ok", "schema_ok", "answer_em", "location_ok"):
             ok = bool(metrics.get(key))
@@ -45,8 +48,8 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
                             "answer_type": answer_type,
                             "gold_answer": (record.get("gold") or {}).get("answer"),
                             "pred_answer": prediction.get("answer"),
-                            "gold_location": (record.get("gold") or {}).get("evidence_location"),
-                            "pred_location": prediction.get("evidence_location"),
+                            "gold_location": gold_location,
+                            "pred_location": pred_location,
                             "generated": record.get("generated", "")[:800],
                         }
                     )

@@ -179,8 +179,13 @@ workflow canonicalization layer filters model-selected citation block ids to
 the retrieved evidence allowlist, records invalid ids in `citation_validation`,
 and exposes canonical `reasoning_summary`, `evidence_used`, and `citations`
 through `local_fact_qa`. Status is `implemented`: local tests verify the
-contract and backwards compatibility, but this is not a Qwen server baseline,
-prompt-quality acceptance, SFT/GRPO update, or final answer benchmark.
+contract and backwards compatibility. The shared prompt compiler now uses
+`docagent_answer_v2_candidate_citations` and asks Qwen-style AnswerPolicy
+outputs for `answer`, `reasoning_summary`, `citation_block_ids`, and
+`evidence_used`; SFT/GRPO record builders and reward/eval helpers can read the
+candidate citation location as well as the legacy `evidence_location`. This is
+not a Qwen server baseline, prompt-quality acceptance, training execution,
+checkpoint update, or final answer benchmark.
 
 Phase 5F full CLI acceptance is accepted in
 `scripts/run_phase5f_full_cli_acceptance.py`. The runner reuses the Phase 5G

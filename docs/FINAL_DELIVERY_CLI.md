@@ -34,6 +34,8 @@ Implemented local capabilities:
 - AnswerPolicy compatibility for both the legacy
   `answer/evidence_location/evidence/reason` output schema and the candidate
   `answer/reasoning_summary/citation_block_ids/evidence_used` schema
+- shared AnswerPolicy prompt v2 asks Qwen-style policies to return candidate
+  citation block ids directly
 - citation allowlist filtering for model-selected evidence block ids
 - local final-evaluation subset preparation for TAT-QA dev and MP-DocVQA val
 - local subset diagnostic report with JSON and Markdown summaries
@@ -120,6 +122,10 @@ When an AnswerPolicy returns candidate `citation_block_ids`, DocAgent filters
 those ids to the retrieved evidence allowlist before constructing final
 citations. Invalid model-selected ids are recorded in `citation_validation` and
 are not emitted as final citations.
+
+The prompt and local training-data builders now use the candidate citation
+contract. Runtime output remains canonicalized by code before CLI artifacts are
+written.
 
 ## Common Commands
 

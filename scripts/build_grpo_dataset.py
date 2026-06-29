@@ -13,9 +13,8 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 from docagent.schemas import DocAgentSample
 from docagent.utils.jsonl import read_jsonl, write_jsonl
-from docagent.workflow.prompts import compile_answer_prompt
+from docagent.workflow.prompts import build_location_target, compile_answer_prompt
 from build_sft_dataset import (
-    build_location_target,
     normalize_answer,
     ordered_evidence_blocks,
     select_gold_block,

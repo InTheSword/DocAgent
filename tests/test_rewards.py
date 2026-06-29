@@ -29,6 +29,19 @@ def test_docqa_reward_without_gold_location_keeps_answer_credit() -> None:
     assert score == 1.0
 
 
+def test_docqa_reward_accepts_candidate_citation_schema() -> None:
+    prediction = {
+        "answer": "Acme Corporation",
+        "reasoning_summary": "The selected block names the company.",
+        "citation_block_ids": ["b1"],
+        "evidence_used": [{"block_id": "b1", "text_preview": "Acme Corporation"}],
+    }
+
+    score = docqa_reward(prediction, "Acme Corporation", {"block_id": "b1"}, "extractive")
+
+    assert score == 1.0
+
+
 def test_recompute_records_updates_reward_with_grounding_gate() -> None:
     rows = [
         {
@@ -45,3 +58,27 @@ def test_recompute_records_updates_reward_with_grounding_gate() -> None:
     assert recomputed[0]["metrics"]["answer_em"] is True
     assert recomputed[0]["metrics"]["location_ok"] is False
     assert recomputed[0]["metrics"]["reward"] == 0.2
+
+
+def test_recompute_records_accepts_candidate_schema_locations() -> None:
+    candidate = {
+        "answer": "Acme Corporation",
+        "reasoning_summary": "The selected block names the company.",
+        "citation_block_ids": ["b1"],
+        "evidence_used": [{"block_id": "b1", "text_preview": "Acme Corporation"}],
+    }
+    rows = [
+        {
+            "id": "q1",
+            "answer_type": "extractive",
+            "gold": candidate,
+            "prediction": candidate,
+            "metrics": {"reward": 0.0, "has_thinking": False},
+        }
+    ]
+
+    recomputed = recompute_records(rows)
+
+    assert recomputed[0]["metrics"]["schema_ok"] is True
+    assert recomputed[0]["metrics"]["location_ok"] is True
+    assert recomputed[0]["metrics"]["reward"] == 1.0
