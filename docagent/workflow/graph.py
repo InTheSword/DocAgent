@@ -51,6 +51,43 @@ def _trace(
         )
 
 
+def _citation_ids_from_tool_results(tool_results: list[dict[str, Any]]) -> list[str]:
+    ids: list[str] = []
+    for result in tool_results:
+        if not isinstance(result, dict):
+            continue
+        for key in ("citations", "evidence_used"):
+            values = result.get(key)
+            if not isinstance(values, list):
+                continue
+            for item in values:
+                if isinstance(item, dict) and str(item.get("block_id") or "").strip():
+                    ids.append(str(item["block_id"]))
+    return list(dict.fromkeys(ids))
+
+
+def _citation_allowlist_blocks(
+    retrieved_blocks: list[EvidenceBlock],
+    all_blocks: list[EvidenceBlock],
+    preferred_block_ids: list[str],
+) -> list[EvidenceBlock]:
+    merged: list[EvidenceBlock] = []
+    seen: set[str] = set()
+    for block in retrieved_blocks:
+        if block.block_id in seen:
+            continue
+        seen.add(block.block_id)
+        merged.append(block)
+    by_id = {block.block_id: block for block in all_blocks}
+    for block_id in preferred_block_ids:
+        block = by_id.get(block_id)
+        if block is None or block.block_id in seen:
+            continue
+        seen.add(block.block_id)
+        merged.append(block)
+    return merged
+
+
 def run_qa_workflow(
     qid: str,
     question: str,
@@ -138,6 +175,13 @@ def run_qa_workflow(
                 output_summary={"block_id": block.block_id, "result": result},
             )
 
+    all_tool_results = [*state.table_results, *state.visual_results]
+    preferred_citation_block_ids = _citation_ids_from_tool_results(all_tool_results)
+    citation_allowlist_blocks = _citation_allowlist_blocks(
+        state.retrieved_blocks,
+        blocks,
+        preferred_citation_block_ids,
+    )
     evidence_context = build_evidence_context(
         question=question,
         task_type=answer_type_hint or "local_fact_qa",
@@ -157,6 +201,8 @@ def run_qa_workflow(
             "task_type": evidence_context["task_type"],
             "selected_block_ids": evidence_context["selected_block_ids"],
             "dropped_block_ids": evidence_context["dropped_block_ids"],
+            "preferred_citation_block_ids": preferred_citation_block_ids,
+            "citation_allowlist_block_ids": [block.block_id for block in citation_allowlist_blocks],
             "evidence_context_hash": evidence_context["evidence_context_hash"],
             "truncation_applied": evidence_context["truncation_applied"],
             "tool_result_count": len(state.table_results),
@@ -167,13 +213,21 @@ def run_qa_workflow(
         generation = answer_policy.generate(
             question=question,
             evidence_blocks=state.retrieved_blocks,
-            tool_results=[*state.table_results, *state.visual_results],
+            tool_results=all_tool_results,
             answer_type=answer_type_hint,
             qid=qid,
         )
         raw_draft = generation.parsed or {}
         state.parse_result = dict(generation.metadata.get("parse_result") or {})
-        canonical_draft = canonicalize_output(raw_draft, state.retrieved_blocks) if raw_draft else {}
+        canonical_draft = (
+            canonicalize_output(
+                raw_draft,
+                citation_allowlist_blocks,
+                preferred_citation_block_ids=preferred_citation_block_ids,
+            )
+            if raw_draft
+            else {}
+        )
         state.draft_answer = canonical_draft
         prompt_version = generation.metadata.get("prompt_version")
         selected_block_ids = generation.metadata.get("selected_block_ids") or evidence_context["selected_block_ids"]
@@ -188,6 +242,8 @@ def run_qa_workflow(
                 "task_type": generation.metadata.get("task_type") or answer_type_hint or "local_fact_qa",
                 "selected_block_ids": selected_block_ids,
                 "dropped_block_ids": dropped_block_ids,
+                "preferred_citation_block_ids": preferred_citation_block_ids,
+                "citation_allowlist_block_ids": [block.block_id for block in citation_allowlist_blocks],
                 "evidence_context_hash": evidence_context_hash,
                 "prompt_token_count": generation.prompt_token_count,
                 "tool_result_count": len(state.table_results),
@@ -218,6 +274,8 @@ def run_qa_workflow(
                 "tool_result_count": len(state.table_results),
                 "selected_block_ids": selected_block_ids,
                 "dropped_block_ids": dropped_block_ids,
+                "preferred_citation_block_ids": preferred_citation_block_ids,
+                "citation_allowlist_block_ids": [block.block_id for block in citation_allowlist_blocks],
                 "evidence_context_hash": evidence_context_hash,
                 "prompt_token_count": generation.prompt_token_count,
                 "truncation_applied": truncation_applied,
@@ -238,7 +296,7 @@ def run_qa_workflow(
         raise
 
     state.format_check = check_answer_format(state.draft_answer)
-    state.location_check = check_location(state.draft_answer, state.retrieved_blocks)
+    state.location_check = check_location(state.draft_answer, citation_allowlist_blocks)
     _trace(state, trace_repository, "check_format", output_summary=state.format_check, success=state.format_check["success"])
     _trace(
         state,
@@ -250,14 +308,18 @@ def run_qa_workflow(
 
     if not state.format_check["success"] or not state.location_check["success"]:
         state.repair_attempted = True
-        state.final_answer = repair_answer(state.draft_answer, state.retrieved_blocks)
+        state.final_answer = repair_answer(state.draft_answer, citation_allowlist_blocks)
         state.repair_result = {
             "format_failed": not state.format_check["success"],
             "location_failed": not state.location_check["success"],
         }
         state.format_check = check_answer_format(state.final_answer)
-        state.location_check = check_location(state.final_answer, state.retrieved_blocks)
-        state.final_answer = canonicalize_output(state.final_answer, state.retrieved_blocks)
+        state.location_check = check_location(state.final_answer, citation_allowlist_blocks)
+        state.final_answer = canonicalize_output(
+            state.final_answer,
+            citation_allowlist_blocks,
+            preferred_citation_block_ids=preferred_citation_block_ids,
+        )
         state.repair_result.update(
             {
                 "format_success": state.format_check["success"],

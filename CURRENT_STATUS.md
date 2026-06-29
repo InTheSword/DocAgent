@@ -176,10 +176,14 @@ output parser now accepts both the legacy
 `answer/evidence_location/evidence/reason` schema and the candidate
 `answer/reasoning_summary/citation_block_ids/evidence_used` schema. The
 workflow canonicalization layer filters model-selected citation block ids to
-the retrieved evidence allowlist, records invalid ids in `citation_validation`,
-and exposes canonical `reasoning_summary`, `evidence_used`, and `citations`
-through `local_fact_qa`. Status is `implemented`: local tests verify the
-contract and backwards compatibility. The shared prompt compiler now uses
+the citation allowlist, records invalid ids in `citation_validation`, and
+exposes canonical `reasoning_summary`, `evidence_used`, and `citations`
+through `local_fact_qa`. After the first real Qwen smoke, the citation
+allowlist also includes deterministic tool-result citation blocks as preferred
+sources, so table/calculation tool evidence is not dropped merely because the
+retrieval top-k omitted the table block or the model cited a weaker retrieved
+block. Status is `implemented`: local tests verify the contract and backwards
+compatibility. The shared prompt compiler now uses
 `docagent_answer_v2_candidate_citations` and asks Qwen-style AnswerPolicy
 outputs for `answer`, `reasoning_summary`, `citation_block_ids`, and
 `evidence_used`; SFT/GRPO record builders and reward/eval helpers can read the
@@ -200,9 +204,15 @@ validation, raw output previews, token/latency metadata, selected/dropped
 block ids, compact tool results for table/calculation prompts, and evidence
 context hashes, without syncing full prompts or logs. It explicitly skips
 MP-DocVQA manifest rows until raw PDF/MinerU/retrieval evidence is available.
-Local smoke uses heuristic/fake policies only. Status is `implemented`; real
-Qwen baseline, prompt-quality acceptance, and formal benchmark status are still
-`not_started`.
+Local smoke uses heuristic/fake policies only. The first server-side Qwen base
+diagnostic smoke ran with run id
+`answer_policy_training_gate_qwen_smoke_20260629`: `used_qwen=true`,
+`used_training=false`, `formal_benchmark_acceptance=false`, `case_count=24`,
+`evaluated_count=12`, `format_valid_rate=1.0`, `answer_hit_rate=0.75`,
+`citation_block_hit_rate=0.75`, and `pass_rate=0.5833`. The review gate
+recommended `citation_contract_repair_before_training`, so Qwen execution is
+`real_model_verified` for smoke only, while prompt-quality acceptance,
+training, and formal benchmark status remain `not_started`.
 
 Phase 5 AnswerPolicy baseline review gate is implemented locally in
 `scripts/review_answer_policy_baseline.py` with tests in
@@ -234,9 +244,12 @@ It writes orchestration `result.json`, `summary.json`, `summary.md`,
 `preview.json`, and `manifest.json`, and can create a compact sync bundle with
 the top-level gate summary plus nested baseline/review/candidate summaries.
 Local heuristic smoke is diagnostic and correctly skips SFT candidate
-generation with `needs_real_qwen_baseline`. This is a server-ready execution
-wrapper; real Qwen baseline acceptance, training execution, and benchmark
-acceptance remain `not_started`.
+generation with `needs_real_qwen_baseline`. The first real Qwen server smoke
+completed successfully but skipped SFT candidates because
+`citation_block_hit_rate=0.75` was below the review gate threshold. This is a
+server-ready execution wrapper with real-model smoke evidence only; real Qwen
+baseline acceptance, training execution, and benchmark acceptance remain
+`not_started`.
 
 Phase 5F full CLI acceptance is accepted in
 `scripts/run_phase5f_full_cli_acceptance.py`. The runner reuses the Phase 5G

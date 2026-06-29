@@ -77,6 +77,30 @@ class ToolAwarePolicy:
         )
 
 
+class ToolAnswerWrongCitationPolicy:
+    mode = "tool_wrong_citation_fake"
+
+    def generate(self, **kwargs: Any) -> GenerationResult:
+        tool_result = (kwargs.get("tool_results") or [])[0]
+        retrieved_block = kwargs["evidence_blocks"][0]
+        parsed = {
+            "answer": tool_result["answer"],
+            "reasoning_summary": "The table tool selected the value, but the model cited the retrieved text.",
+            "citation_block_ids": [retrieved_block.block_id],
+            "evidence_used": [{"block_id": retrieved_block.block_id, "text_preview": retrieved_block.retrieval_text}],
+        }
+        return GenerationResult(
+            raw_text='{"answer": "2019: 10"}',
+            parsed=parsed,
+            prompt_text="prompt",
+            prompt_token_count=1,
+            completion_token_count=10,
+            finish_reason="stop",
+            latency_ms=2.0,
+            metadata={"parse_result": {"raw_json_ok": True, "schema_ok": True}},
+        )
+
+
 def _blocks() -> list[EvidenceBlock]:
     return [
         EvidenceBlock(
@@ -87,6 +111,27 @@ def _blocks() -> list[EvidenceBlock]:
             text="Date: March 12, 2020",
             location=EvidenceLocation(page=1, block_id="b1"),
         )
+    ]
+
+
+def _blocks_with_table() -> list[EvidenceBlock]:
+    return [
+        EvidenceBlock(
+            doc_id="doc1",
+            page_id=1,
+            block_id="text",
+            block_type="text",
+            text="The annual report contains a table of yearly values.",
+            location=EvidenceLocation(page=1, block_id="text"),
+        ),
+        EvidenceBlock(
+            doc_id="doc1",
+            page_id=2,
+            block_id="table",
+            block_type="table",
+            table_html="<table><tr><td>Year</td><td>Value</td></tr><tr><td>2019</td><td>10</td></tr></table>",
+            location=EvidenceLocation(page=2, block_id="table", table_id="table"),
+        ),
     ]
 
 
@@ -180,3 +225,57 @@ def test_workflow_passes_tool_results_to_answer_policy() -> None:
     trace_by_step = {item["step"]: item for item in state.trace}
     assert trace_by_step["build_evidence_context"]["tool_result_count"] == 1
     assert trace_by_step["generate_answer"]["tool_result_count"] == 1
+
+
+def test_workflow_allows_tool_citation_outside_retrieved_top_k() -> None:
+    tool_result = {
+        "status": "success",
+        "tool": "table_lookup_or_calculation",
+        "answer": "2019: 10",
+        "citations": [{"block_id": "table", "text_preview": "2019 10"}],
+    }
+
+    state = run_qa_workflow(
+        qid="q1",
+        question="What is the 2019 value?",
+        blocks=_blocks_with_table(),
+        answer_policy=ToolAwarePolicy(),
+        answer_type_hint="numeric",
+        top_k=1,
+        preserve_input_order=True,
+        tool_results=[tool_result],
+    )
+
+    assert [block.block_id for block in state.retrieved_blocks] == ["text"]
+    assert state.final_answer["citation_block_ids"] == ["table"]
+    assert state.final_answer["evidence_location"]["block_id"] == "table"
+    assert state.final_answer["citation_validation"]["preferred_block_ids"] == ["table"]
+    assert state.final_answer["citation_validation"]["missing_preferred_block_ids"] == []
+    assert state.location_check["success"] is True
+    assert state.generation_metadata["citation_allowlist_block_ids"] == ["text", "table"]
+
+
+def test_workflow_prefers_tool_citation_when_model_cites_retrieved_text() -> None:
+    tool_result = {
+        "status": "success",
+        "tool": "table_lookup_or_calculation",
+        "answer": "2019: 10",
+        "citations": [{"block_id": "table", "text_preview": "2019 10"}],
+    }
+
+    state = run_qa_workflow(
+        qid="q1",
+        question="What is the 2019 value?",
+        blocks=_blocks_with_table(),
+        answer_policy=ToolAnswerWrongCitationPolicy(),
+        answer_type_hint="numeric",
+        top_k=1,
+        preserve_input_order=True,
+        tool_results=[tool_result],
+    )
+
+    assert state.final_answer["citation_block_ids"] == ["table", "text"]
+    assert state.final_answer["evidence_location"]["block_id"] == "table"
+    assert state.final_answer["citation_validation"]["added_preferred_block_ids"] == ["table"]
+    assert state.final_answer["citation_validation"]["requested_block_ids"] == ["text"]
+    assert state.location_check["success"] is True

@@ -37,8 +37,9 @@ Phase 5 Personal-use DocAgent MVP
 -> final-delivery CLI guide implemented locally
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
--> final subset AnswerPolicy baseline runner implemented locally; real Qwen
-   server run remains not_started
+-> final subset AnswerPolicy baseline runner implemented locally; first real
+   Qwen server smoke completed as diagnostic_only, with citation contract
+   repair required before SFT candidate generation
 -> AnswerPolicy baseline review gate implemented locally for full artifacts or
    compact sync bundles; it emits diagnostic training-gate recommendations only
 -> AnswerPolicy SFT candidate data builder implemented locally; it requires a
@@ -46,6 +47,8 @@ Phase 5 Personal-use DocAgent MVP
 -> AnswerPolicy training-gate orchestrator implemented locally; it runs
    baseline -> review -> optional SFT candidate artifact generation in one
    server-ready command, but still does not train
+-> tool-result citation allowlist/priority repair implemented locally after
+   the first real Qwen smoke; server rerun remains pending
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -134,6 +137,8 @@ Phase 5 final AnswerPolicy baseline runner -> implemented
 Phase 5 AnswerPolicy baseline review gate -> implemented
 Phase 5 AnswerPolicy SFT candidate data builder -> implemented
 Phase 5 AnswerPolicy training-gate orchestrator -> implemented
+Phase 5 final AnswerPolicy Qwen smoke -> real_model_verified
+Phase 5 tool-result citation allowlist repair -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
@@ -1366,10 +1371,11 @@ reward_eval_compatibility = docagent/rewards/combined.py,
   docagent/rewards/format_reward.py, scripts/eval_sft_checkpoint.py
 supported_model_outputs = legacy answer/evidence_location/evidence/reason,
   candidate answer/reasoning_summary/citation_block_ids/evidence_used
-local_behavior = filters model-selected citation block ids to the retrieved
-  evidence allowlist and records invalid ids in citation_validation; shared
-  prompt version requests candidate citations directly from Qwen-style
-  AnswerPolicy output
+local_behavior = filters model-selected citation block ids to the citation
+  allowlist, records invalid ids in citation_validation, and now includes
+  tool-result citation blocks as preferred sources when deterministic table or
+  visual tools return citations; shared prompt version requests candidate
+  citations directly from Qwen-style AnswerPolicy output
 status = implemented
 benchmark_evaluation_status = not_started
 used_external_api = false
@@ -1377,7 +1383,12 @@ used_vlm = false
 used_training = false
 used_online_mineru_ocr = false
 used_qwen = false
-server_qwen_baseline = not_started
+server_qwen_smoke = real_model_verified
+server_qwen_smoke_run_id = answer_policy_training_gate_qwen_smoke_20260629
+server_qwen_smoke_result = success, diagnostic_only, answer_hit_rate 0.75,
+  citation_block_hit_rate 0.75, recommendation
+  citation_contract_repair_before_training
+server_rerun_after_citation_repair = not_started
 ```
 
 Final AnswerPolicy baseline runner:
@@ -1414,7 +1425,13 @@ training_gate_orchestrator = runs baseline, review, and optional SFT candidate
   generation in one command; local heuristic smoke skips candidate generation
 status = implemented
 used_qwen_local = false
-server_qwen_baseline = not_started
+server_qwen_smoke = real_model_verified
+server_qwen_smoke_run_id = answer_policy_training_gate_qwen_smoke_20260629
+server_qwen_smoke_summary = case_count 24, evaluated_count 12,
+  format_valid_rate 1.0, answer_hit_rate 0.75,
+  citation_block_hit_rate 0.75, pass_rate 0.5833
+server_training_gate_recommendation = citation_contract_repair_before_training
+server_rerun_after_citation_repair = not_started
 benchmark_evaluation_status = not_started
 ```
 
