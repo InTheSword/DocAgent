@@ -292,6 +292,8 @@ def run_tatqa_sample(sample: DocAgentSample, manifest: dict[str, Any]) -> dict[s
         }
     )
     row["pass_fail"] = "passed" if _tatqa_row_passes(row, citation_block_hit, citation_page_hit, metrics) else "failed"
+    row["failure_reasons"] = _failure_reasons(row)
+    row["failure_stage"] = _failure_stage(row["failure_reasons"])
     return row
 
 
@@ -318,7 +320,7 @@ def run_mpdocvqa_manifest_row(manifest: dict[str, Any]) -> dict[str, Any]:
     answers = as_list(manifest.get("answers"))
     gold_ids = gold_block_ids(manifest)
     gold_page_values = gold_pages(manifest)
-    return {
+    row = {
         "sample_id": str(manifest.get("sample_id") or ""),
         "dataset": "mp_docvqa",
         "split": str(manifest.get("split") or "val"),
@@ -349,6 +351,48 @@ def run_mpdocvqa_manifest_row(manifest: dict[str, Any]) -> dict[str, Any]:
         "evidence_ready": bool(answers and gold_page_values),
         "pass_fail": "passed" if answers and gold_page_values and manifest.get("doc_id") else "failed",
     }
+    row["failure_reasons"] = _failure_reasons(row)
+    row["failure_stage"] = _failure_stage(row["failure_reasons"])
+    return row
+
+
+def _failure_reasons(row: dict[str, Any]) -> list[str]:
+    reasons: list[str] = []
+    if row.get("pass_fail") == "passed":
+        return reasons
+    if not row.get("format_valid"):
+        reasons.append("format_invalid")
+    if not row.get("evidence_ready"):
+        reasons.append("evidence_not_ready")
+    if row.get("tool_executed") and row.get("tool_status") != "success":
+        error = row.get("error") or {}
+        error_type = str(error.get("type") or row.get("tool_status") or "tool_failed")
+        reasons.append(error_type)
+    if row.get("citation_evaluated"):
+        if row.get("gold_block_ids") and not row.get("citation_block_hit"):
+            reasons.append("citation_block_miss")
+        if row.get("gold_pages") and not row.get("citation_page_hit"):
+            reasons.append("citation_page_miss")
+    if row.get("answer_evaluated") and not row.get("answer_hit"):
+        reasons.append("answer_miss")
+    return list(dict.fromkeys(reasons or ["unknown_failure"]))
+
+
+def _failure_stage(reasons: list[str]) -> str:
+    if not reasons:
+        return ""
+    priority = [
+        ("format", {"format_invalid"}),
+        ("evidence_readiness", {"evidence_not_ready"}),
+        ("tool_execution", {"table_lookup_unsupported", "simple_calculation_unsupported", "simple_calculation_failed"}),
+        ("attribution", {"citation_block_miss", "citation_page_miss"}),
+        ("answer_quality", {"answer_miss"}),
+    ]
+    reason_set = set(reasons)
+    for stage, stage_reasons in priority:
+        if reason_set.intersection(stage_reasons):
+            return stage
+    return "other"
 
 
 def limit_rows(rows: list[Any], max_samples: int | None) -> list[Any]:
@@ -363,6 +407,12 @@ def summarize(rows: list[dict[str, Any]], *, run_id: str, artifact_dir: Path) ->
     pass_fail = Counter(str(row.get("pass_fail") or "") for row in rows)
     tools = Counter(tool for row in rows for tool in row.get("tools_used") or [])
     tool_statuses = Counter(str(row.get("tool_status") or "") for row in rows)
+    failure_reasons = Counter(reason for row in rows for reason in row.get("failure_reasons") or [])
+    failure_stages = Counter(str(row.get("failure_stage") or "") for row in rows if row.get("failure_stage"))
+    case_count = len(rows)
+    answer_evaluated_count = _count_true(rows, "answer_evaluated")
+    numeric_evaluated_count = _count_true(rows, "numeric_evaluated")
+    citation_evaluated_count = _count_true(rows, "citation_evaluated")
     return {
         "command": "run_final_eval_subset",
         "status": "success",
@@ -372,24 +422,33 @@ def summarize(rows: list[dict[str, Any]], *, run_id: str, artifact_dir: Path) ->
         "quality_status_semantics": "local subset readiness and deterministic-tool diagnostics, not formal benchmark acceptance",
         "run_id": run_id,
         "artifact_dir": safe_relpath(artifact_dir),
-        "case_count": len(rows),
+        "case_count": case_count,
         "passed_count": pass_fail.get("passed", 0),
         "failed_count": pass_fail.get("failed", 0),
+        "pass_rate": _rate(pass_fail.get("passed", 0), case_count),
         "dataset_distribution": dict(sorted(datasets.items())),
         "evaluation_mode_distribution": dict(sorted(modes.items())),
         "tool_status_distribution": dict(sorted(tool_statuses.items())),
         "tools_used_distribution": dict(sorted(tools.items())),
+        "failure_reason_distribution": dict(sorted(failure_reasons.items())),
+        "failure_stage_distribution": dict(sorted(failure_stages.items())),
         "evidence_ready_count": _count_true(rows, "evidence_ready"),
+        "evidence_ready_rate": _rate(_count_true(rows, "evidence_ready"), case_count),
         "tool_executed_count": _count_true(rows, "tool_executed"),
         "tool_success_count": sum(1 for row in rows if row.get("tool_executed") and row.get("tool_status") == "success"),
         "format_valid_count": _count_true(rows, "format_valid"),
-        "answer_evaluated_count": _count_true(rows, "answer_evaluated"),
+        "format_valid_rate": _rate(_count_true(rows, "format_valid"), case_count),
+        "answer_evaluated_count": answer_evaluated_count,
         "answer_hit_count": _count_true(rows, "answer_hit"),
-        "numeric_evaluated_count": _count_true(rows, "numeric_evaluated"),
+        "answer_hit_rate": _rate(_count_true(rows, "answer_hit"), answer_evaluated_count),
+        "numeric_evaluated_count": numeric_evaluated_count,
         "numeric_accuracy_count": _count_true(rows, "numeric_accuracy"),
-        "citation_evaluated_count": _count_true(rows, "citation_evaluated"),
+        "numeric_accuracy_rate": _rate(_count_true(rows, "numeric_accuracy"), numeric_evaluated_count),
+        "citation_evaluated_count": citation_evaluated_count,
         "citation_block_hit_count": _count_true(rows, "citation_block_hit"),
         "citation_page_hit_count": _count_true(rows, "citation_page_hit"),
+        "citation_block_hit_rate": _rate(_count_true(rows, "citation_block_hit"), citation_evaluated_count),
+        "citation_page_hit_rate": _rate(_count_true(rows, "citation_page_hit"), citation_evaluated_count),
         "requires_model_answer_count": _count_true(rows, "requires_model_answer"),
         "requires_mineru_or_retrieval_count": _count_true(rows, "requires_mineru_or_retrieval"),
         "final_llm_answer_quality_evaluated": False,
@@ -408,6 +467,10 @@ def summarize(rows: list[dict[str, Any]], *, run_id: str, artifact_dir: Path) ->
 
 def _count_true(rows: list[dict[str, Any]], key: str) -> int:
     return sum(1 for row in rows if row.get(key) is True)
+
+
+def _rate(numerator: int, denominator: int) -> float:
+    return round(numerator / denominator, 4) if denominator else 0.0
 
 
 def write_manual_review(path: Path, rows: list[dict[str, Any]]) -> None:

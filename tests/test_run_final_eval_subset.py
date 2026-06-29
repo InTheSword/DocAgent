@@ -197,13 +197,18 @@ def test_final_eval_runner_writes_local_diagnostic_artifacts(tmp_path: Path) -> 
     assert summary["evaluation_scope"] == "local_subset_diagnostic_not_formal_benchmark"
     assert summary["case_count"] == 4
     assert summary["passed_count"] == 4
+    assert summary["pass_rate"] == 1.0
     assert summary["tool_executed_count"] == 2
     assert summary["tool_success_count"] == 2
     assert summary["answer_evaluated_count"] == 2
     assert summary["answer_hit_count"] == 2
+    assert summary["answer_hit_rate"] == 1.0
     assert summary["numeric_accuracy_count"] == 2
+    assert summary["numeric_accuracy_rate"] == 1.0
     assert summary["citation_block_hit_count"] == 2
     assert summary["citation_page_hit_count"] == 2
+    assert summary["citation_block_hit_rate"] == 1.0
+    assert summary["failure_reason_distribution"] == {}
     assert summary["requires_model_answer_count"] == 2
     assert summary["requires_mineru_or_retrieval_count"] == 1
     assert summary["final_llm_answer_quality_evaluated"] is False
@@ -218,6 +223,8 @@ def test_final_eval_runner_writes_local_diagnostic_artifacts(tmp_path: Path) -> 
     rows = {row["sample_id"]: row for row in read_jsonl(run_dir / "results.jsonl")}
     assert rows["tatqa_table_q"]["evaluation_mode"] == "deterministic_table_tool"
     assert rows["tatqa_table_q"]["answer_hit"] is True
+    assert rows["tatqa_table_q"]["failure_reasons"] == []
+    assert rows["tatqa_table_q"]["failure_stage"] == ""
     assert rows["tatqa_average_q"]["structured_result"]["calculation"]["operation"] == "average"
     assert rows["tatqa_average_q"]["answer_hit"] is True
     assert rows["tatqa_text_q"]["evaluation_mode"] == "manifest_readiness"

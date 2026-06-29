@@ -34,7 +34,7 @@ The strongest accepted evidence is still execution stability:
   previews under `outputs/final_eval/`.
 - Final evaluation local subset diagnostic runner: implemented locally; the
   current 135-case local diagnostic is diagnostic-only and shows table
-  answer-quality gaps.
+  answer-quality gaps (`answer_hit_rate=0.1667`, `citation_block_hit_rate=1.0`).
 
 The most important product gap is clear:
 

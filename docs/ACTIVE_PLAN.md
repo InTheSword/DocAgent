@@ -1285,17 +1285,24 @@ Final-evaluation local subset diagnostic runner:
 resource_boundary = local_only
 script = scripts/run_final_eval_subset.py
 test = tests/test_run_final_eval_subset.py
-local_probe_run_id = local_subset_full_diagnostic_average
+local_probe_run_id = local_subset_full_diagnostic_taxonomy
 local_probe_case_count = 135
 local_probe_passed_count = 85
 local_probe_failed_count = 50
+local_probe_pass_rate = 0.6296
 local_probe_tool_executed_count = 60
 local_probe_tool_success_count = 37
 local_probe_answer_hit_count = 10
+local_probe_answer_hit_rate = 0.1667
 local_probe_numeric_accuracy_count = 4
+local_probe_numeric_accuracy_rate = 0.2
 local_probe_citation_block_hit_count = 60
+local_probe_citation_block_hit_rate = 1.0
 local_probe_requires_model_answer_count = 75
 local_probe_requires_mineru_or_retrieval_count = 55
+local_probe_failure_stage_distribution = tool_execution:23, answer_quality:27
+local_probe_failure_reason_distribution = table_lookup_unsupported:23,
+  answer_miss:50
 status = implemented
 quality_status = diagnostic_only
 benchmark_evaluation_status = not_started
