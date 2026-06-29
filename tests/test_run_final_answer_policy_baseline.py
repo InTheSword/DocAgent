@@ -195,6 +195,8 @@ def test_answer_policy_baseline_writes_diagnostic_artifacts(tmp_path: Path) -> N
     assert rows["text_q"]["selected_block_ids"] == ["tatqa_doc_p1"]
     assert rows["table_q"]["evaluation_mode"] == "answer_policy_with_tool_results"
     assert rows["table_q"]["tool_status"] == "success"
+    assert rows["table_q"]["tool_results_compact"][0]["status"] == "success"
+    assert rows["table_q"]["tool_results_compact"][0]["citations"][0]["block_id"] == "table_doc_table"
     assert rows["table_q"]["model_tool_result_count"] == 1
     assert rows["table_q"]["pass_fail"] == "passed"
     assert rows["table_q"]["final_answer_compact"]["citation_block_ids"] == ["table_doc_table"]

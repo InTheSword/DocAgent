@@ -197,11 +197,12 @@ diagnostic artifacts (`result.json`, `results.jsonl`, `summary.json`,
 can create an optional compact `outputs/sync/<run_id>/` bundle for server
 result return. Per-row diagnostics include compact final answers, citation
 validation, raw output previews, token/latency metadata, selected/dropped
-block ids, and evidence context hashes, without syncing full prompts or logs.
-It explicitly skips MP-DocVQA manifest rows until raw PDF/MinerU/retrieval
-evidence is available. Local smoke uses heuristic/fake policies only. Status is
-`implemented`; real Qwen baseline, prompt-quality acceptance, and formal
-benchmark status are still `not_started`.
+block ids, compact tool results for table/calculation prompts, and evidence
+context hashes, without syncing full prompts or logs. It explicitly skips
+MP-DocVQA manifest rows until raw PDF/MinerU/retrieval evidence is available.
+Local smoke uses heuristic/fake policies only. Status is `implemented`; real
+Qwen baseline, prompt-quality acceptance, and formal benchmark status are still
+`not_started`.
 
 Phase 5 AnswerPolicy baseline review gate is implemented locally in
 `scripts/review_answer_policy_baseline.py` with tests in
@@ -212,6 +213,17 @@ compact failed samples, and a diagnostic training-gate recommendation. Missing
 baseline artifacts return a structured failed review. This gate does not start
 SFT, start GRPO, accept Qwen prompt quality, or promote local diagnostics to a
 formal benchmark result.
+
+Phase 5 AnswerPolicy SFT candidate data builder is implemented locally in
+`scripts/build_answer_policy_sft_candidates.py` with tests in
+`tests/test_build_answer_policy_sft_candidates.py`. It reads a real-Qwen-marked
+AnswerPolicy baseline artifact directory or sync bundle, selects failed TAT-QA
+AnswerPolicy rows, reconstructs prompt-v2 SFT candidate records from the
+prepared TAT-QA samples plus compact tool results, and writes
+`sft_candidates.jsonl`, `summary.json`, `summary.md`, `preview.json`,
+`result.json`, and `manifest.json`. It blocks heuristic/fake non-Qwen baselines
+to avoid treating local smoke output as training evidence. This is candidate
+data design only; it does not start SFT/GRPO or claim final model quality.
 
 Phase 5F full CLI acceptance is accepted in
 `scripts/run_phase5f_full_cli_acceptance.py`. The runner reuses the Phase 5G

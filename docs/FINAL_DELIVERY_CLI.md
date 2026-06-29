@@ -42,6 +42,7 @@ Implemented local capabilities:
 - final subset AnswerPolicy baseline runner for server Qwen prompt-v2 smoke
 - diagnostic AnswerPolicy baseline review gate for full artifacts or compact
   sync bundles
+- diagnostic SFT candidate data builder from real-Qwen baseline failures
 
 Not included in the current local delivery:
 
@@ -218,6 +219,19 @@ python scripts\review_answer_policy_baseline.py `
 The review writes `review.json` and `review.md` with a diagnostic
 `training_gate` recommendation. It does not start SFT/GRPO and does not mark
 Qwen prompt quality or benchmark acceptance.
+
+Build candidate SFT records after a real Qwen baseline has been reviewed:
+
+```powershell
+python scripts\build_answer_policy_sft_candidates.py `
+  --baseline-run-dir outputs\sync\<run_id> `
+  --output-dir outputs\final_eval\answer_policy_sft_candidates
+```
+
+The builder reconstructs prompt-v2 records for failed TAT-QA AnswerPolicy rows
+using prepared local subset samples and compact tool results. It blocks
+heuristic/fake non-Qwen baselines and writes candidate data only; it does not
+start training.
 
 Enable optional query planning:
 

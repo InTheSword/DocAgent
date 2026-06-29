@@ -291,6 +291,7 @@ def evaluate_tatqa_sample(
                 str(item.get("block_id")) for item in tool_citations if item.get("block_id")
             ),
             "tool_results_count": len(tool_results),
+            "tool_results_compact": tool_results,
         }
 
     try:
