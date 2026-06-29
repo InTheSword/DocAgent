@@ -250,6 +250,21 @@ prepared TAT-QA samples plus compact tool results, and writes
 to avoid treating local smoke output as training evidence. This is candidate
 data design only; it does not start SFT/GRPO or claim final model quality.
 
+Phase 5 AnswerPolicy SFT candidate review is implemented locally in
+`scripts/review_answer_policy_sft_candidates.py` with tests in
+`tests/test_review_answer_policy_sft_candidates.py`. It reviews a larger
+real-Qwen baseline directory and the generated SFT candidate directory,
+summarizes answer misses, candidate alignment, malformed target fields,
+missing tool-result context, preview artifacts, and `manual_review.jsonl`.
+The server one-off inspection of
+`answer_policy_training_gate_qwen_larger40_20260629` found 14 TAT-QA answer
+misses, 13 generated SFT candidate records, one failed sample without a
+candidate because tool execution failed, and the recommendation
+`manual_review_sft_candidates_before_training`. The tracked script still
+requires server validation on the same artifacts. It does not start SFT,
+start GRPO, accept model quality, or promote the diagnostic run to a formal
+benchmark.
+
 Phase 5 AnswerPolicy training-gate orchestrator is implemented locally in
 `scripts/run_final_answer_policy_training_gate.py` with tests in
 `tests/test_run_final_answer_policy_training_gate.py`. It runs the final
