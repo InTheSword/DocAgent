@@ -323,6 +323,21 @@ skipped. This confirms that the earlier larger40 answer misses were mostly
 tool-context defects and that the next step is a larger real-Qwen diagnostic,
 not SFT/GRPO training.
 
+The full 80-sample real-Qwen diagnostic gate after the table-tool repair ran
+with run id `answer_policy_training_gate_qwen_full80_tablefix_20260629`. It
+processed the prepared final-eval artifacts, evaluated 80 TAT-QA AnswerPolicy
+cases, skipped 55 MP-DocVQA manifest rows that still require raw
+PDF/MinerU/retrieval evidence, used Qwen base, did not train, and did not
+claim formal benchmark acceptance. The baseline result was
+`pass_rate=0.7625`, `answer_hit_rate=0.7625`,
+`citation_block_hit_rate=1.0`, `format_valid_rate=1.0`, and
+`failure_reason_distribution=answer_miss:19`. The review gate returned
+`prompt_or_parser_repair_before_training`, `sft_gate=not_ready`, because raw
+JSON or schema failures were present in row-level parse diagnostics despite
+the canonical format-valid rate being 1.0. The next action is to inspect the
+raw/schema failure rows before changing prompts, parser behavior, or any
+training data.
+
 Phase 5 AnswerPolicy training-gate orchestrator is implemented locally in
 `scripts/run_final_answer_policy_training_gate.py` with tests in
 `tests/test_run_final_answer_policy_training_gate.py`. It runs the final
