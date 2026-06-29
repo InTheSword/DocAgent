@@ -78,6 +78,11 @@ Phase 5 Personal-use DocAgent MVP
    schema failure that was already repaired into a canonical format-valid
    output; review-only server rerun confirmed the repaired-output semantics
    and now recommends continuing Qwen evaluation before training
+-> full80 answer-miss artifact-only review completed on server as
+   diagnostic_only: 19 answer misses bucketed into table/calculation tool
+   review, model extractive precision review, metric/granularity review, and
+   repaired-parse answer miss; tracked reusable review script is implemented
+   locally and does not create training data
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -176,6 +181,7 @@ Phase 5 table tool row/header selection repair -> accepted
 Phase 5 larger AnswerPolicy Qwen tablefix diagnostic gate -> real_model_verified
 Phase 5 full80 AnswerPolicy Qwen tablefix diagnostic gate -> real_model_verified
 Phase 5 AnswerPolicy review gate repaired parse/schema semantics -> real_model_verified
+Phase 5 AnswerPolicy answer-miss artifact review -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
@@ -1528,6 +1534,18 @@ review_gate_repaired_parse_schema_semantics = implemented locally; repaired
   unrepaired_parse_fail_count 0, invalid_citation_id_count 16,
   answer_miss_count 19, used_training false,
   formal_benchmark_acceptance false
+answer_miss_artifact_review = server diagnostic success, run_id
+  answer_policy_full80_answer_miss_review_20260630, git_commit cbd0db1,
+  source_baseline answer_policy_training_gate_qwen_full80_tablefix_20260629,
+  answer_miss_count 19, bucket_counts
+  answer_granularity_or_metric_review:3,
+  calculation_reasoning_or_operand_review:7,
+  model_extractive_precision_review:4,
+  repaired_parse_plus_answer_miss:1,
+  table_selection_or_column_review:4, used_training false,
+  formal_benchmark_acceptance false; tracked reusable script implemented
+  locally as scripts/review_answer_policy_answer_misses.py and does not
+  create training data
 sft_candidate_review = server validation success, run_id
   answer_policy_sft_candidate_review_larger40_20260629_tracked,
   candidate_record_count 13, failed_without_candidate_count 1,

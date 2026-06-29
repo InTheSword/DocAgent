@@ -16,6 +16,11 @@ Do not silently download large datasets. Do not treat subset preparation as
 benchmark evaluation. Training data rebuilds, SFT, GRPO, and model-quality
 claims still require explicit approval.
 
+The Phase 5 MP-DocVQA and TAT-QA validation subsets are diagnostic/evaluation
+artifacts only. Do not convert them into SFT/GRPO training records; future
+training must use separate training-set data or an explicitly approved
+training split.
+
 ## 2. MP-DocVQA
 
 Current role:

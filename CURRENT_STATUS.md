@@ -1,6 +1,6 @@
 # Current Status
 
-Updated: 2026-06-29
+Updated: 2026-06-30
 
 ## Phase 4D-C Accepted / Phase 5 Active
 
@@ -254,6 +254,24 @@ Qwen, did not train, and returned
 `unrepaired_parse_fail_count_in_rows=0`,
 `invalid_citation_id_count_in_rows=16`, and
 `answer_miss_count_in_rows=19`.
+
+Phase 5 AnswerPolicy answer-miss artifact review is implemented locally in
+`scripts/review_answer_policy_answer_misses.py` with tests in
+`tests/test_review_answer_policy_answer_misses.py`. It reads an existing
+AnswerPolicy baseline artifact directory, selects rows with `answer_miss`,
+assigns broad diagnostic buckets, and writes `result.json`, `summary.json`,
+`summary.md`, `answer_miss_rows.jsonl`, `preview.json`, and `manifest.json`.
+The review is artifact-only: it does not rerun Qwen, create training records,
+start SFT/GRPO, or tune against individual validation examples. The server
+one-off diagnostic `answer_policy_full80_answer_miss_review_20260630` over the
+full80 tablefix baseline found 19 answer misses with bucket counts
+`answer_granularity_or_metric_review=3`,
+`calculation_reasoning_or_operand_review=7`,
+`model_extractive_precision_review=4`,
+`repaired_parse_plus_answer_miss=1`, and
+`table_selection_or_column_review=4`. This is diagnostic evidence for where
+generic review should focus before training decisions; it is not final answer
+quality acceptance or benchmark evaluation.
 
 Phase 5 AnswerPolicy SFT candidate data builder is implemented locally in
 `scripts/build_answer_policy_sft_candidates.py` with tests in
