@@ -53,6 +53,30 @@ class CandidateSchemaPolicy:
         )
 
 
+class ToolAwarePolicy:
+    mode = "tool_aware_fake"
+
+    def generate(self, **kwargs: Any) -> GenerationResult:
+        tool_result = (kwargs.get("tool_results") or [])[0]
+        citation = tool_result["citations"][0]
+        parsed = {
+            "answer": tool_result["answer"],
+            "reasoning_summary": "The table tool selected the cited table cell.",
+            "citation_block_ids": [citation["block_id"]],
+            "evidence_used": [{"block_id": citation["block_id"], "text_preview": citation["text_preview"]}],
+        }
+        return GenerationResult(
+            raw_text='{"answer": "2019: 10"}',
+            parsed=parsed,
+            prompt_text="prompt",
+            prompt_token_count=1,
+            completion_token_count=10,
+            finish_reason="stop",
+            latency_ms=2.0,
+            metadata={"parse_result": {"raw_json_ok": True, "schema_ok": True}},
+        )
+
+
 def _blocks() -> list[EvidenceBlock]:
     return [
         EvidenceBlock(
@@ -130,3 +154,29 @@ def test_workflow_accepts_candidate_schema_and_filters_citations() -> None:
     assert state.final_answer["citation_validation"]["invalid_block_ids"] == ["missing_block"]
     assert state.format_check["success"] is True
     assert state.location_check["success"] is True
+
+
+def test_workflow_passes_tool_results_to_answer_policy() -> None:
+    tool_result = {
+        "status": "success",
+        "tool": "table_lookup_or_calculation",
+        "answer": "2019: 10",
+        "citations": [{"block_id": "b1", "text_preview": "2019 10"}],
+    }
+
+    state = run_qa_workflow(
+        qid="q1",
+        question="What is the 2019 value?",
+        blocks=_blocks(),
+        answer_policy=ToolAwarePolicy(),
+        answer_type_hint="numeric",
+        preserve_input_order=True,
+        tool_results=[tool_result],
+    )
+
+    assert state.final_answer["answer"] == "2019: 10"
+    assert state.final_answer["citation_block_ids"] == ["b1"]
+    assert state.table_results == [tool_result]
+    trace_by_step = {item["step"]: item for item in state.trace}
+    assert trace_by_step["build_evidence_context"]["tool_result_count"] == 1
+    assert trace_by_step["generate_answer"]["tool_result_count"] == 1

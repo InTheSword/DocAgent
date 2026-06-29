@@ -19,7 +19,15 @@ from docagent.schemas import DocAgentSample
 from docagent.utils.jsonl import read_jsonl, write_jsonl
 from docagent.workflow.answer_contract import candidate_citation_ids, primary_location_from_output
 from docagent.workflow.graph import run_qa_workflow
-from scripts.run_final_eval_subset import answer_metrics, as_list, gold_block_ids, load_manifest, safe_relpath, write_json
+from scripts.run_final_eval_subset import (
+    InMemoryDocumentRepository,
+    answer_metrics,
+    as_list,
+    gold_block_ids,
+    load_manifest,
+    safe_relpath,
+    write_json,
+)
 
 
 SCRIPT_VERSION = "final-answer-policy-baseline-v1"
@@ -150,7 +158,41 @@ def row_from_skipped_mpdocvqa(manifest: dict[str, Any]) -> dict[str, Any]:
 
 def should_run_answer_policy(manifest: dict[str, Any]) -> bool:
     tools = {str(item) for item in manifest.get("expected_tools") or []}
-    return "local_fact_qa" in tools
+    return bool(tools.intersection({"local_fact_qa", "table_lookup", "simple_calculation"}))
+
+
+def should_attach_table_tool(expected_tools: list[str]) -> bool:
+    return "table_lookup" in expected_tools or "simple_calculation" in expected_tools
+
+
+def compact_tool_result(result: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in {
+            "status": result.get("status"),
+            "tool": result.get("tool"),
+            "task_type": result.get("task_type"),
+            "answer": result.get("answer"),
+            "reasoning_summary": result.get("reasoning_summary"),
+            "citations": result.get("citations") or [],
+            "evidence_used": result.get("evidence_used") or [],
+            "structured_result": result.get("structured_result") or {},
+            "warnings": result.get("warnings") or [],
+            "error": result.get("error") or {},
+        }.items()
+        if value not in (None, "", [], {})
+    }
+
+
+def table_tool_result_for_sample(sample: DocAgentSample, expected_tools: list[str]) -> dict[str, Any]:
+    from docagent.tools.table_tools import table_lookup_or_calculation
+
+    return table_lookup_or_calculation(
+        InMemoryDocumentRepository(sample),  # type: ignore[arg-type]
+        sample.doc_id,
+        sample.question,
+        selected_tools=expected_tools,
+    )
 
 
 def evaluate_tatqa_sample(
@@ -178,16 +220,53 @@ def evaluate_tatqa_sample(
         "requires_mineru_or_retrieval": False,
         "answer_policy_mode": str(getattr(answer_policy, "mode", "unknown")),
         "used_qwen": str(getattr(answer_policy, "mode", "")) in {"base", "sft", "grpo"},
+        "tool_executed": False,
+        "tool_status": "not_run",
+        "tool_results_count": 0,
     }
     if not should_run_answer_policy(manifest):
         return {
             **base,
-            "evaluation_mode": "skipped_deterministic_tool_case",
-            "skip_reason": "expected_tools_do_not_include_local_fact_qa",
+            "evaluation_mode": "skipped_no_answer_policy_tool",
+            "skip_reason": "expected_tools_do_not_include_model_ready_tool",
             "pass_fail": "skipped",
             "answer_evaluated": False,
             "citation_evaluated": False,
             "format_valid": False,
+        }
+
+    tool_results: list[dict[str, Any]] = []
+    tool_diagnostics: dict[str, Any] = {}
+    if should_attach_table_tool(expected_tools):
+        try:
+            table_result = table_tool_result_for_sample(sample, expected_tools)
+        except Exception as exc:
+            return {
+                **base,
+                "evaluation_mode": "answer_policy_with_tool_results",
+                "pass_fail": "failed",
+                "failure_stage": "tool_execution",
+                "failure_reasons": [type(exc).__name__],
+                "error": {"type": type(exc).__name__, "message": str(exc)},
+                "answer_evaluated": False,
+                "citation_evaluated": False,
+                "format_valid": False,
+                "tool_executed": True,
+                "tool_status": "exception",
+            }
+        compact_result = compact_tool_result(table_result)
+        tool_results.append(compact_result)
+        tool_citations = [item for item in table_result.get("citations") or [] if isinstance(item, dict)]
+        tool_diagnostics = {
+            "tool_executed": True,
+            "tool_status": str(table_result.get("status") or ""),
+            "tool_answer": str(table_result.get("answer") or ""),
+            "tool_error_type": str((table_result.get("error") or {}).get("type") or ""),
+            "tool_warnings": [str(item) for item in table_result.get("warnings") or []],
+            "tool_citation_block_ids": sorted(
+                str(item.get("block_id")) for item in tool_citations if item.get("block_id")
+            ),
+            "tool_results_count": len(tool_results),
         }
 
     try:
@@ -200,11 +279,13 @@ def evaluate_tatqa_sample(
             answer_type_hint=sample.answer_type,
             doc_id=sample.doc_id,
             preserve_input_order=preserve_input_order,
+            tool_results=tool_results,
         )
     except Exception as exc:
         return {
             **base,
-            "evaluation_mode": "answer_policy_generation",
+            **tool_diagnostics,
+            "evaluation_mode": "answer_policy_with_tool_results" if tool_results else "answer_policy_generation",
             "pass_fail": "failed",
             "failure_stage": "answer_policy",
             "failure_reasons": [type(exc).__name__],
@@ -235,7 +316,8 @@ def evaluate_tatqa_sample(
     )
     return {
         **base,
-        "evaluation_mode": "answer_policy_generation",
+        **tool_diagnostics,
+        "evaluation_mode": "answer_policy_with_tool_results" if tool_results else "answer_policy_generation",
         "pass_fail": pass_fail,
         "failure_reasons": failure_reasons,
         "failure_stage": failure_stage(failure_reasons),
@@ -251,6 +333,7 @@ def evaluate_tatqa_sample(
         "prompt_version": state.generation_metadata.get("prompt_version"),
         "parse_result": state.parse_result,
         "retrieved_block_ids": [block.block_id for block in state.retrieved_blocks],
+        "model_tool_result_count": int(state.generation_metadata.get("tool_result_count") or len(tool_results)),
         "trace_step_count": len(state.trace),
         **metrics,
     }
@@ -294,7 +377,9 @@ def failure_stage(reasons: list[str]) -> str:
 
 def summarize(rows: list[dict[str, Any]], *, run_id: str, artifact_dir: Path, answer_policy: str) -> dict[str, Any]:
     status_counts = Counter(str(row.get("pass_fail") or "") for row in rows)
-    evaluated = [row for row in rows if row.get("evaluation_mode") == "answer_policy_generation"]
+    modes = Counter(str(row.get("evaluation_mode") or "") for row in rows)
+    tool_statuses = Counter(str(row.get("tool_status") or "") for row in rows if row.get("tool_executed"))
+    evaluated = [row for row in rows if row.get("answer_evaluated")]
     evaluated_count = len(evaluated)
     failure_reasons = Counter(reason for row in rows for reason in row.get("failure_reasons") or [])
     failure_stages = Counter(str(row.get("failure_stage") or "") for row in rows if row.get("failure_stage"))
@@ -316,6 +401,14 @@ def summarize(rows: list[dict[str, Any]], *, run_id: str, artifact_dir: Path, an
         "failed_count": status_counts.get("failed", 0),
         "skipped_count": status_counts.get("skipped", 0),
         "pass_rate": round(status_counts.get("passed", 0) / evaluated_count, 4) if evaluated_count else 0.0,
+        "evaluation_mode_distribution": dict(sorted(modes.items())),
+        "tool_executed_count": sum(1 for row in rows if row.get("tool_executed")),
+        "tool_success_count": sum(1 for row in rows if row.get("tool_executed") and row.get("tool_status") == "success"),
+        "tool_success_rate": rate(
+            sum(1 for row in rows if row.get("tool_executed") and row.get("tool_status") == "success"),
+            sum(1 for row in rows if row.get("tool_executed")),
+        ),
+        "tool_status_distribution": dict(sorted(tool_statuses.items())),
         "format_valid_count": sum(1 for row in evaluated if row.get("format_valid")),
         "format_valid_rate": rate(sum(1 for row in evaluated if row.get("format_valid")), evaluated_count),
         "location_valid_count": sum(1 for row in evaluated if row.get("location_valid")),
@@ -367,6 +460,18 @@ def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
         f"- failed_count: {summary['failed_count']}",
         f"- skipped_count: {summary['skipped_count']}",
         f"- pass_rate: {summary['pass_rate']}",
+        "",
+        "Evaluation modes:",
+        *markdown_distribution(summary.get("evaluation_mode_distribution") or {}),
+        "",
+        "## Tool Results",
+        "",
+        f"- tool_executed_count: {summary.get('tool_executed_count', 0)}",
+        f"- tool_success_count: {summary.get('tool_success_count', 0)}",
+        f"- tool_success_rate: {summary.get('tool_success_rate', 0.0)}",
+        "",
+        "Tool status distribution:",
+        *markdown_distribution(summary.get("tool_status_distribution") or {}),
         "",
         "## Metrics",
         "",
@@ -437,6 +542,9 @@ def result_payload(summary: dict[str, Any], artifact_paths: list[Path]) -> dict[
             "failed_count": summary.get("failed_count", 0),
             "skipped_count": summary.get("skipped_count", 0),
             "pass_rate": summary.get("pass_rate", 0.0),
+            "tool_executed_count": summary.get("tool_executed_count", 0),
+            "tool_success_count": summary.get("tool_success_count", 0),
+            "tool_success_rate": summary.get("tool_success_rate", 0.0),
             "format_valid_rate": summary.get("format_valid_rate", 0.0),
             "location_valid_rate": summary.get("location_valid_rate", 0.0),
             "answer_hit_rate": summary.get("answer_hit_rate", 0.0),

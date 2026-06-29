@@ -65,11 +65,13 @@ def run_qa_workflow(
     preserve_input_order: bool = False,
     retriever: Retriever | None = None,
     rank_aware_context: bool = False,
+    tool_results: list[dict[str, Any]] | None = None,
 ) -> QAState:
     if answer_policy is None:
         raise ValueError("answer_policy is required; pass HeuristicAnswerPolicy explicitly for tests or smoke runs")
     policy_mode = getattr(answer_policy, "mode", "unknown")
     state = QAState(qid=qid, question=question, doc_id=doc_id, answer_type=answer_type_hint)
+    state.table_results = list(tool_results or [])
     if trace_repository is not None:
         state.run_id = trace_repository.create_run(
             run_id=run_id,
@@ -157,6 +159,7 @@ def run_qa_workflow(
             "dropped_block_ids": evidence_context["dropped_block_ids"],
             "evidence_context_hash": evidence_context["evidence_context_hash"],
             "truncation_applied": evidence_context["truncation_applied"],
+            "tool_result_count": len(state.table_results),
         },
     )
 
@@ -187,6 +190,7 @@ def run_qa_workflow(
                 "dropped_block_ids": dropped_block_ids,
                 "evidence_context_hash": evidence_context_hash,
                 "prompt_token_count": generation.prompt_token_count,
+                "tool_result_count": len(state.table_results),
                 "truncation_applied": truncation_applied,
                 "completion_token_count": generation.completion_token_count,
                 "finish_reason": generation.finish_reason,
@@ -205,11 +209,13 @@ def run_qa_workflow(
             input_summary={
                 "policy_mode": policy_mode,
                 "evidence_ids": [block.block_id for block in state.retrieved_blocks],
+                "tool_result_count": len(state.table_results),
             },
             output_summary={
                 "policy_mode": policy_mode,
                 "prompt_version": prompt_version,
                 "task_type": state.generation_metadata["task_type"],
+                "tool_result_count": len(state.table_results),
                 "selected_block_ids": selected_block_ids,
                 "dropped_block_ids": dropped_block_ids,
                 "evidence_context_hash": evidence_context_hash,

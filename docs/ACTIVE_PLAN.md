@@ -1378,9 +1378,10 @@ script = scripts/run_final_answer_policy_baseline.py
 test = tests/test_run_final_answer_policy_baseline.py
 input_scope = prepared final-eval subset artifacts under outputs/final_eval/
 local_smoke = heuristic/fake-policy only; diagnostic_not_formal_benchmark
-server_target = Qwen base prompt-v2 baseline over prepared TAT-QA local_fact_qa
-  evidence cases, with MP-DocVQA manifest cases explicitly skipped until
-  raw PDF -> MinerU/retrieval evidence is available
+server_target = Qwen base prompt-v2 baseline over prepared TAT-QA
+  local_fact_qa evidence cases plus table_lookup/simple_calculation tool
+  result cases, with MP-DocVQA manifest cases explicitly skipped until raw
+  PDF -> MinerU/retrieval evidence is available
 artifact_outputs = result.json, results.jsonl, summary.json, summary.md,
   preview.json, failures_sample.jsonl, manifest.json, optional
   outputs/sync/<run_id>/ compact bundle

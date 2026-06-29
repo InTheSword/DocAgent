@@ -191,7 +191,8 @@ python scripts\run_final_answer_policy_baseline.py `
   --answer-policy heuristic `
   --max-samples 5 `
   --output-dir outputs\final_eval\answer_policy_baseline_local `
-  --sync-output-dir outputs\sync
+  --sync-output-dir outputs\sync `
+  --preserve-input-order
 ```
 
 On a GPU server with Qwen available, use `--answer-policy base` and
@@ -200,6 +201,9 @@ diagnostic prompt-v2 baseline, not formal benchmark acceptance. With
 `--sync-output-dir`, it writes a compact `outputs/sync/<run_id>/` bundle with
 `result.json`, summaries, previews, failure samples, manifest, and log-tail
 placeholders suitable for server result return.
+TAT-QA table/calculation cases run deterministic table tools first and pass
+the compact tool result into the AnswerPolicy prompt; MP-DocVQA manifest cases
+remain skipped until raw PDF/MinerU/retrieval evidence is available.
 
 Enable optional query planning:
 

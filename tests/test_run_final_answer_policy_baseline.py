@@ -15,6 +15,26 @@ class CandidatePolicy:
 
     def generate(self, **kwargs: Any) -> GenerationResult:
         block = kwargs["evidence_blocks"][0]
+        tool_results = kwargs.get("tool_results") or []
+        if tool_results:
+            tool_result = tool_results[0]
+            citation = (tool_result.get("citations") or [{"block_id": block.block_id, "text_preview": block.retrieval_text}])[0]
+            parsed = {
+                "answer": str(tool_result.get("answer") or ""),
+                "reasoning_summary": "The table tool result selected the cited value.",
+                "citation_block_ids": [citation["block_id"]],
+                "evidence_used": [{"block_id": citation["block_id"], "text_preview": citation.get("text_preview", "")}],
+            }
+            return GenerationResult(
+                raw_text=json.dumps(parsed),
+                parsed=parsed,
+                prompt_text="prompt",
+                prompt_token_count=1,
+                completion_token_count=1,
+                finish_reason="stop",
+                latency_ms=1.0,
+                metadata={"parse_result": {"raw_json_ok": True, "schema_ok": True}},
+            )
         parsed = {
             "answer": "vessel values divided by net borrowings",
             "reasoning_summary": "The cited paragraph defines LTV.",
@@ -142,9 +162,12 @@ def test_answer_policy_baseline_writes_diagnostic_artifacts(tmp_path: Path) -> N
     assert summary["status"] == "success"
     assert summary["evaluation_scope"] == "final_subset_answer_policy_baseline_not_formal_benchmark"
     assert summary["case_count"] == 3
-    assert summary["evaluated_count"] == 1
-    assert summary["passed_count"] == 1
-    assert summary["skipped_count"] == 2
+    assert summary["evaluated_count"] == 2
+    assert summary["passed_count"] == 2
+    assert summary["skipped_count"] == 1
+    assert summary["tool_executed_count"] == 1
+    assert summary["tool_success_count"] == 1
+    assert summary["tool_success_rate"] == 1.0
     assert summary["answer_hit_rate"] == 1.0
     assert summary["citation_block_hit_rate"] == 1.0
     assert summary["used_qwen"] is False
@@ -163,10 +186,14 @@ def test_answer_policy_baseline_writes_diagnostic_artifacts(tmp_path: Path) -> N
     rows = {row["sample_id"]: row for row in read_jsonl(run_dir / "results.jsonl")}
     assert rows["text_q"]["pass_fail"] == "passed"
     assert rows["text_q"]["citation_block_hit"] is True
-    assert rows["table_q"]["evaluation_mode"] == "skipped_deterministic_tool_case"
+    assert rows["table_q"]["evaluation_mode"] == "answer_policy_with_tool_results"
+    assert rows["table_q"]["tool_status"] == "success"
+    assert rows["table_q"]["model_tool_result_count"] == 1
+    assert rows["table_q"]["pass_fail"] == "passed"
     assert rows["mp_q"]["evaluation_mode"] == "skipped_requires_raw_pdf_mineru_retrieval"
     result = json.loads((run_dir / "result.json").read_text(encoding="utf-8"))
-    assert result["metrics"]["evaluated_count"] == 1
+    assert result["metrics"]["evaluated_count"] == 2
+    assert result["metrics"]["tool_success_count"] == 1
     sync_dir = tmp_path / "sync" / "candidate_run"
     assert (sync_dir / "result.json").is_file()
     assert (sync_dir / "summary.json").is_file()
