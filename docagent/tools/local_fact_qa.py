@@ -7,12 +7,12 @@ from docagent.retrieval.base import Retriever
 from docagent.schemas import EvidenceBlock, QAState
 from docagent.storage.repositories import DocumentRepository, TraceRepository
 from docagent.workflow.graph import run_qa_workflow
+from docagent.workflow.answer_contract import citation_from_block, evidence_used_from_blocks
 
 
 WorkflowRunner = Callable[..., QAState]
 
 DEFAULT_TOP_K = 5
-DEFAULT_TEXT_PREVIEW_CHARS = 180
 
 
 def local_fact_qa(
@@ -113,13 +113,18 @@ def _success(
     workflow_status: str,
     final_answer: dict[str, Any],
 ) -> dict[str, Any]:
+    citations = _final_answer_citations(final_answer, blocks)
+    evidence_used = _final_answer_evidence_used(final_answer, citations)
+    reasoning_summary = str(final_answer.get("reasoning_summary") or final_answer.get("reason") or "")
     return {
         "tool_name": "local_fact_qa",
         "status": "success",
         "doc_id": doc_id,
         "question": question,
         "answer": answer,
-        "citations": [_citation(block) for block in blocks],
+        "reasoning_summary": reasoning_summary,
+        "evidence_used": evidence_used,
+        "citations": citations,
         "supporting_evidence_ids": [block.block_id for block in blocks],
         "tools_used": ["local_fact_qa"],
         "trace_path": trace_path,
@@ -129,6 +134,7 @@ def _success(
         "router_plan_summary": _router_plan_summary(router_plan),
         "workflow_status": workflow_status,
         "final_answer": final_answer,
+        "citation_validation": final_answer.get("citation_validation") or {},
     }
 
 
@@ -147,6 +153,8 @@ def _error(
         "doc_id": doc_id,
         "question": question,
         "answer": "",
+        "reasoning_summary": "",
+        "evidence_used": [],
         "citations": [],
         "supporting_evidence_ids": [],
         "tools_used": ["local_fact_qa"],
@@ -185,23 +193,41 @@ def _initial_warnings(router_plan: dict[str, Any], options: dict[str, Any]) -> l
     return warnings
 
 
-def _citation(block: EvidenceBlock) -> dict[str, Any]:
-    return {
-        key: value
-        for key, value in {
-            "doc_id": block.doc_id,
-            "page": block.location.page if block.location.page is not None else block.page_id,
-            "block_id": block.block_id,
-            "block_type": block.block_type,
-            "text_preview": _text_preview(block.retrieval_text),
-        }.items()
-        if value not in {None, ""}
-    }
+def _final_answer_citations(final_answer: dict[str, Any], blocks: list[EvidenceBlock]) -> list[dict[str, Any]]:
+    raw_citations = final_answer.get("citations")
+    if isinstance(raw_citations, list) and raw_citations:
+        return [dict(item) for item in raw_citations if isinstance(item, dict)]
+    block_by_id = {block.block_id: block for block in blocks}
+    citation_ids = final_answer.get("citation_block_ids")
+    if isinstance(citation_ids, list) and citation_ids:
+        return [citation_from_block(block_by_id[block_id]) for block_id in citation_ids if block_id in block_by_id]
+    location = final_answer.get("evidence_location") if isinstance(final_answer, dict) else {}
+    block_id = str((location or {}).get("block_id") or "")
+    if block_id in block_by_id:
+        return [citation_from_block(block_by_id[block_id])]
+    return [citation_from_block(block) for block in blocks]
 
 
-def _text_preview(text: str, limit: int = DEFAULT_TEXT_PREVIEW_CHARS) -> str:
-    normalized = " ".join((text or "").split())
-    return normalized[:limit]
+def _final_answer_evidence_used(final_answer: dict[str, Any], citations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    evidence_used = final_answer.get("evidence_used")
+    if isinstance(evidence_used, list):
+        return [dict(item) for item in evidence_used if isinstance(item, dict)]
+    if isinstance(evidence_used, str) and evidence_used.strip():
+        return [{"text_preview": evidence_used}]
+    citation_blocks = [
+        EvidenceBlock(
+            doc_id=str(citation.get("doc_id") or ""),
+            block_id=str(citation.get("block_id") or ""),
+            block_type=str(citation.get("block_type") or "text"),
+            text=str(citation.get("text_preview") or ""),
+            page_id=citation.get("page"),
+        )
+        for citation in citations
+        if citation.get("block_id")
+    ]
+    if citation_blocks:
+        return evidence_used_from_blocks(citation_blocks)
+    return []
 
 
 def _positive_int(value: Any, default: int) -> int:

@@ -12,6 +12,18 @@ def test_parse_strict_json_object() -> None:
     assert result.parsed["answer"] == "A"
 
 
+def test_parse_answer_candidate_schema() -> None:
+    result = parse_generation_output(
+        '{"answer": "A", "reasoning_summary": "Block b1 states A.", '
+        '"citation_block_ids": ["b1"], "evidence_used": [{"block_id": "b1", "text_preview": "A"}]}'
+    )
+
+    assert result.raw_json_ok
+    assert result.schema_ok
+    assert result.parsed["reasoning_summary"] == "Block b1 states A."
+    assert result.parsed["citation_block_ids"] == ["b1"]
+
+
 def test_parse_recovers_json_after_extra_text_and_think_tags() -> None:
     result = parse_generation_output(
         '<think>hidden</think>\nHere is the answer:\n'

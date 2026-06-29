@@ -28,6 +28,31 @@ class FakePolicy:
         )
 
 
+class CandidateSchemaPolicy:
+    mode = "candidate_fake"
+
+    def generate(self, **kwargs: Any) -> GenerationResult:
+        parsed = {
+            "answer": "March 12, 2020",
+            "reasoning_summary": "The invoice date is stated in the selected text block.",
+            "citation_block_ids": ["missing_block", "b1"],
+            "evidence_used": [
+                {"block_id": "missing_block", "text_preview": "not in the evidence pack"},
+                {"block_id": "b1", "text_preview": "Date: March 12, 2020"},
+            ],
+        }
+        return GenerationResult(
+            raw_text='{"answer": "March 12, 2020", "reasoning_summary": "..."}',
+            parsed=parsed,
+            prompt_text="prompt",
+            prompt_token_count=1,
+            completion_token_count=10,
+            finish_reason="stop",
+            latency_ms=2.0,
+            metadata={"parse_result": {"raw_json_ok": True, "schema_ok": True}},
+        )
+
+
 def _blocks() -> list[EvidenceBlock]:
     return [
         EvidenceBlock(
@@ -87,3 +112,21 @@ def test_workflow_can_preserve_input_evidence_order() -> None:
 
     assert [block.block_id for block in state.retrieved_blocks] == ["first", "second"]
     assert state.trace[0]["preserve_input_order"] is True
+
+
+def test_workflow_accepts_candidate_schema_and_filters_citations() -> None:
+    state = run_qa_workflow(
+        qid="q1",
+        question="What is the date?",
+        blocks=_blocks(),
+        answer_policy=CandidateSchemaPolicy(),
+        answer_type_hint="extractive",
+    )
+
+    assert state.status == "completed"
+    assert state.final_answer["answer"] == "March 12, 2020"
+    assert state.final_answer["reasoning_summary"] == "The invoice date is stated in the selected text block."
+    assert state.final_answer["citation_block_ids"] == ["b1"]
+    assert state.final_answer["citation_validation"]["invalid_block_ids"] == ["missing_block"]
+    assert state.format_check["success"] is True
+    assert state.location_check["success"] is True

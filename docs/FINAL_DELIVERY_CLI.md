@@ -31,6 +31,10 @@ Implemented local capabilities:
 - deterministic persisted-evidence `structured_extraction`
 - deterministic `table_lookup` and traceable simple table calculations
 - `local_fact_qa` wrapper around retrieval and AnswerPolicy
+- AnswerPolicy compatibility for both the legacy
+  `answer/evidence_location/evidence/reason` output schema and the candidate
+  `answer/reasoning_summary/citation_block_ids/evidence_used` schema
+- citation allowlist filtering for model-selected evidence block ids
 - local final-evaluation subset preparation for TAT-QA dev and MP-DocVQA val
 - local subset diagnostic report with JSON and Markdown summaries
 
@@ -111,6 +115,11 @@ Citation objects are normalized around these fields when available:
 
 `reasoning_summary` is a short user-facing explanation. It is not a hidden
 chain-of-thought field.
+
+When an AnswerPolicy returns candidate `citation_block_ids`, DocAgent filters
+those ids to the retrieved evidence allowlist before constructing final
+citations. Invalid model-selected ids are recorded in `citation_validation` and
+are not emitted as final citations.
 
 ## Common Commands
 

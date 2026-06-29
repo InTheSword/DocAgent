@@ -143,6 +143,28 @@ def test_canonical_output_adapter_adds_doc_id_page_and_bbox() -> None:
     assert canonical["evidence_location"]["bbox"] == [0, 1, 2, 3]
 
 
+def test_canonical_output_adapter_filters_candidate_citations_to_allowlist() -> None:
+    block = _block("b1", "Invoice Date: March 12, 2020")
+    canonical = canonicalize_output(
+        {
+            "answer": "March 12, 2020",
+            "reasoning_summary": "The selected block gives the invoice date.",
+            "citation_block_ids": ["missing", "b1"],
+            "evidence_used": [
+                {"block_id": "missing", "text_preview": "not in evidence pack"},
+                {"block_id": "b1", "text_preview": "Invoice Date: March 12, 2020"},
+            ],
+        },
+        [block],
+    )
+
+    assert canonical["evidence_location"]["block_id"] == "b1"
+    assert canonical["citation_block_ids"] == ["b1"]
+    assert [item["block_id"] for item in canonical["citations"]] == ["b1"]
+    assert [item["block_id"] for item in canonical["evidence_used"]] == ["b1"]
+    assert canonical["citation_validation"]["invalid_block_ids"] == ["missing"]
+
+
 def test_workflow_trace_records_unified_protocol(tmp_path: Path) -> None:
     state = run_qa_workflow(
         qid="q1",

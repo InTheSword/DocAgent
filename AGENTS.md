@@ -34,6 +34,10 @@ Read additional documents only when the task requires them.
 The detailed design files explain **how** a Phase 2 module should work.  
 `docs/ACTIVE_PLAN.md` defines **what must be done now**.
 
+PM-oriented handoff documents, including `docs/PROJECT_HANDOFF_PM.md`, are
+deprecated and are not active planning sources. Do not read or update them
+unless the user explicitly asks.
+
 ## 3. Source-of-truth priority
 
 When information conflicts, use:
@@ -271,6 +275,7 @@ Update only when relevant:
 - `DATASETS.md`: dataset source, split, or role changes;
 - `AGENTS.md`: repository-wide rules change.
 
+Do not update PM-oriented handoff documents unless explicitly requested.
 Do not store temporary logs in planning documents.
 
 ## 12. Communication style

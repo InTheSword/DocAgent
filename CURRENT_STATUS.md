@@ -168,6 +168,20 @@ is documentation and packaging only: it does not change model behavior, run
 online MinerU OCR, run Qwen, use VLM, start training, or promote local subset
 diagnostics to `benchmark_evaluated`.
 
+Phase 5 AnswerPolicy IO candidate schema and citation allowlist are
+implemented locally in `docagent/workflow/answer_contract.py`,
+`docagent/models/output_parser.py`, `docagent/workflow/output_adapter.py`,
+`docagent/workflow/graph.py`, and `docagent/tools/local_fact_qa.py`. The model
+output parser now accepts both the legacy
+`answer/evidence_location/evidence/reason` schema and the candidate
+`answer/reasoning_summary/citation_block_ids/evidence_used` schema. The
+workflow canonicalization layer filters model-selected citation block ids to
+the retrieved evidence allowlist, records invalid ids in `citation_validation`,
+and exposes canonical `reasoning_summary`, `evidence_used`, and `citations`
+through `local_fact_qa`. Status is `implemented`: local tests verify the
+contract and backwards compatibility, but this is not a Qwen server baseline,
+prompt-quality acceptance, SFT/GRPO update, or final answer benchmark.
+
 Phase 5F full CLI acceptance is accepted in
 `scripts/run_phase5f_full_cli_acceptance.py`. The runner reuses the Phase 5G
 CLI regression execution and adds full-entrypoint acceptance checks for

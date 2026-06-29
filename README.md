@@ -92,6 +92,7 @@ commits.
 - deterministic structured extraction over persisted evidence;
 - deterministic table lookup and simple traceable calculations;
 - `local_fact_qa` workflow wrapper;
+- AnswerPolicy candidate output schema and citation allowlist filtering;
 - local TAT-QA / MP-DocVQA validation-subset preparation;
 - local diagnostic reporting with `summary.json` and `summary.md`.
 
@@ -113,9 +114,10 @@ commits.
   delivery guide.
 - [docs/DATASETS.md](docs/DATASETS.md): dataset roles, split policy, and
   download constraints.
-- [docs/PROJECT_HANDOFF_PM.md](docs/PROJECT_HANDOFF_PM.md): PM-oriented
-  handoff and risk register.
 - [AGENTS.md](AGENTS.md): repository rules for implementation and validation.
+
+PM-oriented handoff documents are deprecated and are not current planning
+sources.
 
 Historical Phase 1-4 implementation details remain in the phase-specific docs
 under `docs/`.

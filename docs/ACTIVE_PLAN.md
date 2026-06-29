@@ -35,6 +35,7 @@ Phase 5 Personal-use DocAgent MVP
    MP-DocVQA val shards 1-2
 -> final-evaluation local subset diagnostic runner implemented locally
 -> final-delivery CLI guide implemented locally
+-> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -117,6 +118,7 @@ Phase 5 raw PDF MinerU local_cli structured failure artifact -> implemented
 Phase 5 final evaluation subset preparation -> implemented
 Phase 5 final evaluation local subset diagnostic runner -> implemented
 Phase 5 final delivery CLI guide -> implemented
+Phase 5 AnswerPolicy IO candidate schema / citation allowlist -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
@@ -1322,7 +1324,7 @@ Final-delivery CLI guide:
 resource_boundary = local_only
 guide = docs/FINAL_DELIVERY_CLI.md
 readme_entry = README.md
-handoff_update = docs/PROJECT_HANDOFF_PM.md
+pm_handoff_docs = deprecated_not_updated
 dataset_policy_update = docs/DATASETS.md
 status = implemented
 benchmark_evaluation_status = not_started
@@ -1331,6 +1333,29 @@ used_vlm = false
 used_training = false
 used_online_mineru_ocr = false
 used_qwen = false
+```
+
+AnswerPolicy IO candidate schema and citation allowlist:
+
+```text
+resource_boundary = local_only
+module = docagent/workflow/answer_contract.py
+parser = docagent/models/output_parser.py
+adapter = docagent/workflow/output_adapter.py
+workflow = docagent/workflow/graph.py
+tool_surface = docagent/tools/local_fact_qa.py
+supported_model_outputs = legacy answer/evidence_location/evidence/reason,
+  candidate answer/reasoning_summary/citation_block_ids/evidence_used
+local_behavior = filters model-selected citation block ids to the retrieved
+  evidence allowlist and records invalid ids in citation_validation
+status = implemented
+benchmark_evaluation_status = not_started
+used_external_api = false
+used_vlm = false
+used_training = false
+used_online_mineru_ocr = false
+used_qwen = false
+server_qwen_baseline = not_started
 ```
 
 Local `main` validation covers code and documentation state. The accepted Gate
@@ -1442,6 +1467,9 @@ Phase 4D-B1.3 server sanity accepted
   benchmark-evaluated
 + Final delivery CLI guide implemented locally in `docs/FINAL_DELIVERY_CLI.md`
   and linked from `README.md`; status remains documentation/packaging only
++ AnswerPolicy IO candidate schema and citation allowlist implemented locally;
+  Qwen baseline, prompt-quality evidence, and final answer benchmark remain
+  not_started
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

@@ -168,8 +168,10 @@ def run_qa_workflow(
             answer_type=answer_type_hint,
             qid=qid,
         )
-        state.draft_answer = generation.parsed or {}
-        canonical_draft = canonicalize_output(state.draft_answer, state.retrieved_blocks)
+        raw_draft = generation.parsed or {}
+        state.parse_result = dict(generation.metadata.get("parse_result") or {})
+        canonical_draft = canonicalize_output(raw_draft, state.retrieved_blocks) if raw_draft else {}
+        state.draft_answer = canonical_draft
         prompt_version = generation.metadata.get("prompt_version")
         selected_block_ids = generation.metadata.get("selected_block_ids") or evidence_context["selected_block_ids"]
         dropped_block_ids = generation.metadata.get("dropped_block_ids") or evidence_context["dropped_block_ids"]
@@ -190,12 +192,12 @@ def run_qa_workflow(
                 "finish_reason": generation.finish_reason,
                 "latency_ms": generation.latency_ms,
                 "raw_model_output": generation.raw_text,
+                "raw_parsed_output": raw_draft,
                 "canonical_output": canonical_draft,
                 **generation.metadata,
             }.items()
             if key != "parse_result"
         }
-        state.parse_result = dict(generation.metadata.get("parse_result") or {})
         _trace(
             state,
             trace_repository,
@@ -216,6 +218,7 @@ def run_qa_workflow(
                 "completion_token_count": generation.completion_token_count,
                 "parse_result": state.parse_result,
                 "raw_model_output": generation.raw_text,
+                "raw_parsed_output": raw_draft,
                 "canonical_output": canonical_draft,
             },
             latency_ms=generation.latency_ms,
@@ -270,7 +273,7 @@ def run_qa_workflow(
             success=state.format_check["success"] and state.location_check["success"],
         )
     else:
-        state.final_answer = canonicalize_output(state.draft_answer, state.retrieved_blocks)
+        state.final_answer = state.draft_answer
     state.status = "completed"
     _trace(
         state,

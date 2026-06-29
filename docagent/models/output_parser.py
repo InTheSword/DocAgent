@@ -4,8 +4,11 @@ import json
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from docagent.workflow.answer_contract import validate_candidate_schema
+
 
 REQUIRED_FIELDS = {"answer", "evidence_location", "evidence", "reason"}
+CANDIDATE_OUTPUT_FIELDS = {"answer", "reasoning_summary", "citation_block_ids", "citations", "evidence_used"}
 
 
 @dataclass
@@ -46,7 +49,7 @@ def _raw_json_object(text: str) -> tuple[dict[str, Any] | None, str | None]:
 
 
 def _has_output_field(parsed: dict[str, Any]) -> bool:
-    return bool(REQUIRED_FIELDS & set(parsed))
+    return bool((REQUIRED_FIELDS | CANDIDATE_OUTPUT_FIELDS) & set(parsed))
 
 
 def _scan_first_json_object(text: str) -> tuple[dict[str, Any] | None, str | None, str | None]:
@@ -95,12 +98,40 @@ def _recover_partial_output_object(text: str) -> dict[str, Any] | None:
     reason = _json_value_after_key(text, "reason")
     if isinstance(reason, str):
         partial["reason"] = reason
+    reasoning_summary = _json_value_after_key(text, "reasoning_summary")
+    if isinstance(reasoning_summary, str):
+        partial["reasoning_summary"] = reasoning_summary
+    citation_block_ids = _json_value_after_key(text, "citation_block_ids")
+    if isinstance(citation_block_ids, list):
+        partial["citation_block_ids"] = citation_block_ids
+    citations = _json_value_after_key(text, "citations")
+    if isinstance(citations, list):
+        partial["citations"] = citations
+    evidence_used = _json_value_after_key(text, "evidence_used")
+    if isinstance(evidence_used, (list, str)):
+        partial["evidence_used"] = evidence_used
     return partial if _has_output_field(partial) else None
 
 
 def validate_schema(parsed: dict[str, Any] | None, max_reason_chars: int | None = 300) -> tuple[bool, str | None]:
     if not isinstance(parsed, dict):
         return False, "parsed output is not an object"
+    legacy_ok, legacy_error = _validate_legacy_schema(parsed, max_reason_chars=max_reason_chars)
+    if legacy_ok:
+        return True, None
+    candidate_ok, candidate_error = validate_candidate_schema(parsed, max_reason_chars=max_reason_chars)
+    if candidate_ok:
+        return True, None
+    if legacy_error and candidate_error:
+        return False, f"{legacy_error}; candidate schema: {candidate_error}"
+    return False, legacy_error or candidate_error
+
+
+def _validate_legacy_schema(
+    parsed: dict[str, Any],
+    *,
+    max_reason_chars: int | None = 300,
+) -> tuple[bool, str | None]:
     missing = sorted(REQUIRED_FIELDS - set(parsed))
     if missing:
         return False, f"missing fields: {', '.join(missing)}"

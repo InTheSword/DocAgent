@@ -71,6 +71,42 @@ def _fake_workflow(**kwargs) -> QAState:
     return state
 
 
+def _fake_candidate_workflow(**kwargs) -> QAState:
+    state = _fake_workflow(**kwargs)
+    state.final_answer = {
+        "answer": "March 12, 2020",
+        "evidence_location": {"page": 1, "block_id": "doc1_p001_text"},
+        "evidence": "Invoice Date: March 12, 2020",
+        "reason": "The selected block contains the invoice date.",
+        "reasoning_summary": "The selected block contains the invoice date.",
+        "citation_block_ids": ["doc1_p001_text"],
+        "citations": [
+            {
+                "doc_id": "doc1",
+                "page": 1,
+                "block_id": "doc1_p001_text",
+                "block_type": "text",
+                "text_preview": "Invoice Date: March 12, 2020",
+            }
+        ],
+        "evidence_used": [
+            {
+                "doc_id": "doc1",
+                "page": 1,
+                "block_id": "doc1_p001_text",
+                "block_type": "text",
+                "text_preview": "Invoice Date: March 12, 2020",
+            }
+        ],
+        "citation_validation": {
+            "requested_block_ids": ["doc1_p001_text", "missing"],
+            "valid_block_ids": ["doc1_p001_text"],
+            "invalid_block_ids": ["missing"],
+        },
+    }
+    return state
+
+
 def test_local_fact_qa_fake_workflow_success_is_json_serializable(tmp_path: Path) -> None:
     repository = _repository_with_document(tmp_path)
 
@@ -92,6 +128,22 @@ def test_local_fact_qa_fake_workflow_success_is_json_serializable(tmp_path: Path
     assert result["citations"][0]["block_id"] == "doc1_p001_text"
     assert result["supporting_evidence_ids"] == ["doc1_p001_text", "doc1_p001_total"]
     json.dumps(result)
+
+
+def test_local_fact_qa_exposes_candidate_schema_citations(tmp_path: Path) -> None:
+    repository = _repository_with_document(tmp_path)
+
+    result = local_fact_qa(
+        {"doc_id": "doc1", "question": "What is the invoice date?"},
+        document_repository=repository,
+        workflow_runner=_fake_candidate_workflow,
+    )
+
+    assert result["status"] == "success"
+    assert result["reasoning_summary"] == "The selected block contains the invoice date."
+    assert [item["block_id"] for item in result["citations"]] == ["doc1_p001_text"]
+    assert [item["block_id"] for item in result["evidence_used"]] == ["doc1_p001_text"]
+    assert result["citation_validation"]["invalid_block_ids"] == ["missing"]
 
 
 def test_missing_doc_id_returns_structured_error(tmp_path: Path) -> None:
