@@ -137,7 +137,9 @@ and evidence-use behavior before final model training or evaluation.
 
 The local diagnostic runner may execute deterministic table tools for TAT-QA
 samples. These diagnostics can expose answer/citation gaps, but they are not a
-formal TAT-QA benchmark and do not validate Qwen answer quality.
+formal TAT-QA benchmark and do not validate Qwen answer quality. The current
+diagnostic artifact set is `results.jsonl`, `summary.json`, `summary.md`,
+`preview.json`, and `manual_review.md`.
 
 ### InfographicVQA
 

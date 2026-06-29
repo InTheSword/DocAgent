@@ -93,7 +93,7 @@ workflow, LoRA-SFT, GRPO, and demo/materials.
 | Unified schema and evidence model | `EvidenceBlock`, `DocAgentSample`, `QAState`, `EvidenceLocation` exist in `docagent/schemas.py`. | accepted | Stable foundation. |
 | MP-DocVQA data construction | Historical Phase 1/4 builders and accepted raw page-window assets exist. | accepted | Usable for experiments, not the current product focus. |
 | Final eval subset preparation | `scripts/prepare_final_eval_subset.py` builds TAT-QA and MP-DocVQA validation subset manifests and reports from local files. | implemented | Data is prepared; benchmark evaluation is still future work. |
-| Final eval local diagnostic runner | `scripts/run_final_eval_subset.py` writes local results, summary, preview, and manual review files for prepared subsets. | implemented | Diagnostic-only; current probe exposes answer-quality gaps and is not benchmark acceptance. |
+| Final eval local diagnostic runner | `scripts/run_final_eval_subset.py` writes local results, JSON/Markdown summaries, preview, and manual review files for prepared subsets. | implemented | Diagnostic-only; current probe exposes answer-quality gaps and is not benchmark acceptance. |
 | TAT-QA | Dev JSON local subset preparation is implemented; table/numeric product tools have a deterministic local baseline. | implemented | Structured table/numeric source, not raw PDF or MinerU evidence. |
 | InfographicVQA | Dataset builder exists, but visual reasoning is not implemented. | not_started | Future VLM branch. |
 | MinerU to EvidenceBlock | Existing MinerU output conversion, quality report, page blocks, and SQLite persistence exist. | accepted | Existing MinerU output path works. |
@@ -251,14 +251,18 @@ Supported file paths:
 - new UTF-8 `.txt` file ingestion through `TextParserBackend`;
 - existing MinerU output-backed PDF/image/document ingestion with
   `--parser mineru_existing` and `--mineru-output-dir`;
+- raw PDF local CLI parsing attempts with `--parser mineru --parser-mode
+  local_cli`, with structured failure artifacts when the local MinerU command
+  is unavailable, times out, or exits nonzero;
 - SHA-based reuse for already ingested files.
 
 Unsupported or incomplete paths:
 
-- raw PDF to online MinerU OCR without existing output;
-- document summary;
-- table lookup;
-- simple calculation;
+- accepted online MinerU OCR from raw PDF;
+- final Qwen answer-quality acceptance;
+- formal MP-DocVQA/TAT-QA subset benchmark evaluation;
+- complex TAT-QA table reasoning beyond the deterministic local subset
+  diagnostic boundary;
 - VLM reasoning.
 
 ## 6. Current Benchmarks and Evidence
@@ -365,12 +369,8 @@ These must not be marketed as completed:
 | Capability | Current status | Practical effect |
 |---|---|---|
 | Phase 5I-B Final Answer Quality Benchmark | not_started | No accepted final QA quality metric. |
-| Phase 5E Document Summary MVP | not_started | Summary requests are routed but unsupported or fallback. |
-| Phase 5F full CLI acceptance | not_started | CLI has accepted smokes, but final product acceptance remains open. |
-| `table_lookup` | not_started | Table intents are classified but no row/column engine exists. |
-| `simple_calculation` | not_started | Calculation intents are not computed by a traceable numeric tool. |
-| Structured extraction tools | not_started | Router supports the type, but extraction tools are not implemented. |
-| Online MinerU OCR/parser execution from raw PDF | not_started | Existing MinerU output path is accepted; raw OCR pipeline is not. |
+| Formal MP-DocVQA/TAT-QA subset benchmark | not_started | Local subset preparation and diagnostics exist, but formal model/parser evaluation has not run. |
+| Online MinerU OCR/parser acceptance from raw PDF | implemented | CLI wrapper and failure artifacts exist; real local/API OCR smoke is not accepted. |
 | VLM / visual_pixel_qa | not_started | Image/chart answers rely on OCR/caption/metadata only. |
 | Candidate-ID Reader | not_started | Postponed until candidate coverage improves. |
 | Full GRPO E2E by default in Phase 5 | not_started | Historical GRPO exists; not a current MVP default. |
@@ -388,25 +388,22 @@ Pick exactly one next milestone.
 
 Best next milestone candidates:
 
-1. Phase 5E Document Summary MVP.
-   - Reason: summary is already part of the Router taxonomy and current smoke
-     limitations. It is visible to users and can be implemented without new
-     training.
-2. Router/evidence-readiness cleanup for Phase 5I-A failures.
+1. AnswerPolicy IO and evidence-pack contract redesign.
+   - Reason: the CLI output contract, citations, deterministic tools, and
+     local subset diagnostics now exist; final answer quality still needs a
+     stricter model input/output contract before SFT or GRPO decisions.
+2. Final dataset evaluation path for MP-DocVQA/TAT-QA curated subsets.
+   - Reason: subset preparation and local diagnostics exist, but formal
+     parser/retrieval/model evaluation is still `not_started`.
+3. Router/evidence-readiness cleanup for Phase 5I-A failures.
    - Reason: Phase 5I-A has 10 failures, including router task mismatches and
      missing unsupported boundaries. This improves trust in the existing MVP.
-3. Table lookup + simple calculation P0.
-   - Reason: product value for financial and report documents is high, but it
-     requires a clear row/column and citation contract.
 4. Online MinerU OCR path.
    - Reason: product convenience improves if users can pass a raw PDF, but
      environment risk is higher.
-5. Final answer quality benchmark Phase 5I-B.
-   - Reason: only after a downstream answer module or answer-quality strategy
-     is connected.
-6. CLI demo packaging / UI.
-   - Reason: needed for portfolio delivery, but should wait until summary or
-     evidence-readiness gaps are handled.
+5. CLI demo packaging / UI.
+   - Reason: useful after backend answer/evidence quality has a clearer
+     acceptance story; current delivery remains CLI-only.
 
 Do not start VLM, training, full GRPO E2E, CDC, or Candidate-ID Reader unless
 the PM explicitly changes the roadmap.
@@ -894,37 +891,37 @@ Secrets:
 Recommended next milestone:
 
 ```text
-Phase 5E Document Summary MVP
+AnswerPolicy IO and evidence-pack contract redesign
 ```
 
 Rationale:
 
-- It is already in the Router taxonomy.
-- It is visible in accepted regression limitations.
-- It can improve user-facing MVP value without retraining.
-- It should be bounded: use page text/page metadata, generate cited summary,
-  avoid arbitrary top-k retrieval as the only context.
+- The current CLI contract and local subset diagnostics expose answer-quality
+  gaps without pretending to solve them.
+- The next model-facing step should define compact evidence packs, citation
+  selection constraints, output validation, and post-processing before any new
+  SFT or GRPO work.
+- This can start locally with prompt/IO schema tests and heuristic/fake model
+  contract checks before server Qwen evaluation.
 
 Minimal acceptance idea:
 
 ```text
-one already ingested document
--> document_summary request
--> bounded page summary or extractive page preview strategy
--> final summary with page citations
--> JSON output and CLI artifacts
--> targeted tests and one server smoke
+question + compact evidence pack + tool results
+-> AnswerPolicy candidate answer / reasoning_summary / citation selection
+-> code-side schema validation and citation allowlist enforcement
+-> CLI final JSON remains answer + reasoning_summary + evidence_used + citations
+-> targeted local contract tests
+-> later server Qwen baseline on accepted curated subset
 ```
 
 Out of scope for that milestone:
 
-- table lookup;
-- simple calculation;
 - VLM;
 - training;
-- AnswerPolicy prompt changes;
 - Candidate-ID Reader;
-- full final answer-quality benchmark.
+- full final answer-quality benchmark before the new IO contract has a server
+  baseline.
 
 ## 16. PM Takeover Checklist
 

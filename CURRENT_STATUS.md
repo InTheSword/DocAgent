@@ -160,6 +160,14 @@ Status is
 `implemented` and `quality_status=diagnostic_only`: this exposes table-answer
 quality gaps and does not count as `benchmark_evaluated`.
 
+Phase 5 final delivery CLI guide is implemented in
+`docs/FINAL_DELIVERY_CLI.md` and linked from `README.md`. It documents the
+current local CLI contract, output fields, local storage paths, dataset subset
+commands, diagnostic artifacts, image/table boundaries, and status rules. This
+is documentation and packaging only: it does not change model behavior, run
+online MinerU OCR, run Qwen, use VLM, start training, or promote local subset
+diagnostics to `benchmark_evaluated`.
+
 Phase 5F full CLI acceptance is accepted in
 `scripts/run_phase5f_full_cli_acceptance.py`. The runner reuses the Phase 5G
 CLI regression execution and adds full-entrypoint acceptance checks for

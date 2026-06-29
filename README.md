@@ -1,190 +1,121 @@
 # DocAgent
 
-DocAgent is a complex document QA and post-training project based on the
-DocAgent 3.0 plan. The first implementation milestone is intentionally small:
-it validates the data schema, evidence retrieval, traceable QA workflow,
-reward functions, and evaluation code before GPU training.
+DocAgent is a local, CLI-first complex-document QA project. The current active
+track is the Phase 5 personal-use MVP: ingest or select a document, ask a
+question, and return an answer with a short reasoning summary, evidence used,
+citations, tools used, and local trace artifacts.
 
-## First milestone
+The current delivery is not a UI product, cloud service, VLM visual-reasoning
+system, or accepted final answer-quality benchmark.
+
+## Current Entry Points
+
+Main CLI:
+
+```powershell
+python scripts\docagent_cli.py --file <path> --question "<question>"
+python scripts\docagent_cli.py --doc-id <doc_id> --question "<question>"
+```
+
+List local documents:
+
+```powershell
+python scripts\docagent_cli.py --list-documents --db-path outputs\docagent.db
+```
+
+Prepare local final-evaluation subsets:
+
+```powershell
+python scripts\prepare_final_eval_subset.py `
+  --dataset all `
+  --tatqa-limit 80 `
+  --mpdocvqa-target-qa-count 50 `
+  --mpdocvqa-min-qa-count 30 `
+  --mpdocvqa-max-qa-count 70 `
+  --overwrite
+```
+
+Run local subset diagnostics:
+
+```powershell
+python scripts\run_final_eval_subset.py `
+  --dataset all `
+  --run-id local_subset_full_diagnostic_report `
+  --output-dir outputs\final_eval\local_subset_diagnostic
+```
+
+See [docs/FINAL_DELIVERY_CLI.md](docs/FINAL_DELIVERY_CLI.md) for the complete
+current CLI contract, storage paths, dataset commands, output fields, and
+limitations.
+
+## Current Output Contract
+
+Normal QA-style CLI output includes:
+
+```json
+{
+  "answer": "...",
+  "reasoning_summary": "...",
+  "evidence_used": [],
+  "citations": [],
+  "tools_used": [],
+  "trace_path": "outputs/cli/<run_id>/trace.json"
+}
+```
+
+Citation records carry document and location fields such as `doc_id`, `page`,
+`block_id`, `block_type`, and preview text/table/image metadata when available.
+
+## Local Storage
+
+Default paths:
 
 ```text
-DocAgentSample
--> EvidenceBlock
--> Query rewrite
--> BM25 retrieval
--> QA workflow trace
--> format / answer / location rewards
--> smoke evaluation
+outputs/docagent.db
+outputs/cli/<run_id>/
+data/documents/
+outputs/final_eval/
 ```
 
-MinerU, Qwen3 LoRA-SFT, GRPO, and VLM review are represented as explicit
-integration points. They are not required for the local smoke test.
+These are local artifacts. Raw datasets, generated outputs, SQLite databases,
+document caches, secrets, model weights, and logs are not intended for Git
+commits.
 
-## Local smoke test
+## Implemented Locally
 
-```bash
-cd docagent
-python scripts/smoke_test.py
-```
+- unified CLI and artifact contract;
+- text file ingestion;
+- existing MinerU output ingestion;
+- raw PDF MinerU local CLI wrapper with structured failure artifacts;
+- deterministic document statistics and page lookup;
+- deterministic extractive document summary;
+- deterministic structured extraction over persisted evidence;
+- deterministic table lookup and simple traceable calculations;
+- `local_fact_qa` workflow wrapper;
+- local TAT-QA / MP-DocVQA validation-subset preparation;
+- local diagnostic reporting with `summary.json` and `summary.md`.
 
-## Phase 1 workflow smoke
+## Not Accepted Yet
 
-The traceable workflow now accepts an explicit answer policy. Local tests use
-the heuristic backend only as a mock policy; server validation should use the
-Qwen base/SFT/GRPO backends.
+- formal MP-DocVQA/TAT-QA final answer benchmark;
+- final Qwen answer-quality acceptance;
+- accepted online MinerU OCR run from raw PDF;
+- pixel-level image/chart VLM reasoning;
+- new SFT/GRPO training;
+- UI, FastAPI, Gradio, cloud storage, or multi-user service.
 
-No-card local smoke:
+## Documentation Map
 
-```bash
-python scripts/smoke_test.py
-```
+- [docs/ACTIVE_PLAN.md](docs/ACTIVE_PLAN.md): current milestone and stop
+  condition.
+- [CURRENT_STATUS.md](CURRENT_STATUS.md): current verified capability status.
+- [docs/FINAL_DELIVERY_CLI.md](docs/FINAL_DELIVERY_CLI.md): current CLI
+  delivery guide.
+- [docs/DATASETS.md](docs/DATASETS.md): dataset roles, split policy, and
+  download constraints.
+- [docs/PROJECT_HANDOFF_PM.md](docs/PROJECT_HANDOFF_PM.md): PM-oriented
+  handoff and risk register.
+- [AGENTS.md](AGENTS.md): repository rules for implementation and validation.
 
-GPU workflow smoke on AutoDL:
-
-```bash
-python scripts/run_workflow_smoke.py \
-  --input data/benchmark/mp_docvqa_dev_sft_retrieved_clean.jsonl \
-  --index 0 \
-  --policy-mode grpo \
-  --base-model-path /root/autodl-tmp/models/Qwen3-1.7B \
-  --adapter-path outputs/checkpoints/qwen3-docagent-trl-grpo-mpdocvqa-retrieved-grounded-100step-20260606_105535 \
-  --max-new-tokens 1024 \
-  --sqlite-path outputs/traces/workflow_grpo_smoke.sqlite \
-  --output outputs/traces/workflow_grpo_smoke_000.json
-```
-
-The workflow smoke/eval scripts preserve retrieved-reader evidence order by
-default. Pass `--rerank-input-evidence` only when the input contains an
-unranked evidence pool.
-
-Small workflow eval:
-
-```bash
-python scripts/eval_workflow_e2e.py \
-  --input data/benchmark/mp_docvqa_dev_sft_retrieved_clean.jsonl \
-  --output outputs/eval/workflow_phase1_grpo.jsonl \
-  --summary-output outputs/eval/workflow_phase1_grpo_summary.json \
-  --limit 20 \
-  --policy-mode grpo \
-  --base-model-path /root/autodl-tmp/models/Qwen3-1.7B \
-  --adapter-path outputs/checkpoints/qwen3-docagent-trl-grpo-mpdocvqa-retrieved-grounded-100step-20260606_105535 \
-  --max-new-tokens 1024
-```
-
-## Phase 2 real-document MVP
-
-Phase 2 starts the real-document ingestion and hybrid retrieval chain. The
-local no-card path can validate registration, parse-existing MinerU output,
-SQLite persistence, BM25 retrieval, and heuristic answer policy. Real MinerU,
-BGE-M3, bge-reranker-v2-m3, and Qwen policy evaluation should run on AutoDL.
-
-No-card parse-existing smoke:
-
-```bash
-python scripts/build_phase2_parse_existing_fixture.py \
-  --input data/benchmark/mp_docvqa_dev_sft_retrieved_clean.jsonl \
-  --output-dir outputs/phase2_parse_existing_fixture \
-  --index 0
-
-python scripts/ingest_document.py \
-  --file outputs/phase2_parse_existing_fixture/source/<source_file> \
-  --mineru-output-dir outputs/phase2_parse_existing_fixture/mineru \
-  --document-root data/documents \
-  --sqlite-path outputs/docagent.db
-
-python scripts/inspect_document.py \
-  --doc-id <doc_id> \
-  --show-blocks \
-  --show-index \
-  --sqlite-path outputs/docagent.db
-
-python scripts/query_document.py \
-  --doc-id <doc_id> \
-  --question "What is the invoice date?" \
-  --retriever bm25 \
-  --policy-mode heuristic \
-  --sqlite-path outputs/docagent.db
-```
-
-GPU hybrid retrieval query:
-
-```bash
-python scripts/query_document.py \
-  --doc-id <doc_id> \
-  --question "..." \
-  --retriever hybrid_rerank \
-  --policy-mode grpo \
-  --dense-model-path /root/autodl-tmp/models/bge-m3 \
-  --dense-device cuda:1 \
-  --dense-fp16 \
-  --build-index-if-missing \
-  --reranker-model-path /root/autodl-tmp/models/bge-reranker-v2-m3 \
-  --reranker-device cuda:1 \
-  --reranker-fp16 \
-  --base-model-path /root/autodl-tmp/models/Qwen3-1.7B \
-  --adapter-path outputs/checkpoints/qwen3-docagent-trl-grpo-mpdocvqa-retrieved-grounded-100step-20260606_105535 \
-  --max-new-tokens 1024 \
-  --sqlite-path outputs/docagent.db
-```
-
-No-download hybrid smoke:
-
-Use this only to verify Phase 2 wiring when BGE-M3 or bge-reranker-v2-m3 are
-not present on the server. The output must be reported as `hash` dense and
-`keyword` reranker, not as a BGE/reranker result.
-
-```bash
-python scripts/query_document.py \
-  --doc-id <doc_id> \
-  --question "..." \
-  --retriever hybrid_rerank \
-  --policy-mode heuristic \
-  --dense-backend hash \
-  --build-index-if-missing \
-  --reranker-backend keyword \
-  --sqlite-path outputs/docagent.db
-```
-
-No-download batch retrieval/workflow smoke:
-
-```bash
-python scripts/eval_retrieval_phase2.py \
-  --input data/benchmark/mp_docvqa_dev_sft_retrieved_clean.jsonl \
-  --modes bm25,hybrid_rerank \
-  --dense-backend hash \
-  --reranker-backend keyword \
-  --limit 20 \
-  --output outputs/eval/phase2_retrieval_hash_keyword_20.json
-
-python scripts/eval_workflow_phase2.py \
-  --input data/benchmark/mp_docvqa_dev_sft_retrieved_clean.jsonl \
-  --output outputs/eval/phase2_workflow_hash_keyword_heuristic_20.jsonl \
-  --summary-output outputs/eval/phase2_workflow_hash_keyword_heuristic_20_summary.json \
-  --retriever hybrid_rerank \
-  --policy-mode heuristic \
-  --dense-backend hash \
-  --reranker-backend keyword \
-  --limit 20 \
-  --sqlite-path outputs/traces/phase2_workflow_hash_keyword_heuristic.sqlite
-```
-
-## Planned server workflow
-
-Use local development with git/ssh, then run GPU jobs on the 2x RTX 3090
-server.
-
-```bash
-ssh user@gpu-server "cd /path/to/docagent && git pull"
-ssh user@gpu-server "cd /path/to/docagent && bash scripts/train_sft.sh"
-ssh user@gpu-server "cd /path/to/docagent && bash scripts/train_grpo.sh"
-```
-
-## Implementation phases
-
-1. Data schema and evidence index.
-2. Query rewrite, BM25, dense retrieval, and reranker.
-3. Traceable QA workflow with tools and SQLite traces.
-4. MinerU parsing for ScenarioSet and real uploaded files.
-5. Qwen3 LoRA-SFT with ms-swift.
-6. GRPO reward training and ablation.
-7. OCR-only vs OCR+VLM review on InfographicVQA.
+Historical Phase 1-4 implementation details remain in the phase-specific docs
+under `docs/`.

@@ -34,6 +34,7 @@ Phase 5 Personal-use DocAgent MVP
 -> final-evaluation subset preparation implemented locally for TAT-QA dev and
    MP-DocVQA val shards 1-2
 -> final-evaluation local subset diagnostic runner implemented locally
+-> final-delivery CLI guide implemented locally
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -115,6 +116,7 @@ Phase 5 simple_calculation deterministic CLI -> implemented
 Phase 5 raw PDF MinerU local_cli structured failure artifact -> implemented
 Phase 5 final evaluation subset preparation -> implemented
 Phase 5 final evaluation local subset diagnostic runner -> implemented
+Phase 5 final delivery CLI guide -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
@@ -1314,6 +1316,23 @@ used_online_mineru_ocr = false
 used_qwen = false
 ```
 
+Final-delivery CLI guide:
+
+```text
+resource_boundary = local_only
+guide = docs/FINAL_DELIVERY_CLI.md
+readme_entry = README.md
+handoff_update = docs/PROJECT_HANDOFF_PM.md
+dataset_policy_update = docs/DATASETS.md
+status = implemented
+benchmark_evaluation_status = not_started
+used_external_api = false
+used_vlm = false
+used_training = false
+used_online_mineru_ocr = false
+used_qwen = false
+```
+
 Local `main` validation covers code and documentation state. The accepted Gate
 4 artifacts are server-side outputs; the local absence of these ignored paths
 does not indicate missing tracked code:
@@ -1421,6 +1440,8 @@ Phase 4D-B1.3 server sanity accepted
   `results.jsonl`, `summary.json`, `summary.md`, `preview.json`, and
   `manual_review.md` outputs; status remains diagnostic-only, not
   benchmark-evaluated
++ Final delivery CLI guide implemented locally in `docs/FINAL_DELIVERY_CLI.md`
+  and linked from `README.md`; status remains documentation/packaging only
 + targeted and regression tests pass
 + status documents updated
 + branch pushed
