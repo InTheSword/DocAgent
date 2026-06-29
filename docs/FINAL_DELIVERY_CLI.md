@@ -43,6 +43,7 @@ Implemented local capabilities:
 - diagnostic AnswerPolicy baseline review gate for full artifacts or compact
   sync bundles
 - diagnostic SFT candidate data builder from real-Qwen baseline failures
+- single-command AnswerPolicy training-gate orchestration for server runs
 
 Not included in the current local delivery:
 
@@ -207,6 +208,20 @@ placeholders suitable for server result return.
 TAT-QA table/calculation cases run deterministic table tools first and pass
 the compact tool result into the AnswerPolicy prompt; MP-DocVQA manifest cases
 remain skipped until raw PDF/MinerU/retrieval evidence is available.
+
+Recommended server-side single command for the Qwen baseline gate:
+
+```powershell
+python scripts\run_final_answer_policy_training_gate.py `
+  --answer-policy base `
+  --base-model-path /root/autodl-tmp/models/Qwen3-1.7B `
+  --sync-output-dir outputs\sync `
+  --preserve-input-order
+```
+
+This runs the baseline, review, and optional SFT candidate-data generation in
+one command. It only builds candidate SFT records when the review gate
+recommends `sft_data_design_candidate`; it does not start training.
 
 Review a full AnswerPolicy baseline artifact directory or compact sync bundle:
 

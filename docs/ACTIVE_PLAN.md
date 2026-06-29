@@ -43,6 +43,9 @@ Phase 5 Personal-use DocAgent MVP
    compact sync bundles; it emits diagnostic training-gate recommendations only
 -> AnswerPolicy SFT candidate data builder implemented locally; it requires a
    real-Qwen-marked baseline and emits candidate records only, not training
+-> AnswerPolicy training-gate orchestrator implemented locally; it runs
+   baseline -> review -> optional SFT candidate artifact generation in one
+   server-ready command, but still does not train
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -130,6 +133,7 @@ Phase 5 AnswerPolicy prompt v2 candidate citation contract -> implemented
 Phase 5 final AnswerPolicy baseline runner -> implemented
 Phase 5 AnswerPolicy baseline review gate -> implemented
 Phase 5 AnswerPolicy SFT candidate data builder -> implemented
+Phase 5 AnswerPolicy training-gate orchestrator -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
@@ -1386,6 +1390,8 @@ review_script = scripts/review_answer_policy_baseline.py
 review_test = tests/test_review_answer_policy_baseline.py
 sft_candidate_script = scripts/build_answer_policy_sft_candidates.py
 sft_candidate_test = tests/test_build_answer_policy_sft_candidates.py
+orchestrator_script = scripts/run_final_answer_policy_training_gate.py
+orchestrator_test = tests/test_run_final_answer_policy_training_gate.py
 input_scope = prepared final-eval subset artifacts under outputs/final_eval/
 local_smoke = heuristic/fake-policy only; diagnostic_not_formal_benchmark
 server_target = Qwen base prompt-v2 baseline over prepared TAT-QA
@@ -1404,6 +1410,8 @@ review_gate = reads a full artifact directory or outputs/sync/<run_id>/ bundle
 sft_candidate_builder = reads real-Qwen-marked baseline failures and prepared
   TAT-QA samples, reconstructs prompt-v2 SFT candidate records with evidence
   and compact tool results, and blocks non-Qwen baselines
+training_gate_orchestrator = runs baseline, review, and optional SFT candidate
+  generation in one command; local heuristic smoke skips candidate generation
 status = implemented
 used_qwen_local = false
 server_qwen_baseline = not_started
@@ -1522,9 +1530,10 @@ Phase 4D-B1.3 server sanity accepted
 + AnswerPolicy IO candidate schema, shared prompt v2 candidate-citation
   contract, SFT/GRPO record compatibility, and reward/eval schema
   compatibility implemented locally; final subset AnswerPolicy baseline runner
-  review gate, and SFT candidate-data builder implemented locally with
-  heuristic/fake-policy validation; real Qwen baseline, prompt-quality
-  evidence, training execution, and final answer benchmark remain not_started
+  review gate, SFT candidate-data builder, and training-gate orchestrator
+  implemented locally with heuristic/fake-policy validation; real Qwen
+  baseline, prompt-quality evidence, training execution, and final answer
+  benchmark remain not_started
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

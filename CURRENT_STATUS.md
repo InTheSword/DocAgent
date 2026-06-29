@@ -225,6 +225,19 @@ prepared TAT-QA samples plus compact tool results, and writes
 to avoid treating local smoke output as training evidence. This is candidate
 data design only; it does not start SFT/GRPO or claim final model quality.
 
+Phase 5 AnswerPolicy training-gate orchestrator is implemented locally in
+`scripts/run_final_answer_policy_training_gate.py` with tests in
+`tests/test_run_final_answer_policy_training_gate.py`. It runs the final
+AnswerPolicy baseline, reviews the baseline artifacts, and only when the
+review recommends `sft_data_design_candidate` builds SFT candidate records.
+It writes orchestration `result.json`, `summary.json`, `summary.md`,
+`preview.json`, and `manifest.json`, and can create a compact sync bundle with
+the top-level gate summary plus nested baseline/review/candidate summaries.
+Local heuristic smoke is diagnostic and correctly skips SFT candidate
+generation with `needs_real_qwen_baseline`. This is a server-ready execution
+wrapper; real Qwen baseline acceptance, training execution, and benchmark
+acceptance remain `not_started`.
+
 Phase 5F full CLI acceptance is accepted in
 `scripts/run_phase5f_full_cli_acceptance.py`. The runner reuses the Phase 5G
 CLI regression execution and adds full-entrypoint acceptance checks for
