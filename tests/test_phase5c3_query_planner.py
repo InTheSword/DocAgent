@@ -192,6 +192,31 @@ def test_llm_query_expander_retries_duplicate_first_attempt_and_uses_unique_retr
     assert "query_planner_llm_no_unique_queries" not in plan.warnings
 
 
+def test_llm_query_expander_retries_cjk_query_without_english_retrieval_terms() -> None:
+    fake = FakeLLMClient(
+        [
+            '{"queries": ["未领取股息年份", "股东未领股息日期"]}',
+            '{"queries": ["unclaimed dividend financial year", "shareholder dividend notice"]}',
+        ]
+    )
+
+    plan = plan_queries(
+        question="请找出文件中提到的未领取股息相关年份",
+        task_type="local_fact_qa",
+        mode="hybrid",
+        llm_client=fake,
+    )
+    payload = plan.to_dict()
+
+    assert len(fake.calls) == 2
+    assert "English translation keyword queries" in fake.calls[1]["system_prompt"]
+    assert "未领取股息年份" in fake.calls[1]["user_payload"]["avoid_exact_queries"]
+    assert plan.llm_queries == ["unclaimed dividend financial year", "shareholder dividend notice"]
+    assert plan.query_sources["llm"] == ["unclaimed dividend financial year", "shareholder dividend notice"]
+    assert payload["llm_added_unique_query_count"] == 2
+    assert "query_planner_llm_no_cross_lingual_query" not in plan.warnings
+
+
 def test_llm_query_expander_warns_when_retry_is_still_duplicate() -> None:
     fake = FakeLLMClient(
         [

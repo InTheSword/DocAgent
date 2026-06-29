@@ -12,6 +12,8 @@ from docagent.retrieval.query_generator_rule import generate_rule_queries
 
 QUERY_PLANNER_MODES = {"rule", "llm", "hybrid"}
 QUERY_ID_RE = re.compile(r"[^a-z0-9]+", flags=re.IGNORECASE)
+CJK_RE = re.compile(r"[\u4e00-\u9fff]")
+ASCII_WORD_RE = re.compile(r"[A-Za-z]{3,}")
 
 
 @dataclass(frozen=True)
@@ -122,10 +124,17 @@ def plan_queries(
         llm_attempts.append(_llm_attempt_record(1, diagnostics, llm_unique_queries, llm_duplicate_queries))
         selected_diagnostics = diagnostics
 
-        if str(diagnostics.get("status") or "") == "used" and llm_queries and not llm_unique_queries:
+        retry_reasons = _retry_reasons(
+            question=question,
+            llm_queries=llm_queries,
+            llm_unique_queries=llm_unique_queries,
+            diagnostics=diagnostics,
+        )
+        if retry_reasons:
+            avoid_queries = [*rule_queries, *llm_queries] if "cross_lingual" in retry_reasons else rule_queries
             retry_queries, retry_diagnostics = generate_llm_queries(
                 question=question,
-                avoid_exact_queries=_avoid_exact_queries(rule_queries, question),
+                avoid_exact_queries=_avoid_exact_queries(avoid_queries, question),
                 llm_client=llm_client,
                 env_file=env_file,
                 model_override=model_override,
@@ -163,6 +172,8 @@ def plan_queries(
             str(item) for item in selected_diagnostics.get("llm_normalization_warnings") or []
         ]
         error = dict(selected_diagnostics.get("error") or {})
+        if _needs_cross_lingual_retry(question, llm_queries):
+            warnings.append("query_planner_llm_no_cross_lingual_query")
 
     if normalized_mode == "llm" and not fuse_queries([], llm_queries, limit=limit):
         warnings.append("query_planner_fallback_rule_queries")
@@ -201,6 +212,29 @@ def _fuse_for_mode(mode: str, rule_queries: list[str], llm_queries: list[str], l
     if mode == "hybrid":
         return _fuse_hybrid_queries(rule_queries, llm_queries, limit=limit)
     return fuse_queries(rule_queries, [], limit=limit)
+
+
+def _retry_reasons(
+    *,
+    question: str,
+    llm_queries: list[str],
+    llm_unique_queries: list[str],
+    diagnostics: Mapping[str, Any],
+) -> list[str]:
+    if str(diagnostics.get("status") or "") != "used" or not llm_queries:
+        return []
+    reasons = []
+    if not llm_unique_queries:
+        reasons.append("duplicate")
+    if _needs_cross_lingual_retry(question, llm_queries):
+        reasons.append("cross_lingual")
+    return reasons
+
+
+def _needs_cross_lingual_retry(question: str, llm_queries: list[str]) -> bool:
+    if not CJK_RE.search(str(question or "")):
+        return False
+    return not any(ASCII_WORD_RE.search(str(query or "")) for query in llm_queries)
 
 
 def _fuse_hybrid_queries(rule_queries: list[str], llm_queries: list[str], *, limit: int) -> list[str]:

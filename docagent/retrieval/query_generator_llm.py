@@ -37,6 +37,7 @@ Rules:
 - Do not repeat the original question as a query.
 - Each query must be keyword-like and suitable for BM25 / dense retrieval.
 - Generate semantically useful alternatives using key phrases, synonyms, field names, dates, amounts, entities, or topic terms.
+- If the question is not in English, include English translation keyword queries suitable for English OCR text.
 - Do not output question, task_type, document_profile, rule_queries, tools, retrieved evidence, OCR text, or document content.
 
 Bad:
@@ -57,6 +58,7 @@ Rules:
 - Do not explain.
 - Do not use Markdown.
 - Each query must be keyword-like and suitable for BM25 / dense retrieval.
+- If the question is not in English, return English translation keyword queries and avoid only same-language paraphrases.
 - Return only {"queries": [...]}.
 - Do not output question, task_type, document_profile, rule_queries, tools, retrieved evidence, OCR text, or document content.
 
