@@ -66,7 +66,8 @@ Phase 5 Personal-use DocAgent MVP
    tool failures: multi-row headers, direct row-label priority, repeated
    Granted/Vested activity rows, section-row context, high/low date columns,
    and $000-to-million display; local 12-row replay now has 12/12 tool
-   answer hits, server rerun pending
+   answer hits; server deterministic audit on the same 12 rows succeeded with
+   12/12 tool answer hits
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -161,7 +162,7 @@ Phase 5 AnswerPolicy review gate invalid-citation semantics -> real_model_verifi
 Phase 5 larger AnswerPolicy Qwen diagnostic gate -> real_model_verified
 Phase 5 AnswerPolicy SFT candidate artifact generation -> implemented
 Phase 5 AnswerPolicy SFT candidate review -> real_model_verified
-Phase 5 table tool row/header selection repair -> implemented
+Phase 5 table tool row/header selection repair -> accepted
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
@@ -1514,7 +1515,12 @@ table_tool_row_header_selection = implemented locally; table parsing now
   larger-gate table/tool miss rows has status success 12/12 and answer hits
   12/12, while the full local TAT-QA diagnostic is 80 cases, pass_rate 0.75,
   table-tool success 56/60, answer_hit 40/60, citation_block_hit 60/60;
-  server deterministic audit rerun pending
+  server deterministic audit success, run_id
+  answer_policy_table_row_header_fix_audit_20260629, commit a2ae57e,
+  loaded_row_count 12/12, status success 12/12, table_lookup 7,
+  simple_calculation 5, tool_answer_hit_count 12, pass_count 12,
+  failure_reason_distribution empty; this accepts the deterministic tool
+  repair only, not final Qwen answer quality
 benchmark_evaluation_status = not_started
 ```
 

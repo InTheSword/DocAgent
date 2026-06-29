@@ -303,8 +303,13 @@ replay of the 12 larger-gate table/tool miss rows now has 12/12 successful
 tool executions and 12/12 answer hits. The full local TAT-QA subset diagnostic
 `local_table_tool_row_context_scale_probe_20260629` has 80 cases,
 `pass_rate=0.75`, 56/60 table-tool successes, 40/60 answer hits, and 60/60
-citation block hits. This remains `implemented` and diagnostic-only until the
-same deterministic audit is rerun on the server artifacts.
+citation block hits. Server deterministic audit
+`answer_policy_table_row_header_fix_audit_20260629` succeeded at commit
+`a2ae57e`: 12/12 target rows loaded, 12/12 tool executions succeeded, 7
+`table_lookup` and 5 `simple_calculation` operations ran, 12/12 tool answers
+hit gold, and the failure distribution was empty. This accepts the
+deterministic table-tool repair only; it is not final Qwen answer-quality
+acceptance.
 
 Phase 5 AnswerPolicy training-gate orchestrator is implemented locally in
 `scripts/run_final_answer_policy_training_gate.py` with tests in
