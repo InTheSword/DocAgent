@@ -14,10 +14,10 @@ def _table_sample() -> DocAgentSample:
         doc_id=doc_id,
         block_id=f"{doc_id}_table",
         block_type="table",
-        text="| Metric | 2019 | 2018 |\n| --- | --- | --- |\n| Total loan | 828.8 | 885.3 |",
+        text="| December 31, 2019 | December 31, 2018 |\n| --- | --- |\n| Right of use assets | $33,014 | $8,620 |",
         table_html=(
-            "<table><tr><th>Metric</th><th>2019</th><th>2018</th></tr>"
-            "<tr><td>Total loan</td><td>828.8</td><td>885.3</td></tr></table>"
+            "<table><tr><th>December 31, 2019</th><th>December 31, 2018</th></tr>"
+            "<tr><td>Right of use assets</td><td>$33,014</td><td>$8,620</td></tr></table>"
         ),
         page_id=1,
         location=EvidenceLocation(page=1, block_id=f"{doc_id}_table", table_id=f"{doc_id}_table"),
@@ -26,8 +26,8 @@ def _table_sample() -> DocAgentSample:
         qid="tatqa_table_q",
         source="tatqa",
         doc_id=doc_id,
-        question="What was Total loan in 2018?",
-        answer=["885.3"],
+        question="What is the company's 2019 right of use assets?",
+        answer=["$33,014"],
         answer_type="numeric",
         evidence=[block],
         split="dev",
@@ -72,8 +72,8 @@ def _write_fixture_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
                 "dataset": "tatqa",
                 "split": "dev",
                 "doc_id": "tatqa_table_doc",
-                "question": "What was Total loan in 2018?",
-                "answers": ["885.3"],
+                "question": "What is the company's 2019 right of use assets?",
+                "answers": ["$33,014"],
                 "expected_answer_type": "numeric",
                 "expected_tools": ["table_lookup"],
                 "gold_evidence": [

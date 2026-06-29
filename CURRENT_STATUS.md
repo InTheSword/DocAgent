@@ -146,9 +146,10 @@ manifest/evidence readiness without fabricating model answers. The local probe
 `local_subset_probe_after_fix` over 10 TAT-QA and 10 MP-DocVQA samples wrote
 `results.jsonl`, `summary.json`, `preview.json`, and `manual_review.md` under
 `outputs/final_eval/local_subset_diagnostic/`. The full local diagnostic
-`local_subset_full_diagnostic` completed with 135 cases, 80 passed, 55 failed,
-60 table-tool executions, 51 table-tool successes, 60/60 citation block hits
-for evaluated tool cases, 5 answer hits, and 1 numeric-accuracy hit. Status is
+`local_subset_full_diagnostic_table_alignment` completed with 135 cases, 83
+passed, 52 failed, 60 table-tool executions, 35 table-tool successes, 60/60
+citation block hits for evaluated tool cases, 8 answer hits, and 2
+numeric-accuracy hits. Status is
 `implemented` and `quality_status=diagnostic_only`: this exposes table-answer
 quality gaps and does not count as `benchmark_evaluated`.
 

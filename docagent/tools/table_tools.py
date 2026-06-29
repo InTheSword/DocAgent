@@ -309,13 +309,14 @@ def _unsupported(
 
 
 def _select_lookup_value(candidate: TableCandidate, question: str) -> dict[str, Any] | None:
-    rows = candidate.data_rows or candidate.rows
+    rows = _selectable_rows(candidate.data_rows or candidate.rows)
     years = _years(question)
     row_required_labels = [] if _header_has_any_label(candidate.header, years) else years
     best_row = _best_row(rows, question, required_labels=row_required_labels)
     if best_row is None:
         return None
     column_index = _metric_column(candidate.header, question)
+    column_index = _aligned_column_index(candidate.header, best_row, column_index)
     if column_index is None or column_index >= len(best_row):
         column_index = _last_numeric_column(best_row, exclude_values=set(years))
     if column_index is None:
@@ -330,7 +331,7 @@ def _select_lookup_value(candidate: TableCandidate, question: str) -> dict[str, 
 
 def _calculation_values(candidate: TableCandidate, question: str) -> list[dict[str, Any]]:
     years = _calculation_years(question)
-    rows = candidate.data_rows or candidate.rows
+    rows = _selectable_rows(candidate.data_rows or candidate.rows)
     column_index = _metric_column(candidate.header, question)
     values: list[dict[str, Any]] = []
     if years and _header_has_any_label(candidate.header, years):
@@ -338,6 +339,7 @@ def _calculation_values(candidate: TableCandidate, question: str) -> list[dict[s
         if row is not None:
             for year in years:
                 value_index = _header_label_index(candidate.header, year)
+                value_index = _aligned_column_index(candidate.header, row, value_index)
                 if value_index is None or value_index >= len(row):
                     continue
                 numeric = _parse_number(row[value_index])
@@ -361,6 +363,7 @@ def _calculation_values(candidate: TableCandidate, question: str) -> list[dict[s
             if row is None:
                 continue
             value_index = column_index if column_index is not None and column_index < len(row) else None
+            value_index = _aligned_column_index(candidate.header, row, value_index)
             if value_index is None:
                 value_index = _last_numeric_column(row, exclude_values={year})
             if value_index is None:
@@ -482,6 +485,35 @@ def _header_label_index(header: list[str], label: str) -> int | None:
         if label in str(value):
             return index
     return None
+
+
+def _aligned_column_index(header: list[str], row: list[str], index: int | None) -> int | None:
+    if index is None:
+        return None
+    if len(row) == len(header) + 1 and row and _parse_number(row[0]) is None:
+        return index + 1
+    return index
+
+
+def _selectable_rows(rows: list[list[str]]) -> list[list[str]]:
+    filtered = [row for row in rows if not _is_header_like_row(row)]
+    return filtered or rows
+
+
+def _is_header_like_row(row: list[str]) -> bool:
+    if not row:
+        return True
+    numeric_cells = [cell for cell in row if _parse_number(cell) is not None]
+    if not numeric_cells:
+        return False
+    year_cells = [cell for cell in numeric_cells if _is_year_cell(cell)]
+    if len(year_cells) == len(numeric_cells) and len(numeric_cells) >= 1:
+        return True
+    return False
+
+
+def _is_year_cell(value: str) -> bool:
+    return bool(re.fullmatch(r"(?:19|20)\d{2}", str(value or "").strip()))
 
 
 def _last_numeric_column(row: list[str], *, exclude_values: set[str]) -> int | None:
