@@ -191,11 +191,13 @@ Phase 5 final subset AnswerPolicy baseline runner is implemented locally in
 `scripts/run_final_answer_policy_baseline.py` with tests in
 `tests/test_run_final_answer_policy_baseline.py`. It runs an AnswerPolicy over
 prepared TAT-QA `local_fact_qa` evidence cases, writes compact diagnostic
-artifacts (`results.jsonl`, `summary.json`, `summary.md`, `preview.json`,
-`failures_sample.jsonl`, `manifest.json`), and explicitly skips MP-DocVQA
-manifest rows until raw PDF/MinerU/retrieval evidence is available. Local smoke
-uses heuristic/fake policies only. Status is `implemented`; real Qwen baseline,
-prompt-quality acceptance, and formal benchmark status are still `not_started`.
+artifacts (`result.json`, `results.jsonl`, `summary.json`, `summary.md`,
+`preview.json`, `failures_sample.jsonl`, `manifest.json`) and can create an
+optional compact `outputs/sync/<run_id>/` bundle for server result return. It
+explicitly skips MP-DocVQA manifest rows until raw PDF/MinerU/retrieval
+evidence is available. Local smoke uses heuristic/fake policies only. Status is
+`implemented`; real Qwen baseline, prompt-quality acceptance, and formal
+benchmark status are still `not_started`.
 
 Phase 5F full CLI acceptance is accepted in
 `scripts/run_phase5f_full_cli_acceptance.py`. The runner reuses the Phase 5G

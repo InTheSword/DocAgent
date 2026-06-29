@@ -190,12 +190,16 @@ Run the final subset AnswerPolicy baseline locally with the heuristic policy:
 python scripts\run_final_answer_policy_baseline.py `
   --answer-policy heuristic `
   --max-samples 5 `
-  --output-dir outputs\final_eval\answer_policy_baseline_local
+  --output-dir outputs\final_eval\answer_policy_baseline_local `
+  --sync-output-dir outputs\sync
 ```
 
 On a GPU server with Qwen available, use `--answer-policy base` and
 `--base-model-path /root/autodl-tmp/models/Qwen3-1.7B`. This runner is a
-diagnostic prompt-v2 baseline, not formal benchmark acceptance.
+diagnostic prompt-v2 baseline, not formal benchmark acceptance. With
+`--sync-output-dir`, it writes a compact `outputs/sync/<run_id>/` bundle with
+`result.json`, summaries, previews, failure samples, manifest, and log-tail
+placeholders suitable for server result return.
 
 Enable optional query planning:
 

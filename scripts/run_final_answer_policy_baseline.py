@@ -417,6 +417,79 @@ def write_manifest(path: Path, *, run_id: str, artifact_dir: Path, summary: dict
     write_json(path, payload)
 
 
+def result_payload(summary: dict[str, Any], artifact_paths: list[Path]) -> dict[str, Any]:
+    return {
+        "command": summary.get("command", "run_final_answer_policy_baseline"),
+        "status": summary.get("status"),
+        "run_id": summary.get("run_id"),
+        "artifact_dir": summary.get("artifact_dir"),
+        "quality_status": summary.get("quality_status"),
+        "resource_boundary": summary.get("resource_boundary"),
+        "answer_policy_mode": summary.get("answer_policy_mode"),
+        "used_qwen": bool(summary.get("used_qwen", False)),
+        "used_vlm": bool(summary.get("used_vlm", False)),
+        "used_training": bool(summary.get("used_training", False)),
+        "formal_benchmark_acceptance": bool(summary.get("formal_benchmark_acceptance", False)),
+        "metrics": {
+            "case_count": summary.get("case_count", 0),
+            "evaluated_count": summary.get("evaluated_count", 0),
+            "passed_count": summary.get("passed_count", 0),
+            "failed_count": summary.get("failed_count", 0),
+            "skipped_count": summary.get("skipped_count", 0),
+            "pass_rate": summary.get("pass_rate", 0.0),
+            "format_valid_rate": summary.get("format_valid_rate", 0.0),
+            "location_valid_rate": summary.get("location_valid_rate", 0.0),
+            "answer_hit_rate": summary.get("answer_hit_rate", 0.0),
+            "citation_block_hit_rate": summary.get("citation_block_hit_rate", 0.0),
+        },
+        "artifact_paths": [safe_relpath(path) for path in artifact_paths if path.is_file() or path.name == "result.json"],
+    }
+
+
+def write_text_tail(source: Path | None, target: Path, *, max_lines: int = 120) -> None:
+    if source is None or not source.is_file():
+        target.write_text("No log file was provided to this runner.\n", encoding="utf-8")
+        return
+    lines = source.read_text(encoding="utf-8", errors="replace").splitlines()
+    target.write_text("\n".join(lines[-max_lines:]) + "\n", encoding="utf-8")
+
+
+def create_sync_bundle(
+    *,
+    sync_root: Path,
+    run_id: str,
+    artifact_dir: Path,
+    summary: dict[str, Any],
+    artifact_paths: list[Path],
+    log_file: Path | None = None,
+    stderr_file: Path | None = None,
+) -> tuple[Path, list[Path]]:
+    sync_dir = sync_root / run_id
+    sync_dir.mkdir(parents=True, exist_ok=True)
+    copy_names = {
+        "result.json",
+        "summary.json",
+        "summary.md",
+        "preview.json",
+        "failures_sample.jsonl",
+    }
+    copied: list[Path] = []
+    for source in artifact_paths:
+        if source.name not in copy_names or not source.is_file():
+            continue
+        target = sync_dir / source.name
+        target.write_bytes(source.read_bytes())
+        copied.append(target)
+    log_tail = sync_dir / "log_tail.txt"
+    stderr_tail = sync_dir / "stderr_tail.txt"
+    write_text_tail(log_file, log_tail)
+    write_text_tail(stderr_file, stderr_tail)
+    copied.extend([log_tail, stderr_tail])
+    write_manifest(sync_dir / "manifest.json", run_id=run_id, artifact_dir=artifact_dir, summary=summary, artifact_paths=copied)
+    copied.append(sync_dir / "manifest.json")
+    return sync_dir, copied
+
+
 def blocked_result(*, run_id: str, artifact_dir: Path, preflight: dict[str, Any], answer_policy: str) -> dict[str, Any]:
     artifact_dir.mkdir(parents=True, exist_ok=True)
     summary = {
@@ -435,18 +508,21 @@ def blocked_result(*, run_id: str, artifact_dir: Path, preflight: dict[str, Any]
         "used_training": False,
         "formal_benchmark_acceptance": False,
     }
-    write_json(artifact_dir / "summary.json", summary)
-    write_summary_markdown(artifact_dir / "summary.md", {**summary, **default_count_summary()})
-    write_json(artifact_dir / "preview.json", {"summary": summary, "results": []})
-    write_jsonl(artifact_dir / "results.jsonl", [])
-    write_jsonl(artifact_dir / "failures_sample.jsonl", [])
     artifact_paths = [
+        artifact_dir / "result.json",
         artifact_dir / "results.jsonl",
         artifact_dir / "summary.json",
         artifact_dir / "summary.md",
         artifact_dir / "preview.json",
         artifact_dir / "failures_sample.jsonl",
     ]
+    summary["result_path"] = safe_relpath(artifact_paths[0])
+    write_jsonl(artifact_paths[1], [])
+    write_json(artifact_paths[2], summary)
+    write_summary_markdown(artifact_paths[3], {**summary, **default_count_summary()})
+    write_json(artifact_paths[4], {"summary": summary, "results": []})
+    write_jsonl(artifact_paths[5], [])
+    write_json(artifact_paths[0], result_payload({**summary, **default_count_summary()}, artifact_paths))
     write_manifest(artifact_dir / "manifest.json", run_id=run_id, artifact_dir=artifact_dir, summary=summary, artifact_paths=artifact_paths)
     return {
         **summary,
@@ -490,6 +566,9 @@ def run_final_answer_policy_baseline(
     top_k: int = 5,
     preserve_input_order: bool = False,
     answer_policy: AnswerPolicy | None = None,
+    sync_output_root: Path | None = None,
+    log_file: Path | None = None,
+    stderr_file: Path | None = None,
 ) -> dict[str, Any]:
     run_id = run_id or now_run_id()
     artifact_dir = output_root / run_id
@@ -498,7 +577,20 @@ def run_final_answer_policy_baseline(
     if answer_policy is None:
         preflight = preflight_model(answer_policy_mode, base_model_path, adapter_path)
         if preflight["status"] != "success":
-            return blocked_result(run_id=run_id, artifact_dir=artifact_dir, preflight=preflight, answer_policy=answer_policy_mode)
+            result = blocked_result(run_id=run_id, artifact_dir=artifact_dir, preflight=preflight, answer_policy=answer_policy_mode)
+            if sync_output_root is not None:
+                sync_dir, sync_paths = create_sync_bundle(
+                    sync_root=sync_output_root,
+                    run_id=run_id,
+                    artifact_dir=artifact_dir,
+                    summary=result,
+                    artifact_paths=[artifact_dir / Path(path).name for path in result["artifact_paths"]],
+                    log_file=log_file,
+                    stderr_file=stderr_file,
+                )
+                result["sync_bundle_path"] = safe_relpath(sync_dir)
+                result["sync_artifact_paths"] = [safe_relpath(path) for path in sync_paths]
+            return result
         answer_policy = build_answer_policy(
             answer_policy=answer_policy_mode,
             base_model_path=base_model_path,
@@ -532,22 +624,38 @@ def run_final_answer_policy_baseline(
     summary = summarize(rows, run_id=run_id, artifact_dir=artifact_dir, answer_policy=str(getattr(answer_policy, "mode", answer_policy_mode)))
     failures = [row for row in rows if row.get("pass_fail") == "failed"][:50]
     artifact_paths = [
+        artifact_dir / "result.json",
         artifact_dir / "results.jsonl",
         artifact_dir / "summary.json",
         artifact_dir / "summary.md",
         artifact_dir / "preview.json",
         artifact_dir / "failures_sample.jsonl",
     ]
-    write_jsonl(artifact_paths[0], rows)
-    write_json(artifact_paths[1], summary)
-    write_summary_markdown(artifact_paths[2], summary)
-    write_json(artifact_paths[3], {"summary": summary, "results": rows[:5]})
-    write_jsonl(artifact_paths[4], failures)
+    summary["result_path"] = safe_relpath(artifact_paths[0])
+    write_jsonl(artifact_paths[1], rows)
+    write_json(artifact_paths[2], summary)
+    write_summary_markdown(artifact_paths[3], summary)
+    write_json(artifact_paths[4], {"summary": summary, "results": rows[:5]})
+    write_jsonl(artifact_paths[5], failures)
+    write_json(artifact_paths[0], result_payload(summary, artifact_paths))
     write_manifest(artifact_dir / "manifest.json", run_id=run_id, artifact_dir=artifact_dir, summary=summary, artifact_paths=artifact_paths)
-    return {
+    result = {
         **summary,
         "artifact_paths": [safe_relpath(path) for path in [*artifact_paths, artifact_dir / "manifest.json"]],
     }
+    if sync_output_root is not None:
+        sync_dir, sync_paths = create_sync_bundle(
+            sync_root=sync_output_root,
+            run_id=run_id,
+            artifact_dir=artifact_dir,
+            summary=summary,
+            artifact_paths=[*artifact_paths, artifact_dir / "manifest.json"],
+            log_file=log_file,
+            stderr_file=stderr_file,
+        )
+        result["sync_bundle_path"] = safe_relpath(sync_dir)
+        result["sync_artifact_paths"] = [safe_relpath(path) for path in sync_paths]
+    return result
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -567,6 +675,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-new-tokens", type=int, default=1024)
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--preserve-input-order", action="store_true")
+    parser.add_argument("--sync-output-dir")
+    parser.add_argument("--log-file")
+    parser.add_argument("--stderr-file")
     return parser
 
 
@@ -588,6 +699,9 @@ def main(argv: list[str] | None = None) -> int:
         max_new_tokens=int(args.max_new_tokens),
         top_k=int(args.top_k),
         preserve_input_order=bool(args.preserve_input_order),
+        sync_output_root=repo_path(args.sync_output_dir),
+        log_file=repo_path(args.log_file),
+        stderr_file=repo_path(args.stderr_file),
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0

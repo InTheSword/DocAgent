@@ -136,6 +136,7 @@ def test_answer_policy_baseline_writes_diagnostic_artifacts(tmp_path: Path) -> N
         mpdocvqa_manifest=mp_manifest_path,
         answer_policy=CandidatePolicy(),
         preserve_input_order=True,
+        sync_output_root=tmp_path / "sync",
     )
 
     assert summary["status"] == "success"
@@ -149,8 +150,10 @@ def test_answer_policy_baseline_writes_diagnostic_artifacts(tmp_path: Path) -> N
     assert summary["used_qwen"] is False
     assert summary["formal_benchmark_acceptance"] is False
     assert "manifest.json" in summary["artifact_paths"][-1]
+    assert summary["sync_bundle_path"].endswith("sync/candidate_run")
 
     run_dir = tmp_path / "runs" / "candidate_run"
+    assert (run_dir / "result.json").is_file()
     assert (run_dir / "results.jsonl").is_file()
     assert (run_dir / "summary.json").is_file()
     assert (run_dir / "summary.md").is_file()
@@ -162,6 +165,17 @@ def test_answer_policy_baseline_writes_diagnostic_artifacts(tmp_path: Path) -> N
     assert rows["text_q"]["citation_block_hit"] is True
     assert rows["table_q"]["evaluation_mode"] == "skipped_deterministic_tool_case"
     assert rows["mp_q"]["evaluation_mode"] == "skipped_requires_raw_pdf_mineru_retrieval"
+    result = json.loads((run_dir / "result.json").read_text(encoding="utf-8"))
+    assert result["metrics"]["evaluated_count"] == 1
+    sync_dir = tmp_path / "sync" / "candidate_run"
+    assert (sync_dir / "result.json").is_file()
+    assert (sync_dir / "summary.json").is_file()
+    assert (sync_dir / "summary.md").is_file()
+    assert (sync_dir / "preview.json").is_file()
+    assert (sync_dir / "failures_sample.jsonl").is_file()
+    assert (sync_dir / "manifest.json").is_file()
+    assert (sync_dir / "log_tail.txt").is_file()
+    assert (sync_dir / "stderr_tail.txt").is_file()
 
 
 def test_answer_policy_baseline_blocks_missing_qwen_model(tmp_path: Path) -> None:
@@ -181,4 +195,5 @@ def test_answer_policy_baseline_blocks_missing_qwen_model(tmp_path: Path) -> Non
     assert summary["quality_status"] == "blocked"
     assert summary["resource_boundary"] == "server_required"
     assert summary["blocker"]["type"] == "missing_base_model_config"
+    assert (tmp_path / "runs" / "blocked_run" / "result.json").is_file()
     assert (tmp_path / "runs" / "blocked_run" / "summary.json").is_file()
