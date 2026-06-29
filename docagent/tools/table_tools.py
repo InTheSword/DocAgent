@@ -311,7 +311,8 @@ def _unsupported(
 def _select_lookup_value(candidate: TableCandidate, question: str) -> dict[str, Any] | None:
     rows = candidate.data_rows or candidate.rows
     years = _years(question)
-    best_row = _best_row(rows, question, required_labels=years)
+    row_required_labels = [] if _header_has_any_label(candidate.header, years) else years
+    best_row = _best_row(rows, question, required_labels=row_required_labels)
     if best_row is None:
         return None
     column_index = _metric_column(candidate.header, question)
@@ -328,10 +329,32 @@ def _select_lookup_value(candidate: TableCandidate, question: str) -> dict[str, 
 
 
 def _calculation_values(candidate: TableCandidate, question: str) -> list[dict[str, Any]]:
-    years = _years(question)
+    years = _calculation_years(question)
     rows = candidate.data_rows or candidate.rows
     column_index = _metric_column(candidate.header, question)
     values: list[dict[str, Any]] = []
+    if years and _header_has_any_label(candidate.header, years):
+        row = _best_row(rows, question, required_labels=[])
+        if row is not None:
+            for year in years:
+                value_index = _header_label_index(candidate.header, year)
+                if value_index is None or value_index >= len(row):
+                    continue
+                numeric = _parse_number(row[value_index])
+                if numeric is None:
+                    continue
+                values.append(
+                    {
+                        "label": year,
+                        "value": numeric,
+                        "text": row[value_index],
+                        "row": row,
+                        "column": candidate.header[value_index] if value_index < len(candidate.header) else "",
+                    }
+                )
+        if len(values) >= 2:
+            return values[:2]
+
     if years:
         for year in years:
             row = _best_row(rows, question, required_labels=[year])
@@ -446,6 +469,19 @@ def _metric_column(header: list[str], question: str) -> int | None:
         if best is None or score > best[0]:
             best = (score, index)
     return best[1] if best is not None else None
+
+
+def _header_has_any_label(header: list[str], labels: list[str]) -> bool:
+    return any(_header_label_index(header, label) is not None for label in labels)
+
+
+def _header_label_index(header: list[str], label: str) -> int | None:
+    if not label:
+        return None
+    for index, value in enumerate(header):
+        if label in str(value):
+            return index
+    return None
 
 
 def _last_numeric_column(row: list[str], *, exclude_values: set[str]) -> int | None:
@@ -596,6 +632,17 @@ def _format_number(value: float) -> str:
 
 def _years(text: str) -> list[str]:
     return list(dict.fromkeys(re.findall(r"\b(?:19|20)\d{2}\b", text or "")))
+
+
+def _calculation_years(text: str) -> list[str]:
+    normalized = text or ""
+    in_from = re.search(r"\bin\s+((?:19|20)\d{2})\s+from\s+((?:19|20)\d{2})\b", normalized, flags=re.I)
+    if in_from:
+        return [in_from.group(2), in_from.group(1)]
+    from_to = re.search(r"\bfrom\s+((?:19|20)\d{2})\s+to\s+((?:19|20)\d{2})\b", normalized, flags=re.I)
+    if from_to:
+        return [from_to.group(1), from_to.group(2)]
+    return _years(normalized)
 
 
 def _content_tokens(text: str) -> set[str]:

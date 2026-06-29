@@ -32,6 +32,9 @@ The strongest accepted evidence is still execution stability:
 - Final evaluation subset preparation: implemented locally for TAT-QA dev and
   MP-DocVQA val shard 1-2, with manifests, source hashes, filter reports, and
   previews under `outputs/final_eval/`.
+- Final evaluation local subset diagnostic runner: implemented locally; the
+  current 135-case local diagnostic is diagnostic-only and shows table
+  answer-quality gaps.
 
 The most important product gap is clear:
 
@@ -90,6 +93,7 @@ workflow, LoRA-SFT, GRPO, and demo/materials.
 | Unified schema and evidence model | `EvidenceBlock`, `DocAgentSample`, `QAState`, `EvidenceLocation` exist in `docagent/schemas.py`. | accepted | Stable foundation. |
 | MP-DocVQA data construction | Historical Phase 1/4 builders and accepted raw page-window assets exist. | accepted | Usable for experiments, not the current product focus. |
 | Final eval subset preparation | `scripts/prepare_final_eval_subset.py` builds TAT-QA and MP-DocVQA validation subset manifests and reports from local files. | implemented | Data is prepared; benchmark evaluation is still future work. |
+| Final eval local diagnostic runner | `scripts/run_final_eval_subset.py` writes local results, summary, preview, and manual review files for prepared subsets. | implemented | Diagnostic-only; current probe exposes answer-quality gaps and is not benchmark acceptance. |
 | TAT-QA | Dev JSON local subset preparation is implemented; table/numeric product tools have a deterministic local baseline. | implemented | Structured table/numeric source, not raw PDF or MinerU evidence. |
 | InfographicVQA | Dataset builder exists, but visual reasoning is not implemented. | not_started | Future VLM branch. |
 | MinerU to EvidenceBlock | Existing MinerU output conversion, quality report, page blocks, and SQLite persistence exist. | accepted | Existing MinerU output path works. |
@@ -587,6 +591,7 @@ Current product/MVP scripts:
 - `scripts/run_phase5h_full_workflow_smoke.py`: full workflow smoke.
 - `scripts/run_phase5i_answer_quality_benchmark.py`: evidence-readiness benchmark runner.
 - `scripts/prepare_final_eval_subset.py`: local TAT-QA / MP-DocVQA final-evaluation subset preparation.
+- `scripts/run_final_eval_subset.py`: local diagnostic runner for prepared final-evaluation subsets.
 
 Document ingestion and inspection:
 

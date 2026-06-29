@@ -37,6 +37,8 @@ Phase 5 final output contract cleanup -> implemented
 Phase 5 deterministic table_lookup -> implemented
 Phase 5 deterministic simple_calculation -> implemented
 Phase 5 raw PDF MinerU local_cli structured failure artifact -> implemented
+Phase 5 final evaluation subset preparation -> implemented
+Phase 5 final evaluation local subset diagnostic runner -> implemented
 ```
 
 Phase 5D-S validates execution stability, not benchmark-level answer quality.
@@ -45,6 +47,10 @@ The final delivery local update adds the CLI output contract fields
 and implements table lookup / simple calculation over persisted table
 EvidenceBlocks. This is local deterministic functionality, not a Qwen final
 answer-quality benchmark or real MinerU OCR server acceptance.
+The local final-evaluation subset preparation and diagnostic runner are also
+implemented. They write manifests, source hashes, local diagnostic results,
+summaries, previews, and manual-review files, but they are not formal
+MP-DocVQA/TAT-QA benchmark acceptance.
 
 Current accepted Phase 4D-C result:
 
@@ -1727,9 +1733,9 @@ It does not modify Router classification, Query Rewriter behavior,
 retrieval logic, local_fact_qa answer generation, AnswerPolicy, ingestion,
 VLM, training, or full GRPO E2E.
 At Phase 5I-A acceptance time, document_summary, table_lookup, and
-simple_calculation remained not_started. Phase 5E document_summary was
-implemented later as a separate deterministic local tool; table_lookup and
-simple_calculation remain not_started.
+simple_calculation remained not_started. Phase 5E document_summary and the
+deterministic table_lookup/simple_calculation tools were implemented later as
+separate local tools.
 Phase 5I-A calculation/table/summary cases are historical unsupported
 boundaries, limitations, or downstream-required signals.
 Phase 5I-B Full Model-enhanced QA Path is implemented locally after Phase 5E-A.

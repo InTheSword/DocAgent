@@ -47,7 +47,8 @@ Do not download the full RRC image archive unless explicitly approved.
 Phase 5 final-delivery local subset preparation:
 
 ```text
-script = scripts/prepare_final_eval_subset.py
+prepare_script = scripts/prepare_final_eval_subset.py
+diagnostic_runner = scripts/run_final_eval_subset.py
 local_input_dir = data/benchmark/mp_docvqa/val
 local_inputs = val-00001-of-00029.parquet, val-00002-of-00029.parquet
 output_root = outputs/final_eval/mpdocvqa_val_subset
@@ -61,6 +62,10 @@ records from two validation parquet shards. This produces page-window PDFs,
 `source_manifest.json`, and previews. It is suitable for raw PDF / OCR /
 page-attribution preparation, but it is not yet a MinerU OCR acceptance run or
 final answer-quality benchmark.
+
+`scripts/run_final_eval_subset.py` currently treats MP-DocVQA as page-manifest
+readiness only unless MinerU/OCR/retrieval artifacts are provided later. It
+does not evaluate MP-DocVQA answer quality by itself.
 
 ## 3. Frozen Phase 1 artifacts
 
@@ -116,7 +121,8 @@ Current role:
 Phase 5 final-delivery local subset preparation:
 
 ```text
-script = scripts/prepare_final_eval_subset.py
+prepare_script = scripts/prepare_final_eval_subset.py
+diagnostic_runner = scripts/run_final_eval_subset.py
 local_input = data/benchmark/tatqa/tatqa_dataset_dev.json
 output_root = outputs/final_eval/tatqa_dev_subset
 status = implemented
@@ -128,6 +134,10 @@ The local smoke on 2026-06-29 selected 80 validation questions balanced across
 structured table/text QA data; it is not raw PDF and must not be described as
 MinerU-parsed evidence. It is used to test table lookup, simple calculation,
 and evidence-use behavior before final model training or evaluation.
+
+The local diagnostic runner may execute deterministic table tools for TAT-QA
+samples. These diagnostics can expose answer/citation gaps, but they are not a
+formal TAT-QA benchmark and do not validate Qwen answer quality.
 
 ### InfographicVQA
 

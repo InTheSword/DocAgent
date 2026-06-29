@@ -33,6 +33,7 @@ Phase 5 Personal-use DocAgent MVP
 -> raw PDF MinerU local_cli failure artifacts hardened locally
 -> final-evaluation subset preparation implemented locally for TAT-QA dev and
    MP-DocVQA val shards 1-2
+-> final-evaluation local subset diagnostic runner implemented locally
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -113,6 +114,7 @@ Phase 5 table_lookup deterministic CLI -> implemented
 Phase 5 simple_calculation deterministic CLI -> implemented
 Phase 5 raw PDF MinerU local_cli structured failure artifact -> implemented
 Phase 5 final evaluation subset preparation -> implemented
+Phase 5 final evaluation local subset diagnostic runner -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
@@ -1248,6 +1250,8 @@ python -m pytest tests/test_phase5f_file_ingestion_cli.py tests/test_phase5f_min
 $files = Get-ChildItem -LiteralPath 'D:\Projects\docagent\tests' -Filter 'test_phase5*.py' | ForEach-Object { $_.FullName }; python -m pytest @files -q
 python -m pytest tests/test_prepare_final_eval_subset.py -q
 python scripts/prepare_final_eval_subset.py --dataset all --tatqa-limit 80 --mpdocvqa-target-qa-count 50 --mpdocvqa-min-qa-count 30 --mpdocvqa-max-qa-count 70 --overwrite
+python -m pytest tests/test_run_final_eval_subset.py -q
+python scripts/run_final_eval_subset.py --dataset all --max-samples 10 --run-id local_subset_probe_after_fix --output-dir outputs/final_eval/local_subset_diagnostic
 ```
 
 Final-evaluation subset preparation local smoke:
@@ -1267,6 +1271,33 @@ mpdocvqa_selected_window_count = 10
 mpdocvqa_selected_sample_count = 55
 mpdocvqa_conflicting_window_count = 0
 status = implemented
+benchmark_evaluation_status = not_started
+used_external_api = false
+used_vlm = false
+used_training = false
+used_online_mineru_ocr = false
+used_qwen = false
+```
+
+Final-evaluation local subset diagnostic runner:
+
+```text
+resource_boundary = local_only
+script = scripts/run_final_eval_subset.py
+test = tests/test_run_final_eval_subset.py
+local_probe_run_id = local_subset_full_diagnostic
+local_probe_case_count = 135
+local_probe_passed_count = 80
+local_probe_failed_count = 55
+local_probe_tool_executed_count = 60
+local_probe_tool_success_count = 51
+local_probe_answer_hit_count = 5
+local_probe_numeric_accuracy_count = 1
+local_probe_citation_block_hit_count = 60
+local_probe_requires_model_answer_count = 75
+local_probe_requires_mineru_or_retrieval_count = 55
+status = implemented
+quality_status = diagnostic_only
 benchmark_evaluation_status = not_started
 used_external_api = false
 used_vlm = false
@@ -1378,6 +1409,9 @@ Phase 4D-B1.3 server sanity accepted
 + Final evaluation subset preparation implemented locally with TAT-QA dev and
   MP-DocVQA val shard 1-2 manifests, filter reports, source hashes, and
   previews under `outputs/final_eval/`
++ Final evaluation local subset diagnostic runner implemented locally with
+  `results.jsonl`, `summary.json`, `preview.json`, and `manual_review.md`
+  outputs; status remains diagnostic-only, not benchmark-evaluated
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

@@ -137,6 +137,21 @@ QA records. Artifacts are under `outputs/final_eval/tatqa_dev_subset` and
 data preparation only, not MinerU OCR acceptance, final answer-quality
 benchmarking, Qwen evaluation, SFT, or GRPO.
 
+Phase 5 final evaluation local subset diagnostic runner is implemented in
+`scripts/run_final_eval_subset.py` with tests in
+`tests/test_run_final_eval_subset.py`. It reads the prepared TAT-QA and
+MP-DocVQA manifests, runs deterministic table tools only when the sample
+expects `table_lookup` or `simple_calculation`, and otherwise records
+manifest/evidence readiness without fabricating model answers. The local probe
+`local_subset_probe_after_fix` over 10 TAT-QA and 10 MP-DocVQA samples wrote
+`results.jsonl`, `summary.json`, `preview.json`, and `manual_review.md` under
+`outputs/final_eval/local_subset_diagnostic/`. The full local diagnostic
+`local_subset_full_diagnostic` completed with 135 cases, 80 passed, 55 failed,
+60 table-tool executions, 51 table-tool successes, 60/60 citation block hits
+for evaluated tool cases, 5 answer hits, and 1 numeric-accuracy hit. Status is
+`implemented` and `quality_status=diagnostic_only`: this exposes table-answer
+quality gaps and does not count as `benchmark_evaluated`.
+
 Phase 5F full CLI acceptance is accepted in
 `scripts/run_phase5f_full_cli_acceptance.py`. The runner reuses the Phase 5G
 CLI regression execution and adds full-entrypoint acceptance checks for
