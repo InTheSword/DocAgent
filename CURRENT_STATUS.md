@@ -265,10 +265,20 @@ completed successfully but skipped SFT candidates because
 post-repair server rerun improved final canonical citation hit to 1.0 and
 left only answer misses. The follow-up review-only server rerun recommended
 `continue_qwen_eval_before_training`, so the next step is a larger real Qwen
-diagnostic baseline or manual review rather than immediate SFT/GRPO. This is
-a server-ready execution wrapper with real-model smoke evidence only; real
-Qwen baseline acceptance, training execution, and benchmark acceptance remain
-`not_started`.
+diagnostic baseline or manual review rather than immediate SFT/GRPO. The
+larger diagnostic gate `answer_policy_training_gate_qwen_larger40_20260629`
+then ran 40 evaluated TAT-QA AnswerPolicy cases plus 40 skipped MP-DocVQA
+manifest rows: `format_valid_rate=1.0`, `citation_block_hit_rate=1.0`,
+`answer_hit_rate=0.65`, `pass_rate=0.65`, and
+`failure_reason_distribution=answer_miss:14`. The review recommendation became
+`sft_data_design_candidate` with `sft_gate=candidate`, and the orchestrator
+generated 13 SFT candidate records under
+`outputs/final_eval/answer_policy_sft_candidates/answer_policy_training_gate_qwen_larger40_20260629_sft_candidates/`.
+This is still diagnostic data design only; no SFT/GRPO training started, and
+the next step is to inspect answer failures and SFT candidates before training.
+This is a server-ready execution wrapper with real-model smoke evidence only;
+real Qwen baseline acceptance, training execution, and benchmark acceptance
+remain `not_started`.
 
 Phase 5F full CLI acceptance is accepted in
 `scripts/run_phase5f_full_cli_acceptance.py`. The runner reuses the Phase 5G
