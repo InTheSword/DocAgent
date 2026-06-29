@@ -278,8 +278,18 @@ gold targets with misleading tool context. The local review script now writes
 enriched full `manual_review.jsonl` rows with review bucket, prediction/tool/
 candidate gold-hit hints, target citations, and raw output previews, and it
 recommends `inspect_tool_and_metric_failures_before_sft` when tool or metric
-issues are present. This enhanced output requires server validation before any
-SFT data or training decision.
+issues are present. Server validation of the enriched review succeeded with
+run id `answer_policy_sft_candidate_review_larger40_enriched_20260629`.
+The next required action is tool/metric repair before any SFT data or training
+decision.
+
+The first local tool repair is implemented in `docagent/tools/table_tools.py`
+with tests in `tests/test_phase5_table_tools.py`: `table_lookup_or_calculation`
+now performs `simple_calculation` only when `selected_tools` explicitly
+contains `simple_calculation`. It no longer upgrades table lookup to
+calculation merely because the question text contains row-label terms such as
+`decrease` or `weighted-average`. Local tests pass; the larger40 server rerun
+is pending and this repair is not yet a final answer-quality acceptance.
 
 Phase 5 AnswerPolicy training-gate orchestrator is implemented locally in
 `scripts/run_final_answer_policy_training_gate.py` with tests in

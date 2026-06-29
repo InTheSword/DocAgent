@@ -59,8 +59,9 @@ Phase 5 Personal-use DocAgent MVP
 -> AnswerPolicy SFT candidate review script validated on server larger-gate
    real-Qwen artifacts; recommendation remains manual review before training
 -> larger-gate manual review extraction found answer misses dominated by
-   wrong tool outputs; enriched manual-review rows implemented locally and
-   require server validation before any SFT decision
+   wrong tool outputs; enriched manual-review rows server validation succeeded,
+   and explicit simple_calculation selection is now enforced locally to avoid
+   table row-label words triggering unintended calculations
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -1490,7 +1491,13 @@ enriched_manual_review = implemented locally in
   review_bucket, prediction/tool/candidate gold-hit hints, target citations,
   raw output previews, and recommendation
   inspect_tool_and_metric_failures_before_sft when tool or metric issues are
-  present; server validation pending
+  present; server validation success, run_id
+  answer_policy_sft_candidate_review_larger40_enriched_20260629
+table_tool_calculation_trigger = implemented locally; table lookup no longer
+  infers calculation from question text when selected_tools lacks
+  simple_calculation, preventing row-label terms such as "decrease" or
+  "weighted-average" from forcing simple_calculation; server larger40 rerun
+  pending
 benchmark_evaluation_status = not_started
 ```
 

@@ -128,7 +128,7 @@ def table_lookup_or_calculation(
         )
 
     selected = max(candidates, key=lambda item: item.score)
-    wants_calculation = "simple_calculation" in tools_used or _requires_calculation(question)
+    wants_calculation = "simple_calculation" in tools_used
     if wants_calculation:
         return _run_calculation(doc_id=doc_id, question=question, candidate=selected, tools_used=tools_used)
     return _run_lookup(doc_id=doc_id, question=question, candidate=selected, tools_used=tools_used)
