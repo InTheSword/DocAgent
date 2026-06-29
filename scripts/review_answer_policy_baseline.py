@@ -92,6 +92,8 @@ def analyze_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     failure_stages = Counter(str(row.get("failure_stage") or "") for row in rows if row.get("failure_stage"))
     modes = Counter(str(row.get("evaluation_mode") or "") for row in rows if row.get("evaluation_mode"))
     parse_fail_count = 0
+    repaired_parse_fail_count = 0
+    unrepaired_parse_fail_count = 0
     invalid_citation_id_count = 0
     empty_citation_count = 0
     answer_miss_count = 0
@@ -101,6 +103,10 @@ def analyze_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         parse_result = row.get("parse_result") if isinstance(row.get("parse_result"), dict) else {}
         if parse_result and (parse_result.get("raw_json_ok") is False or parse_result.get("schema_ok") is False):
             parse_fail_count += 1
+            if row.get("format_valid") is True:
+                repaired_parse_fail_count += 1
+            else:
+                unrepaired_parse_fail_count += 1
         compact = row.get("final_answer_compact") if isinstance(row.get("final_answer_compact"), dict) else {}
         validation = compact.get("citation_validation") if isinstance(compact.get("citation_validation"), dict) else {}
         invalid_citation_id_count += len(validation.get("invalid_block_ids") or [])
@@ -118,6 +124,8 @@ def analyze_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "failure_stage_distribution": dict(sorted(failure_stages.items())),
         "evaluation_mode_distribution": dict(sorted(modes.items())),
         "parse_fail_count_in_rows": parse_fail_count,
+        "repaired_parse_fail_count_in_rows": repaired_parse_fail_count,
+        "unrepaired_parse_fail_count_in_rows": unrepaired_parse_fail_count,
         "invalid_citation_id_count_in_rows": invalid_citation_id_count,
         "empty_citation_count_in_rows": empty_citation_count,
         "answer_miss_count_in_rows": answer_miss_count,
@@ -161,9 +169,11 @@ def training_gate(summary: dict[str, Any], result: dict[str, Any], row_analysis:
     if _rate(metrics["format_valid_rate"]) < 0.95:
         reasons.append("format_valid_rate_below_0.95")
         return _gate("prompt_or_parser_repair_before_training", "not_ready", "fix_output_format_or_parser_before_sft", reasons)
-    if row_analysis["parse_fail_count_in_rows"] > 0:
+    if row_analysis.get("unrepaired_parse_fail_count_in_rows", row_analysis["parse_fail_count_in_rows"]) > 0:
         reasons.append("raw_json_or_schema_failures_present")
         return _gate("prompt_or_parser_repair_before_training", "not_ready", "fix_output_format_or_parser_before_sft", reasons)
+    if row_analysis["parse_fail_count_in_rows"] > 0:
+        reasons.append("raw_json_or_schema_failures_repaired_by_canonicalization")
     if _rate(metrics["citation_block_hit_rate"]) < 0.80:
         reasons.append("citation_block_hit_rate_below_0.80")
         return _gate("citation_contract_repair_before_training", "not_ready", "fix_citation_selection_before_sft", reasons)

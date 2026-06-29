@@ -231,13 +231,22 @@ baseline artifacts return a structured failed review. The gate now treats
 filtered invalid raw model citation ids as diagnostic when final canonical
 citations hit the gold block and there is no `citation_block_miss`; invalid
 ids remain a hard citation-contract blocker only when final citations are
-empty or miss. This adjustment is implemented locally and awaits server rerun.
+empty or miss.
 Server review rerun `answer_policy_review_gate_filtered_invalid_20260629`
 accepted the diagnostic gate with `recommendation=continue_qwen_eval_before_training`,
 `sft_gate=defer`, `invalid_citation_id_count_in_rows=3`, and
 `failure_reason_distribution=answer_miss:3`. This gate does not start SFT,
 start GRPO, accept Qwen prompt quality, or promote local diagnostics to a
 formal benchmark result.
+
+The review gate now also distinguishes unrepaired parse/schema failures from
+candidate outputs that failed the narrow model-output schema but were
+canonicalized into a final `format_valid=true` answer. Repaired parse/schema
+failures remain diagnostic and do not preempt answer-quality or SFT-candidate
+recommendations; unrepaired failures still return
+`prompt_or_parser_repair_before_training`. This semantic repair is
+implemented locally and awaits a review-only server rerun on the full80
+tablefix baseline.
 
 Phase 5 AnswerPolicy SFT candidate data builder is implemented locally in
 `scripts/build_answer_policy_sft_candidates.py` with tests in
@@ -334,9 +343,14 @@ claim formal benchmark acceptance. The baseline result was
 `failure_reason_distribution=answer_miss:19`. The review gate returned
 `prompt_or_parser_repair_before_training`, `sft_gate=not_ready`, because raw
 JSON or schema failures were present in row-level parse diagnostics despite
-the canonical format-valid rate being 1.0. The next action is to inspect the
-raw/schema failure rows before changing prompts, parser behavior, or any
-training data.
+the canonical format-valid rate being 1.0. Follow-up inspection
+`answer_policy_full80_parse_failure_inspect_20260629` found one row-level
+schema failure, zero raw JSON failures, and one
+`parse_fail_but_format_valid` row; the row was already canonicalized into the
+final output contract and also failed answer quality. The local review-gate
+semantics now treat this as a repaired-output diagnostic rather than a hard
+parser blocker. The next action is a review-only server rerun of the existing
+baseline artifacts, not Qwen rerun or training.
 
 Phase 5 AnswerPolicy training-gate orchestrator is implemented locally in
 `scripts/run_final_answer_policy_training_gate.py` with tests in

@@ -225,6 +225,172 @@ def test_review_blocks_invalid_citations_when_final_citation_misses(tmp_path: Pa
     assert review["training_gate"]["next_action"] == "fix_citation_allowlist_use_before_sft"
 
 
+def test_review_blocks_unrepaired_schema_failure(tmp_path: Path) -> None:
+    run_dir = tmp_path / "baseline" / "qwen_unrepaired_schema"
+    summary = {
+        "status": "success",
+        "run_id": "qwen_unrepaired_schema",
+        "answer_policy_mode": "base",
+        "used_qwen": True,
+        "case_count": 4,
+        "evaluated_count": 4,
+        "passed_count": 3,
+        "failed_count": 1,
+        "skipped_count": 0,
+        "pass_rate": 0.75,
+        "tool_success_rate": 1.0,
+        "format_valid_rate": 1.0,
+        "location_valid_rate": 1.0,
+        "answer_hit_rate": 0.75,
+        "citation_block_hit_rate": 1.0,
+    }
+    rows = [
+        {
+            "sample_id": "q1",
+            "dataset": "tatqa",
+            "evaluation_mode": "answer_policy_generation",
+            "pass_fail": "failed",
+            "failure_stage": "format",
+            "failure_reasons": ["format_invalid"],
+            "answer_evaluated": True,
+            "citation_evaluated": True,
+            "citation_block_ids": ["b1"],
+            "format_valid": False,
+            "parse_result": {"raw_json_ok": True, "schema_ok": False},
+            "final_answer_compact": {
+                "answer": "wrong",
+                "citation_block_ids": ["b1"],
+                "citation_validation": {"invalid_block_ids": [], "allowlist_size": 1},
+            },
+            "answers": ["right"],
+        }
+    ]
+    _write_json(run_dir / "summary.json", summary)
+    _write_json(run_dir / "result.json", {"status": "success", "run_id": "qwen_unrepaired_schema", "used_qwen": True, "metrics": summary})
+    _write_jsonl(run_dir / "results.jsonl", rows)
+
+    review = review_answer_policy_baseline(run_dir=run_dir, output_root=tmp_path / "reviews", run_id="review_unrepaired_schema")
+
+    assert review["row_analysis"]["parse_fail_count_in_rows"] == 1
+    assert review["row_analysis"]["unrepaired_parse_fail_count_in_rows"] == 1
+    assert review["training_gate"]["recommendation"] == "prompt_or_parser_repair_before_training"
+    assert review["training_gate"]["next_action"] == "fix_output_format_or_parser_before_sft"
+    assert "raw_json_or_schema_failures_present" in review["training_gate"]["reasons"]
+
+
+def test_review_does_not_block_repaired_schema_failure(tmp_path: Path) -> None:
+    run_dir = tmp_path / "baseline" / "qwen_repaired_schema"
+    summary = {
+        "status": "success",
+        "run_id": "qwen_repaired_schema",
+        "answer_policy_mode": "base",
+        "used_qwen": True,
+        "case_count": 4,
+        "evaluated_count": 4,
+        "passed_count": 3,
+        "failed_count": 1,
+        "skipped_count": 0,
+        "pass_rate": 0.75,
+        "tool_success_rate": 1.0,
+        "format_valid_rate": 1.0,
+        "location_valid_rate": 1.0,
+        "answer_hit_rate": 0.75,
+        "citation_block_hit_rate": 1.0,
+        "failure_reason_distribution": {"answer_miss": 1},
+        "failure_stage_distribution": {"answer_quality": 1},
+    }
+    rows = [
+        {
+            "sample_id": "q1",
+            "dataset": "tatqa",
+            "evaluation_mode": "answer_policy_generation",
+            "pass_fail": "failed",
+            "failure_stage": "answer_quality",
+            "failure_reasons": ["answer_miss"],
+            "answer_evaluated": True,
+            "citation_evaluated": True,
+            "citation_block_ids": ["b1"],
+            "format_valid": True,
+            "parse_result": {"raw_json_ok": True, "schema_ok": False},
+            "final_answer_compact": {
+                "answer": "wrong",
+                "citation_block_ids": ["b1"],
+                "citation_validation": {"invalid_block_ids": [], "allowlist_size": 1},
+            },
+            "answers": ["right"],
+        }
+    ]
+    _write_json(run_dir / "summary.json", summary)
+    _write_json(run_dir / "result.json", {"status": "success", "run_id": "qwen_repaired_schema", "used_qwen": True, "metrics": summary})
+    _write_jsonl(run_dir / "results.jsonl", rows)
+
+    review = review_answer_policy_baseline(run_dir=run_dir, output_root=tmp_path / "reviews", run_id="review_repaired_schema")
+
+    assert review["row_analysis"]["parse_fail_count_in_rows"] == 1
+    assert review["row_analysis"]["repaired_parse_fail_count_in_rows"] == 1
+    assert review["training_gate"]["recommendation"] == "continue_qwen_eval_before_training"
+    assert review["training_gate"]["sft_gate"] == "defer"
+    assert "raw_json_or_schema_failures_repaired_by_canonicalization" in review["training_gate"]["reasons"]
+
+
+def test_review_repaired_schema_failure_can_still_recommend_sft_candidate(tmp_path: Path) -> None:
+    run_dir = tmp_path / "baseline" / "qwen_repaired_schema_low_pass"
+    summary = {
+        "status": "success",
+        "run_id": "qwen_repaired_schema_low_pass",
+        "answer_policy_mode": "base",
+        "used_qwen": True,
+        "case_count": 4,
+        "evaluated_count": 4,
+        "passed_count": 2,
+        "failed_count": 2,
+        "skipped_count": 0,
+        "pass_rate": 0.65,
+        "tool_success_rate": 1.0,
+        "format_valid_rate": 1.0,
+        "location_valid_rate": 1.0,
+        "answer_hit_rate": 0.65,
+        "citation_block_hit_rate": 1.0,
+        "failure_reason_distribution": {"answer_miss": 2},
+        "failure_stage_distribution": {"answer_quality": 2},
+    }
+    rows = [
+        {
+            "sample_id": "q1",
+            "dataset": "tatqa",
+            "evaluation_mode": "answer_policy_generation",
+            "pass_fail": "failed",
+            "failure_stage": "answer_quality",
+            "failure_reasons": ["answer_miss"],
+            "answer_evaluated": True,
+            "citation_evaluated": True,
+            "citation_block_ids": ["b1"],
+            "format_valid": True,
+            "parse_result": {"raw_json_ok": True, "schema_ok": False},
+            "final_answer_compact": {
+                "answer": "wrong",
+                "citation_block_ids": ["b1"],
+                "citation_validation": {"invalid_block_ids": [], "allowlist_size": 1},
+            },
+            "answers": ["right"],
+        }
+    ]
+    _write_json(run_dir / "summary.json", summary)
+    _write_json(
+        run_dir / "result.json",
+        {"status": "success", "run_id": "qwen_repaired_schema_low_pass", "used_qwen": True, "metrics": summary},
+    )
+    _write_jsonl(run_dir / "results.jsonl", rows)
+
+    review = review_answer_policy_baseline(run_dir=run_dir, output_root=tmp_path / "reviews", run_id="review_repaired_schema_low_pass")
+
+    assert review["row_analysis"]["repaired_parse_fail_count_in_rows"] == 1
+    assert review["training_gate"]["recommendation"] == "sft_data_design_candidate"
+    assert review["training_gate"]["next_action"] == "inspect_answer_and_attribution_failures_before_sft"
+    assert "raw_json_or_schema_failures_repaired_by_canonicalization" in review["training_gate"]["reasons"]
+    assert "pass_rate_below_0.70" in review["training_gate"]["reasons"]
+
+
 def test_review_sync_bundle_without_qwen_defers_training(tmp_path: Path) -> None:
     run_dir = tmp_path / "sync" / "heuristic_run"
     summary = {
