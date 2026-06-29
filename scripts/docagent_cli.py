@@ -78,6 +78,14 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), encoding="utf-8")
 
 
+def _print_json(payload: dict[str, Any]) -> None:
+    text = json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default)
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        print(json.dumps(payload, ensure_ascii=True, indent=2, default=_json_default))
+
+
 def _build_answer_policy(
     *,
     answer_policy: str,
@@ -1388,9 +1396,9 @@ def main(argv: list[str] | None = None) -> int:
             error_type=type(exc).__name__,
             message=str(exc),
         )
-        print(json.dumps(result, ensure_ascii=False, indent=2, default=_json_default))
+        _print_json(result)
         return 1
-    print(json.dumps(result, ensure_ascii=False, indent=2, default=_json_default))
+    _print_json(result)
     return 0
 
 

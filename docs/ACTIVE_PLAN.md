@@ -26,6 +26,7 @@ Phase 5 Personal-use DocAgent MVP
    output contract and future training data design are revisited
 -> Phase 5E Document Summary MVP implemented locally
 -> Phase 5E-A Document Summary Acceptance Pack implemented locally
+-> Phase 5F Full CLI Acceptance runner ready after local acceptance smoke
 -> stop before table_lookup, simple_calculation, VLM,
    local_fact_qa answer-quality fixes, training, and full GRPO E2E
 ```
@@ -100,7 +101,7 @@ Phase 5I-B Final Answer Quality Benchmark -> not_started
 Phase 5E Document Summary MVP -> implemented
 Phase 5E-A Document Summary Acceptance Pack -> implemented
 Phase 5 structured_extraction deterministic CLI -> implemented
-Phase 5F full CLI acceptance -> not_started
+Phase 5F full CLI acceptance -> ready
 CDC -> not_started
 MVP CLI / trace integration -> not_started
 Demo/closure -> not_started
@@ -1100,6 +1101,31 @@ boundary = persisted-evidence structured scans only; no table_lookup,
   simple_calculation, VLM, answer-quality repair, or training
 ```
 
+Phase 5F full CLI acceptance runner is ready locally:
+
+```text
+runner = scripts/run_phase5f_full_cli_acceptance.py
+local_run_id = phase5f_full_cli_20260629_054248_59c59b05
+local_status = success
+acceptance_status = ready
+case_count = 11
+completed_count = 10
+unsupported_count = 1
+required_task_types = document_statistics, page_lookup, local_fact_qa,
+  document_summary, structured_extraction, table_lookup_or_calculation
+artifact_checked_count = 10
+artifact_pass_count = 10
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+final_answer_quality_evaluated = false
+server_acceptance_required = true
+boundary = full CLI entrypoint and artifact contract only; no table_lookup,
+  simple_calculation, VLM, online MinerU OCR, training, full GRPO E2E, or
+  final answer quality acceptance
+```
+
 Phase 4D-C scaffold / command preparation:
 
 ```text
@@ -1189,6 +1215,8 @@ python -m pytest tests/test_phase5e_document_summary_tool.py -q
 python -m pytest tests/test_phase5e_document_summary_cli.py -q
 python -m pytest tests/test_phase5f_cli.py tests/test_phase5_document_tools.py tests/test_phase5_router.py -q
 python -m pytest tests/test_phase5g_cli_regression.py -q
+python -m pytest tests/test_phase5f_full_cli_acceptance.py -q
+python scripts/run_phase5f_full_cli_acceptance.py --db-path outputs/docagent.db --doc-id fe3465edd3da60d2 --output-dir outputs/acceptance/phase5f_full_cli_local --timeout-seconds 180
 python -m pytest tests/test_phase5f_file_ingestion_cli.py tests/test_phase5f_mineru_file_cli.py -q
 $files = Get-ChildItem -LiteralPath 'D:\Projects\docagent\tests' -Filter 'test_phase5*.py' | ForEach-Object { $_.FullName }; python -m pytest @files -q
 ```

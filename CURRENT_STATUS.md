@@ -108,6 +108,18 @@ The local acceptance report is a packaging and grounding check only; it does
 not evaluate final answer quality or use external LLM answer generation, VLM,
 training, GRPO, table lookup, simple calculation, or online MinerU OCR.
 
+Phase 5F full CLI acceptance is ready in
+`scripts/run_phase5f_full_cli_acceptance.py`. The runner reuses the Phase 5G
+CLI regression execution and adds full-entrypoint acceptance checks for
+required task coverage, structured unsupported table/calculation boundary,
+`result.json` / `summary.json` / `router_plan.json` / `trace.json` artifact
+presence, and summary flags proving no external API, VLM, training, or full
+E2E path was used. Local execution
+`phase5f_full_cli_20260629_054248_59c59b05` passed 11 cases with 10 completed
+and 1 structured unsupported boundary. This is a local readiness result; server
+smoke remains required before marking Phase 5F full CLI acceptance as
+accepted.
+
 Phase 5C-2 LLM-assisted Router fallback is accepted in
 `docagent/router/llm_client.py`, `docagent/router/llm_router.py`, and
 `scripts/docagent_cli.py`. The accepted rule router remains the deterministic
@@ -515,7 +527,7 @@ Phase 5I-B Final Answer Quality Benchmark -> not_started
 Phase 5E Document Summary MVP -> implemented
 Phase 5E-A Document Summary Acceptance Pack -> implemented
 Phase 5 structured_extraction deterministic CLI -> implemented
-Phase 5F full CLI acceptance -> not_started
+Phase 5F full CLI acceptance -> ready
 CDC -> not_started
 MVP CLI / trace integration -> not_started
 Demo/closure -> not_started

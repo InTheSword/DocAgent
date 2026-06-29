@@ -32,7 +32,7 @@ Phase 5I-B Final Answer Quality Benchmark -> not_started
 Phase 5E document_summary -> implemented
 Phase 5E-A document_summary acceptance pack -> implemented
 Phase 5 structured_extraction deterministic CLI -> implemented
-Phase 5F full CLI acceptance -> not_started
+Phase 5F full CLI acceptance -> ready
 ```
 
 Phase 5D-S validates execution stability, not benchmark-level answer quality.
@@ -1294,6 +1294,36 @@ local_fact_qa answer quality is not benchmark-validated by this smoke.
 The GLOBOCAN sample structure_quality is passed_with_warnings.
 ```
 
+#### Phase 5F full CLI acceptance
+
+Implementation status:
+
+```text
+Phase 5F full CLI acceptance -> ready
+runner = scripts/run_phase5f_full_cli_acceptance.py
+resource_boundary = local_only for implementation; server smoke required for acceptance
+local_run_id = phase5f_full_cli_20260629_054248_59c59b05
+local_status = success
+case_count = 11
+completed_count = 10
+unsupported_count = 1
+artifact_checked_count = 10
+artifact_pass_count = 10
+required_task_types = document_statistics, page_lookup, local_fact_qa,
+  document_summary, structured_extraction, table_lookup_or_calculation
+```
+
+Acceptance boundary:
+
+```text
+This runner validates the unified CLI entrypoint and artifact contract after
+document_summary and structured_extraction were added.
+It does not evaluate final answer quality.
+It does not implement table_lookup, simple_calculation, visual_pixel_qa,
+online MinerU OCR, training, or full GRPO E2E.
+Server smoke remains required before marking this as accepted.
+```
+
 ### Phase 5G: Multi-task Regression
 
 Goal:
@@ -1733,6 +1763,7 @@ Phase 5F-1 unified CLI MVP and server CLI smoke are accepted.
 Phase 5F-2 file-to-answer ingestion integration and server smoke are accepted for lightweight .txt files.
 Phase 5F-3 MinerU-backed file-to-answer implementation and server smoke are accepted for existing MinerU output-backed execution.
 Phase 5G CLI regression baseline and server regression are accepted as execution stability evidence.
+Phase 5F full CLI acceptance runner is ready locally; server smoke remains required before accepted status.
 Phase 5C-2 LLM-assisted Router fallback and server real API smoke are accepted.
 Phase 5C-3 Query Planning + Multi-Query Retrieval is accepted. Single-case LLM
 semantic query expansion smoke and multi-question Query Rewriter smoke both
