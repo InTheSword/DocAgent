@@ -260,10 +260,13 @@ The server one-off inspection of
 `answer_policy_training_gate_qwen_larger40_20260629` found 14 TAT-QA answer
 misses, 13 generated SFT candidate records, one failed sample without a
 candidate because tool execution failed, and the recommendation
-`manual_review_sft_candidates_before_training`. The tracked script still
-requires server validation on the same artifacts. It does not start SFT,
-start GRPO, accept model quality, or promote the diagnostic run to a formal
-benchmark.
+`manual_review_sft_candidates_before_training`. Server validation of the
+tracked script succeeded with run id
+`answer_policy_sft_candidate_review_larger40_20260629_tracked`: candidate
+target quality flags were clean, `failed_without_candidate_count=1`,
+`used_training=false`, and `formal_benchmark_acceptance=false`. It does not
+start SFT, start GRPO, accept model quality, or promote the diagnostic run to
+a formal benchmark.
 
 Phase 5 AnswerPolicy training-gate orchestrator is implemented locally in
 `scripts/run_final_answer_policy_training_gate.py` with tests in
