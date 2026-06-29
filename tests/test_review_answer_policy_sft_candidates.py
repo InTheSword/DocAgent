@@ -78,8 +78,9 @@ def _write_baseline(tmp_path: Path) -> Path:
             "pass_fail": "failed",
             "failure_reasons": ["answer_miss"],
             "tool_status": "success",
-            "tool_answer": "10",
+            "tool_answer": "8",
             "citation_block_ids": ["b1"],
+            "tool_citation_block_ids": ["b1"],
             "final_answer_compact": {"citation_validation": {"invalid_block_ids": []}},
         },
         {
@@ -87,7 +88,7 @@ def _write_baseline(tmp_path: Path) -> Path:
             "dataset": "tatqa",
             "question": "What is the policy?",
             "answers": ["policy"],
-            "prediction_answer": "wrong",
+            "prediction_answer": "the policy",
             "expected_answer_type": "extractive",
             "expected_tools": ["retrieval", "local_fact_qa"],
             "evaluation_mode": "answer_policy_generation",
@@ -147,7 +148,13 @@ def test_review_sft_candidates_writes_alignment_and_preview_artifacts(tmp_path: 
         tmp_path,
         [
             _candidate_record("q_table", expected_tools=["table_lookup"], tool_results_attached=1),
-            _candidate_record("q_text", expected_tools=["retrieval", "local_fact_qa"], tool_results_attached=0),
+            _candidate_record(
+                "q_text",
+                expected_tools=["retrieval", "local_fact_qa"],
+                tool_results_attached=0,
+                answer="policy",
+                citation_block_ids=["b2"],
+            ),
         ],
     )
 
@@ -172,7 +179,17 @@ def test_review_sft_candidates_writes_alignment_and_preview_artifacts(tmp_path: 
     }
     assert result["candidate_quality_flags"]["failed_without_candidate_count"] == 1
     assert result["candidate_quality_flags"]["tool_expected_without_tool_results_count"] == 0
-    assert result["recommendation"]["next_action"] == "manual_review_sft_candidates_before_training"
+    assert result["manual_review_summary"]["bucket_counts"] == {
+        "generation_answer_miss_review": 1,
+        "table_lookup_answer_miss_with_tool": 1,
+        "tool_failure_without_candidate": 1,
+    }
+    assert result["manual_review_summary"]["tool_answer_miss_with_candidate_count"] == 1
+    assert result["manual_review_summary"]["tool_answer_miss_with_candidate_sample_ids"] == ["q_table"]
+    assert result["manual_review_summary"]["metric_normalization_candidate_count"] == 1
+    assert result["manual_review_summary"]["metric_normalization_candidate_sample_ids"] == ["q_text"]
+    assert result["manual_review_summary"]["tool_failure_without_candidate_count"] == 1
+    assert result["recommendation"]["next_action"] == "inspect_tool_and_metric_failures_before_sft"
     review_dir = tmp_path / "reviews" / "review_run"
     assert (review_dir / "result.json").is_file()
     assert (review_dir / "summary.json").is_file()
@@ -183,6 +200,14 @@ def test_review_sft_candidates_writes_alignment_and_preview_artifacts(tmp_path: 
     assert (review_dir / "manifest.json").is_file()
     manual_rows = read_jsonl(review_dir / "manual_review.jsonl")
     assert [row["sample_id"] for row in manual_rows] == ["q_table", "q_text", "q_tool_error"]
+    assert manual_rows[0]["review_bucket"] == "table_lookup_answer_miss_with_tool"
+    assert manual_rows[0]["candidate_target_answer"] == "10"
+    assert manual_rows[0]["tool_hits_gold_hint"] is False
+    assert manual_rows[0]["candidate_hits_gold_hint"] is True
+    assert manual_rows[1]["review_bucket"] == "generation_answer_miss_review"
+    assert manual_rows[1]["prediction_hits_gold_hint"] is True
+    assert manual_rows[2]["review_bucket"] == "tool_failure_without_candidate"
+    assert manual_rows[2]["candidate_record_available"] is False
 
 
 def test_review_sft_candidates_blocks_missing_artifacts(tmp_path: Path) -> None:

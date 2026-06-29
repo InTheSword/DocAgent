@@ -58,6 +58,9 @@ Phase 5 Personal-use DocAgent MVP
    training has started
 -> AnswerPolicy SFT candidate review script validated on server larger-gate
    real-Qwen artifacts; recommendation remains manual review before training
+-> larger-gate manual review extraction found answer misses dominated by
+   wrong tool outputs; enriched manual-review rows implemented locally and
+   require server validation before any SFT decision
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -1477,6 +1480,17 @@ sft_candidate_review = server validation success, run_id
   candidate target quality flags clean, recommendation
   manual_review_sft_candidates_before_training, used_training false,
   formal_benchmark_acceptance false
+manual_review_extract = success, run_id
+  answer_policy_manual_review_extract_larger40_20260629, row_count 14,
+  bucket_counts table_lookup_answer_miss_with_tool:6,
+  calculation_answer_miss_with_tool:5, generation_answer_miss_review:2,
+  tool_failure_without_candidate:1
+enriched_manual_review = implemented locally in
+  scripts/review_answer_policy_sft_candidates.py; adds full per-row
+  review_bucket, prediction/tool/candidate gold-hit hints, target citations,
+  raw output previews, and recommendation
+  inspect_tool_and_metric_failures_before_sft when tool or metric issues are
+  present; server validation pending
 benchmark_evaluation_status = not_started
 ```
 

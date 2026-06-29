@@ -268,6 +268,19 @@ target quality flags were clean, `failed_without_candidate_count=1`,
 start SFT, start GRPO, accept model quality, or promote the diagnostic run to
 a formal benchmark.
 
+The follow-up manual review extraction
+`answer_policy_manual_review_extract_larger40_20260629` found 14 answer-miss
+rows with bucket counts `table_lookup_answer_miss_with_tool=6`,
+`calculation_answer_miss_with_tool=5`, `generation_answer_miss_review=2`,
+and `tool_failure_without_candidate=1`. Most candidate targets hit the gold
+answer, while many successful tool outputs did not, so immediate SFT would mix
+gold targets with misleading tool context. The local review script now writes
+enriched full `manual_review.jsonl` rows with review bucket, prediction/tool/
+candidate gold-hit hints, target citations, and raw output previews, and it
+recommends `inspect_tool_and_metric_failures_before_sft` when tool or metric
+issues are present. This enhanced output requires server validation before any
+SFT data or training decision.
+
 Phase 5 AnswerPolicy training-gate orchestrator is implemented locally in
 `scripts/run_final_answer_policy_training_gate.py` with tests in
 `tests/test_run_final_answer_policy_training_gate.py`. It runs the final

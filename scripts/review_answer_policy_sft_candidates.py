@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from collections import Counter
 from datetime import datetime, timezone
@@ -95,6 +96,47 @@ def tool_expected(values: list[Any]) -> bool:
     return bool(tools.intersection({"table_lookup", "simple_calculation"}))
 
 
+def clip_text(value: Any, limit: int = 500) -> str:
+    text = "" if value is None else str(value)
+    return text if len(text) <= limit else text[:limit] + "..."
+
+
+def normalize_answer_hint(value: Any) -> str:
+    text = "" if value is None else str(value)
+    text = text.lower().replace(",", "")
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9.%()-]+", " ", text)).strip()
+
+
+def answer_hit_hint(value: Any, answers: Any) -> bool:
+    normalized_value = normalize_answer_hint(value)
+    if not normalized_value:
+        return False
+    answer_values = answers if isinstance(answers, list) else [answers]
+    for answer in answer_values:
+        normalized_answer = normalize_answer_hint(answer)
+        if normalized_answer and (normalized_answer in normalized_value or normalized_value in normalized_answer):
+            return True
+    return False
+
+
+def review_bucket(row: dict[str, Any], candidate_record_available: bool) -> str:
+    tools = [str(item) for item in row.get("expected_tools") or []]
+    tool_status = str(row.get("tool_status") or "")
+    if not candidate_record_available:
+        return "tool_failure_without_candidate" if tool_status == "error" else "failed_without_candidate"
+    if tool_status == "error":
+        return "tool_failure_needs_repair"
+    if tool_status == "not_run" or row.get("evaluation_mode") == "answer_policy_generation":
+        return "generation_answer_miss_review"
+    if "simple_calculation" in tools:
+        return "calculation_answer_miss_with_tool"
+    if "table_lookup" in tools:
+        return "table_lookup_answer_miss_with_tool"
+    if "local_fact_qa" in tools:
+        return "local_fact_qa_answer_miss"
+    return "answer_miss_review"
+
+
 def build_failure_preview(rows: list[dict[str, Any]], candidate_by_sample: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     preview: list[dict[str, Any]] = []
     for row in rows[:12]:
@@ -164,23 +206,74 @@ def build_manual_review_rows(rows: list[dict[str, Any]], candidate_by_sample: di
         sample_id = str(row.get("sample_id") or "")
         record = candidate_by_sample.get(sample_id)
         metadata = record.get("metadata") if isinstance(record, dict) and isinstance(record.get("metadata"), dict) else {}
+        assistant_target = parse_assistant_target(record) if isinstance(record, dict) else {}
+        answers = row.get("answers") or []
+        candidate_available = record is not None
         manual_rows.append(
             {
                 "sample_id": sample_id,
+                "review_bucket": review_bucket(row, candidate_available),
                 "question": row.get("question"),
-                "answers": row.get("answers"),
+                "answers": answers,
                 "prediction_answer": row.get("prediction_answer"),
+                "tool_answer": row.get("tool_answer"),
+                "candidate_target_answer": assistant_target.get("answer"),
                 "expected_answer_type": row.get("expected_answer_type"),
                 "expected_tools": row.get("expected_tools") or [],
                 "evaluation_mode": row.get("evaluation_mode"),
                 "tool_status": row.get("tool_status"),
-                "tool_answer": row.get("tool_answer"),
-                "candidate_record_available": record is not None,
+                "candidate_record_available": candidate_available,
                 "candidate_tool_results_attached": metadata.get("tool_results_attached"),
+                "prediction_hits_gold_hint": answer_hit_hint(row.get("prediction_answer"), answers),
+                "tool_hits_gold_hint": answer_hit_hint(row.get("tool_answer"), answers),
+                "candidate_hits_gold_hint": answer_hit_hint(assistant_target.get("answer"), answers),
+                "target_citation_block_ids": assistant_target.get("citation_block_ids") or [],
+                "baseline_citation_block_ids": row.get("citation_block_ids") or [],
+                "tool_citation_block_ids": row.get("tool_citation_block_ids") or [],
+                "failure_reasons": row.get("failure_reasons") or [],
+                "target_reasoning_summary": clip_text(assistant_target.get("reasoning_summary"), 240),
+                "raw_model_output_preview": clip_text(row.get("raw_model_output_preview"), 240),
                 "review_needed": "check_gold_answer_evidence_and_metric_normalization",
             }
         )
     return manual_rows
+
+
+def manual_review_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    bucket_counts = Counter(str(row.get("review_bucket") or "") for row in rows)
+    tool_answer_miss_ids: list[str] = []
+    metric_normalization_ids: list[str] = []
+    candidate_target_miss_ids: list[str] = []
+    tool_failure_without_candidate_ids: list[str] = []
+    for row in rows:
+        sample_id = str(row.get("sample_id") or "")
+        if row.get("candidate_record_available") and not row.get("candidate_hits_gold_hint"):
+            candidate_target_miss_ids.append(sample_id)
+        if row.get("prediction_hits_gold_hint") and "answer_miss" in (row.get("failure_reasons") or []):
+            metric_normalization_ids.append(sample_id)
+        if row.get("review_bucket") == "tool_failure_without_candidate":
+            tool_failure_without_candidate_ids.append(sample_id)
+        if (
+            row.get("candidate_record_available")
+            and row.get("tool_status") == "success"
+            and tool_expected(row.get("expected_tools") or [])
+            and row.get("tool_answer")
+            and not row.get("tool_hits_gold_hint")
+        ):
+            tool_answer_miss_ids.append(sample_id)
+    return {
+        "bucket_counts": dict(bucket_counts),
+        "row_count": len(rows),
+        "candidate_target_hits_gold_count": sum(1 for row in rows if row.get("candidate_hits_gold_hint")),
+        "candidate_target_miss_count": len(candidate_target_miss_ids),
+        "candidate_target_miss_sample_ids": sorted(candidate_target_miss_ids),
+        "tool_answer_miss_with_candidate_count": len(tool_answer_miss_ids),
+        "tool_answer_miss_with_candidate_sample_ids": sorted(tool_answer_miss_ids),
+        "metric_normalization_candidate_count": len(metric_normalization_ids),
+        "metric_normalization_candidate_sample_ids": sorted(metric_normalization_ids),
+        "tool_failure_without_candidate_count": len(tool_failure_without_candidate_ids),
+        "tool_failure_without_candidate_sample_ids": sorted(tool_failure_without_candidate_ids),
+    }
 
 
 def candidate_quality_flags(records: list[dict[str, Any]], failed_without_candidate: list[str]) -> dict[str, Any]:
@@ -214,7 +307,11 @@ def candidate_quality_flags(records: list[dict[str, Any]], failed_without_candid
     }
 
 
-def recommendation(flags: dict[str, Any], record_count: int) -> dict[str, Any]:
+def recommendation(
+    flags: dict[str, Any],
+    record_count: int,
+    manual_summary: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     if record_count <= 0:
         return {
             "next_action": "blocked_no_sft_candidate_records",
@@ -232,6 +329,17 @@ def recommendation(flags: dict[str, Any], record_count: int) -> dict[str, Any]:
             "next_action": "repair_sft_candidate_records_before_training",
             "do_not_train_yet": True,
             "reason": "Candidate records have missing target fields or missing tool context.",
+        }
+    manual_summary = manual_summary or {}
+    if (
+        int(manual_summary.get("tool_answer_miss_with_candidate_count") or 0) > 0
+        or int(manual_summary.get("metric_normalization_candidate_count") or 0) > 0
+        or int(manual_summary.get("tool_failure_without_candidate_count") or 0) > 0
+    ):
+        return {
+            "next_action": "inspect_tool_and_metric_failures_before_sft",
+            "do_not_train_yet": True,
+            "reason": "Manual review found wrong tool answers, metric-normalization candidates, or tool failures that should be resolved before training.",
         }
     return {
         "next_action": "manual_review_sft_candidates_before_training",
@@ -289,6 +397,8 @@ def review_answer_policy_sft_candidates(
     failed_without_candidate = sorted(failed_ids - candidate_ids)
     candidate_without_failed = sorted(candidate_ids - failed_ids)
     flags = candidate_quality_flags(records, failed_without_candidate)
+    manual_review = build_manual_review_rows(answer_miss_rows, candidate_by_sample)
+    manual_summary = manual_review_summary(manual_review)
 
     summary = {
         "command": "review_answer_policy_sft_candidates",
@@ -336,7 +446,8 @@ def review_answer_policy_sft_candidates(
             "candidate_without_failed": candidate_without_failed,
         },
         "candidate_quality_flags": flags,
-        "recommendation": recommendation(flags, len(records)),
+        "manual_review_summary": manual_summary,
+        "recommendation": recommendation(flags, len(records), manual_summary),
         "used_training": False,
         "formal_benchmark_acceptance": False,
     }
@@ -345,7 +456,7 @@ def review_answer_policy_sft_candidates(
         summary=summary,
         failure_preview=build_failure_preview(answer_miss_rows, candidate_by_sample),
         candidate_preview=build_candidate_preview(records),
-        manual_review=build_manual_review_rows(answer_miss_rows, candidate_by_sample),
+        manual_review=manual_review,
     )
 
 
@@ -401,6 +512,7 @@ def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
     metrics = summary.get("baseline_metrics") or {}
     alignment = summary.get("candidate_alignment") or {}
     flags = summary.get("candidate_quality_flags") or {}
+    manual_summary = summary.get("manual_review_summary") or {}
     recommendation_payload = summary.get("recommendation") or {}
     lines = [
         "# AnswerPolicy SFT Candidate Review",
@@ -420,6 +532,14 @@ def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
         "## Quality Flags",
         "",
         *[f"- {key}: {value}" for key, value in sorted(flags.items()) if key.endswith("_count")],
+        "",
+        "## Manual Review Summary",
+        "",
+        f"- row_count: {manual_summary.get('row_count')}",
+        f"- bucket_counts: {manual_summary.get('bucket_counts')}",
+        f"- tool_answer_miss_with_candidate_count: {manual_summary.get('tool_answer_miss_with_candidate_count')}",
+        f"- metric_normalization_candidate_count: {manual_summary.get('metric_normalization_candidate_count')}",
+        f"- tool_failure_without_candidate_count: {manual_summary.get('tool_failure_without_candidate_count')}",
         "",
         "## Recommendation",
         "",
