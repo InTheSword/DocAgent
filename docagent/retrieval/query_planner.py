@@ -199,8 +199,27 @@ def _fuse_for_mode(mode: str, rule_queries: list[str], llm_queries: list[str], l
         final_queries = fuse_queries([], llm_queries, limit=limit)
         return final_queries or fuse_queries(rule_queries, [], limit=limit)
     if mode == "hybrid":
-        return fuse_queries(rule_queries, llm_queries, limit=limit)
+        return _fuse_hybrid_queries(rule_queries, llm_queries, limit=limit)
     return fuse_queries(rule_queries, [], limit=limit)
+
+
+def _fuse_hybrid_queries(rule_queries: list[str], llm_queries: list[str], *, limit: int) -> list[str]:
+    final_queries = fuse_queries(rule_queries, llm_queries, limit=limit)
+    if not final_queries or not llm_queries:
+        return final_queries
+    if _query_sources(rule_queries, llm_queries, final_queries).get("llm"):
+        return final_queries
+
+    rule_keys = {_query_identity_key(query) for query in rule_queries}
+    final_keys = {_query_identity_key(query) for query in final_queries}
+    for llm_query in fuse_queries([], llm_queries, limit=len(llm_queries)):
+        llm_key = _query_identity_key(llm_query)
+        if not llm_key or llm_key in rule_keys or llm_key in final_keys:
+            continue
+        if len(final_queries) < limit:
+            return [*final_queries, llm_query]
+        return [*final_queries[:-1], llm_query]
+    return final_queries
 
 
 def _query_sources(rule_queries: list[str], llm_queries: list[str], final_queries: list[str]) -> dict[str, list[str]]:

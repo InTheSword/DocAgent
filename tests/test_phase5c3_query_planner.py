@@ -232,6 +232,25 @@ def test_llm_query_expander_records_unique_queries_added_by_fusion() -> None:
     assert plan.final_queries[-2:] == ["invoice issue date", "billing date"]
 
 
+def test_hybrid_plan_reserves_final_slot_for_unique_llm_query_when_rule_queries_fill_limit() -> None:
+    fake = FakeLLMClient('{"queries": ["unclaimed dividend financial year"]}')
+
+    plan = plan_queries(
+        question="How many pages and tables mention the dividend notice amount?",
+        task_type="local_fact_qa",
+        mode="hybrid",
+        llm_client=fake,
+        limit=3,
+    )
+    payload = plan.to_dict()
+
+    assert len(plan.rule_queries) > 3
+    assert plan.final_queries[-1] == "unclaimed dividend financial year"
+    assert plan.query_sources["llm"] == ["unclaimed dividend financial year"]
+    assert payload["llm_unique_queries"] == ["unclaimed dividend financial year"]
+    assert payload["llm_added_unique_query_count"] == 1
+
+
 def test_llm_query_expander_does_not_parse_context_object_as_loose_queries() -> None:
     response = json.dumps(
         {
