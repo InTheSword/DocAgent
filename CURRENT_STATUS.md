@@ -108,7 +108,7 @@ The local acceptance report is a packaging and grounding check only; it does
 not evaluate final answer quality or use external LLM answer generation, VLM,
 training, GRPO, table lookup, simple calculation, or online MinerU OCR.
 
-Phase 5F full CLI acceptance is ready in
+Phase 5F full CLI acceptance is accepted in
 `scripts/run_phase5f_full_cli_acceptance.py`. The runner reuses the Phase 5G
 CLI regression execution and adds full-entrypoint acceptance checks for
 required task coverage, structured unsupported table/calculation boundary,
@@ -116,9 +116,13 @@ required task coverage, structured unsupported table/calculation boundary,
 presence, and summary flags proving no external API, VLM, training, or full
 E2E path was used. Local execution
 `phase5f_full_cli_20260629_054248_59c59b05` passed 11 cases with 10 completed
-and 1 structured unsupported boundary. This is a local readiness result; server
-smoke remains required before marking Phase 5F full CLI acceptance as
-accepted.
+and 1 structured unsupported boundary. AutoDL server smoke on
+`phase5/phase5f-full-cli-acceptance` at `42ee83d` also passed with run id
+`phase5f_full_cli_20260629_055323_69679174`, 11 cases, 10 completed, 1
+structured unsupported boundary, and 10/10 artifact contracts passing. This
+acceptance covers the CLI entrypoint and trace artifact contract, not final
+answer quality, table lookup, simple calculation, visual pixel QA, online
+MinerU OCR, training, full GRPO E2E, or a new SQLite trace replay benchmark.
 
 Phase 5C-2 LLM-assisted Router fallback is accepted in
 `docagent/router/llm_client.py`, `docagent/router/llm_router.py`, and
@@ -527,9 +531,9 @@ Phase 5I-B Final Answer Quality Benchmark -> not_started
 Phase 5E Document Summary MVP -> implemented
 Phase 5E-A Document Summary Acceptance Pack -> implemented
 Phase 5 structured_extraction deterministic CLI -> implemented
-Phase 5F full CLI acceptance -> ready
+Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
-MVP CLI / trace integration -> not_started
+MVP CLI / trace integration -> accepted
 Demo/closure -> not_started
 ```
 

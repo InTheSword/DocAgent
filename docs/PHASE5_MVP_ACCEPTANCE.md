@@ -305,7 +305,7 @@ Phase 5F-2 server file-to-answer smoke -> accepted
 Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> accepted
-Phase 5F full CLI acceptance -> ready
+Phase 5F full CLI acceptance -> accepted
 ```
 
 ## Exit Criteria For Phase 5C-2
@@ -458,7 +458,7 @@ Phase 5F-3 server smoke -> accepted
 Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> accepted
-Phase 5F full CLI acceptance -> ready
+Phase 5F full CLI acceptance -> accepted
 ```
 
 ## Exit Criteria For Phase 5F-1
@@ -841,14 +841,14 @@ Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
 Phase 5E document_summary -> implemented
 Phase 5C-2 LLM-assisted Router fallback -> accepted
-Phase 5F full CLI acceptance -> ready
+Phase 5F full CLI acceptance -> accepted
 online MinerU OCR execution -> not_started
 local_fact_qa answer quality improvement -> not_started
 ```
 
 ## Exit Criteria For Phase 5F Full CLI Acceptance
 
-Phase 5F full CLI acceptance is ready when:
+Phase 5F full CLI acceptance is accepted when:
 
 - `scripts/run_phase5f_full_cli_acceptance.py` exists and reuses the accepted
   Phase 5G CLI regression execution instead of bypassing the CLI;
@@ -879,8 +879,30 @@ artifact_pass_count = 10
 server_acceptance_required = true
 ```
 
-Phase 5F full CLI acceptance is not yet `accepted`; AutoDL server smoke must
-run the same runner against the server SQLite and existing MinerU-backed sample.
+AutoDL server acceptance evidence:
+
+```text
+branch = phase5/phase5f-full-cli-acceptance
+head = 42ee83d
+server_run_id = phase5f_full_cli_20260629_055323_69679174
+server_status = success
+case_count = 11
+completed_count = 10
+unsupported_count = 1
+artifact_checked_count = 10
+artifact_pass_count = 10
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+final_answer_quality_evaluated = false
+artifact_dir = outputs/acceptance/phase5f_full_cli_server/phase5f_full_cli_20260629_055323_69679174
+```
+
+This acceptance covers the full CLI entrypoint and trace artifact contract. It
+does not accept final answer quality, table lookup, simple calculation, visual
+pixel QA, online MinerU OCR, training, full GRPO E2E, or a new SQLite trace
+replay benchmark.
 
 ## Exit Criteria For Phase 5 MVP
 

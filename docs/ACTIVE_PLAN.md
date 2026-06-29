@@ -26,7 +26,7 @@ Phase 5 Personal-use DocAgent MVP
    output contract and future training data design are revisited
 -> Phase 5E Document Summary MVP implemented locally
 -> Phase 5E-A Document Summary Acceptance Pack implemented locally
--> Phase 5F Full CLI Acceptance runner ready after local acceptance smoke
+-> Phase 5F Full CLI Acceptance accepted after AutoDL server smoke
 -> stop before table_lookup, simple_calculation, VLM,
    local_fact_qa answer-quality fixes, training, and full GRPO E2E
 ```
@@ -101,9 +101,9 @@ Phase 5I-B Final Answer Quality Benchmark -> not_started
 Phase 5E Document Summary MVP -> implemented
 Phase 5E-A Document Summary Acceptance Pack -> implemented
 Phase 5 structured_extraction deterministic CLI -> implemented
-Phase 5F full CLI acceptance -> ready
+Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
-MVP CLI / trace integration -> not_started
+MVP CLI / trace integration -> accepted
 Demo/closure -> not_started
 ```
 
@@ -1101,13 +1101,17 @@ boundary = persisted-evidence structured scans only; no table_lookup,
   simple_calculation, VLM, answer-quality repair, or training
 ```
 
-Phase 5F full CLI acceptance runner is ready locally:
+Phase 5F full CLI acceptance is accepted:
 
 ```text
 runner = scripts/run_phase5f_full_cli_acceptance.py
 local_run_id = phase5f_full_cli_20260629_054248_59c59b05
 local_status = success
-acceptance_status = ready
+server_branch = phase5/phase5f-full-cli-acceptance
+server_head = 42ee83d
+server_run_id = phase5f_full_cli_20260629_055323_69679174
+server_status = success
+acceptance_status = accepted
 case_count = 11
 completed_count = 10
 unsupported_count = 1
@@ -1120,10 +1124,13 @@ used_vlm = false
 used_training = false
 used_full_e2e = false
 final_answer_quality_evaluated = false
-server_acceptance_required = true
+server_artifacts = outputs/acceptance/phase5f_full_cli_server/phase5f_full_cli_20260629_055323_69679174/acceptance_result.json,
+  acceptance_summary.md, artifact_checks.jsonl, regression_summary.json,
+  regression_results.jsonl
 boundary = full CLI entrypoint and artifact contract only; no table_lookup,
   simple_calculation, VLM, online MinerU OCR, training, full GRPO E2E, or
-  final answer quality acceptance
+  final answer quality acceptance. MVP CLI / trace integration acceptance
+  covers CLI trace artifact writing, not a new SQLite trace replay benchmark.
 ```
 
 Phase 4D-C scaffold / command preparation:
@@ -1314,6 +1321,9 @@ Phase 4D-B1.3 server sanity accepted
 + Phase 5I-B Final Answer Quality Benchmark not_started
 + Phase 5E Document Summary MVP implemented with local targeted and Phase 5
   regression tests passing
++ Phase 5F full CLI acceptance accepted after AutoDL server smoke with
+  11 cases, 10 completed, 1 structured unsupported boundary, and 10/10
+  artifact contracts passing
 + targeted and regression tests pass
 + status documents updated
 + branch pushed
