@@ -10,6 +10,9 @@ venv/
 data/raw/
 data/processed/
 data/benchmark/*.jsonl
+data/benchmark/**/*.json
+data/benchmark/**/*.parquet
+data/benchmark/**/*.crdownload
 data/documents/
 data/real_documents/
 outputs/*

@@ -4,15 +4,17 @@
 
 ## 1. Current policy
 
-During the active Phase 3A milestone:
+During the active Phase 5 final-delivery track:
 
 ```text
-reuse accepted MP-DocVQA corpus-backed benchmark artifacts
-→ validate BM25 vs Hybrid on a fixed subset
-→ generate fixed Hybrid evidence for SFT vs GRPO
+prepare small reproducible validation subsets locally
+-> keep source files, hashes, filter reports, manifests, and previews
+-> run formal retrieval/final-answer benchmarks only after the subset contract is accepted
 ```
 
-Do not rebuild training data, change splits, or add a new dataset.
+Do not silently download large datasets. Do not treat subset preparation as
+benchmark evaluation. Training data rebuilds, SFT, GRPO, and model-quality
+claims still require explicit approval.
 
 ## 2. MP-DocVQA
 
@@ -41,6 +43,24 @@ Current Phase 1 training/evaluation evidence is mainly based on official OCR.
 Do not describe it as full MinerU-parsed MP-DocVQA.
 
 Do not download the full RRC image archive unless explicitly approved.
+
+Phase 5 final-delivery local subset preparation:
+
+```text
+script = scripts/prepare_final_eval_subset.py
+local_input_dir = data/benchmark/mp_docvqa/val
+local_inputs = val-00001-of-00029.parquet, val-00002-of-00029.parquet
+output_root = outputs/final_eval/mpdocvqa_val_subset
+status = implemented
+benchmark_status = not_started
+```
+
+The local smoke on 2026-06-29 restored 10 page-window documents and 55 QA
+records from two validation parquet shards. This produces page-window PDFs,
+`qa.jsonl`, `sample_manifest.jsonl`, `filter_report.json`,
+`source_manifest.json`, and previews. It is suitable for raw PDF / OCR /
+page-attribution preparation, but it is not yet a MinerU OCR acceptance run or
+final answer-quality benchmark.
 
 ## 3. Frozen Phase 1 artifacts
 
@@ -82,15 +102,32 @@ Store only safe metadata, hashes, expected evidence, and reports in Git.
 
 ### TAT-QA
 
-Status: `deferred`
+Status: `implemented` for local subset preparation; benchmark evaluation is
+`not_started`.
 
-Future role:
+Current role:
 
 - table + paragraph QA;
 - calculator;
 - numeric normalization;
 - Numeric Accuracy;
 - type-aware reward.
+
+Phase 5 final-delivery local subset preparation:
+
+```text
+script = scripts/prepare_final_eval_subset.py
+local_input = data/benchmark/tatqa/tatqa_dataset_dev.json
+output_root = outputs/final_eval/tatqa_dev_subset
+status = implemented
+benchmark_status = not_started
+```
+
+The local smoke on 2026-06-29 selected 80 validation questions balanced across
+`table_arithmetic`, `table_lookup`, `table_text`, and `text` buckets. TAT-QA is
+structured table/text QA data; it is not raw PDF and must not be described as
+MinerU-parsed evidence. It is used to test table lookup, simple calculation,
+and evidence-use behavior before final model training or evaluation.
 
 ### InfographicVQA
 
@@ -102,7 +139,8 @@ Future role:
 - image-region evidence;
 - OCR-only vs OCR+VLM comparison.
 
-Do not add these datasets until Phase 2 real retrieval and real-document ingestion are accepted.
+Do not add InfographicVQA until visual reasoning / VLM work is explicitly
+started.
 
 ## 6. Split and leakage policy
 

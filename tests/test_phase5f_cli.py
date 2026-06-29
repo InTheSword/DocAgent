@@ -66,9 +66,16 @@ def _repository_with_document(tmp_path: Path) -> Path:
                 block_id="doc1_p001_table",
                 block_type="table",
                 text="Year Revenue 2020 10 2021 15",
-                table_html="<table><tr><td>2020</td><td>10</td></tr></table>",
+                table_html=(
+                    "<table>"
+                    "<tr><th>Year</th><th>Revenue</th></tr>"
+                    "<tr><td>2020</td><td>10</td></tr>"
+                    "<tr><td>2021</td><td>15</td></tr>"
+                    "</table>"
+                ),
                 page_id=1,
                 location=EvidenceLocation(page=1, block_id="doc1_p001_table"),
+                metadata={"table_caption": "Annual revenue"},
             ),
             EvidenceBlock(
                 doc_id="doc1",
@@ -345,7 +352,33 @@ def test_structured_extraction_tables_runs_deterministic_tool(tmp_path: Path) ->
     assert payload["citations"][0]["block_id"] == "doc1_p001_table"
 
 
-def test_table_calculation_question_returns_not_implemented(tmp_path: Path) -> None:
+def test_table_lookup_question_returns_value_with_citation(tmp_path: Path) -> None:
+    db_path = _repository_with_document(tmp_path)
+
+    payload = _run_cli(
+        tmp_path,
+        "--db-path",
+        str(db_path),
+        "--doc-id",
+        "doc1",
+        "--question",
+        "What was the revenue in 2020?",
+        "--output-dir",
+        str(tmp_path / "cli"),
+    )
+
+    assert payload["status"] == "success"
+    assert payload["task_type"] == "table_lookup_or_calculation"
+    assert payload["tools_used"] == ["table_lookup"]
+    assert "10" in payload["answer"]
+    assert payload["reasoning_summary"]
+    assert payload["evidence_used"][0]["doc_id"] == "doc1"
+    assert payload["citations"][0]["block_id"] == "doc1_p001_table"
+    assert payload["citations"][0]["block_type"] == "table"
+    assert payload["citations"][0]["table_caption"] == "Annual revenue"
+
+
+def test_table_calculation_question_returns_traceable_result(tmp_path: Path) -> None:
     db_path = _repository_with_document(tmp_path)
 
     payload = _run_cli(
@@ -360,7 +393,10 @@ def test_table_calculation_question_returns_not_implemented(tmp_path: Path) -> N
         str(tmp_path / "cli"),
     )
 
-    assert payload["status"] == "error"
+    assert payload["status"] == "success"
     assert payload["task_type"] == "table_lookup_or_calculation"
-    assert payload["error"]["type"] == "table_lookup_not_implemented"
-    assert "table_lookup_not_implemented" in payload["warnings"]
+    assert payload["tools_used"] == ["table_lookup", "simple_calculation"]
+    assert "5" in payload["answer"]
+    assert payload["structured_result"]["operation"] == "simple_calculation"
+    assert payload["structured_result"]["calculation"]["expression"] == "15.0 - 10.0"
+    assert payload["citations"][0]["block_id"] == "doc1_p001_table"

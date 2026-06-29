@@ -79,14 +79,13 @@ def test_phase5g_runner_reads_cases_and_writes_reports(tmp_path: Path) -> None:
                 "expected_tools_any": ["extract_all_dates"],
             },
             {
-                "case_id": "table_lookup_not_implemented",
+                "case_id": "table_lookup_or_calculation",
                 "mode": "doc_id",
                 "doc_id": "$FIRST_DOC_ID",
                 "question": "What is the difference between 2020 and 2021 revenue?",
-                "expected_status": "error",
+                "expected_status": "success",
                 "expected_task_type": "table_lookup_or_calculation",
-                "expected_error_type": "table_lookup_not_implemented",
-                "known_limitation_allowed": True,
+                "expected_tools_any": ["simple_calculation"],
             },
             {
                 "case_id": "mineru_missing",
@@ -155,10 +154,9 @@ def test_phase5g_runner_reads_cases_and_writes_reports(tmp_path: Path) -> None:
             return CommandResult(
                 0,
                 _payload(
-                    status="error",
+                    status="success",
                     task_type="table_lookup_or_calculation",
-                    warnings=["table_lookup_not_implemented"],
-                    error={"type": "table_lookup_not_implemented", "message": "not implemented"},
+                    tools_used=["table_lookup", "simple_calculation"],
                     artifact_dir=str(artifact_dir),
                 ),
             )
@@ -175,8 +173,8 @@ def test_phase5g_runner_reads_cases_and_writes_reports(tmp_path: Path) -> None:
 
     assert summary["status"] == "failed"
     assert summary["case_count"] == 7
-    assert summary["completed_count"] == 4
-    assert summary["unsupported_count"] == 1
+    assert summary["completed_count"] == 5
+    assert summary["unsupported_count"] == 0
     assert summary["skipped_count"] == 1
     assert summary["failed_count"] == 1
     assert summary["json_valid_count"] == 5
@@ -187,12 +185,17 @@ def test_phase5g_runner_reads_cases_and_writes_reports(tmp_path: Path) -> None:
         "structured_extraction": 1,
         "table_lookup_or_calculation": 1,
     }
-    assert summary["tools_used_distribution"] == {"count_pages": 1, "document_summary": 1, "extract_all_dates": 1}
+    assert summary["tools_used_distribution"] == {
+        "count_pages": 1,
+        "document_summary": 1,
+        "extract_all_dates": 1,
+        "simple_calculation": 1,
+        "table_lookup": 1,
+    }
     assert summary["failure_taxonomy"] == {"stdout_not_json": 1}
-    assert summary["unsupported_taxonomy"]["table_lookup_not_implemented"] == 1
+    assert summary["unsupported_taxonomy"] == {}
     assert summary["skipped_taxonomy"]["mineru_fixture_missing"] == 1
     assert summary["failure_taxonomy"]["stdout_not_json"] == 1
-    assert summary["known_limitation_counts"]["table_lookup_not_implemented"] == 1
     assert summary["used_external_api"] is False
     assert summary["used_vlm"] is False
     assert summary["used_training"] is False

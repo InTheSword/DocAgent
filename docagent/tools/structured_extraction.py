@@ -146,6 +146,7 @@ def _item(block: EvidenceBlock, *, item_type: str, value: str, text: str) -> dic
     return {
         "type": item_type,
         "value": value,
+        "doc_id": block.doc_id,
         "page": _block_page(block),
         "block_id": block.block_id,
         "block_type": block.block_type,
@@ -155,8 +156,10 @@ def _item(block: EvidenceBlock, *, item_type: str, value: str, text: str) -> dic
 
 def _citation_from_item(item: dict[str, Any]) -> dict[str, Any]:
     return {
+        "doc_id": item.get("doc_id"),
         "page": item.get("page"),
         "block_id": item.get("block_id"),
+        "block_type": item.get("block_type"),
         "text_preview": item.get("text_preview") or "",
     }
 

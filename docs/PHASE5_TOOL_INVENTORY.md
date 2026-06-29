@@ -36,7 +36,8 @@ Known Phase 5B limitations:
 - `count_images` counts image/figure-like evidence blocks and chart metadata
   from MinerU-derived block metadata; it does not perform pixel reasoning.
 - `table_lookup`, `simple_calculation`, `document_summary`, Router, CLI, and
-  trace artifact integration remain deferred.
+  trace artifact integration were deferred at Phase 5B time and are
+  implemented later in the Phase 5 CLI/tool layer.
 
 Current implementation target:
 
@@ -53,6 +54,10 @@ Phase 5F-3 server smoke -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> accepted
 Phase 5C-3 Query Planning + Multi-Query Retrieval -> accepted
 Phase 5H Full Workflow Validation Baseline -> accepted
+Phase 5 final output contract cleanup -> implemented
+Phase 5 deterministic table_lookup -> implemented
+Phase 5 deterministic simple_calculation -> implemented
+Phase 5 raw PDF MinerU local_cli structured failure artifact -> implemented
 ```
 
 ## Phase 5C-2 LLM-assisted Router Fallback Status
@@ -765,26 +770,30 @@ SQLite with small new wrapper code.
 | `get_page_text` | page aggregate block text or blocks filtered by `page_id` | Implemented | Returns 1-based page number, full text, capped preview, block ids, and source. |
 | `list_pages` | page aggregate blocks / page ids | Implemented | Returns 1-based pages, child block counts, page block ids, and capped previews. |
 
-## P1 Tool Plan
+## P1 Tool Status
 
-These are feasible from current artifacts, but require more output contract work.
+These are feasible from current artifacts. The deterministic structured
+extraction paths are implemented in `docagent/tools/structured_extraction.py`
+and wired through `scripts/docagent_cli.py`.
 
 | Tool | Current source | Needs new code? | Notes |
 |---|---|---:|---|
-| `extract_all_tables` | table `EvidenceBlock`s | Yes | Return table id/block id, page, text, html, bbox, preview. |
-| `extract_all_images` | image/chart `EvidenceBlock`s | Yes | Return image id/block id, page, path, caption/OCR text, bbox. |
-| `list_sections` | `raw_mineru_type`, `text_level`, title-like blocks | Yes | Heuristic only until section hierarchy is formalized. |
-| `document_outline` | section/title blocks plus page ordering | Yes | Should clearly mark heuristic confidence. |
+| `extract_all_tables` | table `EvidenceBlock`s | No | Returns table block id, page, type, and preview through structured extraction. |
+| `extract_all_images` | image/chart `EvidenceBlock`s | No | Returns image/chart block id, page, path/caption text where persisted evidence has it. |
+| `list_sections` | `raw_mineru_type`, `text_level`, title-like blocks | No | Heuristic only until section hierarchy is formalized. |
+| `document_outline` | section/title blocks plus page ordering | No | Heuristic outline backed by persisted block metadata. |
 
-## P2 Tool Plan
+## P2 Tool Status
 
-These should wait until P0/P1 contracts and tests are accepted.
+The first deterministic table/numeric implementation is now present. It is
+not a full TAT-QA reasoning engine and should be evaluated on a curated subset
+before any benchmark claim.
 
-| Tool | Current source | Needs new code? | Reason to defer |
+| Tool | Current source | Needs new code? | Current boundary |
 |---|---|---:|---|
-| `table_lookup` | table blocks and `table_html` | Yes | Needs row/column parsing and result citations. |
-| `simple_calculation` | table lookup outputs or extracted numeric spans | Yes | Needs typed numeric normalization and traceable calculation inputs. |
-| `document_summary` | page text and outline/page previews | Yes | Needs summary strategy and citation policy; external LLM use must be bounded. |
+| `table_lookup` | table blocks and `table_html` | No | Deterministic row/header/value selection over parsed table evidence, with block citations. |
+| `simple_calculation` | table lookup outputs or extracted numeric spans | No | Traceable difference/sum/percentage-change over cited numeric table values. |
+| `document_summary` | page text and outline/page previews | No | Deterministic extractive summary with citations; no LLM abstractive quality claim. |
 
 ## Tools To Defer
 
@@ -975,12 +984,13 @@ document_not_found
 Current limitations:
 
 ```text
-PDF/image ingestion inside docagent_cli is not implemented in Phase 5F-2.
-MinerU-backed PDF ingestion should still use scripts/ingest_document.py until
-a configured CLI MinerU path is explicitly added.
-Phase 5E document_summary, table_lookup, simple_calculation, VLM, training,
-and full GRPO E2E remain not_started. LLM-assisted Router fallback was
-accepted later in Phase 5C-2.
+At Phase 5F-2 time, PDF/image ingestion inside docagent_cli was not
+implemented. Later CLI work added MinerU-backed paths and local_cli failure
+artifacts, but real online MinerU OCR acceptance still requires an approved
+environment smoke.
+document_summary, table_lookup, and simple_calculation are implemented later
+as local deterministic tools. VLM, training, and full GRPO E2E remain out of
+the current local delivery scope.
 ```
 
 Accepted server smoke evidence:
@@ -1149,12 +1159,12 @@ Current limitations:
 
 ```text
 Phase 5F-3 accepts existing MinerU output-backed file-to-answer execution.
-Online MinerU OCR/parser execution from raw PDF remains a later task.
-document_summary is not implemented; summary-like questions may fall back to
-local_fact_qa dry-run with warnings.
+Raw PDF MinerU local_cli wiring exists and writes structured failure artifacts,
+but real online/local MinerU OCR parser execution remains unaccepted until an
+approved environment smoke passes.
+document_summary is implemented as a deterministic extractive tool.
 local_fact_qa answer quality is not benchmark-validated by this smoke.
 The GLOBOCAN sample structure_quality is passed_with_warnings.
-Phase 5E document_summary, table_lookup, simple_calculation, VLM, training,
-and full GRPO E2E remain not_started. LLM-assisted Router fallback was
-accepted later in Phase 5C-2.
+table_lookup and simple_calculation are implemented later as deterministic
+local tools. VLM, training, and full GRPO E2E remain not_started.
 ```

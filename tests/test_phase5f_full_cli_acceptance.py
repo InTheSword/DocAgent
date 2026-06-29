@@ -128,10 +128,9 @@ def _fake_runner(*, omit_summary_trace: bool = False):
                 _payload(
                     output_dir=output_dir,
                     case_name="table",
-                    status="error",
+                    status="success",
                     task_type="table_lookup_or_calculation",
-                    warnings=["table_lookup_not_implemented"],
-                    error={"type": "table_lookup_not_implemented", "message": "not implemented"},
+                    tools_used=["table_lookup", "simple_calculation"],
                 ),
             )
         if question == "In the chart, what color is shown?":
@@ -171,8 +170,6 @@ def test_phase5f_full_cli_acceptance_passes_required_contract(tmp_path: Path) ->
     assert set(result["checks"]["missing_task_types"]) == set()
     assert result["not_evaluated"] == [
         "final_answer_quality",
-        "table_lookup",
-        "simple_calculation",
         "visual_pixel_qa",
         "online_mineru_ocr",
         "training",

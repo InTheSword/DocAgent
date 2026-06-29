@@ -31,12 +31,11 @@ REQUIRED_COMPLETED_CASES = {
     "txt_file_to_answer",
     "document_summary",
     "structured_extract_dates",
+    "table_lookup_or_calculation",
     "visual_pixel_qa_boundary",
     "file_not_found",
 }
-REQUIRED_UNSUPPORTED_CASES = {
-    "table_lookup_not_implemented": "table_lookup_not_implemented",
-}
+REQUIRED_UNSUPPORTED_CASES: dict[str, str] = {}
 OPTIONAL_CASES = {"mineru_existing_file_to_answer"}
 REQUIRED_TASK_TYPES = {
     "document_statistics",
@@ -208,8 +207,6 @@ def _evaluate_acceptance(
         "artifact_checks": artifact_checks,
         "not_evaluated": [
             "final_answer_quality",
-            "table_lookup",
-            "simple_calculation",
             "visual_pixel_qa",
             "online_mineru_ocr",
             "training",

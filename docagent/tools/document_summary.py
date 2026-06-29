@@ -294,6 +294,7 @@ def _make_citation(item: dict[str, Any]) -> dict[str, Any]:
         "page": item.get("page"),
         "block_id": item.get("block_id") or "",
         "block_type": item.get("block_type") or "",
+        "text_preview": _truncate(str(item.get("text") or ""), 180),
     }
 
 

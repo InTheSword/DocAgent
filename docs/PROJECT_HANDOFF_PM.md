@@ -1,6 +1,6 @@
 # DocAgent Project Handoff for Product Manager
 
-Updated: 2026-06-28
+Updated: 2026-06-29
 
 ## 1. One-page Conclusion
 
@@ -20,18 +20,26 @@ document registration / ingestion
 -> citations, JSON output, CLI artifacts, and traces
 ```
 
-The strongest accepted evidence is execution stability:
+The strongest accepted evidence is still execution stability:
 
-- Phase 5G CLI regression: accepted, 10 cases, 8 completed, 2 known unsupported, 0 failed.
+- Phase 5G CLI regression: accepted historically; current local regression now includes deterministic table lookup / simple calculation paths.
 - Phase 5H full workflow smoke: accepted, 15 non-dry-run cases, 15 passed, 0 failed.
 - Phase 5I-A evidence-readiness benchmark: accepted as a pre-LLM evidence-readiness baseline, 16 passed and 10 failed out of 26. This is not final answer quality.
+- Final delivery local contract update: implemented top-level
+  `answer`, `reasoning_summary`, `evidence_used`, normalized `citations`,
+  deterministic `table_lookup`, deterministic `simple_calculation`, and MinerU
+  `local_cli` failure artifacts.
+- Final evaluation subset preparation: implemented locally for TAT-QA dev and
+  MP-DocVQA val shard 1-2, with manifests, source hashes, filter reports, and
+  previews under `outputs/final_eval/`.
 
 The most important product gap is clear:
 
 ```text
 DocAgent can route, retrieve, cite, and produce structured artifacts, but it
-has not yet proven final answer quality, document_summary, table lookup,
-simple calculation, online MinerU OCR, VLM reasoning, or UI/demo closure.
+has not yet proven final answer quality, MP-DocVQA/TAT-QA subset benchmark
+quality, online MinerU OCR execution, VLM reasoning, training gains, or
+UI/demo closure.
 ```
 
 ## 2. Source of Truth
@@ -81,10 +89,11 @@ workflow, LoRA-SFT, GRPO, and demo/materials.
 |---|---|---|---|
 | Unified schema and evidence model | `EvidenceBlock`, `DocAgentSample`, `QAState`, `EvidenceLocation` exist in `docagent/schemas.py`. | accepted | Stable foundation. |
 | MP-DocVQA data construction | Historical Phase 1/4 builders and accepted raw page-window assets exist. | accepted | Usable for experiments, not the current product focus. |
-| TAT-QA | Dataset builder exists, but table QA product flow is not implemented. | not_started | Future table/numeric branch. |
+| Final eval subset preparation | `scripts/prepare_final_eval_subset.py` builds TAT-QA and MP-DocVQA validation subset manifests and reports from local files. | implemented | Data is prepared; benchmark evaluation is still future work. |
+| TAT-QA | Dev JSON local subset preparation is implemented; table/numeric product tools have a deterministic local baseline. | implemented | Structured table/numeric source, not raw PDF or MinerU evidence. |
 | InfographicVQA | Dataset builder exists, but visual reasoning is not implemented. | not_started | Future VLM branch. |
 | MinerU to EvidenceBlock | Existing MinerU output conversion, quality report, page blocks, and SQLite persistence exist. | accepted | Existing MinerU output path works. |
-| Online MinerU OCR from raw PDF | CLI has `--parser mineru` local-cli wiring, but stable online/installed OCR execution is not accepted. | not_started | Needs explicit environment and product decision. |
+| Online MinerU OCR from raw PDF | CLI has `--parser mineru --parser-mode local_cli` wiring and structured failure artifacts. | implemented | Real local/API MinerU execution still needs approved environment smoke. |
 | BM25 retrieval | Implemented and tested. | accepted | Baseline retrieval available. |
 | Dense retrieval and reranker | BGE-M3, FAISS, RRF, reranker integration exist with server smoke history. | accepted | Server/model-dependent, not always local. |
 | Query planning / multi-query retrieval | Rule query generation and optional LLM query rewriting are accepted. | accepted | Helps retrieval, not answer generation. |
@@ -95,9 +104,9 @@ workflow, LoRA-SFT, GRPO, and demo/materials.
 | Deterministic document tools | Page/block/table/image counts, page text, list pages are implemented. | accepted | MVP-ready deterministic utilities. |
 | Router | Rule-first router plus optional LLM fallback are accepted. | accepted | Default is deterministic rule router. |
 | Unified CLI | `scripts/docagent_cli.py` is accepted for Phase 5F execution. | accepted | Main user entrypoint today. |
-| Full product CLI acceptance | The CLI has regression and smoke evidence, but final closure remains open. | not_started | Needs PM acceptance criteria. |
-| Document summary | Router can classify it, but summary tool is not implemented. | not_started | High-priority MVP gap. |
-| Table lookup and simple calculation | Router can classify these intents, but tools are not implemented. | not_started | Major product gap for financial/table documents. |
+| Full product CLI acceptance | The CLI has regression/smoke evidence and the final local output contract is implemented. | implemented | Final closure still needs product/dataset acceptance. |
+| Document summary | Deterministic extractive summary tool is implemented and wired through CLI. | implemented | Not an LLM summary-quality benchmark. |
+| Table lookup and simple calculation | Deterministic table lookup and simple calculation over parsed table EvidenceBlocks are implemented. | implemented | Complex TAT-QA reasoning and benchmark quality remain future work. |
 | Visual reasoning / VLM | Explicitly out of Phase 5. | not_started | Do not promise image understanding. |
 | Final answer quality benchmark | Phase 5I-A is only evidence readiness. Phase 5I-B is not started. | not_started | Do not claim final QA quality. |
 | UI / Demo closure | No FastAPI/Gradio product UI is accepted. | not_started | CLI-only handoff. |
@@ -139,9 +148,10 @@ Supported task types:
 
 Important boundary:
 
-Routing to a task type does not mean the task tool is implemented. Today,
-`document_summary`, `table_lookup_or_calculation`, and `structured_extraction`
-mainly return structured unsupported results or fallback warnings.
+Routing to a task type does not by itself prove answer quality. Today,
+`document_summary`, `structured_extraction`, and
+`table_lookup_or_calculation` have deterministic local tool paths, while
+complex reasoning and final answer quality still need evaluation.
 
 ### 5.3 Optional LLM Router Fallback
 
@@ -550,6 +560,7 @@ Tools:
 - `docagent/tools/format_check.py`: answer format check.
 - `docagent/tools/local_fact_qa.py`: local_fact_qa wrapper.
 - `docagent/tools/location_check.py`: evidence location check.
+- `docagent/tools/table_tools.py`: deterministic table lookup and simple calculation over parsed table EvidenceBlocks.
 - `docagent/tools/visual_review.py`: metadata/text-only visual review helper, not VLM.
 
 Utilities:
@@ -575,6 +586,7 @@ Current product/MVP scripts:
 - `scripts/run_phase5g_cli_regression.py`: CLI regression runner.
 - `scripts/run_phase5h_full_workflow_smoke.py`: full workflow smoke.
 - `scripts/run_phase5i_answer_quality_benchmark.py`: evidence-readiness benchmark runner.
+- `scripts/prepare_final_eval_subset.py`: local TAT-QA / MP-DocVQA final-evaluation subset preparation.
 
 Document ingestion and inspection:
 

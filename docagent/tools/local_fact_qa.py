@@ -189,8 +189,10 @@ def _citation(block: EvidenceBlock) -> dict[str, Any]:
     return {
         key: value
         for key, value in {
+            "doc_id": block.doc_id,
             "page": block.location.page if block.location.page is not None else block.page_id,
             "block_id": block.block_id,
+            "block_type": block.block_type,
             "text_preview": _text_preview(block.retrieval_text),
         }.items()
         if value not in {None, ""}

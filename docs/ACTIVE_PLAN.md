@@ -27,8 +27,15 @@ Phase 5 Personal-use DocAgent MVP
 -> Phase 5E Document Summary MVP implemented locally
 -> Phase 5E-A Document Summary Acceptance Pack implemented locally
 -> Phase 5F Full CLI Acceptance accepted after AutoDL server smoke
--> stop before table_lookup, simple_calculation, VLM,
-   local_fact_qa answer-quality fixes, training, and full GRPO E2E
+-> Final Delivery Contract local update implemented:
+   answer + reasoning_summary + evidence_used + citations + trace_path
+-> deterministic table_lookup and simple_calculation implemented locally
+-> raw PDF MinerU local_cli failure artifacts hardened locally
+-> final-evaluation subset preparation implemented locally for TAT-QA dev and
+   MP-DocVQA val shards 1-2
+-> continue to stop before VLM, local_fact_qa answer-quality fixes,
+   training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
+   and final Qwen answer-quality acceptance
 ```
 
 ## Current Status
@@ -101,6 +108,11 @@ Phase 5I-B Final Answer Quality Benchmark -> not_started
 Phase 5E Document Summary MVP -> implemented
 Phase 5E-A Document Summary Acceptance Pack -> implemented
 Phase 5 structured_extraction deterministic CLI -> implemented
+Phase 5 final output contract cleanup -> implemented
+Phase 5 table_lookup deterministic CLI -> implemented
+Phase 5 simple_calculation deterministic CLI -> implemented
+Phase 5 raw PDF MinerU local_cli structured failure artifact -> implemented
+Phase 5 final evaluation subset preparation -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
@@ -722,10 +734,13 @@ file_unavailable_error = file_ingestion_unavailable
 router_used = true
 deterministic_tools_used = true
 local_fact_qa_used = true
-document_summary = not_started
-table_lookup = not_started
-simple_calculation = not_started
-llm_router_fallback = not_started
+document_summary_at_acceptance_time = not_started
+table_lookup_at_acceptance_time = not_started
+simple_calculation_at_acceptance_time = not_started
+llm_router_fallback_at_acceptance_time = not_started
+current_document_summary = implemented
+current_table_lookup = implemented
+current_simple_calculation = implemented
 ```
 
 Phase 5F-1 accepted server CLI smoke:
@@ -795,10 +810,13 @@ pdf_without_cli_backend = parser_backend_unavailable
 unsupported_extension_error = unsupported_file_type
 file_not_found_error = file_not_found
 page_metadata_inconsistent_warning = implemented
-document_summary = not_started
-table_lookup = not_started
-simple_calculation = not_started
-llm_router_fallback = not_started
+document_summary_at_acceptance_time = not_started
+table_lookup_at_acceptance_time = not_started
+simple_calculation_at_acceptance_time = not_started
+llm_router_fallback_at_acceptance_time = not_started
+current_document_summary = implemented
+current_table_lookup = implemented
+current_simple_calculation = implemented
 ```
 
 Phase 5F-2 accepted server file-to-answer smoke:
@@ -1097,8 +1115,9 @@ cli = scripts/docagent_cli.py
 supported_tools = extract_all_dates, extract_all_tables, extract_all_images,
   list_sections, document_outline, structured_extract
 validation = tests/test_phase5f_cli.py and tests/test_phase5g_cli_regression.py
-boundary = persisted-evidence structured scans only; no table_lookup,
-  simple_calculation, VLM, answer-quality repair, or training
+boundary = persisted-evidence structured scans only; table_lookup and
+  simple_calculation are separate deterministic local tools; no VLM,
+  answer-quality repair, or training
 ```
 
 Phase 5F full CLI acceptance is accepted:
@@ -1127,9 +1146,10 @@ final_answer_quality_evaluated = false
 server_artifacts = outputs/acceptance/phase5f_full_cli_server/phase5f_full_cli_20260629_055323_69679174/acceptance_result.json,
   acceptance_summary.md, artifact_checks.jsonl, regression_summary.json,
   regression_results.jsonl
-boundary = full CLI entrypoint and artifact contract only; no table_lookup,
-  simple_calculation, VLM, online MinerU OCR, training, full GRPO E2E, or
-  final answer quality acceptance. MVP CLI / trace integration acceptance
+boundary = full CLI entrypoint and artifact contract only; table_lookup and
+  simple_calculation are implemented later as deterministic local tools, but
+  no VLM, online MinerU OCR acceptance, training, full GRPO E2E, or final
+  answer quality acceptance. MVP CLI / trace integration acceptance
   covers CLI trace artifact writing, not a new SQLite trace replay benchmark.
 ```
 
@@ -1226,6 +1246,33 @@ python -m pytest tests/test_phase5f_full_cli_acceptance.py -q
 python scripts/run_phase5f_full_cli_acceptance.py --db-path outputs/docagent.db --doc-id fe3465edd3da60d2 --output-dir outputs/acceptance/phase5f_full_cli_local --timeout-seconds 180
 python -m pytest tests/test_phase5f_file_ingestion_cli.py tests/test_phase5f_mineru_file_cli.py -q
 $files = Get-ChildItem -LiteralPath 'D:\Projects\docagent\tests' -Filter 'test_phase5*.py' | ForEach-Object { $_.FullName }; python -m pytest @files -q
+python -m pytest tests/test_prepare_final_eval_subset.py -q
+python scripts/prepare_final_eval_subset.py --dataset all --tatqa-limit 80 --mpdocvqa-target-qa-count 50 --mpdocvqa-min-qa-count 30 --mpdocvqa-max-qa-count 70 --overwrite
+```
+
+Final-evaluation subset preparation local smoke:
+
+```text
+resource_boundary = local_only
+script = scripts/prepare_final_eval_subset.py
+tatqa_input = data/benchmark/tatqa/tatqa_dataset_dev.json
+tatqa_output = outputs/final_eval/tatqa_dev_subset
+tatqa_selected_sample_count = 80
+tatqa_bucket_distribution = table_arithmetic:20, table_lookup:20,
+  table_text:20, text:20
+mpdocvqa_input = data/benchmark/mp_docvqa/val/val-00001-of-00029.parquet,
+  data/benchmark/mp_docvqa/val/val-00002-of-00029.parquet
+mpdocvqa_output = outputs/final_eval/mpdocvqa_val_subset
+mpdocvqa_selected_window_count = 10
+mpdocvqa_selected_sample_count = 55
+mpdocvqa_conflicting_window_count = 0
+status = implemented
+benchmark_evaluation_status = not_started
+used_external_api = false
+used_vlm = false
+used_training = false
+used_online_mineru_ocr = false
+used_qwen = false
 ```
 
 Local `main` validation covers code and documentation state. The accepted Gate
@@ -1324,13 +1371,20 @@ Phase 4D-B1.3 server sanity accepted
 + Phase 5F full CLI acceptance accepted after AutoDL server smoke with
   11 cases, 10 completed, 1 structured unsupported boundary, and 10/10
   artifact contracts passing
++ Final Delivery Contract local update implemented with top-level
+  `reasoning_summary`, `evidence_used`, normalized citations,
+  deterministic `table_lookup`, deterministic `simple_calculation`, and
+  MinerU `local_cli` failure artifact writing
++ Final evaluation subset preparation implemented locally with TAT-QA dev and
+  MP-DocVQA val shard 1-2 manifests, filter reports, source hashes, and
+  previews under `outputs/final_eval/`
 + targeted and regression tests pass
 + status documents updated
 + branch pushed
-+ stop before table lookup, simple_calculation,
-   Reader prompt changes, external Answer API integration, training, CDC,
-   Demo, per-qid repairs, further 90-sample probe tuning, and any global
-   `candidate_spans` default change
++ stop before VLM, Reader prompt changes, external Answer API integration,
+   Qwen prompt/training/SFT/GRPO changes, MP-DocVQA/TAT-QA benchmark runs,
+   CDC, Demo, per-qid repairs, further 90-sample probe tuning, and any
+   global `candidate_spans` default change
 ```
 
 ## Phase Documents

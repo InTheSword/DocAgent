@@ -27,47 +27,64 @@ class MinerUParserBackend:
         return content_list_to_blocks(doc_id=doc_id, content_list_path=content_list, document_dir=output_dir.parent)
 
     def _run_local_cli(self, *, file_path: Path, output_dir: Path) -> None:
+        command = [self.command, "-p", str(file_path), "-o", str(output_dir)]
         if shutil.which(self.command) is None:
+            self._write_cli_result(
+                output_dir,
+                {
+                    "command": self.command,
+                    "argv": command,
+                    "returncode": None,
+                    "stdout": "",
+                    "stderr": f"{self.command} is not installed or not on PATH",
+                    "timeout_seconds": self.timeout_seconds,
+                    "timed_out": False,
+                    "command_found": False,
+                },
+            )
             raise RuntimeError(f"{self.command} is not installed or not on PATH")
         try:
             completed = subprocess.run(
-                [self.command, "-p", str(file_path), "-o", str(output_dir)],
+                command,
                 check=False,
                 timeout=self.timeout_seconds,
                 capture_output=True,
                 text=True,
             )
         except subprocess.TimeoutExpired as exc:
-            (output_dir / "mineru_cli_result.json").write_text(
-                json.dumps(
-                    {
-                        "command": self.command,
-                        "returncode": None,
-                        "stdout": exc.stdout,
-                        "stderr": exc.stderr,
-                        "timeout_seconds": self.timeout_seconds,
-                        "timed_out": True,
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                ),
-                encoding="utf-8",
-            )
-            raise
-        (output_dir / "mineru_cli_result.json").write_text(
-            json.dumps(
+            self._write_cli_result(
+                output_dir,
                 {
                     "command": self.command,
-                    "returncode": completed.returncode,
-                    "stdout": completed.stdout,
-                    "stderr": completed.stderr,
+                    "argv": command,
+                    "returncode": None,
+                    "stdout": exc.stdout,
+                    "stderr": exc.stderr,
                     "timeout_seconds": self.timeout_seconds,
-                    "timed_out": False,
+                    "timed_out": True,
+                    "command_found": True,
                 },
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
+            )
+            raise
+        self._write_cli_result(
+            output_dir,
+            {
+                "command": self.command,
+                "argv": command,
+                "returncode": completed.returncode,
+                "stdout": completed.stdout,
+                "stderr": completed.stderr,
+                "timeout_seconds": self.timeout_seconds,
+                "timed_out": False,
+                "command_found": True,
+            },
         )
         if completed.returncode != 0:
             raise RuntimeError(f"MinerU CLI failed with return code {completed.returncode}")
+
+    @staticmethod
+    def _write_cli_result(output_dir: Path, payload: dict[str, object]) -> None:
+        (output_dir / "mineru_cli_result.json").write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )

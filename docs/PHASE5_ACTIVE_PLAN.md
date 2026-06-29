@@ -33,9 +33,18 @@ Phase 5E document_summary -> implemented
 Phase 5E-A document_summary acceptance pack -> implemented
 Phase 5 structured_extraction deterministic CLI -> implemented
 Phase 5F full CLI acceptance -> accepted
+Phase 5 final output contract cleanup -> implemented
+Phase 5 deterministic table_lookup -> implemented
+Phase 5 deterministic simple_calculation -> implemented
+Phase 5 raw PDF MinerU local_cli structured failure artifact -> implemented
 ```
 
 Phase 5D-S validates execution stability, not benchmark-level answer quality.
+The final delivery local update adds the CLI output contract fields
+`reasoning_summary` and `evidence_used`, normalizes citations across tools,
+and implements table lookup / simple calculation over persisted table
+EvidenceBlocks. This is local deterministic functionality, not a Qwen final
+answer-quality benchmark or real MinerU OCR server acceptance.
 
 Current accepted Phase 4D-C result:
 
@@ -1077,7 +1086,8 @@ Boundary:
 ```text
 At Phase 5F-1 acceptance time, document_summary remained Phase 5E not_started;
 it was implemented later as a deterministic local tool.
-table_lookup and simple_calculation remain not_started.
+table_lookup and simple_calculation were not_started at Phase 5F-1 acceptance
+time; they are now implemented as deterministic local tools.
 structured_extraction was implemented later as deterministic persisted-evidence
 scans for dates, table blocks, image/figure blocks, section metadata, outline,
 and generic structured evidence.
@@ -1431,7 +1441,8 @@ Phase 5G is an execution regression baseline, not a benchmark accuracy report.
 Missing local GLOBOCAN / MinerU output fixtures are recorded as skipped.
 At Phase 5G acceptance time, document_summary remained Phase 5E not_started;
 the default local regression was updated after Phase 5E implementation.
-table_lookup and simple_calculation remain not_started.
+table_lookup and simple_calculation were not_started at Phase 5G acceptance
+time; the local regression now includes deterministic table/calculation paths.
 visual_pixel_qa remains unsupported and may fall back to local_fact_qa dry-run.
 LLM-assisted Router fallback is accepted in Phase 5C-2 and remains disabled
 by default unless explicitly configured and allowed.
@@ -1551,7 +1562,8 @@ It does not validate answer quality.
 It does not create a golden QA benchmark.
 At Phase 5H acceptance time, Phase 5E document_summary remained not_started;
 Phase 5E was implemented later and does not change the answer-quality boundary.
-table_lookup and simple_calculation remain not_started.
+table_lookup and simple_calculation were implemented later as deterministic
+local tools and do not change the Phase 5H server answer-quality boundary.
 online MinerU full parsing remains not_started.
 Answer quality validation remains not_started.
 VLM, training, and full GRPO E2E are not executed.

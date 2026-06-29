@@ -35,6 +35,7 @@ from docagent.tools.document_tools import (
 from docagent.tools.document_summary import summarize_document
 from docagent.tools.local_fact_qa import local_fact_qa
 from docagent.tools.structured_extraction import structured_extract
+from docagent.tools.table_tools import table_lookup_or_calculation
 
 
 AVAILABLE_TOOLS = [
@@ -52,6 +53,8 @@ AVAILABLE_TOOLS = [
     "document_outline",
     "extract_all_dates",
     "structured_extract",
+    "table_lookup",
+    "simple_calculation",
 ]
 DEFAULT_OUTPUT_DIR = ROOT / "outputs" / "cli"
 DEFAULT_DOCUMENT_ROOT = ROOT / "data" / "documents"
@@ -185,6 +188,8 @@ def _base_result(
         "task_type": task_type,
         "router_plan": router_plan or {},
         "answer": "",
+        "reasoning_summary": "",
+        "evidence_used": [],
         "citations": [],
         "supporting_evidence_ids": [],
         "tools_used": [],
@@ -641,6 +646,104 @@ def _page_metadata_warnings(metadata_consistency: dict[str, Any]) -> list[str]:
     return [warning] if warning else []
 
 
+def _normalize_citations(
+    repository: DocumentRepository,
+    doc_id: str,
+    citations: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    blocks_by_id = {
+        block.block_id: block
+        for block in repository.load_evidence_blocks(doc_id, include_page_blocks=True)
+    }
+    normalized: list[dict[str, Any]] = []
+    for raw in citations:
+        if not isinstance(raw, dict):
+            continue
+        citation = dict(raw)
+        block_id = str(citation.get("block_id") or "")
+        block = blocks_by_id.get(block_id)
+        citation["doc_id"] = str(citation.get("doc_id") or (block.doc_id if block is not None else doc_id))
+        if block is not None:
+            if citation.get("page") in {None, ""}:
+                citation["page"] = _citation_block_page(block)
+            citation["block_type"] = str(citation.get("block_type") or block.block_type)
+            if not citation.get("text_preview"):
+                citation["text_preview"] = _citation_preview(block)
+            caption = _citation_caption(block)
+            if caption and block.block_type == "table" and not citation.get("table_caption"):
+                citation["table_caption"] = caption
+            if caption and block.block_type in {"image", "figure"} and not citation.get("image_caption"):
+                citation["image_caption"] = caption
+            if block.image_path and not citation.get("image_path"):
+                citation["image_path"] = block.image_path
+        else:
+            citation["block_type"] = str(citation.get("block_type") or "")
+            citation["text_preview"] = str(citation.get("text_preview") or citation.get("preview") or "")
+        normalized.append(citation)
+    return normalized
+
+
+def _evidence_used_from_citations(citations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    evidence: list[dict[str, Any]] = []
+    for citation in citations:
+        item = {
+            "doc_id": citation.get("doc_id") or "",
+            "page": citation.get("page"),
+            "block_id": citation.get("block_id") or "",
+            "block_type": citation.get("block_type") or "",
+            "text_preview": citation.get("text_preview") or "",
+        }
+        for optional_key in ("table_caption", "image_caption", "image_path"):
+            if citation.get(optional_key):
+                item[optional_key] = citation[optional_key]
+        evidence.append(item)
+    return evidence
+
+
+def _reasoning_summary_for_tool(tool_result: dict[str, Any], task_type: str) -> str:
+    explicit = str(tool_result.get("reasoning_summary") or "").strip()
+    if explicit:
+        return explicit
+    if tool_result.get("status") == "error":
+        error = tool_result.get("error") if isinstance(tool_result.get("error"), dict) else {}
+        return str(error.get("message") or "The request could not be completed with the available document evidence.")
+    mapping = {
+        "document_statistics": "Computed deterministic document statistics from the registered document metadata and evidence blocks.",
+        "page_lookup": "Returned the requested page text and cited the page evidence block.",
+        "local_fact_qa": "Answered from retrieved document evidence blocks using the configured AnswerPolicy.",
+        "document_summary": "Built an extractive document summary from persisted evidence blocks and cited supporting blocks.",
+        "structured_extraction": "Scanned persisted evidence blocks for the requested structured items and cited matching blocks.",
+        "table_lookup_or_calculation": "Selected table evidence and returned a traceable lookup or simple calculation result.",
+    }
+    return mapping.get(task_type, "")
+
+
+def _citation_block_page(block: Any) -> int | None:
+    page_id = getattr(block, "page_id", None)
+    if page_id is not None:
+        return int(page_id)
+    location = getattr(block, "location", None)
+    page = getattr(location, "page", None)
+    return int(page) if page is not None else None
+
+
+def _citation_preview(block: Any, limit: int = 220) -> str:
+    text = str(getattr(block, "retrieval_text", "") or getattr(block, "text", "") or getattr(block, "table_html", "") or "")
+    return " ".join(text.split())[:limit]
+
+
+def _citation_caption(block: Any) -> str:
+    metadata = getattr(block, "metadata", {}) or {}
+    for key in ("table_caption", "caption", "image_caption", "chart_caption", "title"):
+        value = metadata.get(key)
+        if not value:
+            continue
+        if isinstance(value, list):
+            return " ".join(str(item) for item in value if str(item).strip())
+        return " ".join(str(value).split())
+    return ""
+
+
 def _run_local_fact_qa(
     *,
     repository: DocumentRepository,
@@ -799,6 +902,40 @@ def _run_structured_extraction(
     }
 
 
+def _run_table_lookup_or_calculation(
+    *,
+    repository: DocumentRepository,
+    doc_id: str,
+    question: str,
+    router_plan: dict[str, Any],
+    dry_run: bool,
+) -> dict[str, Any]:
+    selected_tools = [str(item) for item in router_plan.get("selected_tools") or ["table_lookup"]]
+    if dry_run:
+        return {
+            "status": "success",
+            "answer": "",
+            "reasoning_summary": "Dry run only; table lookup and calculation were not executed.",
+            "evidence_used": [],
+            "citations": [],
+            "supporting_evidence_ids": [],
+            "tools_used": selected_tools,
+            "structured_result": {
+                "task_type": "table_lookup_or_calculation",
+                "status": "dry_run",
+                "selected_tools": selected_tools,
+            },
+            "warnings": ["dry_run_no_answer_generated"],
+            "error": {},
+        }
+    return table_lookup_or_calculation(
+        repository,
+        doc_id,
+        question,
+        selected_tools=selected_tools,
+    )
+
+
 def _unsupported_task(task_type: str) -> dict[str, Any]:
     mapping = {
         "table_lookup_or_calculation": (
@@ -884,9 +1021,13 @@ def _dispatch_tool(
             dry_run=dry_run,
         )
     if task_type == "table_lookup_or_calculation":
-        unsupported = _unsupported_task(task_type)
-        unsupported["warnings"] = list(dict.fromkeys((router_plan.get("warnings") or []) + [unsupported["error"]["type"]]))
-        return unsupported
+        return _run_table_lookup_or_calculation(
+            repository=repository,
+            doc_id=doc_id,
+            question=question,
+            router_plan=router_plan,
+            dry_run=dry_run,
+        )
     return _unsupported_task(task_type)
 
 
@@ -918,6 +1059,8 @@ def _finalize_qa_result(
         "question": result.get("question") or "",
         "task_type": result.get("task_type") or "",
         "tools_used": result.get("tools_used") or [],
+        "reasoning_summary": result.get("reasoning_summary") or "",
+        "evidence_used": result.get("evidence_used") or [],
         "used_file_ingestion": bool(source.get("was_ingested", used_file_ingestion)),
         "reused_existing_document": bool(source.get("reused_existing", False)),
         "ingestion_status": source.get("ingestion_status") or "",
@@ -965,6 +1108,9 @@ def _finalize_qa_result(
         "trace_run_id": str(result.get("trace_run_id") or ""),
         "result_status": result.get("status"),
         "tools_used": result.get("tools_used") or [],
+        "reasoning_summary": result.get("reasoning_summary") or "",
+        "evidence_used": result.get("evidence_used") or [],
+        "citations": result.get("citations") or [],
         "supporting_evidence_ids": result.get("supporting_evidence_ids") or [],
         "error": result.get("error") or {},
     }
@@ -1294,7 +1440,9 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
         )
         result["status"] = tool_result.get("status") or "error"
         result["answer"] = tool_result.get("answer") or ""
-        result["citations"] = tool_result.get("citations") or []
+        result["citations"] = _normalize_citations(repository, doc_id, tool_result.get("citations") or [])
+        result["reasoning_summary"] = _reasoning_summary_for_tool(tool_result, result["task_type"])
+        result["evidence_used"] = tool_result.get("evidence_used") or _evidence_used_from_citations(result["citations"])
         result["supporting_evidence_ids"] = tool_result.get("supporting_evidence_ids") or []
         result["tools_used"] = tool_result.get("tools_used") or []
         router_execution = _router_execution(router_plan)

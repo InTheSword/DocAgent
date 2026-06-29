@@ -24,12 +24,14 @@ DEFAULT_CLI_PATH = ROOT / "scripts" / "docagent_cli.py"
 
 UNSUPPORTED_ERROR_TYPES = {
     "document_summary_not_implemented",
-    "table_lookup_not_implemented",
+    "table_lookup_unsupported",
+    "simple_calculation_unsupported",
     "unsupported_task_type",
 }
 KNOWN_LIMITATION_MARKERS = {
     "document_summary_not_implemented",
-    "table_lookup_not_implemented",
+    "table_lookup_unsupported",
+    "simple_calculation_unsupported",
     "visual_understanding_unsupported",
     "fallback_to_local_fact_qa",
     "dry_run_no_answer_generated",
@@ -194,14 +196,13 @@ def _load_cases(cases_jsonl: Path | None, *, run_dir: Path, doc_id: str, txt_fix
             "expected_tools_any": ["extract_all_dates"],
         },
         {
-            "case_id": "table_lookup_not_implemented",
+            "case_id": "table_lookup_or_calculation",
             "mode": "doc_id",
             "doc_id": dynamic_doc_id,
             "question": "What is the difference between 2020 and 2021 revenue?",
-            "expected_status": "error",
+            "expected_status": "success",
             "expected_task_type": "table_lookup_or_calculation",
-            "expected_error_type": "table_lookup_not_implemented",
-            "known_limitation_allowed": True,
+            "expected_tools_any": ["simple_calculation"],
         },
         {
             "case_id": "visual_pixel_qa_boundary",

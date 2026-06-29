@@ -82,9 +82,21 @@ Target success output:
   "doc_id": "some_doc_id",
   "task_type": "document_statistics",
   "answer": "The document contains 12 pages, 5 tables, and 3 image or figure regions.",
+  "reasoning_summary": "Computed deterministic document statistics from registered metadata and evidence blocks.",
+  "evidence_used": [
+    {
+      "doc_id": "some_doc_id",
+      "page": 1,
+      "block_id": "optional",
+      "block_type": "text",
+      "text_preview": "optional"
+    }
+  ],
   "citations": [
     {
+      "doc_id": "some_doc_id",
       "page": 1,
+      "block_type": "text",
       "block_id": "optional",
       "text_preview": "optional"
     }
@@ -119,6 +131,8 @@ status
 doc_id
 task_type
 answer
+reasoning_summary
+evidence_used
 citations
 tools_used
 trace_path
@@ -165,11 +179,14 @@ document_statistics
 page_lookup
 structured_extraction
 document_summary
+table_lookup_or_calculation
 ```
 
-`table_lookup_or_calculation` may be classified by the router before a mature
-table tool exists. Until the tool exists, it may fall back to `local_fact_qa`
-with a warning.
+`table_lookup_or_calculation` is implemented as a deterministic local tool for
+persisted table EvidenceBlocks. It supports row/column-style lookup and simple
+traceable calculations from cited numeric table values. It is not a full
+TAT-QA reasoning engine; unsupported table structures or missing numeric
+inputs return structured unsupported errors with citations when available.
 
 Phase 5C implements the rule-first single-step Router / Planner for:
 
@@ -229,8 +246,10 @@ Useful existing tests to keep green:
 
 - No VLM or pixel-level visual reasoning in Phase 5.
 - Image/chart answers only use OCR, captions, nearby text, and metadata.
-- Table lookup is not yet a typed row/column engine.
-- `document_summary` needs a bounded summarization strategy before acceptance.
+- Table lookup and simple calculation are deterministic local tools over
+  parsed table blocks; complex table reasoning remains deferred.
+- `document_summary` is deterministic extractive summarization, not an LLM
+  abstractive summary-quality benchmark.
 - `scripts/query_document.py` is a useful existing QA entrypoint, but it is not
   the final unified MVP CLI.
 - Existing local fact QA quality is limited by candidate answer extraction and
@@ -265,7 +284,8 @@ Phase 5B P0 deterministic document tools are complete when:
 - focused tests cover normal counts, page lookup, list pages, JSON
   serialization, and structured errors;
 - Router, `scripts/docagent_cli.py`, final trace artifacts, `document_summary`,
-  `table_lookup`, and `simple_calculation` remain deferred.
+  `table_lookup`, and `simple_calculation` were deferred at Phase 5B time and
+  are implemented later in the Phase 5 CLI/tool layer.
 
 Next implementation target:
 
@@ -474,13 +494,12 @@ Phase 5F-1 Unified CLI MVP is implemented when:
 - `--doc-id + --question` checks document existence, calls the Phase 5C Router,
   dispatches deterministic document tools for `document_statistics`, dispatches
   page tools for `page_lookup`, and dispatches Phase 5D `local_fact_qa`;
-- `--file + --question` is part of the CLI contract. Current support is
-  partial: already-ingested files can be reused by SHA; otherwise the CLI
-  returns structured `file_ingestion_unavailable` and points users to
-  `scripts/ingest_document.py`;
-- unsupported task types return structured errors such as
-  `table_lookup_not_implemented`; `document_summary` and
-  `structured_extraction` are now implemented deterministic CLI paths;
+- `--file + --question` is part of the CLI contract. Current support includes
+  text ingestion, existing MinerU output ingestion, and raw PDF MinerU
+  `local_cli` execution when the approved local command is installed;
+- unsupported task types return structured errors; `document_summary`,
+  `structured_extraction`, `table_lookup`, and `simple_calculation` are now
+  implemented deterministic CLI paths;
 - stdout is a single JSON object and every QA run writes
   `result.json`, `summary.json`, `router_plan.json`, and `trace.json` under
   `outputs/cli/<run_id>/`;
@@ -732,18 +751,22 @@ used_full_e2e = false
 acceptance_boundary = existing MinerU output-backed execution smoke, not online MinerU OCR execution or benchmark answer quality
 ```
 
-Phase 5F-3 does not implement Phase 5E document_summary, LLM-assisted Router
+Phase 5F-3 did not implement Phase 5E document_summary, LLM-assisted Router
 fallback, table lookup, simple calculation, VLM, training, full GRPO E2E,
-AnswerPolicy prompt changes, or candidate answer extraction changes.
+AnswerPolicy prompt changes, or candidate answer extraction changes. Summary,
+Router fallback, table lookup, and simple calculation were implemented later
+in the Phase 5 CLI/tool layer.
 
 Accepted limitations:
 
 ```text
 Phase 5F-3 accepts existing MinerU output-backed file-to-answer execution.
-Online MinerU OCR/parser execution from raw PDF remains a later task.
+Raw PDF MinerU local_cli wiring now exists with structured failure artifacts,
+but real online/local MinerU OCR parser execution remains unaccepted until an
+approved environment smoke passes.
 Router correctly classifies "What is this document about?" as document_summary,
-but Phase 5E document_summary is not implemented, so CLI falls back to
-local_fact_qa dry-run.
+and Phase 5E document_summary is now implemented as a deterministic
+extractive CLI tool.
 local_fact_qa answer quality is not benchmark-validated by this smoke.
 The GLOBOCAN sample structure_quality is passed_with_warnings.
 ```
@@ -798,11 +821,12 @@ Boundary:
 - Phase 5G is a CLI execution stability regression, not a benchmark accuracy
   report.
 - Missing local GLOBOCAN / MinerU fixture paths are recorded as skipped.
-- Phase 5E `document_summary` remains not_started.
+- Phase 5E `document_summary` was not_started at Phase 5G acceptance time and
+  is now implemented locally.
 - Phase 5C-2 LLM-assisted Router fallback is accepted and disabled by
   default unless explicitly configured and allowed.
-- table lookup, simple calculation, VLM, training, and full GRPO E2E remain
-  out of scope.
+- table lookup and simple calculation are now implemented locally; VLM,
+  training, and full GRPO E2E remain out of scope.
 
 Accepted server regression evidence:
 
@@ -842,6 +866,9 @@ Phase 5G server regression -> accepted
 Phase 5E document_summary -> implemented
 Phase 5C-2 LLM-assisted Router fallback -> accepted
 Phase 5F full CLI acceptance -> accepted
+Phase 5 final output contract cleanup -> implemented
+Phase 5 deterministic table_lookup -> implemented
+Phase 5 deterministic simple_calculation -> implemented
 online MinerU OCR execution -> not_started
 local_fact_qa answer quality improvement -> not_started
 ```
@@ -855,14 +882,13 @@ Phase 5F full CLI acceptance is accepted when:
 - required CLI paths cover `list_documents`, `document_statistics`,
   `page_lookup`, `local_fact_qa`, `.txt` file input, `document_summary`,
   `structured_extraction`, `file_not_found`, visual unsupported fallback, and
-  the table/calculation structured unsupported boundary;
+  deterministic table lookup / simple calculation;
 - every non-list, non-skipped QA case writes `result.json`, `summary.json`,
   `router_plan.json`, and `trace.json`;
 - summary artifacts record `used_external_api=false`, `used_vlm=false`,
   `used_training=false`, and `used_full_e2e=false`;
-- the runner records that final answer quality, table lookup, simple
-  calculation, visual pixel QA, online MinerU OCR, training, and full GRPO E2E
-  are not evaluated.
+- the runner records that final answer quality, visual pixel QA, online MinerU
+  OCR, training, and full GRPO E2E are not evaluated.
 
 Local readiness evidence:
 
@@ -900,9 +926,10 @@ artifact_dir = outputs/acceptance/phase5f_full_cli_server/phase5f_full_cli_20260
 ```
 
 This acceptance covers the full CLI entrypoint and trace artifact contract. It
-does not accept final answer quality, table lookup, simple calculation, visual
-pixel QA, online MinerU OCR, training, full GRPO E2E, or a new SQLite trace
-replay benchmark.
+does not accept final answer quality, visual pixel QA, online MinerU OCR,
+training, full GRPO E2E, or a new SQLite trace replay benchmark. Table lookup
+and simple calculation are implemented later as deterministic local tools and
+still require dataset/product evaluation before benchmark claims.
 
 ## Exit Criteria For Phase 5 MVP
 

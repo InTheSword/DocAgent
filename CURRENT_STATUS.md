@@ -15,8 +15,9 @@ Phase 5B P0 deterministic document tools are accepted in
 `docagent/tools/document_tools.py`. The tools read from
 `DocumentRepository`, `documents.page_count`, and persisted `EvidenceBlock`
 payloads. They do not implement Router, `scripts/docagent_cli.py`, final CLI
-trace artifact creation, `document_summary`, `table_lookup`, or
-`simple_calculation`.
+trace artifact creation, or later Phase 5 CLI tools. `document_summary`,
+`table_lookup`, and `simple_calculation` are implemented later in the Phase 5
+CLI/tool layer.
 
 Phase 5C rule-first Router / Planner is accepted in `docagent/router/`.
 It returns schema-valid single-step planning decisions from question,
@@ -93,8 +94,8 @@ bounded set of representative textual blocks, and returns `answer`, `summary`,
 `document_summary` is now included in CLI `available_tools`, so obvious summary
 requests route to the summary tool instead of the old generic unsupported path.
 The implementation does not call external APIs, LLM answer generation, VLM,
-AnswerPolicy, training, GRPO, table lookup, simple calculation, or online
-MinerU OCR. Local Phase 5 tests pass; no server smoke has been run for this
+AnswerPolicy, training, GRPO, or online MinerU OCR. Local Phase 5 tests pass;
+no server smoke has been run for this
 local-only deterministic milestone.
 
 Phase 5E-A Document Summary Acceptance Pack is implemented in
@@ -107,6 +108,34 @@ EvidenceBlocks, and writes
 The local acceptance report is a packaging and grounding check only; it does
 not evaluate final answer quality or use external LLM answer generation, VLM,
 training, GRPO, table lookup, simple calculation, or online MinerU OCR.
+
+Phase 5 Final Delivery local contract update is implemented in
+`scripts/docagent_cli.py`, `docagent/tools/table_tools.py`,
+`docagent/tools/local_fact_qa.py`, `docagent/tools/document_summary.py`,
+`docagent/tools/structured_extraction.py`, and
+`docagent/parser/mineru_backend.py`. The CLI now includes top-level
+`reasoning_summary` and `evidence_used`, normalizes citation fields across
+text/table/image/page evidence, dispatches `table_lookup_or_calculation` to a
+deterministic table tool, supports traceable simple difference/sum/percentage
+calculations from cited table values, and writes `mineru_cli_result.json` for
+MinerU local_cli command-missing/timeout/nonzero failures. Status is
+`implemented`: local tests verify the contract and deterministic table paths,
+but MP-DocVQA/TAT-QA evaluation, real Qwen answer-quality acceptance, and real
+MinerU OCR server smoke remain pending.
+
+Phase 5 final evaluation subset preparation is implemented in
+`scripts/prepare_final_eval_subset.py` with local tests in
+`tests/test_prepare_final_eval_subset.py`. The script prepares reproducible
+validation-subset artifacts without downloading data or running models. The
+2026-06-29 local smoke used
+`data/benchmark/tatqa/tatqa_dataset_dev.json` to select 80 balanced TAT-QA dev
+questions, and
+`data/benchmark/mp_docvqa/val/val-00001-of-00029.parquet` plus
+`val-00002-of-00029.parquet` to restore 10 MP-DocVQA page-window PDFs with 55
+QA records. Artifacts are under `outputs/final_eval/tatqa_dev_subset` and
+`outputs/final_eval/mpdocvqa_val_subset`. Status is `implemented`: this is
+data preparation only, not MinerU OCR acceptance, final answer-quality
+benchmarking, Qwen evaluation, SFT, or GRPO.
 
 Phase 5F full CLI acceptance is accepted in
 `scripts/run_phase5f_full_cli_acceptance.py`. The runner reuses the Phase 5G
@@ -121,8 +150,10 @@ and 1 structured unsupported boundary. AutoDL server smoke on
 `phase5f_full_cli_20260629_055323_69679174`, 11 cases, 10 completed, 1
 structured unsupported boundary, and 10/10 artifact contracts passing. This
 acceptance covers the CLI entrypoint and trace artifact contract, not final
-answer quality, table lookup, simple calculation, visual pixel QA, online
-MinerU OCR, training, full GRPO E2E, or a new SQLite trace replay benchmark.
+answer quality, visual pixel QA, online MinerU OCR, training, full GRPO E2E,
+or a new SQLite trace replay benchmark. Table lookup and simple calculation
+are implemented later as local deterministic tools and require separate
+product/dataset evaluation before any benchmark claim.
 
 Phase 5C-2 LLM-assisted Router fallback is accepted in
 `docagent/router/llm_client.py`, `docagent/router/llm_router.py`, and
@@ -856,8 +887,9 @@ Current conclusion:
   citations, and artifacts. The accepted server run passed 15/15 non-dry-run
   cases with valid JSON and artifact output for every case.
 - Phase 5E document_summary is implemented locally as a deterministic
-  extractive summary tool. Table lookup, simple calculation, online MinerU OCR
-  execution, and local_fact_qa answer quality improvement remain not_started.
+  extractive summary tool. Deterministic table lookup and simple calculation
+  are implemented locally. Online MinerU OCR execution acceptance and
+  local_fact_qa answer quality improvement remain not_started.
 
 Phase 4D-C accepted server result:
 
