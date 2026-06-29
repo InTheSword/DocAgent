@@ -291,6 +291,21 @@ calculation merely because the question text contains row-label terms such as
 `decrease` or `weighted-average`. Local tests pass; the larger40 server rerun
 is pending and this repair is not yet a final answer-quality acceptance.
 
+The next local table-tool repair is implemented in
+`docagent/tools/table_tools.py` with expanded tests in
+`tests/test_phase5_table_tools.py`. It preserves blank HTML cells, merges
+multi-row headers, prioritizes direct row-label matches over generic
+`year/end/amount/number` terms, handles repeated `Granted`/`Vested` activity
+rows, uses section-row context for child rows such as `Basic`, computes
+`High`/`Low` differences from the question date column, and appends a
+traceable million display for positive `$000` lookup cells. Local diagnostic
+replay of the 12 larger-gate table/tool miss rows now has 12/12 successful
+tool executions and 12/12 answer hits. The full local TAT-QA subset diagnostic
+`local_table_tool_row_context_scale_probe_20260629` has 80 cases,
+`pass_rate=0.75`, 56/60 table-tool successes, 40/60 answer hits, and 60/60
+citation block hits. This remains `implemented` and diagnostic-only until the
+same deterministic audit is rerun on the server artifacts.
+
 Phase 5 AnswerPolicy training-gate orchestrator is implemented locally in
 `scripts/run_final_answer_policy_training_gate.py` with tests in
 `tests/test_run_final_answer_policy_training_gate.py`. It runs the final

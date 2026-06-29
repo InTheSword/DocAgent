@@ -22,9 +22,12 @@ STOPWORDS = {
     "between",
     "by",
     "calculate",
+    "calculated",
     "change",
     "difference",
     "do",
+    "end",
+    "ended",
     "for",
     "from",
     "give",
@@ -32,8 +35,12 @@ STOPWORDS = {
     "in",
     "is",
     "me",
+    "number",
+    "numbers",
     "of",
     "on",
+    "respective",
+    "respectively",
     "show",
     "table",
     "than",
@@ -43,6 +50,8 @@ STOPWORDS = {
     "value",
     "was",
     "what",
+    "year",
+    "years",
 }
 
 
@@ -311,19 +320,41 @@ def _unsupported(
 def _select_lookup_value(candidate: TableCandidate, question: str) -> dict[str, Any] | None:
     rows = _selectable_rows(candidate.data_rows or candidate.rows)
     years = _years(question)
+    repeated_values = _activity_values(candidate, question)
+    if repeated_values and _asks_for_multiple_activity_values(question):
+        return {
+            "value": ", ".join(str(value["text"]) for value in repeated_values),
+            "column": repeated_values[0].get("column", ""),
+            "row": [value.get("row") for value in repeated_values],
+            "row_label": _activity_label(question) or "values",
+        }
+    if _asks_for_year_values(question):
+        header_years = _year_labels_from_header(candidate.header)
+        if header_years:
+            return {
+                "value": ", ".join(header_years),
+                "column": "years",
+                "row": candidate.header,
+                "row_label": "years",
+            }
     row_required_labels = [] if _header_has_any_label(candidate.header, years) else years
     best_row = _best_row(rows, question, required_labels=row_required_labels)
     if best_row is None:
         return None
-    column_index = _metric_column(candidate.header, question)
+    column_index = _year_column(candidate.header, years)
+    if column_index is None:
+        column_index = _metric_column(candidate.header, question)
     column_index = _aligned_column_index(candidate.header, best_row, column_index)
     if column_index is None or column_index >= len(best_row):
         column_index = _last_numeric_column(best_row, exclude_values=set(years))
     if column_index is None:
         return None
+    raw_value = best_row[column_index]
+    column = candidate.header[column_index] if column_index < len(candidate.header) else ""
     return {
-        "value": best_row[column_index],
-        "column": candidate.header[column_index] if column_index < len(candidate.header) else "",
+        "value": _lookup_display_value(raw_value, column),
+        "raw_value": raw_value,
+        "column": column,
         "row": best_row,
         "row_label": _row_label(best_row, years),
     }
@@ -335,6 +366,9 @@ def _calculation_values(candidate: TableCandidate, question: str) -> list[dict[s
     column_index = _metric_column(candidate.header, question)
     operation = _calculation_operation(question)
     values: list[dict[str, Any]] = []
+    high_low_values = _high_low_values(candidate, question)
+    if len(high_low_values) >= 2:
+        return high_low_values
     if operation == "average":
         row_values = _average_values_from_best_row(candidate, question, years)
         if len(row_values) >= 2:
@@ -457,6 +491,10 @@ def _requires_calculation(question: str) -> bool:
 
 def _average_values_from_best_row(candidate: TableCandidate, question: str, years: list[str]) -> list[dict[str, Any]]:
     rows = _selectable_rows(candidate.data_rows or candidate.rows)
+    activity_values = _activity_values(candidate, question)
+    if len(activity_values) >= 2:
+        return activity_values
+
     if years and _header_has_any_label(candidate.header, years):
         row = _best_row(rows, question, required_labels=[])
         if row is not None:
@@ -508,15 +546,132 @@ def _average_values_from_best_row(candidate: TableCandidate, question: str, year
 def _best_row(rows: list[list[str]], question: str, *, required_labels: list[str]) -> list[str] | None:
     query_tokens = _content_tokens(question)
     best: tuple[float, list[str]] | None = None
+    context_tokens: set[str] = set()
     for row in rows:
+        if _is_section_context_row(row):
+            context_tokens = _content_tokens(row[0])
+            continue
         row_text = " ".join(row)
         if required_labels and not any(label in row_text for label in required_labels):
             continue
-        score = float(len(query_tokens & set(_content_tokens(row_text))))
+        row_tokens = set(_content_tokens(row_text))
+        label_tokens = set(_content_tokens(row[0] if row else ""))
+        score = 2.0 * len(query_tokens & label_tokens)
+        score += 0.75 * len(query_tokens & (row_tokens | context_tokens))
         score += 3.0 * sum(1 for label in required_labels if label in row_text)
         score += 0.1 * len(row)
+        if not _has_non_year_number(row):
+            score -= 2.0
         if best is None or score > best[0]:
             best = (score, row)
+        if _starts_activity_context(row):
+            context_tokens = _content_tokens(row[0])
+    return best[1] if best is not None else None
+
+
+def _high_low_values(candidate: TableCandidate, question: str) -> list[dict[str, Any]]:
+    query_tokens = _content_tokens(question)
+    if not {"high", "low"}.issubset(query_tokens):
+        return []
+    rows = _selectable_rows(candidate.data_rows or candidate.rows)
+    high_row = _row_with_label(rows, "high")
+    low_row = _row_with_label(rows, "low")
+    if high_row is None or low_row is None:
+        return []
+    column_index = _question_column(candidate.header, question)
+    values: list[dict[str, Any]] = []
+    for label, row in (("low", low_row), ("high", high_row)):
+        value_index = _aligned_column_index(candidate.header, row, column_index)
+        if value_index is None or value_index >= len(row):
+            value_index = _last_numeric_column(row, exclude_values=set(_years(question)))
+        if value_index is None:
+            continue
+        numeric = _parse_number(row[value_index])
+        if numeric is None:
+            continue
+        values.append(
+            {
+                "label": label,
+                "value": numeric,
+                "text": row[value_index],
+                "row": row,
+                "column": candidate.header[value_index] if value_index < len(candidate.header) else "",
+            }
+        )
+    return values
+
+
+def _activity_values(candidate: TableCandidate, question: str) -> list[dict[str, Any]]:
+    label = _activity_label(question)
+    if not label:
+        return []
+    rows = _selectable_rows(candidate.data_rows or candidate.rows)
+    matches = [row for row in rows if _row_label_matches(row, label)]
+    if len(matches) < 2:
+        return []
+    selected_rows = [matches[0], matches[-1]]
+    values: list[dict[str, Any]] = []
+    for row in selected_rows:
+        value_index = _first_numeric_column(row)
+        if value_index is None:
+            continue
+        numeric = _parse_number(row[value_index])
+        if numeric is None:
+            continue
+        values.append(
+            {
+                "label": label,
+                "value": numeric,
+                "text": row[value_index],
+                "row": row,
+                "column": candidate.header[value_index] if value_index < len(candidate.header) else "",
+            }
+        )
+    return values
+
+
+def _activity_label(question: str) -> str | None:
+    normalized = question.casefold()
+    for label in ("granted", "vested", "forfeited", "exercised"):
+        if re.search(rf"\b{label}\b", normalized):
+            return label
+    return None
+
+
+def _asks_for_multiple_activity_values(question: str) -> bool:
+    normalized = question.casefold()
+    return "respective" in normalized or "respectively" in normalized
+
+
+def _row_label_matches(row: list[str], label: str) -> bool:
+    first = (row[0] if row else "").casefold().strip()
+    return bool(re.fullmatch(rf"{re.escape(label)}\.?", first))
+
+
+def _row_with_label(rows: list[list[str]], label: str) -> list[str] | None:
+    for row in rows:
+        first = (row[0] if row else "").casefold().strip()
+        if first == label:
+            return row
+    return None
+
+
+def _question_column(header: list[str], question: str) -> int | None:
+    if not header:
+        return None
+    query_tokens = _content_tokens(question)
+    years = set(_years(question))
+    best: tuple[float, int] | None = None
+    for index, value in enumerate(header):
+        header_tokens = set(_content_tokens(value))
+        if not header_tokens:
+            continue
+        score = float(len(query_tokens & header_tokens))
+        score += 2.0 * sum(1 for year in years if year in str(value))
+        if score <= 0:
+            continue
+        if best is None or score > best[0]:
+            best = (score, index)
     return best[1] if best is not None else None
 
 
@@ -550,6 +705,23 @@ def _header_label_index(header: list[str], label: str) -> int | None:
     return None
 
 
+def _year_column(header: list[str], years: list[str]) -> int | None:
+    for year in years:
+        index = _header_label_index(header, year)
+        if index is not None:
+            return index
+    return None
+
+
+def _year_labels_from_header(header: list[str]) -> list[str]:
+    labels: list[str] = []
+    for value in header:
+        for year in _years(str(value)):
+            if year not in labels:
+                labels.append(year)
+    return labels
+
+
 def _aligned_column_index(header: list[str], row: list[str], index: int | None) -> int | None:
     if index is None:
         return None
@@ -573,6 +745,37 @@ def _is_header_like_row(row: list[str]) -> bool:
     if len(year_cells) == len(numeric_cells) and len(numeric_cells) >= 1:
         return True
     return False
+
+
+def _is_section_context_row(row: list[str]) -> bool:
+    if not row:
+        return False
+    first = _normalize_space(row[0])
+    if not first:
+        return False
+    if not first.endswith(":"):
+        return False
+    return not any(_parse_number(cell) is not None for cell in row[1:])
+
+
+def _starts_activity_context(row: list[str]) -> bool:
+    first = (row[0] if row else "").casefold()
+    return bool(re.match(r"\s*(?:nonvested|outstanding)\s+at\b", first))
+
+
+def _has_non_year_number(row: list[str]) -> bool:
+    return _first_numeric_column(row) is not None
+
+
+def _first_numeric_column(row: list[str]) -> int | None:
+    for index, cell in enumerate(row):
+        numeric = _parse_number(cell)
+        if numeric is None:
+            continue
+        if _is_year_cell(cell):
+            continue
+        return index
+    return None
 
 
 def _is_year_cell(value: str) -> bool:
@@ -610,7 +813,7 @@ def _rows_from_html(html: str) -> list[list[str]]:
         return []
     parser = _HTMLTableParser()
     parser.feed(html)
-    return [[cell for cell in row if cell] for row in parser.rows if any(cell for cell in row)]
+    return [row for row in parser.rows if any(cell for cell in row)]
 
 
 def _rows_from_text(text: str) -> list[list[str]]:
@@ -644,10 +847,54 @@ def _tokenize_row(text: str) -> list[str]:
 def _split_header(rows: list[list[str]]) -> tuple[list[str], list[list[str]]]:
     if not rows:
         return [], []
+    header_rows: list[list[str]] = []
+    data_start = 0
+    for index, row in enumerate(rows):
+        if _looks_like_initial_header_row(row):
+            header_rows.append(row)
+            data_start = index + 1
+            continue
+        break
+    if header_rows:
+        return _merge_header_rows(header_rows), rows[data_start:] or rows
     first = rows[0]
     if any(_parse_number(cell) is None for cell in first):
         return first, rows[1:] or rows
     return [], rows
+
+
+def _looks_like_initial_header_row(row: list[str]) -> bool:
+    if not row:
+        return True
+    cells = [_normalize_space(cell) for cell in row]
+    non_empty = [cell for cell in cells if cell]
+    if not non_empty:
+        return True
+    first = cells[0] if cells else ""
+    numeric_cells = [cell for cell in non_empty if _parse_number(cell) is not None]
+    year_cells = [cell for cell in numeric_cells if _is_year_cell(cell)]
+    if numeric_cells and len(year_cells) == len(numeric_cells):
+        return True
+    if first == "":
+        return True
+    if re.fullmatch(r"\([^)]*(?:millions|thousands|usd|dollars)[^)]*\)", first, flags=re.I):
+        return True
+    return False
+
+
+def _merge_header_rows(header_rows: list[list[str]]) -> list[str]:
+    width = max((len(row) for row in header_rows), default=0)
+    merged: list[str] = []
+    for index in range(width):
+        parts: list[str] = []
+        for row in header_rows:
+            if index >= len(row):
+                continue
+            value = _normalize_space(row[index])
+            if value and value not in parts:
+                parts.append(value)
+        merged.append(_normalize_space(" ".join(parts)))
+    return merged
 
 
 def _citation(block: EvidenceBlock) -> dict[str, Any]:
@@ -725,8 +972,33 @@ def _format_number(value: float) -> str:
     return f"{value:.4f}".rstrip("0").rstrip(".")
 
 
+def _format_one_decimal(value: float) -> str:
+    return f"{value:.1f}".rstrip("0").rstrip(".")
+
+
+def _lookup_display_value(value: str, column: str) -> str:
+    numeric = _parse_number(value)
+    if numeric is None or numeric <= 0:
+        return value
+    normalized_column = column.casefold()
+    if "000" not in normalized_column:
+        return value
+    if "$" not in column and "usd" not in normalized_column:
+        return value
+    return f"{value} (about ${_format_one_decimal(numeric / 1000)} million)"
+
+
 def _years(text: str) -> list[str]:
-    return list(dict.fromkeys(re.findall(r"\b(?:19|20)\d{2}\b", text or "")))
+    values = re.findall(r"\b(?:19|20)\d{2}\b", text or "")
+    for short in re.findall(r"\bFY\s*([0-9]{2})\b", text or "", flags=re.I):
+        year = int(short)
+        values.append(str(2000 + year if year < 50 else 1900 + year))
+    return list(dict.fromkeys(values))
+
+
+def _asks_for_year_values(text: str) -> bool:
+    normalized = (text or "").casefold()
+    return bool(re.search(r"\b(?:which|what)\s+years?\b|\bin\s+which\s+years?\b", normalized))
 
 
 def _calculation_years(text: str) -> list[str]:

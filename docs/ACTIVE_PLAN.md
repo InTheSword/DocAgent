@@ -62,6 +62,11 @@ Phase 5 Personal-use DocAgent MVP
    wrong tool outputs; enriched manual-review rows server validation succeeded,
    and explicit simple_calculation selection is now enforced locally to avoid
    table row-label words triggering unintended calculations
+-> table row/header selection repair implemented locally for larger-gate
+   tool failures: multi-row headers, direct row-label priority, repeated
+   Granted/Vested activity rows, section-row context, high/low date columns,
+   and $000-to-million display; local 12-row replay now has 12/12 tool
+   answer hits, server rerun pending
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -156,6 +161,7 @@ Phase 5 AnswerPolicy review gate invalid-citation semantics -> real_model_verifi
 Phase 5 larger AnswerPolicy Qwen diagnostic gate -> real_model_verified
 Phase 5 AnswerPolicy SFT candidate artifact generation -> implemented
 Phase 5 AnswerPolicy SFT candidate review -> real_model_verified
+Phase 5 table tool row/header selection repair -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
@@ -1498,6 +1504,17 @@ table_tool_calculation_trigger = implemented locally; table lookup no longer
   simple_calculation, preventing row-label terms such as "decrease" or
   "weighted-average" from forcing simple_calculation; server larger40 rerun
   pending
+table_tool_row_header_selection = implemented locally; table parsing now
+  preserves blank HTML cells, merges initial multi-row headers, prioritizes
+  direct row-label tokens over generic year/end words, handles repeated
+  Granted/Vested activity rows, uses section-row context for child rows such
+  as Basic under Weighted-average common shares outstanding, computes high/low
+  differences from the question date column, and appends traceable million
+  display values for positive $000 lookup cells; local replay of the 12
+  larger-gate table/tool miss rows has status success 12/12 and answer hits
+  12/12, while the full local TAT-QA diagnostic is 80 cases, pass_rate 0.75,
+  table-tool success 56/60, answer_hit 40/60, citation_block_hit 60/60;
+  server deterministic audit rerun pending
 benchmark_evaluation_status = not_started
 ```
 
