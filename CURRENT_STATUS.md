@@ -203,6 +203,16 @@ evidence is available. Local smoke uses heuristic/fake policies only. Status is
 `implemented`; real Qwen baseline, prompt-quality acceptance, and formal
 benchmark status are still `not_started`.
 
+Phase 5 AnswerPolicy baseline review gate is implemented locally in
+`scripts/review_answer_policy_baseline.py` with tests in
+`tests/test_review_answer_policy_baseline.py`. It reads either a full
+AnswerPolicy baseline artifact directory or a compact `outputs/sync/<run_id>/`
+bundle, then writes `review.json` and `review.md` with failure distributions,
+compact failed samples, and a diagnostic training-gate recommendation. Missing
+baseline artifacts return a structured failed review. This gate does not start
+SFT, start GRPO, accept Qwen prompt quality, or promote local diagnostics to a
+formal benchmark result.
+
 Phase 5F full CLI acceptance is accepted in
 `scripts/run_phase5f_full_cli_acceptance.py`. The runner reuses the Phase 5G
 CLI regression execution and adds full-entrypoint acceptance checks for

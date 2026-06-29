@@ -40,6 +40,8 @@ Implemented local capabilities:
 - local final-evaluation subset preparation for TAT-QA dev and MP-DocVQA val
 - local subset diagnostic report with JSON and Markdown summaries
 - final subset AnswerPolicy baseline runner for server Qwen prompt-v2 smoke
+- diagnostic AnswerPolicy baseline review gate for full artifacts or compact
+  sync bundles
 
 Not included in the current local delivery:
 
@@ -204,6 +206,18 @@ placeholders suitable for server result return.
 TAT-QA table/calculation cases run deterministic table tools first and pass
 the compact tool result into the AnswerPolicy prompt; MP-DocVQA manifest cases
 remain skipped until raw PDF/MinerU/retrieval evidence is available.
+
+Review a full AnswerPolicy baseline artifact directory or compact sync bundle:
+
+```powershell
+python scripts\review_answer_policy_baseline.py `
+  --run-dir outputs\sync\<run_id> `
+  --output-dir outputs\final_eval\answer_policy_baseline_review
+```
+
+The review writes `review.json` and `review.md` with a diagnostic
+`training_gate` recommendation. It does not start SFT/GRPO and does not mark
+Qwen prompt quality or benchmark acceptance.
 
 Enable optional query planning:
 

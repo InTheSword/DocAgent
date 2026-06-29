@@ -39,6 +39,8 @@ Phase 5 Personal-use DocAgent MVP
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; real Qwen
    server run remains not_started
+-> AnswerPolicy baseline review gate implemented locally for full artifacts or
+   compact sync bundles; it emits diagnostic training-gate recommendations only
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -124,6 +126,7 @@ Phase 5 final delivery CLI guide -> implemented
 Phase 5 AnswerPolicy IO candidate schema / citation allowlist -> implemented
 Phase 5 AnswerPolicy prompt v2 candidate citation contract -> implemented
 Phase 5 final AnswerPolicy baseline runner -> implemented
+Phase 5 AnswerPolicy baseline review gate -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
@@ -1376,6 +1379,8 @@ Final AnswerPolicy baseline runner:
 resource_boundary = server_required_for_qwen_acceptance
 script = scripts/run_final_answer_policy_baseline.py
 test = tests/test_run_final_answer_policy_baseline.py
+review_script = scripts/review_answer_policy_baseline.py
+review_test = tests/test_review_answer_policy_baseline.py
 input_scope = prepared final-eval subset artifacts under outputs/final_eval/
 local_smoke = heuristic/fake-policy only; diagnostic_not_formal_benchmark
 server_target = Qwen base prompt-v2 baseline over prepared TAT-QA
@@ -1388,6 +1393,9 @@ artifact_outputs = result.json, results.jsonl, summary.json, summary.md,
 diagnostics = per-row compact final answer, citation validation, raw output
   preview, token/latency metadata, selected/dropped block ids, and evidence
   context hash for Qwen failure review without full prompt/log sync
+review_gate = reads a full artifact directory or outputs/sync/<run_id>/ bundle
+  and writes review.json/review.md with a diagnostic SFT/GRPO gate
+  recommendation; it does not start training or mark benchmark acceptance
 status = implemented
 used_qwen_local = false
 server_qwen_baseline = not_started
@@ -1506,9 +1514,9 @@ Phase 4D-B1.3 server sanity accepted
 + AnswerPolicy IO candidate schema, shared prompt v2 candidate-citation
   contract, SFT/GRPO record compatibility, and reward/eval schema
   compatibility implemented locally; final subset AnswerPolicy baseline runner
-  implemented locally with heuristic/fake-policy validation; real Qwen
-  baseline, prompt-quality evidence, training execution, and final answer
-  benchmark remain not_started
+  and review gate implemented locally with heuristic/fake-policy validation;
+  real Qwen baseline, prompt-quality evidence, training execution, and final
+  answer benchmark remain not_started
 + targeted and regression tests pass
 + status documents updated
 + branch pushed
