@@ -262,15 +262,29 @@ AnswerPolicy baseline artifact directory, selects rows with `answer_miss`,
 assigns broad diagnostic buckets, and writes `result.json`, `summary.json`,
 `summary.md`, `answer_miss_rows.jsonl`, `preview.json`, and `manifest.json`.
 The review is artifact-only: it does not rerun Qwen, create training records,
-start SFT/GRPO, or tune against individual validation examples. The server
-one-off diagnostic `answer_policy_full80_answer_miss_review_20260630` over the
-full80 tablefix baseline found 19 answer misses with bucket counts
+start SFT/GRPO, or tune against individual validation examples. The initial
+server one-off diagnostic `answer_policy_full80_answer_miss_review_20260630`
+over the full80 tablefix baseline found 19 answer misses with bucket counts
 `answer_granularity_or_metric_review=3`,
 `calculation_reasoning_or_operand_review=7`,
 `model_extractive_precision_review=4`,
 `repaired_parse_plus_answer_miss=1`, and
-`table_selection_or_column_review=4`. This is diagnostic evidence for where
-generic review should focus before training decisions; it is not final answer
+`table_selection_or_column_review=4`.
+
+The tracked server validation
+`answer_policy_full80_answer_miss_review_tracked_20260630` succeeded at commit
+`2b2a431` against the real-Qwen full80 tablefix baseline artifact. It found
+the same 19 answer misses and reported bucket counts
+`answer_granularity_or_metric_review=2`,
+`calculation_reasoning_or_operand_review=7`,
+`model_extractive_precision_review=4`,
+`repaired_parse_plus_answer_miss=1`, and
+`table_selection_or_column_review=5`, with `used_training=false`,
+`formal_benchmark_acceptance=false`, and
+`validation_subset_used_for_training=false`. The one-bucket shift from the
+one-off diagnostic comes from the tracked script's generic bucket assignment,
+not from sample-specific tuning. This is diagnostic evidence for generic tool,
+prompt, or metric review before training decisions; it is not final answer
 quality acceptance or benchmark evaluation.
 
 Phase 5 AnswerPolicy SFT candidate data builder is implemented locally in
