@@ -1285,7 +1285,7 @@ Final-evaluation local subset diagnostic runner:
 resource_boundary = local_only
 script = scripts/run_final_eval_subset.py
 test = tests/test_run_final_eval_subset.py
-local_probe_run_id = local_subset_full_diagnostic_taxonomy
+local_probe_run_id = local_subset_full_diagnostic_report
 local_probe_case_count = 135
 local_probe_passed_count = 85
 local_probe_failed_count = 50
@@ -1303,6 +1303,7 @@ local_probe_requires_mineru_or_retrieval_count = 55
 local_probe_failure_stage_distribution = tool_execution:23, answer_quality:27
 local_probe_failure_reason_distribution = table_lookup_unsupported:23,
   answer_miss:50
+local_probe_summary_markdown_path = outputs/final_eval/local_subset_diagnostic/local_subset_full_diagnostic_report/summary.md
 status = implemented
 quality_status = diagnostic_only
 benchmark_evaluation_status = not_started
@@ -1417,8 +1418,9 @@ Phase 4D-B1.3 server sanity accepted
   MP-DocVQA val shard 1-2 manifests, filter reports, source hashes, and
   previews under `outputs/final_eval/`
 + Final evaluation local subset diagnostic runner implemented locally with
-  `results.jsonl`, `summary.json`, `preview.json`, and `manual_review.md`
-  outputs; status remains diagnostic-only, not benchmark-evaluated
+  `results.jsonl`, `summary.json`, `summary.md`, `preview.json`, and
+  `manual_review.md` outputs; status remains diagnostic-only, not
+  benchmark-evaluated
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

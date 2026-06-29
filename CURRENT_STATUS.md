@@ -146,10 +146,12 @@ manifest/evidence readiness without fabricating model answers. The local probe
 `local_subset_probe_after_fix` over 10 TAT-QA and 10 MP-DocVQA samples wrote
 `results.jsonl`, `summary.json`, `preview.json`, and `manual_review.md` under
 `outputs/final_eval/local_subset_diagnostic/`. The full local diagnostic
-`local_subset_full_diagnostic_taxonomy` completed with 135 cases, 85 passed,
+`local_subset_full_diagnostic_report` completed with 135 cases, 85 passed,
 50 failed, 60 table-tool executions, 37 table-tool successes, 60/60 citation
 block hits for evaluated tool cases, 10 answer hits, and 4 numeric-accuracy
-hits. The runner now reports diagnostic rates and failure taxonomy:
+hits, and wrote `results.jsonl`, `summary.json`, `summary.md`,
+`preview.json`, and `manual_review.md`. The runner now reports diagnostic rates
+and failure taxonomy:
 `pass_rate=0.6296`, `answer_hit_rate=0.1667`,
 `numeric_accuracy_rate=0.2`, `citation_block_hit_rate=1.0`,
 `failure_stage_distribution=tool_execution:23, answer_quality:27`, and

@@ -460,6 +460,7 @@ def summarize(rows: list[dict[str, Any]], *, run_id: str, artifact_dir: Path) ->
         "used_full_e2e": False,
         "results_path": safe_relpath(artifact_dir / "results.jsonl"),
         "summary_path": safe_relpath(artifact_dir / "summary.json"),
+        "summary_markdown_path": safe_relpath(artifact_dir / "summary.md"),
         "preview_path": safe_relpath(artifact_dir / "preview.json"),
         "manual_review_path": safe_relpath(artifact_dir / "manual_review.md"),
     }
@@ -508,6 +509,87 @@ def write_manual_review(path: Path, rows: list[dict[str, Any]]) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
+    lines = [
+        "# Final Eval Local Subset Summary",
+        "",
+        "## Scope",
+        "",
+        f"- evaluation_scope: `{summary.get('evaluation_scope')}`",
+        f"- quality_status: `{summary.get('quality_status')}`",
+        "- formal_benchmark_acceptance: `false`",
+        f"- final_llm_answer_quality_evaluated: `{str(summary.get('final_llm_answer_quality_evaluated')).lower()}`",
+        f"- used_qwen: `{str(summary.get('used_qwen')).lower()}`",
+        f"- used_online_mineru_ocr: `{str(summary.get('used_online_mineru_ocr')).lower()}`",
+        f"- used_vlm: `{str(summary.get('used_vlm')).lower()}`",
+        f"- used_training: `{str(summary.get('used_training')).lower()}`",
+        "",
+        "## Inputs",
+        "",
+        f"- run_id: `{summary.get('run_id')}`",
+        f"- case_count: {summary.get('case_count')}",
+        f"- passed_count: {summary.get('passed_count')}",
+        f"- failed_count: {summary.get('failed_count')}",
+        f"- pass_rate: {summary.get('pass_rate')}",
+        "",
+        "Dataset distribution:",
+        *(_markdown_distribution(summary.get("dataset_distribution") or {})),
+        "",
+        "Evaluation mode distribution:",
+        *(_markdown_distribution(summary.get("evaluation_mode_distribution") or {})),
+        "",
+        "## Evidence Readiness",
+        "",
+        f"- evidence_ready_count: {summary.get('evidence_ready_count')}",
+        f"- evidence_ready_rate: {summary.get('evidence_ready_rate')}",
+        f"- requires_model_answer_count: {summary.get('requires_model_answer_count')}",
+        f"- requires_mineru_or_retrieval_count: {summary.get('requires_mineru_or_retrieval_count')}",
+        "",
+        "## Answer Quality",
+        "",
+        f"- answer_evaluated_count: {summary.get('answer_evaluated_count')}",
+        f"- answer_hit_count: {summary.get('answer_hit_count')}",
+        f"- answer_hit_rate: {summary.get('answer_hit_rate')}",
+        f"- numeric_evaluated_count: {summary.get('numeric_evaluated_count')}",
+        f"- numeric_accuracy_count: {summary.get('numeric_accuracy_count')}",
+        f"- numeric_accuracy_rate: {summary.get('numeric_accuracy_rate')}",
+        "",
+        "## Attribution Quality",
+        "",
+        f"- citation_evaluated_count: {summary.get('citation_evaluated_count')}",
+        f"- citation_block_hit_count: {summary.get('citation_block_hit_count')}",
+        f"- citation_block_hit_rate: {summary.get('citation_block_hit_rate')}",
+        f"- citation_page_hit_count: {summary.get('citation_page_hit_count')}",
+        f"- citation_page_hit_rate: {summary.get('citation_page_hit_rate')}",
+        "",
+        "## Format Quality",
+        "",
+        f"- format_valid_count: {summary.get('format_valid_count')}",
+        f"- format_valid_rate: {summary.get('format_valid_rate')}",
+        "",
+        "## Failure Taxonomy",
+        "",
+        "Failure stage distribution:",
+        *(_markdown_distribution(summary.get("failure_stage_distribution") or {})),
+        "",
+        "Failure reason distribution:",
+        *(_markdown_distribution(summary.get("failure_reason_distribution") or {})),
+        "",
+        "## Next Gates",
+        "",
+        "- Deterministic table failures remain local tool-quality work, not model acceptance evidence.",
+        "- Text and MP-DocVQA cases require retrieval/MinerU evidence packs and Qwen AnswerPolicy evaluation.",
+        "- Formal MP-DocVQA/TAT-QA benchmark status still requires the approved real parser/model evaluation path.",
+    ]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _markdown_distribution(distribution: dict[str, Any]) -> list[str]:
+    if not distribution:
+        return ["- none"]
+    return [f"- {key}: {value}" for key, value in sorted(distribution.items())]
+
+
 def run_final_eval_subset(
     *,
     output_root: Path = DEFAULT_OUTPUT_ROOT,
@@ -535,9 +617,19 @@ def run_final_eval_subset(
     summary = summarize(rows, run_id=run_id, artifact_dir=artifact_dir)
     write_jsonl(artifact_dir / "results.jsonl", rows)
     write_json(artifact_dir / "summary.json", summary)
+    write_summary_markdown(artifact_dir / "summary.md", summary)
     write_json(artifact_dir / "preview.json", {"summary": summary, "results": rows[:5]})
     write_manual_review(artifact_dir / "manual_review.md", rows)
-    return {**summary, "artifact_paths": [summary["results_path"], summary["summary_path"], summary["preview_path"], summary["manual_review_path"]]}
+    return {
+        **summary,
+        "artifact_paths": [
+            summary["results_path"],
+            summary["summary_path"],
+            summary["summary_markdown_path"],
+            summary["preview_path"],
+            summary["manual_review_path"],
+        ],
+    }
 
 
 def build_parser() -> argparse.ArgumentParser:

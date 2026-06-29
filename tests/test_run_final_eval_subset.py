@@ -213,12 +213,22 @@ def test_final_eval_runner_writes_local_diagnostic_artifacts(tmp_path: Path) -> 
     assert summary["requires_mineru_or_retrieval_count"] == 1
     assert summary["final_llm_answer_quality_evaluated"] is False
     assert summary["used_qwen"] is False
+    assert "summary.md" in summary["summary_markdown_path"]
+    assert summary["summary_markdown_path"] in summary["artifact_paths"]
 
     run_dir = tmp_path / "runs" / "fixture_run"
     assert (run_dir / "results.jsonl").is_file()
     assert (run_dir / "summary.json").is_file()
+    assert (run_dir / "summary.md").is_file()
     assert (run_dir / "preview.json").is_file()
     assert (run_dir / "manual_review.md").is_file()
+    summary_markdown = (run_dir / "summary.md").read_text(encoding="utf-8")
+    assert "## Evidence Readiness" in summary_markdown
+    assert "## Answer Quality" in summary_markdown
+    assert "## Attribution Quality" in summary_markdown
+    assert "## Format Quality" in summary_markdown
+    assert "## Failure Taxonomy" in summary_markdown
+    assert "formal_benchmark_acceptance: `false`" in summary_markdown
 
     rows = {row["sample_id"]: row for row in read_jsonl(run_dir / "results.jsonl")}
     assert rows["tatqa_table_q"]["evaluation_mode"] == "deterministic_table_tool"
@@ -258,3 +268,4 @@ def test_final_eval_runner_cli_smoke(tmp_path: Path) -> None:
     assert exit_code == 0
     summary = json.loads((output_root / "cli_fixture" / "summary.json").read_text(encoding="utf-8"))
     assert summary["case_count"] == 4
+    assert (output_root / "cli_fixture" / "summary.md").is_file()
