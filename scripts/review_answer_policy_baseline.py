@@ -167,9 +167,14 @@ def training_gate(summary: dict[str, Any], result: dict[str, Any], row_analysis:
     if _rate(metrics["citation_block_hit_rate"]) < 0.80:
         reasons.append("citation_block_hit_rate_below_0.80")
         return _gate("citation_contract_repair_before_training", "not_ready", "fix_citation_selection_before_sft", reasons)
-    if row_analysis["invalid_citation_id_count_in_rows"] > 0:
+    citation_miss_count = int((row_analysis.get("failure_reason_distribution") or {}).get("citation_block_miss") or 0)
+    if row_analysis["invalid_citation_id_count_in_rows"] > 0 and (
+        citation_miss_count > 0 or row_analysis["empty_citation_count_in_rows"] > 0
+    ):
         reasons.append("invalid_model_selected_citation_ids_present")
         return _gate("citation_contract_repair_before_training", "not_ready", "fix_citation_allowlist_use_before_sft", reasons)
+    if row_analysis["invalid_citation_id_count_in_rows"] > 0:
+        reasons.append("invalid_model_selected_citation_ids_filtered_by_allowlist")
     if _rate(metrics["answer_hit_rate"]) < 0.50:
         reasons.append("answer_hit_rate_below_0.50")
         return _gate("sft_data_design_candidate", "candidate", "design_sft_data_from_failures_and_evidence_packs", reasons)

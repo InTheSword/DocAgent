@@ -211,8 +211,15 @@ diagnostic smoke ran with run id
 `evaluated_count=12`, `format_valid_rate=1.0`, `answer_hit_rate=0.75`,
 `citation_block_hit_rate=0.75`, and `pass_rate=0.5833`. The review gate
 recommended `citation_contract_repair_before_training`, so Qwen execution is
-`real_model_verified` for smoke only, while prompt-quality acceptance,
-training, and formal benchmark status remain `not_started`.
+`real_model_verified` for smoke only. After tool-result citation allowlist
+repair, the server rerun
+`answer_policy_training_gate_qwen_tool_citation_fix_20260629` reached
+`citation_block_hit_rate=1.0`, `pass_rate=0.75`, and no
+`citation_block_miss`; the remaining review blocker was
+`invalid_model_selected_citation_ids_present`, meaning invalid raw model
+citation ids had been filtered from the canonical final output but were still
+treated as a hard pre-training blocker. Prompt-quality acceptance, training,
+and formal benchmark status remain `not_started`.
 
 Phase 5 AnswerPolicy baseline review gate is implemented locally in
 `scripts/review_answer_policy_baseline.py` with tests in
@@ -220,9 +227,13 @@ Phase 5 AnswerPolicy baseline review gate is implemented locally in
 AnswerPolicy baseline artifact directory or a compact `outputs/sync/<run_id>/`
 bundle, then writes `review.json` and `review.md` with failure distributions,
 compact failed samples, and a diagnostic training-gate recommendation. Missing
-baseline artifacts return a structured failed review. This gate does not start
-SFT, start GRPO, accept Qwen prompt quality, or promote local diagnostics to a
-formal benchmark result.
+baseline artifacts return a structured failed review. The gate now treats
+filtered invalid raw model citation ids as diagnostic when final canonical
+citations hit the gold block and there is no `citation_block_miss`; invalid
+ids remain a hard citation-contract blocker only when final citations are
+empty or miss. This adjustment is implemented locally and awaits server rerun.
+This gate does not start SFT, start GRPO, accept Qwen prompt quality, or
+promote local diagnostics to a formal benchmark result.
 
 Phase 5 AnswerPolicy SFT candidate data builder is implemented locally in
 `scripts/build_answer_policy_sft_candidates.py` with tests in
@@ -246,10 +257,12 @@ the top-level gate summary plus nested baseline/review/candidate summaries.
 Local heuristic smoke is diagnostic and correctly skips SFT candidate
 generation with `needs_real_qwen_baseline`. The first real Qwen server smoke
 completed successfully but skipped SFT candidates because
-`citation_block_hit_rate=0.75` was below the review gate threshold. This is a
-server-ready execution wrapper with real-model smoke evidence only; real Qwen
-baseline acceptance, training execution, and benchmark acceptance remain
-`not_started`.
+`citation_block_hit_rate=0.75` was below the review gate threshold. The
+post-repair server rerun improved final canonical citation hit to 1.0 and
+left only answer misses, but the local review-gate invalid-citation semantics
+change still needs a server rerun. This is a server-ready execution wrapper
+with real-model smoke evidence only; real Qwen baseline acceptance, training
+execution, and benchmark acceptance remain `not_started`.
 
 Phase 5F full CLI acceptance is accepted in
 `scripts/run_phase5f_full_cli_acceptance.py`. The runner reuses the Phase 5G

@@ -48,7 +48,10 @@ Phase 5 Personal-use DocAgent MVP
    baseline -> review -> optional SFT candidate artifact generation in one
    server-ready command, but still does not train
 -> tool-result citation allowlist/priority repair implemented locally after
-   the first real Qwen smoke; server rerun remains pending
+   the first real Qwen smoke; server rerun improved citation_block_hit_rate
+   to 1.0, while invalid raw model citation ids remain diagnostic
+-> AnswerPolicy review gate invalid-citation semantics adjustment implemented
+   locally; server rerun remains pending
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -139,6 +142,7 @@ Phase 5 AnswerPolicy SFT candidate data builder -> implemented
 Phase 5 AnswerPolicy training-gate orchestrator -> implemented
 Phase 5 final AnswerPolicy Qwen smoke -> real_model_verified
 Phase 5 tool-result citation allowlist repair -> implemented
+Phase 5 AnswerPolicy review gate invalid-citation semantics -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
@@ -1388,7 +1392,14 @@ server_qwen_smoke_run_id = answer_policy_training_gate_qwen_smoke_20260629
 server_qwen_smoke_result = success, diagnostic_only, answer_hit_rate 0.75,
   citation_block_hit_rate 0.75, recommendation
   citation_contract_repair_before_training
-server_rerun_after_citation_repair = not_started
+server_rerun_after_citation_repair = success, diagnostic_only,
+  run_id answer_policy_training_gate_qwen_tool_citation_fix_20260629,
+  answer_hit_rate 0.75, citation_block_hit_rate 1.0, pass_rate 0.75,
+  no citation_block_miss; review still recommended
+  citation_contract_repair_before_training because invalid raw model citation
+  ids were treated as a hard pre-training blocker
+review_gate_invalid_citation_semantics = implemented locally; server rerun
+  not_started
 ```
 
 Final AnswerPolicy baseline runner:
@@ -1430,8 +1441,13 @@ server_qwen_smoke_run_id = answer_policy_training_gate_qwen_smoke_20260629
 server_qwen_smoke_summary = case_count 24, evaluated_count 12,
   format_valid_rate 1.0, answer_hit_rate 0.75,
   citation_block_hit_rate 0.75, pass_rate 0.5833
+server_rerun_after_citation_repair = case_count 24, evaluated_count 12,
+  format_valid_rate 1.0, answer_hit_rate 0.75,
+  citation_block_hit_rate 1.0, pass_rate 0.75, failure_reason answer_miss:3
 server_training_gate_recommendation = citation_contract_repair_before_training
-server_rerun_after_citation_repair = not_started
+  before review-gate invalid-citation semantics adjustment
+review_gate_invalid_citation_semantics = implemented locally; server rerun
+  not_started
 benchmark_evaluation_status = not_started
 ```
 
