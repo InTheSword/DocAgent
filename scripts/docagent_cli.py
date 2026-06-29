@@ -48,6 +48,9 @@ AVAILABLE_TOOLS = [
 ]
 DEFAULT_OUTPUT_DIR = ROOT / "outputs" / "cli"
 DEFAULT_DOCUMENT_ROOT = ROOT / "data" / "documents"
+DEFAULT_ROUTER_LLM_ENV_FILE = ".secrets/router_llm.env"
+DEFAULT_QWEN_BASE_MODEL_PATH = "/root/autodl-tmp/models/Qwen3-1.7B"
+ANSWER_POLICY_CHOICES = {"heuristic", "base", "sft", "grpo"}
 
 
 def _now_run_id() -> str:
@@ -66,6 +69,85 @@ def _json_default(value: Any) -> str:
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), encoding="utf-8")
+
+
+def _build_answer_policy(
+    *,
+    answer_policy: str,
+    base_model_path: str,
+    adapter_path: str | None,
+    device: str,
+    torch_dtype: str,
+    max_prompt_tokens: int | None,
+    max_new_tokens: int,
+):
+    if answer_policy == "heuristic":
+        from docagent.models.base import HeuristicAnswerPolicy
+
+        return HeuristicAnswerPolicy()
+    from docagent.models.qwen_answer_policy import QwenAnswerPolicy, QwenAnswerPolicyConfig
+
+    return QwenAnswerPolicy(
+        QwenAnswerPolicyConfig(
+            mode=answer_policy,
+            base_model_path=base_model_path,
+            adapter_path=adapter_path,
+            device=device,
+            torch_dtype=torch_dtype,
+            max_prompt_tokens=max_prompt_tokens,
+            max_new_tokens=max_new_tokens,
+        )
+    )
+
+
+def _answer_policy_metadata(answer_policy: Any) -> dict[str, Any]:
+    mode = str(getattr(answer_policy, "mode", "unknown") or "unknown")
+    return {
+        "answer_policy_mode": mode,
+        "used_qwen_answer_policy": mode in {"base", "sft", "grpo"},
+        "used_external_answer_api": False,
+    }
+
+
+def _router_execution(router_plan: dict[str, Any]) -> dict[str, Any]:
+    warnings = [str(item) for item in router_plan.get("warnings") or []]
+    llm_router = router_plan.get("llm_router") if isinstance(router_plan.get("llm_router"), dict) else {}
+    router_source = str(router_plan.get("router_source") or "")
+    llm_status = str(llm_router.get("status") or ("used" if router_source == "llm_fallback" else "skipped"))
+    skip_reason = ""
+    if router_source == "rule":
+        if "llm_router_disabled" in warnings:
+            skip_reason = "llm_router_disabled"
+        elif "visual_understanding_unsupported" in warnings:
+            skip_reason = "visual_understanding_unsupported"
+        else:
+            skip_reason = "high_confidence_or_rule_sufficient"
+    elif router_source == "rule_after_llm_failure":
+        error = llm_router.get("error") if isinstance(llm_router.get("error"), dict) else {}
+        skip_reason = str(error.get("type") or next((item for item in warnings if item.startswith("llm_router_")), "llm_router_failed"))
+    return {
+        "router_source": router_source,
+        "llm_router_status": llm_status,
+        "llm_router_skip_reason": skip_reason,
+        "llm_router_attempted": bool(llm_router),
+        "used_llm_router": router_source == "llm_fallback",
+        "rule_confidence": router_plan.get("confidence"),
+        "final_task_type": str(router_plan.get("task_type") or ""),
+    }
+
+
+def _query_planner_execution(query_planner: dict[str, Any]) -> dict[str, Any]:
+    query_sources = query_planner.get("query_sources") if isinstance(query_planner.get("query_sources"), dict) else {}
+    llm_queries_in_final = list(query_sources.get("llm") or [])
+    llm_status = str(query_planner.get("llm_status") or "")
+    return {
+        "query_planner_mode": str(query_planner.get("mode") or ""),
+        "llm_query_rewriter_status": llm_status,
+        "llm_query_rewriter_attempted": llm_status not in {"", "not_started", "skipped"},
+        "used_llm_query_rewriter": bool(llm_queries_in_final),
+        "llm_final_query_count": len(llm_queries_in_final),
+        "final_query_count": len(query_planner.get("final_queries") or []),
+    }
 
 
 def _base_result(
@@ -559,6 +641,7 @@ def _run_local_fact_qa(
     document_profile: dict[str, Any] | None = None,
     query_planner_env_file: Path | None = None,
     query_planner_model: str | None = None,
+    answer_policy: Any,
 ) -> dict[str, Any]:
     options: dict[str, Any] = {"dry_run": dry_run, "qid": run_id}
     if not dry_run:
@@ -588,18 +671,25 @@ def _run_local_fact_qa(
         document_repository=repository,
         trace_repository=None if dry_run else trace_repository,
         retriever=retriever,
+        answer_policy=answer_policy,
     )
+    citations = result.get("citations") or []
+    supporting_evidence_ids = result.get("supporting_evidence_ids") or []
     payload = {
         "status": "success" if result.get("status") == "success" else "error",
         "answer": result.get("answer") or "",
-        "citations": result.get("citations") or [],
-        "supporting_evidence_ids": result.get("supporting_evidence_ids") or [],
+        "citations": citations,
+        "supporting_evidence_ids": supporting_evidence_ids,
         "tools_used": result.get("tools_used") or ["local_fact_qa"],
         "tool_run_id": result.get("run_id") or "",
         "tool_trace_path": result.get("trace_path") or "",
+        "trace_run_id": result.get("run_id") or "",
+        "retrieval_candidate_count": max(len(supporting_evidence_ids), len(citations)),
+        "citation_count": len(citations),
         "structured_result": result,
         "warnings": list(dict.fromkeys(query_planner_warnings + (result.get("warnings") or []))),
         "error": result.get("error") or {},
+        **_answer_policy_metadata(answer_policy),
     }
     if query_planner_payload:
         payload["query_planner"] = query_planner_payload
@@ -686,6 +776,7 @@ def _dispatch_tool(
     document_profile: dict[str, Any] | None = None,
     query_planner_env_file: Path | None = None,
     query_planner_model: str | None = None,
+    answer_policy: Any,
 ) -> dict[str, Any]:
     task_type = str(router_plan.get("task_type") or "")
     if router_plan.get("status") == "error":
@@ -722,6 +813,7 @@ def _dispatch_tool(
             document_profile=document_profile,
             query_planner_env_file=query_planner_env_file,
             query_planner_model=query_planner_model,
+            answer_policy=answer_policy,
         )
     if task_type == "document_summary":
         return _run_document_summary(repository=repository, doc_id=doc_id, question=question, dry_run=dry_run)
@@ -765,9 +857,23 @@ def _finalize_qa_result(
         "ingestion_status": source.get("ingestion_status") or "",
         "ingestion_error": source.get("ingestion_error") or {},
         "used_router": bool(router_plan),
+        "full_model_path": bool(result.get("full_model_path", False)),
+        "router_execution": result.get("router_execution") or {},
+        "used_llm_router": bool(result.get("used_llm_router", False)),
+        "llm_router_status": str(result.get("llm_router_status") or ""),
+        "llm_router_skip_reason": str(result.get("llm_router_skip_reason") or ""),
         "used_query_planning": bool((result.get("query_planner") or {}).get("enabled")),
         "query_planner_mode": str((result.get("query_planner") or {}).get("mode") or ""),
+        "query_planner_execution": result.get("query_planner_execution") or {},
+        "used_llm_query_rewriter": bool(result.get("used_llm_query_rewriter", False)),
+        "llm_query_rewriter_status": str(result.get("llm_query_rewriter_status") or ""),
         "query_count": len((result.get("query_planner") or {}).get("final_queries") or []),
+        "answer_policy_mode": str(result.get("answer_policy_mode") or ""),
+        "used_qwen_answer_policy": bool(result.get("used_qwen_answer_policy", False)),
+        "used_external_answer_api": bool(result.get("used_external_answer_api", False)),
+        "retrieval_candidate_count": int(result.get("retrieval_candidate_count") or 0),
+        "citation_count": int(result.get("citation_count") or 0),
+        "trace_run_id": str(result.get("trace_run_id") or ""),
         "used_external_api": _router_used_external_api(router_plan) or _query_planner_used_external_api(result.get("query_planner") or {}),
         "used_vlm": False,
         "used_training": False,
@@ -783,7 +889,14 @@ def _finalize_qa_result(
         "run_id": run_id,
         "source": source,
         "router_plan": router_plan,
+        "router_execution": result.get("router_execution") or {},
         "query_planner": result.get("query_planner") or {},
+        "query_planner_execution": result.get("query_planner_execution") or {},
+        "answer_policy_mode": str(result.get("answer_policy_mode") or ""),
+        "used_qwen_answer_policy": bool(result.get("used_qwen_answer_policy", False)),
+        "used_llm_router": bool(result.get("used_llm_router", False)),
+        "used_llm_query_rewriter": bool(result.get("used_llm_query_rewriter", False)),
+        "trace_run_id": str(result.get("trace_run_id") or ""),
         "result_status": result.get("status"),
         "tools_used": result.get("tools_used") or [],
         "supporting_evidence_ids": result.get("supporting_evidence_ids") or [],
@@ -820,6 +933,15 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
     document_root = _project_path(args.document_root)
     mineru_output_dir = _project_path(args.mineru_output_dir) if args.mineru_output_dir else None
     limit = max(0, int(args.limit))
+    full_model_path = bool(getattr(args, "full_model_path", False))
+    allow_llm_router = bool(args.allow_llm_router or full_model_path)
+    enable_query_planning = bool(args.enable_query_planning or full_model_path)
+    query_planner_mode = "hybrid" if full_model_path else str(args.query_planner_mode)
+    router_llm_env_file = (
+        _project_path(args.router_llm_env_file or DEFAULT_ROUTER_LLM_ENV_FILE)
+        if args.router_llm_env_file or full_model_path
+        else None
+    )
 
     if args.list_documents:
         return _list_documents(db_path=db_path, limit=limit)
@@ -1001,7 +1123,31 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
             )
 
         profile = _document_profile(repository, doc_id)
-        router_llm_env_file = _project_path(args.router_llm_env_file) if args.router_llm_env_file else None
+        if full_model_path and router_llm_env_file is not None and not router_llm_env_file.is_file():
+            result = _error_result(
+                mode="qa",
+                run_id=run_id,
+                error_type="llm_planning_config_missing",
+                message=f"Full model path requires Router/Rewriter LLM config: {router_llm_env_file}",
+                doc_id=doc_id,
+                source=source,
+                question=question,
+                warnings=[*warnings, "full_model_path_requires_llm_planning_config"],
+            )
+            result["full_model_path"] = True
+            result["answer_policy_mode"] = str(args.answer_policy)
+            result["used_qwen_answer_policy"] = False
+            result["used_external_answer_api"] = False
+            result["router_execution"] = {}
+            result["query_planner_execution"] = {}
+            return _finalize_qa_result(
+                result=result,
+                output_dir=output_dir,
+                router_plan={},
+                source_type=source_type,
+                used_file_ingestion=used_file_ingestion,
+            )
+
         router_plan = plan_route_with_optional_llm(
             {
                 "doc_id": doc_id,
@@ -1009,7 +1155,7 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
                 "document_profile": profile,
                 "available_tools": AVAILABLE_TOOLS,
                 "options": {
-                    "allow_external_llm_router": bool(args.allow_llm_router),
+                    "allow_external_llm_router": allow_llm_router,
                     "prefer_deterministic_tools": True,
                     "max_tool_calls": 4,
                 },
@@ -1018,6 +1164,42 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
             env_file=router_llm_env_file,
             model_override=str(args.router_llm_model or "") or None,
         )
+        try:
+            answer_policy = _build_answer_policy(
+                answer_policy=str(args.answer_policy),
+                base_model_path=str(args.base_model_path),
+                adapter_path=str(args.adapter_path) if args.adapter_path else None,
+                device=str(args.device),
+                torch_dtype=str(args.torch_dtype),
+                max_prompt_tokens=args.max_prompt_tokens,
+                max_new_tokens=int(args.max_new_tokens),
+            )
+        except Exception as exc:
+            result = _error_result(
+                mode="qa",
+                run_id=run_id,
+                error_type="answer_policy_build_failed",
+                message=str(exc),
+                doc_id=doc_id,
+                source=source,
+                question=question,
+                task_type=str(router_plan.get("task_type") or ""),
+                router_plan=router_plan,
+                warnings=warnings + (router_plan.get("warnings") or []),
+            )
+            result["full_model_path"] = full_model_path
+            result["answer_policy_mode"] = str(args.answer_policy)
+            result["used_qwen_answer_policy"] = False
+            result["used_external_answer_api"] = False
+            result["router_execution"] = _router_execution(router_plan)
+            result["query_planner_execution"] = {}
+            return _finalize_qa_result(
+                result=result,
+                output_dir=output_dir,
+                router_plan=router_plan,
+                source_type=source_type,
+                used_file_ingestion=used_file_ingestion,
+            )
         tool_result = _dispatch_tool(
             repository=repository,
             trace_repository=trace_repository,
@@ -1027,11 +1209,12 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
             router_plan=router_plan,
             dry_run=bool(args.dry_run),
             run_id=run_id,
-            enable_query_planning=bool(args.enable_query_planning),
-            query_planner_mode=str(args.query_planner_mode),
+            enable_query_planning=enable_query_planning,
+            query_planner_mode=query_planner_mode,
             document_profile=profile,
             query_planner_env_file=router_llm_env_file,
             query_planner_model=str(args.router_llm_model or "") or None,
+            answer_policy=answer_policy,
         )
 
         result = _base_result(
@@ -1048,6 +1231,22 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
         result["citations"] = tool_result.get("citations") or []
         result["supporting_evidence_ids"] = tool_result.get("supporting_evidence_ids") or []
         result["tools_used"] = tool_result.get("tools_used") or []
+        router_execution = _router_execution(router_plan)
+        query_planner_execution = _query_planner_execution(tool_result.get("query_planner") or {})
+        result["full_model_path"] = full_model_path
+        result["router_execution"] = router_execution
+        result["query_planner_execution"] = query_planner_execution
+        result["used_llm_router"] = bool(router_execution.get("used_llm_router"))
+        result["llm_router_status"] = str(router_execution.get("llm_router_status") or "")
+        result["llm_router_skip_reason"] = str(router_execution.get("llm_router_skip_reason") or "")
+        result["used_llm_query_rewriter"] = bool(query_planner_execution.get("used_llm_query_rewriter"))
+        result["llm_query_rewriter_status"] = str(query_planner_execution.get("llm_query_rewriter_status") or "")
+        result["answer_policy_mode"] = str(tool_result.get("answer_policy_mode") or args.answer_policy)
+        result["used_qwen_answer_policy"] = bool(tool_result.get("used_qwen_answer_policy", False))
+        result["used_external_answer_api"] = bool(tool_result.get("used_external_answer_api", False))
+        result["retrieval_candidate_count"] = int(tool_result.get("retrieval_candidate_count") or len(result["supporting_evidence_ids"]))
+        result["citation_count"] = int(tool_result.get("citation_count") or len(result["citations"]))
+        result["trace_run_id"] = str(tool_result.get("trace_run_id") or tool_result.get("tool_run_id") or "")
         metadata_consistency = _page_metadata_consistency(repository, doc_id, document, result["citations"])
         result["metadata_consistency"] = metadata_consistency
         result["warnings"] = list(
@@ -1104,6 +1303,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--router-llm-env-file")
     parser.add_argument("--enable-query-planning", action="store_true")
     parser.add_argument("--query-planner-mode", choices=["rule", "llm", "hybrid"], default="hybrid")
+    parser.add_argument(
+        "--full-model-path",
+        action="store_true",
+        help="Enable the full model-enhanced QA path: LLM router, hybrid LLM query planning, and real local_fact_qa.",
+    )
+    parser.add_argument("--answer-policy", choices=sorted(ANSWER_POLICY_CHOICES), default="heuristic")
+    parser.add_argument("--base-model-path", default=DEFAULT_QWEN_BASE_MODEL_PATH)
+    parser.add_argument("--adapter-path")
+    parser.add_argument("--device", default="cuda")
+    parser.add_argument("--torch-dtype", default="bfloat16")
+    parser.add_argument("--max-prompt-tokens", type=int, default=4096)
+    parser.add_argument("--max-new-tokens", type=int, default=1024)
     return parser
 
 

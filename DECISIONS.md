@@ -8,6 +8,44 @@ repository status vocabulary. Older entries may quote transient historical
 phrases such as gate-specific blockers; those snapshots are preserved as
 history and are not the current canonical project state.
 
+## 2026-06-28: Phase 5I-B Reframed as Full Model-enhanced QA Path Validation
+
+Decision: implement Phase 5I-B as a full model-enhanced QA path validation,
+not as a hard final-answer quality benchmark and not as an external Answer API
+integration.
+
+Reason:
+
+```text
+DocAgent 3.0 defines Qwen3 as the main Answer Policy. External LLM use is
+allowed for planning/query rewriting, but QA answer generation should stay on
+the local/server Qwen path. Current SFT/GRPO data and IO design need later
+rework, so answer correctness must remain diagnostic in this phase.
+```
+
+Implementation boundary:
+
+```text
+CLI full path = LLM Router fallback enabled
+              + hybrid LLM Query Rewriter enabled
+              + real local_fact_qa workflow
+              + explicit local AnswerPolicy selection
+
+Minimum server AnswerPolicy target = Qwen3 base
+Existing SFT/GRPO adapters = compatibility diagnostics only
+External Answer API = not implemented
+Final answer quality acceptance = not_started
+```
+
+Status:
+
+```text
+Phase 5I-B Full Model-enhanced QA Path -> implemented
+Phase 5I-B server full-path smoke -> not_started
+Phase 5I-B Final Answer Quality Benchmark -> not_started
+SFT/GRPO retraining -> not_started
+```
+
 ## 2026-06-28: Phase 5I Evaluation Semantics Aligned to Evidence Readiness
 
 Decision: define current Phase 5I as a Pre-LLM Evidence Readiness Benchmark,

@@ -20,6 +20,7 @@ DEFAULT_DB_PATH = ROOT / "outputs" / "docagent.db"
 DEFAULT_DOC_ID = "c1fc1c5e040ec894"
 DEFAULT_OUTPUT_ROOT = ROOT / "outputs" / "benchmark" / "phase5i_answer_quality"
 DEFAULT_CLI_PATH = ROOT / "scripts" / "docagent_cli.py"
+DEFAULT_QWEN_BASE_MODEL_PATH = "/root/autodl-tmp/models/Qwen3-1.7B"
 EVALUATION_SCOPE = "pre_llm_evidence_readiness"
 
 UNSUPPORTED_ERROR_TYPES = {
@@ -647,6 +648,14 @@ def _build_cli_command(
     cli_path: Path,
     dry_run: bool,
     python_executable: str,
+    full_model_path: bool,
+    answer_policy: str,
+    base_model_path: str,
+    adapter_path: str | None,
+    device: str,
+    torch_dtype: str,
+    max_prompt_tokens: int,
+    max_new_tokens: int,
 ) -> list[str]:
     command = [
         python_executable,
@@ -664,7 +673,23 @@ def _build_cli_command(
         "hybrid",
         "--output-dir",
         str(cli_output_dir),
+        "--answer-policy",
+        answer_policy,
+        "--base-model-path",
+        base_model_path,
+        "--device",
+        device,
+        "--torch-dtype",
+        torch_dtype,
+        "--max-prompt-tokens",
+        str(max_prompt_tokens),
+        "--max-new-tokens",
+        str(max_new_tokens),
     ]
+    if adapter_path:
+        command.extend(["--adapter-path", adapter_path])
+    if full_model_path:
+        command.append("--full-model-path")
     if dry_run:
         command.append("--dry-run")
     return command
@@ -692,6 +717,18 @@ def _router_plan(payload: dict[str, Any] | None) -> dict[str, Any]:
 def _query_planner(payload: dict[str, Any] | None) -> dict[str, Any]:
     if payload and isinstance(payload.get("query_planner"), dict):
         return payload["query_planner"]
+    return {}
+
+
+def _router_execution(payload: dict[str, Any] | None) -> dict[str, Any]:
+    if payload and isinstance(payload.get("router_execution"), dict):
+        return payload["router_execution"]
+    return {}
+
+
+def _query_planner_execution(payload: dict[str, Any] | None) -> dict[str, Any]:
+    if payload and isinstance(payload.get("query_planner_execution"), dict):
+        return payload["query_planner_execution"]
     return {}
 
 
@@ -870,9 +907,12 @@ def _evaluate_case(
     parse_error: str,
     returncode: int,
     evaluate_final_answer: bool,
+    full_model_path: bool,
 ) -> dict[str, Any]:
     router = _router_plan(payload)
     query_planner = _query_planner(payload)
+    router_execution = _router_execution(payload)
+    query_planner_execution = _query_planner_execution(payload)
     citations = _citations(payload)
     warnings = _all_warnings(payload)
     error = _error(payload, parse_error)
@@ -925,6 +965,18 @@ def _evaluate_case(
         reasons.append("artifact_missing")
     if actual_task_type != case.expected_task_type:
         reasons.append(f"task_type_mismatch:{actual_task_type or 'unknown'}!={case.expected_task_type}")
+    if full_model_path:
+        if not (payload or {}).get("full_model_path"):
+            reasons.append("full_model_path_not_enabled")
+        if case.expected_task_type == "local_fact_qa":
+            if str(query_planner.get("llm_status") or "") != "used":
+                reasons.append("llm_query_rewriter_not_used")
+            if not (query_planner.get("query_sources") or {}).get("llm"):
+                reasons.append("llm_query_rewriter_no_downstream_query")
+            if payload is not None and payload.get("status") == "success" and not (
+                payload.get("trace_run_id") or payload.get("tool_run_id")
+            ):
+                reasons.append("trace_run_id_missing")
 
     if case.expected_answer_type == "unsupported" or case.unsupported_ok:
         if unsupported_boundary_pass is not True:
@@ -1006,6 +1058,7 @@ def _evaluate_case(
 
     return {
         "evaluation_scope": EVALUATION_SCOPE,
+        "full_model_path": bool((payload or {}).get("full_model_path", False)),
         "actual_task_type": actual_task_type,
         "cli_task_type": cli_task_type,
         "downstream_task_type": case.effective_downstream_task_type,
@@ -1018,8 +1071,24 @@ def _evaluate_case(
         "final_answer_quality_evaluated": bool(evaluate_final_answer),
         "answer_keyword_evaluated": answer_keyword_evaluated,
         "router_source": str(router.get("router_source") or ""),
+        "router_execution": router_execution,
+        "used_llm_router": bool((payload or {}).get("used_llm_router", False)),
+        "llm_router_status": str((payload or {}).get("llm_router_status") or router_execution.get("llm_router_status") or ""),
+        "llm_router_skip_reason": str(
+            (payload or {}).get("llm_router_skip_reason") or router_execution.get("llm_router_skip_reason") or ""
+        ),
+        "rule_confidence": router_execution.get("rule_confidence", router.get("confidence")),
+        "final_task_type": str(router_execution.get("final_task_type") or actual_task_type),
         "query_planner_enabled": bool(query_planner.get("enabled")),
         "query_planner_mode": str(query_planner.get("mode") or ""),
+        "query_planner_execution": query_planner_execution,
+        "used_llm_query_rewriter": bool((payload or {}).get("used_llm_query_rewriter", False)),
+        "llm_query_rewriter_status": str(
+            (payload or {}).get("llm_query_rewriter_status")
+            or query_planner_execution.get("llm_query_rewriter_status")
+            or query_planner.get("llm_status")
+            or ""
+        ),
         "rule_queries": query_planner.get("rule_queries") or [],
         "llm_queries": query_planner.get("llm_queries") or [],
         "llm_unique_queries": query_planner.get("llm_unique_queries") or [],
@@ -1031,6 +1100,12 @@ def _evaluate_case(
         "final_queries": query_planner.get("final_queries") or [],
         "tools_used": (payload or {}).get("tools_used") or [],
         "retrieved_evidence_count": _retrieved_evidence_count(payload),
+        "retrieval_candidate_count": int((payload or {}).get("retrieval_candidate_count") or _retrieved_evidence_count(payload)),
+        "citation_count": int((payload or {}).get("citation_count") or len(citations)),
+        "trace_run_id": str((payload or {}).get("trace_run_id") or (payload or {}).get("tool_run_id") or ""),
+        "answer_policy_mode": str((payload or {}).get("answer_policy_mode") or ""),
+        "used_qwen_answer_policy": bool((payload or {}).get("used_qwen_answer_policy", False)),
+        "used_external_answer_api": bool((payload or {}).get("used_external_answer_api", False)),
         "answer_preview": answer,
         "citations": citations,
         "citation_pages": _citation_pages(citations),
@@ -1078,6 +1153,14 @@ def run_case(
     timeout_seconds: int,
     command_runner: CommandRunner,
     evaluate_final_answer: bool,
+    full_model_path: bool,
+    answer_policy: str,
+    base_model_path: str,
+    adapter_path: str | None,
+    device: str,
+    torch_dtype: str,
+    max_prompt_tokens: int,
+    max_new_tokens: int,
 ) -> dict[str, Any]:
     command = _build_cli_command(
         case=case,
@@ -1088,6 +1171,14 @@ def run_case(
         cli_path=cli_path,
         dry_run=dry_run,
         python_executable=python_executable,
+        full_model_path=full_model_path,
+        answer_policy=answer_policy,
+        base_model_path=base_model_path,
+        adapter_path=adapter_path,
+        device=device,
+        torch_dtype=torch_dtype,
+        max_prompt_tokens=max_prompt_tokens,
+        max_new_tokens=max_new_tokens,
     )
     completed = command_runner(command, ROOT, timeout_seconds)
     payload, parse_error = _parse_stdout(completed.stdout)
@@ -1097,6 +1188,7 @@ def run_case(
         parse_error=parse_error,
         returncode=completed.returncode,
         evaluate_final_answer=evaluate_final_answer,
+        full_model_path=full_model_path,
     )
     evaluated["stdout_preview"] = completed.stdout.strip()[:1000]
     evaluated["stderr_preview"] = completed.stderr.strip()[:1000]
@@ -1116,6 +1208,8 @@ def build_summary(
     results: list[dict[str, Any]],
     dry_run: bool,
     evaluate_final_answer: bool,
+    full_model_path: bool,
+    answer_policy: str,
 ) -> dict[str, Any]:
     pass_fail_counts = Counter(str(row.get("pass_fail") or "") for row in results)
     request_forms = Counter(case.request_form for case in cases)
@@ -1129,6 +1223,9 @@ def build_summary(
         if reason
     )
     tools = Counter(tool for row in results for tool in (row.get("tools_used") or []))
+    answer_policy_modes = Counter(str(row.get("answer_policy_mode") or "unknown") for row in results)
+    llm_router_statuses = Counter(str(row.get("llm_router_status") or "unknown") for row in results)
+    llm_query_statuses = Counter(str(row.get("llm_query_rewriter_status") or "unknown") for row in results)
     task_type_correct_count = sum(
         1
         for case, row in zip(cases, results)
@@ -1138,6 +1235,7 @@ def build_summary(
         "command": "phase5i_answer_quality_benchmark",
         "status": "success",
         "evaluation_scope": EVALUATION_SCOPE,
+        "full_model_path": bool(full_model_path),
         "final_answer_generation_enabled": bool(evaluate_final_answer),
         "final_answer_quality_evaluated": bool(evaluate_final_answer),
         "evidence_readiness_status": "passed" if pass_fail_counts.get("failed", 0) == 0 else "baseline_has_failures",
@@ -1175,15 +1273,27 @@ def build_summary(
         "manual_review_count": sum(1 for row in results if row.get("manual_review_required")),
         "json_valid_count": sum(1 for row in results if row.get("json_valid")),
         "artifact_write_count": sum(1 for row in results if row.get("artifact_written")),
+        "used_llm_router_count": _count_true(results, "used_llm_router"),
+        "used_llm_query_rewriter_count": _count_true(results, "used_llm_query_rewriter"),
+        "used_qwen_answer_policy_count": _count_true(results, "used_qwen_answer_policy"),
+        "trace_run_id_count": sum(1 for row in results if row.get("trace_run_id")),
+        "answer_policy_mode": answer_policy,
         "dry_run_cases": len(cases) if dry_run else 0,
         "non_dry_run_cases": 0 if dry_run else len(cases),
         "request_form_distribution": dict(sorted(request_forms.items())),
         "expected_task_type_distribution": dict(sorted(expected_task_types.items())),
         "actual_task_type_distribution": dict(sorted(actual_task_types.items())),
         "tools_used_distribution": dict(sorted(tools.items())),
+        "answer_policy_mode_distribution": dict(sorted(answer_policy_modes.items())),
+        "llm_router_status_distribution": dict(sorted(llm_router_statuses.items())),
+        "llm_query_rewriter_status_distribution": dict(sorted(llm_query_statuses.items())),
         "failure_stage_distribution": dict(sorted(failure_stages.items())),
         "failure_reason_distribution": dict(sorted(failure_reasons.items())),
         "used_external_api": any(_used_external_api_row(row) for row in results),
+        "used_llm_router": any(bool(row.get("used_llm_router")) for row in results),
+        "used_llm_query_rewriter": any(bool(row.get("used_llm_query_rewriter")) for row in results),
+        "used_qwen_answer_policy": any(bool(row.get("used_qwen_answer_policy")) for row in results),
+        "used_external_answer_api": any(bool(row.get("used_external_answer_api")) for row in results),
         "used_vlm": False,
         "used_training": False,
         "used_full_e2e": False,
@@ -1252,6 +1362,65 @@ def _write_manual_review(path: Path, results: list[dict[str, Any]]) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _llm_planning_config_status(router_llm_env_file: Path) -> dict[str, Any]:
+    from docagent.router.llm_client import load_router_llm_config
+
+    config, warnings = load_router_llm_config(env_file=router_llm_env_file, env={})
+    return {
+        "configured": config is not None,
+        "env_file": str(router_llm_env_file),
+        "warnings": warnings,
+        "model": config.model if config is not None else "",
+        "base_url": config.base_url if config is not None else "",
+    }
+
+
+def _blocked_summary(
+    *,
+    run_id: str,
+    artifact_dir: Path,
+    cases: list[GoldenCase],
+    router_llm_env_file: Path,
+    config_status: dict[str, Any],
+    full_model_path: bool,
+    answer_policy: str,
+) -> dict[str, Any]:
+    summary = {
+        "command": "phase5i_answer_quality_benchmark",
+        "status": "blocked",
+        "evaluation_scope": EVALUATION_SCOPE,
+        "full_model_path": bool(full_model_path),
+        "quality_status": "blocked",
+        "quality_status_semantics": "full_model_path_requires_llm_planning_config",
+        "run_id": run_id,
+        "artifact_dir": str(artifact_dir),
+        "case_count": len(cases),
+        "passed_count": 0,
+        "failed_count": 0,
+        "blocked_count": len(cases),
+        "answer_policy_mode": answer_policy,
+        "llm_planning_config": config_status,
+        "blocker": {
+            "type": "llm_planning_config_missing",
+            "message": f"Full model path requires Router/Rewriter LLM config: {router_llm_env_file}",
+        },
+        "used_external_api": False,
+        "used_llm_router": False,
+        "used_llm_query_rewriter": False,
+        "used_qwen_answer_policy": False,
+        "used_external_answer_api": False,
+        "used_vlm": False,
+        "used_training": False,
+        "used_full_e2e": False,
+    }
+    summary["cases_path"] = str(artifact_dir / "phase5i_cases.jsonl")
+    summary["results_path"] = str(artifact_dir / "phase5i_results.jsonl")
+    summary["summary_path"] = str(artifact_dir / "phase5i_summary.json")
+    summary["preview_path"] = str(artifact_dir / "preview.json")
+    summary["manual_review_path"] = str(artifact_dir / "manual_review.md")
+    return summary
+
+
 def run_phase5i_benchmark(
     *,
     db_path: Path,
@@ -1263,6 +1432,15 @@ def run_phase5i_benchmark(
     max_cases: int | None = None,
     dry_run: bool = False,
     evaluate_final_answer: bool = False,
+    full_model_path: bool = False,
+    require_llm_planning_config: bool = False,
+    answer_policy: str = "heuristic",
+    base_model_path: str = DEFAULT_QWEN_BASE_MODEL_PATH,
+    adapter_path: str | None = None,
+    device: str = "cuda",
+    torch_dtype: str = "bfloat16",
+    max_prompt_tokens: int = 4096,
+    max_new_tokens: int = 1024,
     python_executable: str = sys.executable,
     timeout_seconds: int = 180,
     command_runner: CommandRunner = _default_command_runner,
@@ -1278,6 +1456,43 @@ def run_phase5i_benchmark(
     if max_cases is not None:
         cases = cases[: max(0, int(max_cases))]
 
+    if full_model_path or require_llm_planning_config:
+        config_status = _llm_planning_config_status(router_llm_env_file)
+        if not config_status["configured"]:
+            summary = _blocked_summary(
+                run_id=run_id,
+                artifact_dir=artifact_dir,
+                cases=cases,
+                router_llm_env_file=router_llm_env_file,
+                config_status=config_status,
+                full_model_path=full_model_path,
+                answer_policy=answer_policy,
+            )
+            preview = {"run_id": run_id, "summary": summary, "results": []}
+            cases_path = artifact_dir / "phase5i_cases.jsonl"
+            results_path = artifact_dir / "phase5i_results.jsonl"
+            summary_path = artifact_dir / "phase5i_summary.json"
+            preview_path = artifact_dir / "preview.json"
+            manual_review_path = artifact_dir / "manual_review.md"
+            _write_jsonl(cases_path, [case.to_dict() for case in cases])
+            _write_jsonl(results_path, [])
+            _write_json(summary_path, summary)
+            _write_json(preview_path, preview)
+            manual_review_path.write_text(
+                "# Phase 5I Manual Review\n\nFull model path is blocked by missing Router/Rewriter LLM config.\n",
+                encoding="utf-8",
+            )
+            return {
+                **summary,
+                "artifact_paths": [
+                    str(cases_path),
+                    str(results_path),
+                    str(summary_path),
+                    str(preview_path),
+                    str(manual_review_path),
+                ],
+            }
+
     results = [
         run_case(
             case=case,
@@ -1291,6 +1506,14 @@ def run_phase5i_benchmark(
             timeout_seconds=timeout_seconds,
             command_runner=command_runner,
             evaluate_final_answer=evaluate_final_answer,
+            full_model_path=full_model_path,
+            answer_policy=answer_policy,
+            base_model_path=base_model_path,
+            adapter_path=adapter_path,
+            device=device,
+            torch_dtype=torch_dtype,
+            max_prompt_tokens=max_prompt_tokens,
+            max_new_tokens=max_new_tokens,
         )
         for case in cases
     ]
@@ -1301,6 +1524,8 @@ def run_phase5i_benchmark(
         results=results,
         dry_run=dry_run,
         evaluate_final_answer=evaluate_final_answer,
+        full_model_path=full_model_path,
+        answer_policy=answer_policy,
     )
     preview = {
         "run_id": run_id,
@@ -1332,7 +1557,7 @@ def run_phase5i_benchmark(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run the Phase 5I-A pre-LLM evidence readiness benchmark.")
+    parser = argparse.ArgumentParser(description="Run Phase 5I evidence readiness or full model-enhanced QA path validation.")
     parser.add_argument("--db-path", default=str(DEFAULT_DB_PATH))
     parser.add_argument("--doc-id", default=DEFAULT_DOC_ID)
     parser.add_argument("--router-llm-env-file", default=".secrets/router_llm.env")
@@ -1347,6 +1572,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Treat answer_preview keyword checks as hard final-answer checks. Disabled by default.",
     )
+    parser.add_argument("--full-model-path", dest="full_model_path", action="store_true", default=True)
+    parser.add_argument("--no-full-model-path", dest="full_model_path", action="store_false")
+    parser.add_argument("--require-llm-planning-config", action="store_true")
+    parser.add_argument("--answer-policy", choices=["heuristic", "base", "sft", "grpo"], default="base")
+    parser.add_argument("--base-model-path", default=DEFAULT_QWEN_BASE_MODEL_PATH)
+    parser.add_argument("--adapter-path")
+    parser.add_argument("--device", default="cuda")
+    parser.add_argument("--torch-dtype", default="bfloat16")
+    parser.add_argument("--max-prompt-tokens", type=int, default=4096)
+    parser.add_argument("--max-new-tokens", type=int, default=1024)
     parser.add_argument("--python-executable", default=sys.executable)
     parser.add_argument("--timeout-seconds", type=int, default=180)
     return parser
@@ -1365,6 +1600,15 @@ def main(argv: list[str] | None = None) -> int:
         max_cases=args.max_cases,
         dry_run=bool(args.dry_run),
         evaluate_final_answer=bool(args.evaluate_final_answer),
+        full_model_path=bool(args.full_model_path),
+        require_llm_planning_config=bool(args.require_llm_planning_config or args.full_model_path),
+        answer_policy=str(args.answer_policy),
+        base_model_path=str(args.base_model_path),
+        adapter_path=str(args.adapter_path) if args.adapter_path else None,
+        device=str(args.device),
+        torch_dtype=str(args.torch_dtype),
+        max_prompt_tokens=int(args.max_prompt_tokens),
+        max_new_tokens=int(args.max_new_tokens),
         python_executable=str(args.python_executable),
         timeout_seconds=int(args.timeout_seconds),
     )

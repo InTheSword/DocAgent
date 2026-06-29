@@ -1,6 +1,6 @@
 # Current Status
 
-Updated: 2026-06-28
+Updated: 2026-06-29
 
 ## Phase 4D-C Accepted / Phase 5 Active
 
@@ -368,6 +368,42 @@ logic, AnswerPolicy, document_summary, table lookup, simple calculation, VLM,
 training, or full GRPO E2E. Phase 5I-B final answer quality benchmarking
 remains not_started until a downstream answer module is connected.
 
+Phase 5I-B Full Model-enhanced QA Path is implemented locally in
+`scripts/docagent_cli.py` and `scripts/run_phase5i_answer_quality_benchmark.py`.
+The CLI now exposes `--full-model-path`, which enables LLM Router fallback,
+hybrid LLM Query Rewriter planning, and real `local_fact_qa` dispatch in one
+path. It also exposes local Qwen AnswerPolicy selection through
+`--answer-policy {heuristic,base,sft,grpo}` plus model/adapter/device/token
+parameters. The default AnswerPolicy remains `heuristic` for local tests and
+backward compatibility; server full-path smoke should use at least
+`--answer-policy base`.
+
+Phase 5I-B server full-path validation is accepted on branch
+`phase5/phase5i-b-full-model-qa-path` at commit `f83269f`. The AutoDL
+resource preflight found `outputs/docagent.db`, `.secrets/router_llm.env`,
+Qwen3-1.7B, BGE-M3, and reranker resources available with CUDA on one RTX
+4090D. The full-path smoke used real Router/Rewriter API configuration and
+Qwen base AnswerPolicy. It completed 5 cases with 4 passed and 1 conservative
+diagnostic failure (`ambiguous_short_date:evidence_keyword_missing`), recorded
+`used_external_api=true`, `used_llm_query_rewriter=true`,
+`used_qwen_answer_policy=true`, `answer_policy_mode=base`, and 4 trace run
+ids. The follow-up same-language probe passed all non-ambiguous core cases and
+confirmed that low-confidence English requests triggered the Router LLM in 2
+probe cases.
+
+Phase 5I-B artifacts now record whether each case used or skipped the Router
+LLM, whether LLM query rewriting affected final retrieval queries,
+`answer_policy_mode`, `used_qwen_answer_policy`,
+`used_external_answer_api=false`, retrieval/citation counts, and trace run id.
+The Phase 5I command-line runner defaults to full-model-path validation and
+returns `blocked` if Router/Rewriter LLM configuration is missing. Library
+entry points remain compatible with Phase 5I-A tests. Final answer correctness,
+answer keyword hit, and location hit are diagnostic-only in this phase; they
+are not accepted as Qwen quality claims until the Qwen input/output contract
+and future training data design are revisited. No external Answer API, VLM,
+table lookup, simple calculation, SFT/GRPO retraining, or full GRPO E2E was
+added.
+
 Phase 5C-2 accepted server real API smoke evidence:
 
 ```text
@@ -464,6 +500,7 @@ Phase 5H Full Workflow Validation Baseline -> accepted
 Phase 5I old-semantics server benchmark -> benchmark_evaluated
 Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner -> accepted
 Phase 5I-A corrected-semantics server benchmark -> accepted
+Phase 5I-B Full Model-enhanced QA Path -> accepted
 Phase 5I-B Final Answer Quality Benchmark -> not_started
 Phase 5E Document Summary MVP -> implemented
 Phase 5E-A Document Summary Acceptance Pack -> implemented

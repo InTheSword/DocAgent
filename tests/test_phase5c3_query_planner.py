@@ -192,6 +192,31 @@ def test_llm_query_expander_retries_duplicate_first_attempt_and_uses_unique_retr
     assert "query_planner_llm_no_unique_queries" not in plan.warnings
 
 
+def test_llm_query_expander_retries_cjk_query_without_english_retrieval_terms() -> None:
+    fake = FakeLLMClient(
+        [
+            '{"queries": ["未领取股息年份", "股东未领股息日期"]}',
+            '{"queries": ["unclaimed dividend financial year", "shareholder dividend notice"]}',
+        ]
+    )
+
+    plan = plan_queries(
+        question="请找出文件中提到的未领取股息相关年份",
+        task_type="local_fact_qa",
+        mode="hybrid",
+        llm_client=fake,
+    )
+    payload = plan.to_dict()
+
+    assert len(fake.calls) == 2
+    assert "English translation keyword queries" in fake.calls[1]["system_prompt"]
+    assert "未领取股息年份" in fake.calls[1]["user_payload"]["avoid_exact_queries"]
+    assert plan.llm_queries == ["unclaimed dividend financial year", "shareholder dividend notice"]
+    assert plan.query_sources["llm"] == ["unclaimed dividend financial year", "shareholder dividend notice"]
+    assert payload["llm_added_unique_query_count"] == 2
+    assert "query_planner_llm_no_cross_lingual_query" not in plan.warnings
+
+
 def test_llm_query_expander_warns_when_retry_is_still_duplicate() -> None:
     fake = FakeLLMClient(
         [
@@ -230,6 +255,25 @@ def test_llm_query_expander_records_unique_queries_added_by_fusion() -> None:
     assert len(payload["llm_attempts"]) == 1
     assert plan.final_queries[: len(plan.rule_queries)] == plan.rule_queries[: len(plan.final_queries)]
     assert plan.final_queries[-2:] == ["invoice issue date", "billing date"]
+
+
+def test_hybrid_plan_reserves_final_slot_for_unique_llm_query_when_rule_queries_fill_limit() -> None:
+    fake = FakeLLMClient('{"queries": ["unclaimed dividend financial year"]}')
+
+    plan = plan_queries(
+        question="How many pages and tables mention the dividend notice amount?",
+        task_type="local_fact_qa",
+        mode="hybrid",
+        llm_client=fake,
+        limit=3,
+    )
+    payload = plan.to_dict()
+
+    assert len(plan.rule_queries) > 3
+    assert plan.final_queries[-1] == "unclaimed dividend financial year"
+    assert plan.query_sources["llm"] == ["unclaimed dividend financial year"]
+    assert payload["llm_unique_queries"] == ["unclaimed dividend financial year"]
+    assert payload["llm_added_unique_query_count"] == 1
 
 
 def test_llm_query_expander_does_not_parse_context_object_as_loose_queries() -> None:
