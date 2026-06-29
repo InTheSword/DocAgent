@@ -333,7 +333,13 @@ def _calculation_values(candidate: TableCandidate, question: str) -> list[dict[s
     years = _calculation_years(question)
     rows = _selectable_rows(candidate.data_rows or candidate.rows)
     column_index = _metric_column(candidate.header, question)
+    operation = _calculation_operation(question)
     values: list[dict[str, Any]] = []
+    if operation == "average":
+        row_values = _average_values_from_best_row(candidate, question, years)
+        if len(row_values) >= 2:
+            return row_values
+
     if years and _header_has_any_label(candidate.header, years):
         row = _best_row(rows, question, required_labels=[])
         if row is not None:
@@ -406,6 +412,9 @@ def _calculation_values(candidate: TableCandidate, question: str) -> list[dict[s
 def _expression_for_operation(values: list[dict[str, Any]], operation: str) -> tuple[str, str]:
     first = float(values[0]["value"])
     second = float(values[1]["value"])
+    if operation == "average":
+        terms = [str(float(value["value"])) for value in values]
+        return f"({' + '.join(terms)}) / {len(terms)}", ""
     if operation == "sum":
         return f"{first} + {second}", ""
     if operation == "percentage_change":
@@ -415,6 +424,8 @@ def _expression_for_operation(values: list[dict[str, Any]], operation: str) -> t
 
 def _calculation_operation(question: str) -> str:
     normalized = question.casefold()
+    if "average" in normalized or "mean" in normalized:
+        return "average"
     if any(token in normalized for token in ("percent change", "percentage change", "growth rate", "% change")):
         return "percentage_change"
     if any(token in normalized for token in ("sum", "total of", "add ")):
@@ -428,6 +439,8 @@ def _requires_calculation(question: str) -> bool:
         token in normalized
         for token in (
             "difference",
+            "average",
+            "mean",
             "subtract",
             "minus",
             "increase",
@@ -440,6 +453,56 @@ def _requires_calculation(question: str) -> bool:
             "% change",
         )
     )
+
+
+def _average_values_from_best_row(candidate: TableCandidate, question: str, years: list[str]) -> list[dict[str, Any]]:
+    rows = _selectable_rows(candidate.data_rows or candidate.rows)
+    if years and _header_has_any_label(candidate.header, years):
+        row = _best_row(rows, question, required_labels=[])
+        if row is not None:
+            values: list[dict[str, Any]] = []
+            for year in years:
+                value_index = _header_label_index(candidate.header, year)
+                value_index = _aligned_column_index(candidate.header, row, value_index)
+                if value_index is None or value_index >= len(row):
+                    continue
+                numeric = _parse_number(row[value_index])
+                if numeric is None:
+                    continue
+                values.append(
+                    {
+                        "label": year,
+                        "value": numeric,
+                        "text": row[value_index],
+                        "row": row,
+                        "column": candidate.header[value_index] if value_index < len(candidate.header) else "",
+                    }
+                )
+            return values
+
+    row = _best_row(rows, question, required_labels=[])
+    if row is None:
+        return []
+    values = []
+    max_values = len(years) if years else 0
+    for index, cell in enumerate(row):
+        numeric = _parse_number(cell)
+        if numeric is None:
+            continue
+        if _is_year_cell(cell):
+            continue
+        values.append(
+            {
+                "label": _row_label(row, years) or f"row value {len(values) + 1}",
+                "value": numeric,
+                "text": cell,
+                "row": row,
+                "column": candidate.header[index] if index < len(candidate.header) else "",
+            }
+        )
+        if max_values and len(values) >= max_values:
+            break
+    return values
 
 
 def _best_row(rows: list[list[str]], question: str, *, required_labels: list[str]) -> list[str] | None:

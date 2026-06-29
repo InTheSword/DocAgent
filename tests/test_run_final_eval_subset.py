@@ -58,8 +58,39 @@ def _text_sample() -> DocAgentSample:
     )
 
 
+def _average_sample() -> DocAgentSample:
+    doc_id = "tatqa_average_doc"
+    block = EvidenceBlock(
+        doc_id=doc_id,
+        block_id=f"{doc_id}_table",
+        block_type="table",
+        text=(
+            "| Fiscal year | % Change |\n"
+            "| --- | --- |\n"
+            "| Orders | 19,975 | 18,451 | 8 % | 7 % |"
+        ),
+        table_html=(
+            "<table><tr><th>Fiscal year</th><th>% Change</th></tr>"
+            "<tr><td>Orders</td><td>19,975</td><td>18,451</td><td>8 %</td><td>7 %</td></tr></table>"
+        ),
+        page_id=1,
+        location=EvidenceLocation(page=1, block_id=f"{doc_id}_table", table_id=f"{doc_id}_table"),
+    )
+    return DocAgentSample(
+        qid="tatqa_average_q",
+        source="tatqa",
+        doc_id=doc_id,
+        question="What was the average orders for 2019 and 2018?",
+        answer=["19213"],
+        answer_type="numeric",
+        evidence=[block],
+        split="dev",
+        metadata={"gold_block_ids": [block.block_id]},
+    )
+
+
 def _write_fixture_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
-    samples = [_table_sample(), _text_sample()]
+    samples = [_table_sample(), _average_sample(), _text_sample()]
     samples_path = tmp_path / "tatqa" / "samples.jsonl"
     manifest_path = tmp_path / "tatqa" / "sample_manifest.jsonl"
     mp_manifest_path = tmp_path / "mp" / "sample_manifest.jsonl"
@@ -81,6 +112,24 @@ def _write_fixture_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
                         "doc_id": "tatqa_table_doc",
                         "page": 1,
                         "block_id": "tatqa_table_doc_table",
+                        "block_type": "table",
+                    }
+                ],
+            },
+            {
+                "sample_id": "tatqa_average_q",
+                "dataset": "tatqa",
+                "split": "dev",
+                "doc_id": "tatqa_average_doc",
+                "question": "What was the average orders for 2019 and 2018?",
+                "answers": ["19213"],
+                "expected_answer_type": "numeric",
+                "expected_tools": ["table_lookup", "simple_calculation"],
+                "gold_evidence": [
+                    {
+                        "doc_id": "tatqa_average_doc",
+                        "page": 1,
+                        "block_id": "tatqa_average_doc_table",
                         "block_type": "table",
                     }
                 ],
@@ -146,14 +195,15 @@ def test_final_eval_runner_writes_local_diagnostic_artifacts(tmp_path: Path) -> 
 
     assert summary["status"] == "success"
     assert summary["evaluation_scope"] == "local_subset_diagnostic_not_formal_benchmark"
-    assert summary["case_count"] == 3
-    assert summary["passed_count"] == 3
-    assert summary["tool_executed_count"] == 1
-    assert summary["tool_success_count"] == 1
-    assert summary["answer_evaluated_count"] == 1
-    assert summary["answer_hit_count"] == 1
-    assert summary["citation_block_hit_count"] == 1
-    assert summary["citation_page_hit_count"] == 1
+    assert summary["case_count"] == 4
+    assert summary["passed_count"] == 4
+    assert summary["tool_executed_count"] == 2
+    assert summary["tool_success_count"] == 2
+    assert summary["answer_evaluated_count"] == 2
+    assert summary["answer_hit_count"] == 2
+    assert summary["numeric_accuracy_count"] == 2
+    assert summary["citation_block_hit_count"] == 2
+    assert summary["citation_page_hit_count"] == 2
     assert summary["requires_model_answer_count"] == 2
     assert summary["requires_mineru_or_retrieval_count"] == 1
     assert summary["final_llm_answer_quality_evaluated"] is False
@@ -168,6 +218,8 @@ def test_final_eval_runner_writes_local_diagnostic_artifacts(tmp_path: Path) -> 
     rows = {row["sample_id"]: row for row in read_jsonl(run_dir / "results.jsonl")}
     assert rows["tatqa_table_q"]["evaluation_mode"] == "deterministic_table_tool"
     assert rows["tatqa_table_q"]["answer_hit"] is True
+    assert rows["tatqa_average_q"]["structured_result"]["calculation"]["operation"] == "average"
+    assert rows["tatqa_average_q"]["answer_hit"] is True
     assert rows["tatqa_text_q"]["evaluation_mode"] == "manifest_readiness"
     assert rows["tatqa_text_q"]["requires_model_answer"] is True
     assert rows["mp_q"]["evaluation_mode"] == "page_manifest_readiness"
@@ -198,4 +250,4 @@ def test_final_eval_runner_cli_smoke(tmp_path: Path) -> None:
 
     assert exit_code == 0
     summary = json.loads((output_root / "cli_fixture" / "summary.json").read_text(encoding="utf-8"))
-    assert summary["case_count"] == 3
+    assert summary["case_count"] == 4
