@@ -51,7 +51,8 @@ Phase 5 Personal-use DocAgent MVP
    the first real Qwen smoke; server rerun improved citation_block_hit_rate
    to 1.0, while invalid raw model citation ids remain diagnostic
 -> AnswerPolicy review gate invalid-citation semantics adjustment implemented
-   locally; server rerun remains pending
+   locally; server rerun accepted the diagnostic gate and recommends larger
+   real Qwen baseline/manual review before training
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -142,7 +143,7 @@ Phase 5 AnswerPolicy SFT candidate data builder -> implemented
 Phase 5 AnswerPolicy training-gate orchestrator -> implemented
 Phase 5 final AnswerPolicy Qwen smoke -> real_model_verified
 Phase 5 tool-result citation allowlist repair -> implemented
-Phase 5 AnswerPolicy review gate invalid-citation semantics -> implemented
+Phase 5 AnswerPolicy review gate invalid-citation semantics -> real_model_verified
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
@@ -1399,7 +1400,9 @@ server_rerun_after_citation_repair = success, diagnostic_only,
   citation_contract_repair_before_training because invalid raw model citation
   ids were treated as a hard pre-training blocker
 review_gate_invalid_citation_semantics = implemented locally; server rerun
-  not_started
+  success, run_id answer_policy_review_gate_filtered_invalid_20260629,
+  recommendation continue_qwen_eval_before_training, sft_gate defer,
+  invalid_citation_id_count_in_rows 3, failure_reason answer_miss:3
 ```
 
 Final AnswerPolicy baseline runner:
@@ -1447,7 +1450,9 @@ server_rerun_after_citation_repair = case_count 24, evaluated_count 12,
 server_training_gate_recommendation = citation_contract_repair_before_training
   before review-gate invalid-citation semantics adjustment
 review_gate_invalid_citation_semantics = implemented locally; server rerun
-  not_started
+  success, run_id answer_policy_review_gate_filtered_invalid_20260629,
+  recommendation continue_qwen_eval_before_training, sft_gate defer,
+  invalid_citation_id_count_in_rows 3, failure_reason answer_miss:3
 benchmark_evaluation_status = not_started
 ```
 

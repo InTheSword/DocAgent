@@ -232,8 +232,12 @@ filtered invalid raw model citation ids as diagnostic when final canonical
 citations hit the gold block and there is no `citation_block_miss`; invalid
 ids remain a hard citation-contract blocker only when final citations are
 empty or miss. This adjustment is implemented locally and awaits server rerun.
-This gate does not start SFT, start GRPO, accept Qwen prompt quality, or
-promote local diagnostics to a formal benchmark result.
+Server review rerun `answer_policy_review_gate_filtered_invalid_20260629`
+accepted the diagnostic gate with `recommendation=continue_qwen_eval_before_training`,
+`sft_gate=defer`, `invalid_citation_id_count_in_rows=3`, and
+`failure_reason_distribution=answer_miss:3`. This gate does not start SFT,
+start GRPO, accept Qwen prompt quality, or promote local diagnostics to a
+formal benchmark result.
 
 Phase 5 AnswerPolicy SFT candidate data builder is implemented locally in
 `scripts/build_answer_policy_sft_candidates.py` with tests in
@@ -259,10 +263,12 @@ generation with `needs_real_qwen_baseline`. The first real Qwen server smoke
 completed successfully but skipped SFT candidates because
 `citation_block_hit_rate=0.75` was below the review gate threshold. The
 post-repair server rerun improved final canonical citation hit to 1.0 and
-left only answer misses, but the local review-gate invalid-citation semantics
-change still needs a server rerun. This is a server-ready execution wrapper
-with real-model smoke evidence only; real Qwen baseline acceptance, training
-execution, and benchmark acceptance remain `not_started`.
+left only answer misses. The follow-up review-only server rerun recommended
+`continue_qwen_eval_before_training`, so the next step is a larger real Qwen
+diagnostic baseline or manual review rather than immediate SFT/GRPO. This is
+a server-ready execution wrapper with real-model smoke evidence only; real
+Qwen baseline acceptance, training execution, and benchmark acceptance remain
+`not_started`.
 
 Phase 5F full CLI acceptance is accepted in
 `scripts/run_phase5f_full_cli_acceptance.py`. The runner reuses the Phase 5G
