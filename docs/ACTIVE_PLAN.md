@@ -20,8 +20,8 @@ Phase 5 Personal-use DocAgent MVP
 -> keep the accepted rule router as the deterministic default
 -> use external LLM only for explicitly enabled low-confidence routing fallback
 -> use the LLM query planner only for query expansion when explicitly enabled
--> Phase 5I-B Full Model-enhanced QA Path implemented locally;
-   server full-path smoke with real Router/Rewriter API and Qwen is pending
+-> Phase 5I-B Full Model-enhanced QA Path accepted after server full-path smoke
+   with real Router/Rewriter API, Qwen base AnswerPolicy, and Router trigger probe
 -> keep final-answer correctness metrics diagnostic-only until the Qwen input /
    output contract and future training data design are revisited
 -> Phase 5E Document Summary MVP implemented locally
@@ -95,7 +95,7 @@ Phase 5H Full Workflow Validation Baseline -> accepted
 Phase 5I old-semantics server benchmark -> benchmark_evaluated
 Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner -> accepted
 Phase 5I-A corrected-semantics server benchmark -> accepted
-Phase 5I-B Full Model-enhanced QA Path -> implemented
+Phase 5I-B Full Model-enhanced QA Path -> accepted
 Phase 5I-B Final Answer Quality Benchmark -> not_started
 Phase 5E Document Summary MVP -> implemented
 Phase 5E-A Document Summary Acceptance Pack -> implemented
@@ -1056,6 +1056,37 @@ table_lookup, simple_calculation, local_fact_qa answer fixes, Router task
 classification changes, AnswerPolicy changes, VLM, training, final answer
 quality benchmarking, or full GRPO E2E.
 
+Phase 5I-B accepted full-model-path server validation:
+
+```text
+branch = phase5/phase5i-b-full-model-qa-path
+accepted_commit = f83269f
+resource_preflight = success
+full_path_smoke_command = phase5i_b_step5_sync_and_rerun_cross_lingual_smoke
+full_path_smoke_run_id = phase5i_b_full_path_smoke_5case_after_cross_lingual_retry
+full_path_smoke_status = success
+full_path_smoke_cases = 5
+full_path_smoke_passed = 4
+full_path_smoke_failed = 1
+full_path_smoke_failure = ambiguous_short_date:evidence_keyword_missing
+used_external_api = true
+used_llm_query_rewriter = true
+used_qwen_answer_policy = true
+answer_policy_mode = base
+trace_run_id_count = 4
+same_language_probe_command = phase5i_b_step6_same_language_router_probe
+same_language_probe_status = success
+same_language_core_failed_count = 0
+ambiguous_short_date_failed = true
+router_probe_used_llm_router_count = 2
+```
+
+Phase 5I-B acceptance means the Phase 3/4/5 capabilities can enter one real
+QA path with LLM planning enabled and local/server Qwen answer generation
+available. The accepted boundary is path validation and artifact tracing, not
+final answer quality. `ambiguous_short_date` remains a conservative diagnostic
+evidence-readiness failure, not a per-sample repair target.
+
 Phase 4D-C scaffold / command preparation:
 
 ```text
@@ -1237,8 +1268,8 @@ Phase 4D-B1.3 server sanity accepted
 + Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner accepted
 + Phase 5I-A corrected-semantics server benchmark accepted with
   evidence_readiness_status = baseline_has_failures
-+ Phase 5I-B Full Model-enhanced QA Path implemented locally; server
-  full-path smoke pending
++ Phase 5I-B Full Model-enhanced QA Path accepted after server full-path smoke
+  and Router LLM trigger probe
 + Phase 5I-B Final Answer Quality Benchmark not_started
 + Phase 5E Document Summary MVP implemented with local targeted and Phase 5
   regression tests passing
