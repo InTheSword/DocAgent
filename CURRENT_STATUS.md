@@ -245,8 +245,15 @@ canonicalized into a final `format_valid=true` answer. Repaired parse/schema
 failures remain diagnostic and do not preempt answer-quality or SFT-candidate
 recommendations; unrepaired failures still return
 `prompt_or_parser_repair_before_training`. This semantic repair is
-implemented locally and awaits a review-only server rerun on the full80
-tablefix baseline.
+implemented locally and was validated by the review-only server rerun
+`answer_policy_full80_repaired_parse_review_20260629` at commit `9f8a23d`.
+The rerun used the existing full80 tablefix baseline artifacts, did not rerun
+Qwen, did not train, and returned
+`recommendation=continue_qwen_eval_before_training`, `sft_gate=defer`,
+`parse_fail_count_in_rows=1`, `repaired_parse_fail_count_in_rows=1`,
+`unrepaired_parse_fail_count_in_rows=0`,
+`invalid_citation_id_count_in_rows=16`, and
+`answer_miss_count_in_rows=19`.
 
 Phase 5 AnswerPolicy SFT candidate data builder is implemented locally in
 `scripts/build_answer_policy_sft_candidates.py` with tests in
@@ -349,8 +356,11 @@ schema failure, zero raw JSON failures, and one
 `parse_fail_but_format_valid` row; the row was already canonicalized into the
 final output contract and also failed answer quality. The local review-gate
 semantics now treat this as a repaired-output diagnostic rather than a hard
-parser blocker. The next action is a review-only server rerun of the existing
-baseline artifacts, not Qwen rerun or training.
+parser blocker. Review-only server rerun
+`answer_policy_full80_repaired_parse_review_20260629` confirmed the gate now
+recommends continuing Qwen evaluation before training. This is
+`real_model_verified` diagnostic evidence for review-gate behavior only, not
+final answer-quality acceptance or benchmark evaluation.
 
 Phase 5 AnswerPolicy training-gate orchestrator is implemented locally in
 `scripts/run_final_answer_policy_training_gate.py` with tests in

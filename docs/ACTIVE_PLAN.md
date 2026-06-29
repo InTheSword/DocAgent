@@ -76,8 +76,8 @@ Phase 5 Personal-use DocAgent MVP
    with answer_hit_rate 0.7625, citation_block_hit_rate 1.0, pass_rate
    0.7625, answer_miss 19; parse/schema inspection found one row-level
    schema failure that was already repaired into a canonical format-valid
-   output, so review-gate repaired-output semantics are implemented locally
-   and need a review-only server rerun before any training decision
+   output; review-only server rerun confirmed the repaired-output semantics
+   and now recommends continuing Qwen evaluation before training
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -175,7 +175,7 @@ Phase 5 AnswerPolicy SFT candidate review -> real_model_verified
 Phase 5 table tool row/header selection repair -> accepted
 Phase 5 larger AnswerPolicy Qwen tablefix diagnostic gate -> real_model_verified
 Phase 5 full80 AnswerPolicy Qwen tablefix diagnostic gate -> real_model_verified
-Phase 5 AnswerPolicy review gate repaired parse/schema semantics -> implemented
+Phase 5 AnswerPolicy review gate repaired parse/schema semantics -> real_model_verified
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
@@ -1521,7 +1521,13 @@ full80_parse_failure_inspect = success, run_id
 review_gate_repaired_parse_schema_semantics = implemented locally; repaired
   raw JSON/schema failures now remain diagnostic when final format_valid is
   true, while unrepaired parse/schema failures still block SFT/GRPO decisions;
-  server review-only rerun pending
+  server review-only rerun success, run_id
+  answer_policy_full80_repaired_parse_review_20260629, git_commit 9f8a23d,
+  recommendation continue_qwen_eval_before_training, sft_gate defer,
+  parse_fail_count 1, repaired_parse_fail_count 1,
+  unrepaired_parse_fail_count 0, invalid_citation_id_count 16,
+  answer_miss_count 19, used_training false,
+  formal_benchmark_acceptance false
 sft_candidate_review = server validation success, run_id
   answer_policy_sft_candidate_review_larger40_20260629_tracked,
   candidate_record_count 13, failed_without_candidate_count 1,
