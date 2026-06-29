@@ -26,6 +26,7 @@ Phase 5 Personal-use DocAgent MVP
    output contract and future training data design are revisited
 -> Phase 5E Document Summary MVP implemented locally
 -> Phase 5E-A Document Summary Acceptance Pack implemented locally
+-> Phase 5F Full CLI Acceptance accepted after AutoDL server smoke
 -> stop before table_lookup, simple_calculation, VLM,
    local_fact_qa answer-quality fixes, training, and full GRPO E2E
 ```
@@ -99,9 +100,10 @@ Phase 5I-B Full Model-enhanced QA Path -> accepted
 Phase 5I-B Final Answer Quality Benchmark -> not_started
 Phase 5E Document Summary MVP -> implemented
 Phase 5E-A Document Summary Acceptance Pack -> implemented
-Phase 5F full CLI acceptance -> not_started
+Phase 5 structured_extraction deterministic CLI -> implemented
+Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
-MVP CLI / trace integration -> not_started
+MVP CLI / trace integration -> accepted
 Demo/closure -> not_started
 ```
 
@@ -1087,6 +1089,50 @@ available. The accepted boundary is path validation and artifact tracing, not
 final answer quality. `ambiguous_short_date` remains a conservative diagnostic
 evidence-readiness failure, not a per-sample repair target.
 
+Phase 5 structured_extraction deterministic CLI support is implemented locally:
+
+```text
+module = docagent/tools/structured_extraction.py
+cli = scripts/docagent_cli.py
+supported_tools = extract_all_dates, extract_all_tables, extract_all_images,
+  list_sections, document_outline, structured_extract
+validation = tests/test_phase5f_cli.py and tests/test_phase5g_cli_regression.py
+boundary = persisted-evidence structured scans only; no table_lookup,
+  simple_calculation, VLM, answer-quality repair, or training
+```
+
+Phase 5F full CLI acceptance is accepted:
+
+```text
+runner = scripts/run_phase5f_full_cli_acceptance.py
+local_run_id = phase5f_full_cli_20260629_054248_59c59b05
+local_status = success
+server_branch = phase5/phase5f-full-cli-acceptance
+server_head = 42ee83d
+server_run_id = phase5f_full_cli_20260629_055323_69679174
+server_status = success
+acceptance_status = accepted
+case_count = 11
+completed_count = 10
+unsupported_count = 1
+required_task_types = document_statistics, page_lookup, local_fact_qa,
+  document_summary, structured_extraction, table_lookup_or_calculation
+artifact_checked_count = 10
+artifact_pass_count = 10
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+final_answer_quality_evaluated = false
+server_artifacts = outputs/acceptance/phase5f_full_cli_server/phase5f_full_cli_20260629_055323_69679174/acceptance_result.json,
+  acceptance_summary.md, artifact_checks.jsonl, regression_summary.json,
+  regression_results.jsonl
+boundary = full CLI entrypoint and artifact contract only; no table_lookup,
+  simple_calculation, VLM, online MinerU OCR, training, full GRPO E2E, or
+  final answer quality acceptance. MVP CLI / trace integration acceptance
+  covers CLI trace artifact writing, not a new SQLite trace replay benchmark.
+```
+
 Phase 4D-C scaffold / command preparation:
 
 ```text
@@ -1176,6 +1222,8 @@ python -m pytest tests/test_phase5e_document_summary_tool.py -q
 python -m pytest tests/test_phase5e_document_summary_cli.py -q
 python -m pytest tests/test_phase5f_cli.py tests/test_phase5_document_tools.py tests/test_phase5_router.py -q
 python -m pytest tests/test_phase5g_cli_regression.py -q
+python -m pytest tests/test_phase5f_full_cli_acceptance.py -q
+python scripts/run_phase5f_full_cli_acceptance.py --db-path outputs/docagent.db --doc-id fe3465edd3da60d2 --output-dir outputs/acceptance/phase5f_full_cli_local --timeout-seconds 180
 python -m pytest tests/test_phase5f_file_ingestion_cli.py tests/test_phase5f_mineru_file_cli.py -q
 $files = Get-ChildItem -LiteralPath 'D:\Projects\docagent\tests' -Filter 'test_phase5*.py' | ForEach-Object { $_.FullName }; python -m pytest @files -q
 ```
@@ -1273,6 +1321,9 @@ Phase 4D-B1.3 server sanity accepted
 + Phase 5I-B Final Answer Quality Benchmark not_started
 + Phase 5E Document Summary MVP implemented with local targeted and Phase 5
   regression tests passing
++ Phase 5F full CLI acceptance accepted after AutoDL server smoke with
+  11 cases, 10 completed, 1 structured unsupported boundary, and 10/10
+  artifact contracts passing
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

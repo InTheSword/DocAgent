@@ -305,7 +305,7 @@ Phase 5F-2 server file-to-answer smoke -> accepted
 Phase 5F-3 MinerU-backed file-to-answer implementation -> accepted
 Phase 5F-3 server smoke -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> accepted
-Phase 5F full CLI acceptance -> not_started
+Phase 5F full CLI acceptance -> accepted
 ```
 
 ## Exit Criteria For Phase 5C-2
@@ -448,7 +448,7 @@ supporting_evidence_ids_count = 5
 Current next targets:
 
 ```text
-Phase 5E document_summary -> not_started
+Phase 5E document_summary -> implemented
 Phase 5F-1 unified CLI MVP -> accepted
 Phase 5F-1 server CLI smoke -> accepted
 Phase 5F-2 file-to-answer ingestion integration -> accepted
@@ -458,7 +458,7 @@ Phase 5F-3 server smoke -> accepted
 Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
 Phase 5C-2 LLM-assisted Router fallback -> accepted
-Phase 5F full CLI acceptance -> not_started
+Phase 5F full CLI acceptance -> accepted
 ```
 
 ## Exit Criteria For Phase 5F-1
@@ -478,9 +478,9 @@ Phase 5F-1 Unified CLI MVP is implemented when:
   partial: already-ingested files can be reused by SHA; otherwise the CLI
   returns structured `file_ingestion_unavailable` and points users to
   `scripts/ingest_document.py`;
-- unsupported task types return structured errors:
-  `document_summary_not_implemented`, `table_lookup_not_implemented`, or
-  `structured_extraction_not_implemented`;
+- unsupported task types return structured errors such as
+  `table_lookup_not_implemented`; `document_summary` and
+  `structured_extraction` are now implemented deterministic CLI paths;
 - stdout is a single JSON object and every QA run writes
   `result.json`, `summary.json`, `router_plan.json`, and `trace.json` under
   `outputs/cli/<run_id>/`;
@@ -839,11 +839,70 @@ Status:
 ```text
 Phase 5G CLI regression baseline -> accepted
 Phase 5G server regression -> accepted
-Phase 5E document_summary -> not_started
+Phase 5E document_summary -> implemented
 Phase 5C-2 LLM-assisted Router fallback -> accepted
+Phase 5F full CLI acceptance -> accepted
 online MinerU OCR execution -> not_started
 local_fact_qa answer quality improvement -> not_started
 ```
+
+## Exit Criteria For Phase 5F Full CLI Acceptance
+
+Phase 5F full CLI acceptance is accepted when:
+
+- `scripts/run_phase5f_full_cli_acceptance.py` exists and reuses the accepted
+  Phase 5G CLI regression execution instead of bypassing the CLI;
+- required CLI paths cover `list_documents`, `document_statistics`,
+  `page_lookup`, `local_fact_qa`, `.txt` file input, `document_summary`,
+  `structured_extraction`, `file_not_found`, visual unsupported fallback, and
+  the table/calculation structured unsupported boundary;
+- every non-list, non-skipped QA case writes `result.json`, `summary.json`,
+  `router_plan.json`, and `trace.json`;
+- summary artifacts record `used_external_api=false`, `used_vlm=false`,
+  `used_training=false`, and `used_full_e2e=false`;
+- the runner records that final answer quality, table lookup, simple
+  calculation, visual pixel QA, online MinerU OCR, training, and full GRPO E2E
+  are not evaluated.
+
+Local readiness evidence:
+
+```text
+runner = scripts/run_phase5f_full_cli_acceptance.py
+local_run_id = phase5f_full_cli_20260629_054248_59c59b05
+local_status = success
+acceptance_status = ready
+case_count = 11
+completed_count = 10
+unsupported_count = 1
+artifact_checked_count = 10
+artifact_pass_count = 10
+server_acceptance_required = true
+```
+
+AutoDL server acceptance evidence:
+
+```text
+branch = phase5/phase5f-full-cli-acceptance
+head = 42ee83d
+server_run_id = phase5f_full_cli_20260629_055323_69679174
+server_status = success
+case_count = 11
+completed_count = 10
+unsupported_count = 1
+artifact_checked_count = 10
+artifact_pass_count = 10
+used_external_api = false
+used_vlm = false
+used_training = false
+used_full_e2e = false
+final_answer_quality_evaluated = false
+artifact_dir = outputs/acceptance/phase5f_full_cli_server/phase5f_full_cli_20260629_055323_69679174
+```
+
+This acceptance covers the full CLI entrypoint and trace artifact contract. It
+does not accept final answer quality, table lookup, simple calculation, visual
+pixel QA, online MinerU OCR, training, full GRPO E2E, or a new SQLite trace
+replay benchmark.
 
 ## Exit Criteria For Phase 5 MVP
 

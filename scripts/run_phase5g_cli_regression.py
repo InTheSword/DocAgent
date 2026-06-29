@@ -25,13 +25,11 @@ DEFAULT_CLI_PATH = ROOT / "scripts" / "docagent_cli.py"
 UNSUPPORTED_ERROR_TYPES = {
     "document_summary_not_implemented",
     "table_lookup_not_implemented",
-    "structured_extraction_not_implemented",
     "unsupported_task_type",
 }
 KNOWN_LIMITATION_MARKERS = {
     "document_summary_not_implemented",
     "table_lookup_not_implemented",
-    "structured_extraction_not_implemented",
     "visual_understanding_unsupported",
     "fallback_to_local_fact_qa",
     "dry_run_no_answer_generated",
@@ -185,6 +183,15 @@ def _load_cases(cases_jsonl: Path | None, *, run_dir: Path, doc_id: str, txt_fix
             "expected_status": "success",
             "expected_task_type": "document_summary",
             "expected_tools_any": ["document_summary"],
+        },
+        {
+            "case_id": "structured_extract_dates",
+            "mode": "doc_id",
+            "doc_id": dynamic_doc_id,
+            "question": "List all dates mentioned in this document.",
+            "expected_status": "success",
+            "expected_task_type": "structured_extraction",
+            "expected_tools_any": ["extract_all_dates"],
         },
         {
             "case_id": "table_lookup_not_implemented",

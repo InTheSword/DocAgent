@@ -31,7 +31,8 @@ Phase 5I-B Full Model-enhanced QA Path -> accepted
 Phase 5I-B Final Answer Quality Benchmark -> not_started
 Phase 5E document_summary -> implemented
 Phase 5E-A document_summary acceptance pack -> implemented
-Phase 5F full CLI acceptance -> not_started
+Phase 5 structured_extraction deterministic CLI -> implemented
+Phase 5F full CLI acceptance -> accepted
 ```
 
 Phase 5D-S validates execution stability, not benchmark-level answer quality.
@@ -1077,7 +1078,9 @@ Boundary:
 At Phase 5F-1 acceptance time, document_summary remained Phase 5E not_started;
 it was implemented later as a deterministic local tool.
 table_lookup and simple_calculation remain not_started.
-structured_extraction returns structured unsupported when current tools are insufficient.
+structured_extraction was implemented later as deterministic persisted-evidence
+scans for dates, table blocks, image/figure blocks, section metadata, outline,
+and generic structured evidence.
 LLM-assisted Router fallback was not implemented in Phase 5F-1; it was accepted
 later in Phase 5C-2 and remains disabled by default.
 No VLM, training, full GRPO E2E, AnswerPolicy prompt change, or candidate answer extraction change is included.
@@ -1289,6 +1292,41 @@ so CLI fell back to local_fact_qa dry-run. This did not block that execution
 smoke acceptance; Phase 5E was implemented later.
 local_fact_qa answer quality is not benchmark-validated by this smoke.
 The GLOBOCAN sample structure_quality is passed_with_warnings.
+```
+
+#### Phase 5F full CLI acceptance
+
+Implementation status:
+
+```text
+Phase 5F full CLI acceptance -> accepted
+runner = scripts/run_phase5f_full_cli_acceptance.py
+resource_boundary = local_only for implementation; server smoke required for accepted status
+local_run_id = phase5f_full_cli_20260629_054248_59c59b05
+local_status = success
+server_branch = phase5/phase5f-full-cli-acceptance
+server_head = 42ee83d
+server_run_id = phase5f_full_cli_20260629_055323_69679174
+server_status = success
+case_count = 11
+completed_count = 10
+unsupported_count = 1
+artifact_checked_count = 10
+artifact_pass_count = 10
+required_task_types = document_statistics, page_lookup, local_fact_qa,
+  document_summary, structured_extraction, table_lookup_or_calculation
+```
+
+Acceptance boundary:
+
+```text
+This runner validates the unified CLI entrypoint and artifact contract after
+document_summary and structured_extraction were added.
+It does not evaluate final answer quality.
+It does not implement table_lookup, simple_calculation, visual_pixel_qa,
+online MinerU OCR, training, or full GRPO E2E.
+Acceptance covers CLI trace artifact writing, not a new SQLite trace replay
+benchmark.
 ```
 
 ### Phase 5G: Multi-task Regression
@@ -1730,6 +1768,7 @@ Phase 5F-1 unified CLI MVP and server CLI smoke are accepted.
 Phase 5F-2 file-to-answer ingestion integration and server smoke are accepted for lightweight .txt files.
 Phase 5F-3 MinerU-backed file-to-answer implementation and server smoke are accepted for existing MinerU output-backed execution.
 Phase 5G CLI regression baseline and server regression are accepted as execution stability evidence.
+Phase 5F full CLI acceptance is accepted after AutoDL server smoke.
 Phase 5C-2 LLM-assisted Router fallback and server real API smoke are accepted.
 Phase 5C-3 Query Planning + Multi-Query Retrieval is accepted. Single-case LLM
 semantic query expansion smoke and multi-question Query Rewriter smoke both

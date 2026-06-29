@@ -26,7 +26,6 @@ DETERMINISTIC_TASKS = {"page_lookup", "document_statistics"}
 UNSUPPORTED_ERROR_TYPES = {
     "document_summary_not_implemented",
     "table_lookup_not_implemented",
-    "structured_extraction_not_implemented",
     "unsupported_task_type",
 }
 

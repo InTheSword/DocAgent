@@ -26,7 +26,6 @@ EVALUATION_SCOPE = "pre_llm_evidence_readiness"
 UNSUPPORTED_ERROR_TYPES = {
     "document_summary_not_implemented",
     "table_lookup_not_implemented",
-    "structured_extraction_not_implemented",
     "unsupported_task_type",
 }
 UNSUPPORTED_WARNING_MARKERS = {
@@ -553,14 +552,14 @@ def default_cases() -> list[GoldenCase]:
             user_request="Extract all dates mentioned in the document.",
             request_form="extraction",
             expected_task_type="structured_extraction",
-            expected_answer_type="unsupported",
-            answerable=False,
-            unsupported_ok=True,
+            expected_answer_type="extractive",
+            answerable=True,
+            unsupported_ok=False,
             expected_page=None,
             expected_evidence_keywords=[],
             expected_answer_keywords=[],
             forbidden_answer_keywords=[],
-            notes="Full-scan extraction is not implemented as a dedicated tool in this phase.",
+            notes="Deterministic full-scan date extraction should run without table lookup, calculation, VLM, or answer-generation changes.",
         ),
     ]
 

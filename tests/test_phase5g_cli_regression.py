@@ -70,6 +70,15 @@ def test_phase5g_runner_reads_cases_and_writes_reports(tmp_path: Path) -> None:
                 "expected_tools_any": ["document_summary"],
             },
             {
+                "case_id": "structured_dates",
+                "mode": "doc_id",
+                "doc_id": "$FIRST_DOC_ID",
+                "question": "List all dates mentioned in this document.",
+                "expected_status": "success",
+                "expected_task_type": "structured_extraction",
+                "expected_tools_any": ["extract_all_dates"],
+            },
+            {
                 "case_id": "table_lookup_not_implemented",
                 "mode": "doc_id",
                 "doc_id": "$FIRST_DOC_ID",
@@ -127,6 +136,18 @@ def test_phase5g_runner_reads_cases_and_writes_reports(tmp_path: Path) -> None:
                     artifact_dir=str(artifact_dir),
                 ),
             )
+        if question == "List all dates mentioned in this document.":
+            artifact_dir = output_dir / "structured_case"
+            artifact_dir.mkdir(parents=True)
+            (artifact_dir / "result.json").write_text("{}", encoding="utf-8")
+            return CommandResult(
+                0,
+                _payload(
+                    task_type="structured_extraction",
+                    tools_used=["extract_all_dates"],
+                    artifact_dir=str(artifact_dir),
+                ),
+            )
         if question == "What is the difference between 2020 and 2021 revenue?":
             artifact_dir = output_dir / "table_case"
             artifact_dir.mkdir(parents=True)
@@ -153,19 +174,20 @@ def test_phase5g_runner_reads_cases_and_writes_reports(tmp_path: Path) -> None:
     )
 
     assert summary["status"] == "failed"
-    assert summary["case_count"] == 6
-    assert summary["completed_count"] == 3
+    assert summary["case_count"] == 7
+    assert summary["completed_count"] == 4
     assert summary["unsupported_count"] == 1
     assert summary["skipped_count"] == 1
     assert summary["failed_count"] == 1
-    assert summary["json_valid_count"] == 4
-    assert summary["artifact_write_count"] == 3
+    assert summary["json_valid_count"] == 5
+    assert summary["artifact_write_count"] == 4
     assert summary["task_type_distribution"] == {
         "document_statistics": 1,
         "document_summary": 1,
+        "structured_extraction": 1,
         "table_lookup_or_calculation": 1,
     }
-    assert summary["tools_used_distribution"] == {"count_pages": 1, "document_summary": 1}
+    assert summary["tools_used_distribution"] == {"count_pages": 1, "document_summary": 1, "extract_all_dates": 1}
     assert summary["failure_taxonomy"] == {"stdout_not_json": 1}
     assert summary["unsupported_taxonomy"]["table_lookup_not_implemented"] == 1
     assert summary["skipped_taxonomy"]["mineru_fixture_missing"] == 1
