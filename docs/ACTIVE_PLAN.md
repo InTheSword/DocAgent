@@ -37,6 +37,8 @@ Phase 5 Personal-use DocAgent MVP
 -> final-delivery CLI guide implemented locally
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
+-> final subset AnswerPolicy baseline runner implemented locally; real Qwen
+   server run remains not_started
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -121,6 +123,7 @@ Phase 5 final evaluation local subset diagnostic runner -> implemented
 Phase 5 final delivery CLI guide -> implemented
 Phase 5 AnswerPolicy IO candidate schema / citation allowlist -> implemented
 Phase 5 AnswerPolicy prompt v2 candidate citation contract -> implemented
+Phase 5 final AnswerPolicy baseline runner -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
@@ -1367,6 +1370,25 @@ used_qwen = false
 server_qwen_baseline = not_started
 ```
 
+Final AnswerPolicy baseline runner:
+
+```text
+resource_boundary = server_required_for_qwen_acceptance
+script = scripts/run_final_answer_policy_baseline.py
+test = tests/test_run_final_answer_policy_baseline.py
+input_scope = prepared final-eval subset artifacts under outputs/final_eval/
+local_smoke = heuristic/fake-policy only; diagnostic_not_formal_benchmark
+server_target = Qwen base prompt-v2 baseline over prepared TAT-QA local_fact_qa
+  evidence cases, with MP-DocVQA manifest cases explicitly skipped until
+  raw PDF -> MinerU/retrieval evidence is available
+artifact_outputs = results.jsonl, summary.json, summary.md, preview.json,
+  failures_sample.jsonl, manifest.json
+status = implemented
+used_qwen_local = false
+server_qwen_baseline = not_started
+benchmark_evaluation_status = not_started
+```
+
 Local `main` validation covers code and documentation state. The accepted Gate
 4 artifacts are server-side outputs; the local absence of these ignored paths
 does not indicate missing tracked code:
@@ -1478,8 +1500,10 @@ Phase 4D-B1.3 server sanity accepted
   and linked from `README.md`; status remains documentation/packaging only
 + AnswerPolicy IO candidate schema, shared prompt v2 candidate-citation
   contract, SFT/GRPO record compatibility, and reward/eval schema
-  compatibility implemented locally; Qwen baseline, prompt-quality evidence,
-  training execution, and final answer benchmark remain not_started
+  compatibility implemented locally; final subset AnswerPolicy baseline runner
+  implemented locally with heuristic/fake-policy validation; real Qwen
+  baseline, prompt-quality evidence, training execution, and final answer
+  benchmark remain not_started
 + targeted and regression tests pass
 + status documents updated
 + branch pushed

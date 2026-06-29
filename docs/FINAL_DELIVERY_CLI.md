@@ -39,6 +39,7 @@ Implemented local capabilities:
 - citation allowlist filtering for model-selected evidence block ids
 - local final-evaluation subset preparation for TAT-QA dev and MP-DocVQA val
 - local subset diagnostic report with JSON and Markdown summaries
+- final subset AnswerPolicy baseline runner for server Qwen prompt-v2 smoke
 
 Not included in the current local delivery:
 
@@ -182,6 +183,19 @@ This path requires a working MinerU executable outside the current project. If
 MinerU is missing, times out, or exits nonzero, DocAgent writes a structured
 `mineru_cli_result.json` failure artifact. That failure artifact is implemented
 locally; it is not an accepted online OCR capability by itself.
+
+Run the final subset AnswerPolicy baseline locally with the heuristic policy:
+
+```powershell
+python scripts\run_final_answer_policy_baseline.py `
+  --answer-policy heuristic `
+  --max-samples 5 `
+  --output-dir outputs\final_eval\answer_policy_baseline_local
+```
+
+On a GPU server with Qwen available, use `--answer-policy base` and
+`--base-model-path /root/autodl-tmp/models/Qwen3-1.7B`. This runner is a
+diagnostic prompt-v2 baseline, not formal benchmark acceptance.
 
 Enable optional query planning:
 
