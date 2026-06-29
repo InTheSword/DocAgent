@@ -311,6 +311,18 @@ hit gold, and the failure distribution was empty. This accepts the
 deterministic table-tool repair only; it is not final Qwen answer-quality
 acceptance.
 
+The larger real-Qwen diagnostic gate was rerun after the table-tool repair
+with run id `answer_policy_training_gate_qwen_larger40_tablefix_20260629`.
+It evaluated 40 TAT-QA AnswerPolicy cases plus 40 skipped MP-DocVQA manifest
+rows, used Qwen base, did not train, and did not claim formal benchmark
+acceptance. The result improved to `pass_rate=0.90`, `answer_hit_rate=0.90`,
+`citation_block_hit_rate=1.0`, `format_valid_rate=1.0`, and
+`failure_reason_distribution=answer_miss:4`. The review recommendation is
+`continue_qwen_eval_before_training`, with `sft_gate=defer` and SFT candidates
+skipped. This confirms that the earlier larger40 answer misses were mostly
+tool-context defects and that the next step is a larger real-Qwen diagnostic,
+not SFT/GRPO training.
+
 Phase 5 AnswerPolicy training-gate orchestrator is implemented locally in
 `scripts/run_final_answer_policy_training_gate.py` with tests in
 `tests/test_run_final_answer_policy_training_gate.py`. It runs the final

@@ -68,6 +68,10 @@ Phase 5 Personal-use DocAgent MVP
    and $000-to-million display; local 12-row replay now has 12/12 tool
    answer hits; server deterministic audit on the same 12 rows succeeded with
    12/12 tool answer hits
+-> larger 40-sample real Qwen diagnostic gate rerun after table-tool repair
+   completed with answer_hit_rate 0.90, citation_block_hit_rate 1.0,
+   pass_rate 0.90, answer_miss 4, and SFT gate deferred; next action is a
+   larger real Qwen diagnostic, not training
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -163,6 +167,7 @@ Phase 5 larger AnswerPolicy Qwen diagnostic gate -> real_model_verified
 Phase 5 AnswerPolicy SFT candidate artifact generation -> implemented
 Phase 5 AnswerPolicy SFT candidate review -> real_model_verified
 Phase 5 table tool row/header selection repair -> accepted
+Phase 5 larger AnswerPolicy Qwen tablefix diagnostic gate -> real_model_verified
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
@@ -1481,6 +1486,13 @@ larger_qwen_diagnostic = success, run_id
   answer_hit_rate 0.65, citation_block_hit_rate 1.0,
   failure_reason answer_miss:14, review recommendation
   sft_data_design_candidate, sft_candidate_record_count 13,
+  used_training false, formal_benchmark_acceptance false
+larger_qwen_tablefix_diagnostic = success, run_id
+  answer_policy_training_gate_qwen_larger40_tablefix_20260629, case_count 80,
+  evaluated_count 40, pass_rate 0.90, format_valid_rate 1.0,
+  answer_hit_rate 0.90, citation_block_hit_rate 1.0,
+  failure_reason answer_miss:4, review recommendation
+  continue_qwen_eval_before_training, sft_gate defer, sft_candidates skipped,
   used_training false, formal_benchmark_acceptance false
 sft_candidate_review = server validation success, run_id
   answer_policy_sft_candidate_review_larger40_20260629_tracked,
