@@ -99,6 +99,7 @@ Phase 5I-B Full Model-enhanced QA Path -> accepted
 Phase 5I-B Final Answer Quality Benchmark -> not_started
 Phase 5E Document Summary MVP -> implemented
 Phase 5E-A Document Summary Acceptance Pack -> implemented
+Phase 5 structured_extraction deterministic CLI -> implemented
 Phase 5F full CLI acceptance -> not_started
 CDC -> not_started
 MVP CLI / trace integration -> not_started
@@ -1086,6 +1087,18 @@ QA path with LLM planning enabled and local/server Qwen answer generation
 available. The accepted boundary is path validation and artifact tracing, not
 final answer quality. `ambiguous_short_date` remains a conservative diagnostic
 evidence-readiness failure, not a per-sample repair target.
+
+Phase 5 structured_extraction deterministic CLI support is implemented locally:
+
+```text
+module = docagent/tools/structured_extraction.py
+cli = scripts/docagent_cli.py
+supported_tools = extract_all_dates, extract_all_tables, extract_all_images,
+  list_sections, document_outline, structured_extract
+validation = tests/test_phase5f_cli.py and tests/test_phase5g_cli_regression.py
+boundary = persisted-evidence structured scans only; no table_lookup,
+  simple_calculation, VLM, answer-quality repair, or training
+```
 
 Phase 4D-C scaffold / command preparation:
 

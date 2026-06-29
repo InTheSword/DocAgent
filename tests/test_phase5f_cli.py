@@ -295,6 +295,56 @@ def test_document_summary_question_runs_summary_tool(tmp_path: Path) -> None:
     assert payload["error"] == {}
 
 
+def test_structured_extraction_dates_runs_deterministic_tool(tmp_path: Path) -> None:
+    db_path = _repository_with_document(tmp_path)
+
+    payload = _run_cli(
+        tmp_path,
+        "--db-path",
+        str(db_path),
+        "--doc-id",
+        "doc1",
+        "--question",
+        "List all dates mentioned in this document.",
+        "--output-dir",
+        str(tmp_path / "cli"),
+    )
+
+    assert payload["status"] == "success"
+    assert payload["task_type"] == "structured_extraction"
+    assert payload["router_plan"]["selected_tools"] == ["extract_all_dates"]
+    assert payload["tools_used"] == ["extract_all_dates"]
+    assert payload["structured_result"]["item_count"] >= 1
+    assert payload["structured_result"]["counts_by_type"]["date"] >= 1
+    assert any(item["value"] == "March 12, 2020" for item in payload["structured_result"]["items"])
+    assert payload["citations"]
+    assert Path(payload["artifact_dir"], "trace.json").is_file()
+
+
+def test_structured_extraction_tables_runs_deterministic_tool(tmp_path: Path) -> None:
+    db_path = _repository_with_document(tmp_path)
+
+    payload = _run_cli(
+        tmp_path,
+        "--db-path",
+        str(db_path),
+        "--doc-id",
+        "doc1",
+        "--question",
+        "Extract all tables from this document.",
+        "--output-dir",
+        str(tmp_path / "cli"),
+    )
+
+    assert payload["status"] == "success"
+    assert payload["task_type"] == "structured_extraction"
+    assert payload["router_plan"]["selected_tools"] == ["extract_all_tables"]
+    assert payload["tools_used"] == ["extract_all_tables"]
+    assert payload["structured_result"]["counts_by_type"]["table"] == 1
+    assert payload["structured_result"]["items"][0]["block_id"] == "doc1_p001_table"
+    assert payload["citations"][0]["block_id"] == "doc1_p001_table"
+
+
 def test_table_calculation_question_returns_not_implemented(tmp_path: Path) -> None:
     db_path = _repository_with_document(tmp_path)
 

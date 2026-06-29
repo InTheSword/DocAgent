@@ -478,9 +478,9 @@ Phase 5F-1 Unified CLI MVP is implemented when:
   partial: already-ingested files can be reused by SHA; otherwise the CLI
   returns structured `file_ingestion_unavailable` and points users to
   `scripts/ingest_document.py`;
-- unsupported task types return structured errors:
-  `document_summary_not_implemented`, `table_lookup_not_implemented`, or
-  `structured_extraction_not_implemented`;
+- unsupported task types return structured errors such as
+  `table_lookup_not_implemented`; `document_summary` and
+  `structured_extraction` are now implemented deterministic CLI paths;
 - stdout is a single JSON object and every QA run writes
   `result.json`, `summary.json`, `router_plan.json`, and `trace.json` under
   `outputs/cli/<run_id>/`;

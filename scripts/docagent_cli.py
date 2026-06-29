@@ -34,6 +34,7 @@ from docagent.tools.document_tools import (
 )
 from docagent.tools.document_summary import summarize_document
 from docagent.tools.local_fact_qa import local_fact_qa
+from docagent.tools.structured_extraction import structured_extract
 
 
 AVAILABLE_TOOLS = [
@@ -45,6 +46,12 @@ AVAILABLE_TOOLS = [
     "get_page_text",
     "list_pages",
     "document_summary",
+    "extract_all_tables",
+    "extract_all_images",
+    "list_sections",
+    "document_outline",
+    "extract_all_dates",
+    "structured_extract",
 ]
 DEFAULT_OUTPUT_DIR = ROOT / "outputs" / "cli"
 DEFAULT_DOCUMENT_ROOT = ROOT / "data" / "documents"
@@ -737,15 +744,58 @@ def _run_document_summary(
     }
 
 
+def _run_structured_extraction(
+    *,
+    repository: DocumentRepository,
+    doc_id: str,
+    question: str,
+    router_plan: dict[str, Any],
+    dry_run: bool,
+) -> dict[str, Any]:
+    selected_tools = [str(item) for item in router_plan.get("selected_tools") or ["structured_extract"]]
+    if dry_run:
+        return {
+            "status": "success",
+            "answer": "",
+            "citations": [],
+            "supporting_evidence_ids": [],
+            "tools_used": selected_tools,
+            "structured_result": {
+                "task_type": "structured_extraction",
+                "status": "dry_run",
+                "selected_tools": selected_tools,
+                "items": [],
+            },
+            "warnings": ["dry_run_no_answer_generated"],
+            "error": {},
+        }
+
+    result = structured_extract(repository, doc_id, selected_tools=selected_tools, question=question)
+    if result.get("status") != "success":
+        return _tool_error(result, "structured_extraction_failed")
+
+    item_count = int(result.get("item_count") or 0)
+    counts = result.get("counts_by_type") if isinstance(result.get("counts_by_type"), dict) else {}
+    count_text = ", ".join(f"{key}: {value}" for key, value in counts.items()) if counts else "no structured items"
+    answer = f"Found {item_count} structured item(s): {count_text}."
+    citations = result.get("citations") or []
+    return {
+        "status": "success",
+        "answer": answer,
+        "citations": citations,
+        "supporting_evidence_ids": [str(item.get("block_id")) for item in result.get("items") or [] if item.get("block_id")],
+        "tools_used": selected_tools,
+        "structured_result": result,
+        "warnings": result.get("warnings") or [],
+        "error": {},
+    }
+
+
 def _unsupported_task(task_type: str) -> dict[str, Any]:
     mapping = {
         "table_lookup_or_calculation": (
             "table_lookup_not_implemented",
             "table_lookup and simple_calculation are not implemented in this CLI MVP.",
-        ),
-        "structured_extraction": (
-            "structured_extraction_not_implemented",
-            "structured extraction tools are not implemented in this CLI MVP.",
         ),
     }
     error_type, message = mapping.get(task_type, ("unsupported_task_type", f"Unsupported task type: {task_type}"))
@@ -817,7 +867,15 @@ def _dispatch_tool(
         )
     if task_type == "document_summary":
         return _run_document_summary(repository=repository, doc_id=doc_id, question=question, dry_run=dry_run)
-    if task_type in {"table_lookup_or_calculation", "structured_extraction"}:
+    if task_type == "structured_extraction":
+        return _run_structured_extraction(
+            repository=repository,
+            doc_id=doc_id,
+            question=question,
+            router_plan=router_plan,
+            dry_run=dry_run,
+        )
+    if task_type == "table_lookup_or_calculation":
         unsupported = _unsupported_task(task_type)
         unsupported["warnings"] = list(dict.fromkeys((router_plan.get("warnings") or []) + [unsupported["error"]["type"]]))
         return unsupported

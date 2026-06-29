@@ -404,6 +404,16 @@ and future training data design are revisited. No external Answer API, VLM,
 table lookup, simple calculation, SFT/GRPO retraining, or full GRPO E2E was
 added.
 
+Phase 5 structured_extraction deterministic CLI support is implemented in
+`docagent/tools/structured_extraction.py` and wired through
+`scripts/docagent_cli.py`. The Router can now dispatch supported
+`structured_extraction` requests to deterministic persisted-evidence scans for
+dates, table blocks, image/figure blocks, section metadata, and generic
+structured evidence. The output includes `structured_result`, citations, and
+trace artifacts through the existing CLI finalization path. This is not
+`table_lookup`, row/column QA, simple calculation, VLM, or answer-quality
+repair.
+
 Phase 5C-2 accepted server real API smoke evidence:
 
 ```text
@@ -504,6 +514,7 @@ Phase 5I-B Full Model-enhanced QA Path -> accepted
 Phase 5I-B Final Answer Quality Benchmark -> not_started
 Phase 5E Document Summary MVP -> implemented
 Phase 5E-A Document Summary Acceptance Pack -> implemented
+Phase 5 structured_extraction deterministic CLI -> implemented
 Phase 5F full CLI acceptance -> not_started
 CDC -> not_started
 MVP CLI / trace integration -> not_started

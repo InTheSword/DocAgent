@@ -31,6 +31,7 @@ Phase 5I-B Full Model-enhanced QA Path -> accepted
 Phase 5I-B Final Answer Quality Benchmark -> not_started
 Phase 5E document_summary -> implemented
 Phase 5E-A document_summary acceptance pack -> implemented
+Phase 5 structured_extraction deterministic CLI -> implemented
 Phase 5F full CLI acceptance -> not_started
 ```
 
@@ -1077,7 +1078,9 @@ Boundary:
 At Phase 5F-1 acceptance time, document_summary remained Phase 5E not_started;
 it was implemented later as a deterministic local tool.
 table_lookup and simple_calculation remain not_started.
-structured_extraction returns structured unsupported when current tools are insufficient.
+structured_extraction was implemented later as deterministic persisted-evidence
+scans for dates, table blocks, image/figure blocks, section metadata, outline,
+and generic structured evidence.
 LLM-assisted Router fallback was not implemented in Phase 5F-1; it was accepted
 later in Phase 5C-2 and remains disabled by default.
 No VLM, training, full GRPO E2E, AnswerPolicy prompt change, or candidate answer extraction change is included.
