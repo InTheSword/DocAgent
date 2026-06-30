@@ -248,6 +248,23 @@ generic API retry/resume hardening at commit `13b1dc1` then passed server run
 materialized and 55/55 samples evidence-ready. This is evidence-readiness and
 artifact-contract acceptance, not final answer-quality benchmark acceptance.
 
+Phase 5 full-workflow real retriever CLI wiring is real-model verified in
+`scripts/docagent_cli.py`. The CLI can now run `local_fact_qa` with explicit
+`bm25`, `dense`, `hybrid`, or `hybrid_rerank` retrieval modes and records
+retriever metadata plus workflow trace artifacts. Server run
+`final_full_workflow_hybrid_rerank_smoke_rowalign_20260630` at commit
+`b0d274f` verified the final delivery execution chain on a materialized
+MP-DocVQA PDF: rule Router main path, LLM Router trigger probe, LLM Query
+Planner, real BGE-M3 dense retrieval, real bge-reranker-v2-m3 cross-encoder
+reranking, Qwen AnswerPolicy, persisted `summary.json`/`trace.json`, and
+workflow trace steps
+`retrieve_evidence -> build_evidence_context -> generate_answer ->
+check_format -> check_location -> answer_repair -> finalize`. The run used
+84 evidence blocks, built a BGE index, returned 5 retrieval candidates and 1
+citation, and passed all execution-chain checks. This is `real_model_verified`
+execution evidence only; it does not evaluate final answer correctness or mark
+MP-DocVQA/TAT-QA benchmark acceptance.
+
 Phase 5 AnswerPolicy IO candidate schema and citation allowlist are
 implemented locally in `docagent/workflow/answer_contract.py`,
 `docagent/models/output_parser.py`, `docagent/workflow/output_adapter.py`,

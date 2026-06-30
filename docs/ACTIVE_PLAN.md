@@ -139,11 +139,17 @@ Phase 5 Personal-use DocAgent MVP
    `mpdocvqa_evidence_api_retry_failed_hardened_20260630` at commit
    `13b1dc1` passed with document_passed_count 10/10 and
    sample_evidence_ready_count 55/55
--> final full-workflow retriever wiring implemented locally: `docagent_cli.py`
-   now lets local_fact_qa explicitly use bm25/dense/hybrid/hybrid_rerank
+-> final full-workflow retriever wiring real-model verified: `docagent_cli.py`
+   lets local_fact_qa explicitly use bm25/dense/hybrid/hybrid_rerank
    retrieval, records dense/reranker metadata and workflow trace in CLI
-   artifacts, and keeps bm25 as the default; server full workflow smoke must
-   still verify Router + Query Planner + real BGE-M3/reranker + Qwen together
+   artifacts, and keeps bm25 as the default; server run
+   `final_full_workflow_hybrid_rerank_smoke_rowalign_20260630` at commit
+   `b0d274f` verified rule Router main path, LLM Router trigger probe,
+   LLM Query Planner, real BGE-M3 dense retrieval, real bge-reranker-v2-m3
+   cross-encoder reranking, Qwen AnswerPolicy, and workflow trace
+   `retrieve_evidence -> build_evidence_context -> generate_answer ->
+   check_format -> check_location -> answer_repair -> finalize`; this is
+   execution-chain evidence, not final answer-quality benchmark evidence
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -252,7 +258,7 @@ Phase 5 MinerU API secret-file support -> accepted
 Phase 5 MinerU API file-to-answer CLI support -> accepted
 Phase 5 MP-DocVQA evidence materialization runner -> accepted
 Phase 5 AnswerPolicy MP-DocVQA evidence-aware baseline path -> implemented
-Phase 5 full-workflow real retriever CLI wiring -> implemented
+Phase 5 full-workflow real retriever CLI wiring -> real_model_verified
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
@@ -1830,6 +1836,13 @@ Phase 4D-B1.3 server sanity accepted
   retry/resume run `mpdocvqa_evidence_api_retry_failed_hardened_20260630`
   verified 10/10 MP-DocVQA documents and 55/55 samples as evidence-ready,
   enabling MP-DocVQA rows to enter the next real-Qwen diagnostic baseline
++ Full-workflow real retriever CLI wiring real-model verified with run id
+  `final_full_workflow_hybrid_rerank_smoke_rowalign_20260630`: main QA path
+  used LLM Query Planner, real BGE-M3 dense retrieval, real
+  bge-reranker-v2-m3 cross-encoder reranking, Qwen AnswerPolicy, and persisted
+  workflow trace including `retrieve_evidence`; separate Router probe used LLM
+  fallback. This is full execution-chain smoke evidence, not final answer
+  correctness or benchmark acceptance.
 + Final evaluation subset preparation implemented locally with TAT-QA dev and
   MP-DocVQA val shard 1-2 manifests, filter reports, source hashes, and
   previews under `outputs/final_eval/`
