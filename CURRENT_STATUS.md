@@ -168,6 +168,19 @@ is documentation and packaging only: it does not change model behavior, run
 online MinerU OCR, run Qwen, use VLM, start training, or promote local subset
 diagnostics to `benchmark_evaluated`.
 
+Phase 5 final raw PDF smoke runner is implemented locally in
+`scripts/run_final_raw_pdf_smoke.py` with tests in
+`tests/test_run_final_raw_pdf_smoke.py`. The runner executes
+`scripts/docagent_cli.py --parser mineru --parser-mode local_cli` over one raw
+PDF and checks the final delivery execution contract: first-run file
+ingestion, MinerU `mineru_cli_result.json`, EvidenceBlock-backed document
+metadata, required CLI artifacts, citations, `evidence_used`, and trace path.
+It writes `cases.jsonl`, `results.jsonl`, `summary.json`, `summary.md`,
+`preview.json`, and `manifest.json` under
+`outputs/smoke/final_raw_pdf/<run_id>/`. Local validation uses a fake command
+runner only; real MinerU local_cli execution, final answer quality, VLM,
+training, and formal benchmark acceptance remain pending server validation.
+
 Phase 5 AnswerPolicy IO candidate schema and citation allowlist are
 implemented locally in `docagent/workflow/answer_contract.py`,
 `docagent/models/output_parser.py`, `docagent/workflow/output_adapter.py`,

@@ -103,6 +103,11 @@ Phase 5 Personal-use DocAgent MVP
    answer_hit_rate/pass_rate to 0.85 with citation_block_hit_rate 1.0;
    review recommends continuing Qwen evaluation before training and skips SFT
    candidates
+-> final raw PDF smoke runner implemented locally; it wraps the existing
+   `docagent_cli.py --parser mineru --parser-mode local_cli` path into a
+   reproducible smoke that checks raw PDF ingestion, MinerU CLI result
+   artifacts, EvidenceBlock persistence, CLI artifact files, citations, and
+   evidence_used without rerunning training, VLM, or benchmark scoring
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -205,6 +210,7 @@ Phase 5 AnswerPolicy answer-miss artifact review -> real_model_verified
 Phase 5 AnswerPolicy generic tool-output pretraining inspection -> real_model_verified
 Phase 5 generic table-tool operation/column repair -> accepted
 Phase 5 full80 AnswerPolicy Qwen generic tablefix diagnostic gate -> real_model_verified
+Phase 5 final raw PDF local_cli smoke runner -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
