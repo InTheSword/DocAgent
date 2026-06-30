@@ -57,6 +57,7 @@ def local_fact_qa(
             warnings=[*warnings, "dry_run_no_answer_generated"],
             workflow_status="dry_run",
             final_answer={},
+            workflow_trace=[],
         )
 
     policy = answer_policy or HeuristicAnswerPolicy()
@@ -96,6 +97,7 @@ def local_fact_qa(
         warnings=warnings,
         workflow_status=state.status,
         final_answer=state.final_answer,
+        workflow_trace=state.trace,
     )
 
 
@@ -112,6 +114,7 @@ def _success(
     warnings: list[str],
     workflow_status: str,
     final_answer: dict[str, Any],
+    workflow_trace: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     citations = _final_answer_citations(final_answer, blocks)
     evidence_used = _final_answer_evidence_used(final_answer, citations)
@@ -135,6 +138,7 @@ def _success(
         "workflow_status": workflow_status,
         "final_answer": final_answer,
         "citation_validation": final_answer.get("citation_validation") or {},
+        "workflow_trace": workflow_trace or [],
     }
 
 

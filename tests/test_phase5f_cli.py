@@ -225,6 +225,48 @@ def test_doc_id_local_fact_qa_dry_run_returns_unified_json(tmp_path: Path) -> No
     assert payload["supporting_evidence_ids"]
 
 
+def test_doc_id_local_fact_qa_can_use_configured_hybrid_rerank_retriever(tmp_path: Path) -> None:
+    db_path = _repository_with_document(tmp_path)
+
+    payload = _run_cli(
+        tmp_path,
+        "--db-path",
+        str(db_path),
+        "--document-root",
+        str(tmp_path / "documents"),
+        "--doc-id",
+        "doc1",
+        "--question",
+        "What is the invoice date?",
+        "--retriever-mode",
+        "hybrid_rerank",
+        "--dense-backend",
+        "hash",
+        "--build-dense-index-if-missing",
+        "--reranker-backend",
+        "keyword",
+        "--output-dir",
+        str(tmp_path / "cli"),
+    )
+
+    assert payload["status"] == "success"
+    assert payload["task_type"] == "local_fact_qa"
+    assert payload["retriever_mode"] == "hybrid_rerank"
+    assert payload["retriever"]["uses_dense"] is True
+    assert payload["retriever"]["uses_reranker"] is True
+    assert payload["retriever"]["dense"]["backend"] == "hash"
+    assert payload["retriever"]["reranker"]["backend"] == "keyword"
+    assert any(step.get("step") == "retrieve_evidence" for step in payload["workflow_trace"])
+
+    summary = json.loads(Path(payload["artifact_dir"], "summary.json").read_text(encoding="utf-8"))
+    assert summary["retriever_mode"] == "hybrid_rerank"
+    assert summary["used_dense_retrieval"] is True
+    assert summary["used_reranker"] is True
+    trace = json.loads(Path(payload["artifact_dir"], "trace.json").read_text(encoding="utf-8"))
+    assert trace["retriever"]["mode"] == "hybrid_rerank"
+    assert any(step.get("step") == "retrieve_evidence" for step in trace["workflow_trace"])
+
+
 def test_full_model_path_missing_llm_config_returns_structured_error(tmp_path: Path) -> None:
     db_path = _repository_with_document(tmp_path)
 

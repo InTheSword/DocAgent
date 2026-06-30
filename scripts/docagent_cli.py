@@ -21,8 +21,11 @@ from docagent.integrations.mineru_api import MinerUApiClient
 from docagent.parser.mineru_backend import MinerUParserBackend
 from docagent.parser.mineru_converter import find_content_list
 from docagent.parser.text_backend import TextParserBackend
+from docagent.retrieval.dense_encoder import DenseEncoder, DenseEncoderConfig, HashDenseEncoder
+from docagent.retrieval.dense_index import DenseIndex
 from docagent.retrieval.index_manager import IndexedDocumentRetriever
 from docagent.retrieval.query_planner import plan_queries
+from docagent.retrieval.reranker import CrossEncoderReranker, CrossEncoderRerankerConfig, KeywordOverlapReranker
 from docagent.router.llm_router import DEFAULT_LLM_ROUTER_THRESHOLD, plan_route_with_optional_llm
 from docagent.storage.db import connect
 from docagent.storage.repositories import DocumentRepository, TraceRepository
@@ -63,7 +66,10 @@ DEFAULT_DOCUMENT_ROOT = ROOT / "data" / "documents"
 DEFAULT_ROUTER_LLM_ENV_FILE = ".secrets/router_llm.env"
 DEFAULT_MINERU_ENV_FILE = ".secrets/mineru.env"
 DEFAULT_QWEN_BASE_MODEL_PATH = "/root/autodl-tmp/models/Qwen3-1.7B"
+DEFAULT_BGE_MODEL_PATH = "/root/autodl-tmp/models/bge-m3"
+DEFAULT_RERANKER_MODEL_PATH = "/root/autodl-tmp/models/bge-reranker-v2-m3"
 ANSWER_POLICY_CHOICES = {"heuristic", "base", "sft", "grpo"}
+RETRIEVER_MODE_CHOICES = {"bm25", "dense", "hybrid", "hybrid_rerank"}
 
 
 def _now_run_id() -> str:
@@ -851,11 +857,126 @@ def _citation_caption(block: Any) -> str:
     return ""
 
 
+def _safe_model_id(value: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("_") or "model"
+
+
+def _build_indexed_retriever(
+    *,
+    repository: DocumentRepository,
+    doc_id: str,
+    document_root: Path,
+    mode: str,
+    dense_backend: str,
+    dense_model_path: str,
+    dense_device: str,
+    dense_fp16: bool,
+    build_dense_index_if_missing: bool,
+    reranker_backend: str,
+    reranker_model_path: str,
+    reranker_device: str,
+    reranker_fp16: bool,
+    query_plan: Any,
+) -> tuple[IndexedDocumentRetriever, dict[str, Any]]:
+    blocks = repository.load_evidence_blocks(doc_id)
+    dense_encoder = None
+    dense_index = None
+    dense_metadata: dict[str, Any] = {}
+    if mode in {"dense", "hybrid", "hybrid_rerank"}:
+        if dense_backend == "hash":
+            dense_encoder = HashDenseEncoder()
+        else:
+            dense_encoder = DenseEncoder(
+                DenseEncoderConfig(
+                    model_path=dense_model_path,
+                    device=dense_device,
+                    use_fp16=dense_fp16,
+                )
+            )
+        index_dir = document_root / doc_id
+        index_metadata = index_dir / f"index_metadata_{_safe_model_id(dense_encoder.model_id)}.json"
+        legacy_index_metadata = index_dir / "index_metadata.json"
+        if not index_metadata.exists() and legacy_index_metadata.exists() and dense_backend == "bge":
+            index_metadata = legacy_index_metadata
+        if not index_metadata.exists():
+            if not build_dense_index_if_missing:
+                raise RuntimeError(
+                    f"dense index is missing for doc_id={doc_id}: {index_metadata}. "
+                    "Pass --build-dense-index-if-missing for a smoke run, or ingest/build the index first."
+                )
+            embeddings = dense_encoder.encode_documents([block.retrieval_text for block in blocks])
+            dense_index = DenseIndex.build(blocks=blocks, embeddings=embeddings, model_id=dense_encoder.model_id)
+            metadata = dense_index.save(index_dir)
+            model_index_metadata = index_dir / f"index_metadata_{_safe_model_id(dense_encoder.model_id)}.json"
+            model_index_metadata.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+            repository.save_index_metadata(
+                doc_id=doc_id,
+                index_type="dense",
+                model_id=str(metadata.get("model_id") or ""),
+                artifact_path=str(index_dir),
+                metadata=metadata,
+            )
+            dense_metadata["index_built"] = True
+            dense_metadata["index_metadata_path"] = str(model_index_metadata)
+        else:
+            dense_index = DenseIndex.load(index_dir=index_dir, blocks=blocks, metadata_path=index_metadata)
+            dense_metadata["index_built"] = False
+            dense_metadata["index_metadata_path"] = str(index_metadata)
+        dense_metadata.update(
+            {
+                "backend": dense_backend,
+                "model_id": dense_encoder.model_id,
+                "device": dense_device,
+                "fp16": bool(dense_fp16),
+            }
+        )
+
+    reranker = None
+    reranker_metadata: dict[str, Any] = {}
+    if mode == "hybrid_rerank":
+        if reranker_backend == "keyword":
+            reranker = KeywordOverlapReranker()
+            reranker_metadata = {"backend": "keyword", "model_path": ""}
+        else:
+            reranker = CrossEncoderReranker(
+                CrossEncoderRerankerConfig(
+                    model_path=reranker_model_path,
+                    device=reranker_device,
+                    use_fp16=reranker_fp16,
+                )
+            )
+            reranker_metadata = {
+                "backend": "cross_encoder",
+                "model_path": reranker_model_path,
+                "device": reranker_device,
+                "fp16": bool(reranker_fp16),
+            }
+
+    retriever = IndexedDocumentRetriever(
+        blocks,
+        mode=mode,
+        dense_encoder=dense_encoder,
+        dense_index=dense_index,
+        reranker=reranker,
+        query_plan=query_plan,
+    )
+    metadata = {
+        "mode": mode,
+        "block_count": len(blocks),
+        "uses_dense": mode in {"dense", "hybrid", "hybrid_rerank"},
+        "uses_reranker": mode == "hybrid_rerank",
+        "dense": dense_metadata,
+        "reranker": reranker_metadata,
+    }
+    return retriever, metadata
+
+
 def _run_local_fact_qa(
     *,
     repository: DocumentRepository,
     trace_repository: TraceRepository,
     db_path: Path,
+    document_root: Path,
     doc_id: str,
     question: str,
     router_plan: dict[str, Any],
@@ -866,6 +987,16 @@ def _run_local_fact_qa(
     document_profile: dict[str, Any] | None = None,
     query_planner_env_file: Path | None = None,
     query_planner_model: str | None = None,
+    retriever_mode: str = "bm25",
+    dense_backend: str = "bge",
+    dense_model_path: str = DEFAULT_BGE_MODEL_PATH,
+    dense_device: str = "cpu",
+    dense_fp16: bool = False,
+    build_dense_index_if_missing: bool = False,
+    reranker_backend: str = "cross_encoder",
+    reranker_model_path: str = DEFAULT_RERANKER_MODEL_PATH,
+    reranker_device: str = "cpu",
+    reranker_fp16: bool = False,
     answer_policy: Any,
 ) -> dict[str, Any]:
     options: dict[str, Any] = {"dry_run": dry_run, "qid": run_id}
@@ -873,7 +1004,9 @@ def _run_local_fact_qa(
         options["trace_path"] = str(db_path)
     query_planner_payload: dict[str, Any] = {}
     retriever = None
+    retriever_payload: dict[str, Any] = {"mode": "legacy_bm25", "uses_dense": False, "uses_reranker": False}
     query_planner_warnings: list[str] = []
+    query_plan = None
     if enable_query_planning:
         query_plan = plan_queries(
             question=question,
@@ -885,12 +1018,46 @@ def _run_local_fact_qa(
         )
         query_planner_payload = {"enabled": True, **query_plan.to_dict()}
         query_planner_warnings = ["query_planning_enabled", *query_plan.warnings]
-        if not dry_run:
-            retriever = IndexedDocumentRetriever(
-                repository.load_evidence_blocks(doc_id),
-                mode="bm25",
+    if not dry_run and (enable_query_planning or retriever_mode != "bm25"):
+        try:
+            retriever, retriever_payload = _build_indexed_retriever(
+                repository=repository,
+                doc_id=doc_id,
+                document_root=document_root,
+                mode=retriever_mode,
+                dense_backend=dense_backend,
+                dense_model_path=dense_model_path,
+                dense_device=dense_device,
+                dense_fp16=dense_fp16,
+                build_dense_index_if_missing=build_dense_index_if_missing,
+                reranker_backend=reranker_backend,
+                reranker_model_path=reranker_model_path,
+                reranker_device=reranker_device,
+                reranker_fp16=reranker_fp16,
                 query_plan=query_plan,
             )
+        except Exception as exc:
+            return {
+                "status": "error",
+                "answer": "",
+                "citations": [],
+                "supporting_evidence_ids": [],
+                "tools_used": ["local_fact_qa"],
+                "tool_run_id": "",
+                "tool_trace_path": "",
+                "trace_run_id": "",
+                "retrieval_candidate_count": 0,
+                "citation_count": 0,
+                "structured_result": {},
+                "workflow_trace": [],
+                "retriever": {**retriever_payload, "requested_mode": retriever_mode},
+                "retriever_mode": retriever_mode,
+                "warnings": list(dict.fromkeys(query_planner_warnings + ["retriever_initialization_failed"])),
+                "error": {"type": "retriever_initialization_failed", "message": str(exc)},
+                **_answer_policy_metadata(answer_policy),
+            }
+    elif dry_run:
+        retriever_payload = {"mode": retriever_mode if enable_query_planning else "dry_run_input_order", "uses_dense": False, "uses_reranker": False}
     result = local_fact_qa(
         {"doc_id": doc_id, "question": question, "router_plan": router_plan, "options": options},
         document_repository=repository,
@@ -912,6 +1079,9 @@ def _run_local_fact_qa(
         "retrieval_candidate_count": max(len(supporting_evidence_ids), len(citations)),
         "citation_count": len(citations),
         "structured_result": result,
+        "workflow_trace": result.get("workflow_trace") or [],
+        "retriever": retriever_payload,
+        "retriever_mode": retriever_payload.get("mode") or "",
         "warnings": list(dict.fromkeys(query_planner_warnings + (result.get("warnings") or []))),
         "error": result.get("error") or {},
         **_answer_policy_metadata(answer_policy),
@@ -1068,6 +1238,7 @@ def _dispatch_tool(
     repository: DocumentRepository,
     trace_repository: TraceRepository,
     db_path: Path,
+    document_root: Path,
     doc_id: str,
     question: str,
     router_plan: dict[str, Any],
@@ -1078,6 +1249,16 @@ def _dispatch_tool(
     document_profile: dict[str, Any] | None = None,
     query_planner_env_file: Path | None = None,
     query_planner_model: str | None = None,
+    retriever_mode: str = "bm25",
+    dense_backend: str = "bge",
+    dense_model_path: str = DEFAULT_BGE_MODEL_PATH,
+    dense_device: str = "cpu",
+    dense_fp16: bool = False,
+    build_dense_index_if_missing: bool = False,
+    reranker_backend: str = "cross_encoder",
+    reranker_model_path: str = DEFAULT_RERANKER_MODEL_PATH,
+    reranker_device: str = "cpu",
+    reranker_fp16: bool = False,
     answer_policy: Any,
 ) -> dict[str, Any]:
     task_type = str(router_plan.get("task_type") or "")
@@ -1105,6 +1286,7 @@ def _dispatch_tool(
             repository=repository,
             trace_repository=trace_repository,
             db_path=db_path,
+            document_root=document_root,
             doc_id=doc_id,
             question=question,
             router_plan=router_plan,
@@ -1115,6 +1297,16 @@ def _dispatch_tool(
             document_profile=document_profile,
             query_planner_env_file=query_planner_env_file,
             query_planner_model=query_planner_model,
+            retriever_mode=retriever_mode,
+            dense_backend=dense_backend,
+            dense_model_path=dense_model_path,
+            dense_device=dense_device,
+            dense_fp16=dense_fp16,
+            build_dense_index_if_missing=build_dense_index_if_missing,
+            reranker_backend=reranker_backend,
+            reranker_model_path=reranker_model_path,
+            reranker_device=reranker_device,
+            reranker_fp16=reranker_fp16,
             answer_policy=answer_policy,
         )
     if task_type == "document_summary":
@@ -1187,6 +1379,10 @@ def _finalize_qa_result(
         "answer_policy_mode": str(result.get("answer_policy_mode") or ""),
         "used_qwen_answer_policy": bool(result.get("used_qwen_answer_policy", False)),
         "used_external_answer_api": bool(result.get("used_external_answer_api", False)),
+        "retriever": result.get("retriever") or {},
+        "retriever_mode": str(result.get("retriever_mode") or ""),
+        "used_dense_retrieval": bool((result.get("retriever") or {}).get("uses_dense")),
+        "used_reranker": bool((result.get("retriever") or {}).get("uses_reranker")),
         "retrieval_candidate_count": int(result.get("retrieval_candidate_count") or 0),
         "citation_count": int(result.get("citation_count") or 0),
         "trace_run_id": str(result.get("trace_run_id") or ""),
@@ -1196,7 +1392,12 @@ def _finalize_qa_result(
         or _query_planner_used_external_api(result.get("query_planner") or {}),
         "used_vlm": False,
         "used_training": False,
-        "used_full_e2e": False,
+        "used_full_e2e": bool(
+            result.get("full_model_path")
+            and result.get("status") == "success"
+            and result.get("used_qwen_answer_policy")
+            and (result.get("query_planner") or {}).get("enabled")
+        ),
         "warnings": result.get("warnings") or [],
         "error": result.get("error") or {},
     }
@@ -1211,6 +1412,9 @@ def _finalize_qa_result(
         "router_execution": result.get("router_execution") or {},
         "query_planner": result.get("query_planner") or {},
         "query_planner_execution": result.get("query_planner_execution") or {},
+        "retriever": result.get("retriever") or {},
+        "retriever_mode": str(result.get("retriever_mode") or ""),
+        "workflow_trace": result.get("workflow_trace") or [],
         "answer_policy_mode": str(result.get("answer_policy_mode") or ""),
         "used_qwen_answer_policy": bool(result.get("used_qwen_answer_policy", False)),
         "used_llm_router": bool(result.get("used_llm_router", False)),
@@ -1541,6 +1745,7 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
             repository=repository,
             trace_repository=trace_repository,
             db_path=db_path,
+            document_root=document_root,
             doc_id=doc_id,
             question=question,
             router_plan=router_plan,
@@ -1551,6 +1756,16 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
             document_profile=profile,
             query_planner_env_file=router_llm_env_file,
             query_planner_model=str(args.router_llm_model or "") or None,
+            retriever_mode=str(args.retriever_mode),
+            dense_backend=str(args.dense_backend),
+            dense_model_path=str(args.dense_model_path),
+            dense_device=str(args.dense_device),
+            dense_fp16=bool(args.dense_fp16),
+            build_dense_index_if_missing=bool(args.build_dense_index_if_missing),
+            reranker_backend=str(args.reranker_backend),
+            reranker_model_path=str(args.reranker_model_path),
+            reranker_device=str(args.reranker_device),
+            reranker_fp16=bool(args.reranker_fp16),
             answer_policy=answer_policy,
         )
 
@@ -1605,6 +1820,14 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
             result["trace"] = tool_result.get("trace")
         if tool_result.get("query_planner") is not None:
             result["query_planner"] = tool_result.get("query_planner")
+        if tool_result.get("query_planner_execution") is not None:
+            result["query_planner_execution"] = tool_result.get("query_planner_execution")
+        if tool_result.get("retriever") is not None:
+            result["retriever"] = tool_result.get("retriever")
+        if tool_result.get("retriever_mode") is not None:
+            result["retriever_mode"] = tool_result.get("retriever_mode")
+        if tool_result.get("workflow_trace") is not None:
+            result["workflow_trace"] = tool_result.get("workflow_trace")
         if tool_result.get("tool_run_id"):
             result["tool_run_id"] = tool_result.get("tool_run_id")
         if tool_result.get("tool_trace_path"):
@@ -1651,6 +1874,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--router-llm-env-file")
     parser.add_argument("--enable-query-planning", action="store_true")
     parser.add_argument("--query-planner-mode", choices=["rule", "llm", "hybrid"], default="hybrid")
+    parser.add_argument("--retriever-mode", choices=sorted(RETRIEVER_MODE_CHOICES), default="bm25")
+    parser.add_argument("--dense-backend", choices=["bge", "hash"], default="bge")
+    parser.add_argument("--dense-model-path", default=DEFAULT_BGE_MODEL_PATH)
+    parser.add_argument("--dense-device", default="cpu")
+    parser.add_argument("--dense-fp16", action="store_true")
+    parser.add_argument("--build-dense-index-if-missing", action="store_true")
+    parser.add_argument("--reranker-backend", choices=["cross_encoder", "keyword"], default="cross_encoder")
+    parser.add_argument("--reranker-model-path", default=DEFAULT_RERANKER_MODEL_PATH)
+    parser.add_argument("--reranker-device", default="cpu")
+    parser.add_argument("--reranker-fp16", action="store_true")
     parser.add_argument(
         "--full-model-path",
         action="store_true",

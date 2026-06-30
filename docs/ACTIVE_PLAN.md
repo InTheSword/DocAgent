@@ -139,6 +139,11 @@ Phase 5 Personal-use DocAgent MVP
    `mpdocvqa_evidence_api_retry_failed_hardened_20260630` at commit
    `13b1dc1` passed with document_passed_count 10/10 and
    sample_evidence_ready_count 55/55
+-> final full-workflow retriever wiring implemented locally: `docagent_cli.py`
+   now lets local_fact_qa explicitly use bm25/dense/hybrid/hybrid_rerank
+   retrieval, records dense/reranker metadata and workflow trace in CLI
+   artifacts, and keeps bm25 as the default; server full workflow smoke must
+   still verify Router + Query Planner + real BGE-M3/reranker + Qwen together
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -247,6 +252,7 @@ Phase 5 MinerU API secret-file support -> accepted
 Phase 5 MinerU API file-to-answer CLI support -> accepted
 Phase 5 MP-DocVQA evidence materialization runner -> accepted
 Phase 5 AnswerPolicy MP-DocVQA evidence-aware baseline path -> implemented
+Phase 5 full-workflow real retriever CLI wiring -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
