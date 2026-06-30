@@ -170,6 +170,30 @@ def test_validate_only_checks_assets_without_api(tmp_path: Path, monkeypatch) ->
     assert not (tmp_path / "out").exists()
 
 
+def test_validate_only_accepts_mineru_env_file_without_global_env(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("MINERU_TOKEN", raising=False)
+    env_file = tmp_path / "mineru.env"
+    env_file.write_text("MINERU_TOKEN=file-secret-token\n", encoding="utf-8")
+    sample = _sample_root(tmp_path)
+    fake = FakeMinerUApi(page_indices=[0])
+    args = _args(
+        str(sample),
+        TARGET_DOC_ID,
+        str(tmp_path / "out"),
+        "--live-api",
+        "--validate-only",
+        "--mineru-env-file",
+        str(env_file),
+    )
+
+    payload = run_phase4b_ingestion(args, api_client_factory=lambda: fake)
+
+    assert payload["status"] == "success"
+    assert payload["mineru_token_set"] is True
+    assert fake.calls == []
+    assert not (tmp_path / "out").exists()
+
+
 def test_single_page_fake_live_ingestion_writes_acceptance_and_mapping(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("MINERU_TOKEN", "secret-token")
     sample = _sample_root(tmp_path)

@@ -99,10 +99,31 @@ def test_mineru_api_client_reads_token_and_writes_sanitized_manifest(tmp_path: P
     assert (tmp_path / "mineru" / "sample_content_list.json").is_file()
 
 
+def test_mineru_api_client_reads_token_from_env_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("MINERU_TOKEN", raising=False)
+    env_file = tmp_path / "mineru.env"
+    env_file.write_text("export MINERU_TOKEN='file-secret-token'\n", encoding="utf-8")
+    source = tmp_path / "sample.pdf"
+    source.write_bytes(b"%PDF-1.4\nsample")
+    fake = FakeHttpClient()
+    client = MinerUApiClient(env_file=env_file, http_client=fake, env={})
+
+    client.run(file_path=source, data_id="sample_data", output_dir=tmp_path / "mineru")
+
+    assert fake.post_headers[0]["Authorization"] == "Bearer file-secret-token"
+    manifest_text = (tmp_path / "mineru" / "mineru_api_manifest.json").read_text(encoding="utf-8")
+    assert "file-secret-token" not in manifest_text
+
+
 def test_mineru_api_client_missing_token_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("MINERU_TOKEN", raising=False)
     with pytest.raises(MinerUApiError, match="MINERU_TOKEN"):
         MinerUApiClient(http_client=FakeHttpClient())
+
+
+def test_mineru_api_client_missing_explicit_env_file_fails(tmp_path: Path) -> None:
+    with pytest.raises(MinerUApiError, match="env file not found"):
+        MinerUApiClient(env_file=tmp_path / "missing.env", http_client=FakeHttpClient(), env={})
 
 
 def test_mineru_api_client_failed_state_and_timeout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

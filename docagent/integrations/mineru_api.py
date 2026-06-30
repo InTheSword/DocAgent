@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Mapping, Protocol
 
 import requests
 
@@ -21,6 +21,7 @@ DONE_STATE = "done"
 FAILED_STATE = "failed"
 ACTIVE_STATES = {"waiting-file", "pending", "running", "converting"}
 TERMINAL_STATES = {DONE_STATE, FAILED_STATE}
+ENV_MINERU_TOKEN = "MINERU_TOKEN"
 
 
 class MinerUApiError(RuntimeError):
@@ -100,10 +101,40 @@ class UrllibMinerUHttpClient:
             return HttpResponse(status_code=exc.code, json_data=payload, content=content)
 
 
-def _require_token(token: str | None) -> str:
-    value = token if token is not None else os.getenv("MINERU_TOKEN")
+def read_env_file(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not path.is_file():
+        raise MinerUApiError(f"MinerU env file not found: {path}")
+    for raw_line in path.read_text(encoding="utf-8-sig").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export ") :].strip()
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip("'\"")
+        if key:
+            values[key] = value
+    return values
+
+
+def load_mineru_token(
+    *,
+    token: str | None = None,
+    env_file: Path | None = None,
+    env: Mapping[str, str] | None = None,
+) -> str:
+    if token:
+        return token
+    values = dict(os.environ if env is None else env)
+    if env_file is not None:
+        values.update(read_env_file(env_file))
+    value = values.get(ENV_MINERU_TOKEN)
     if not value:
-        raise MinerUApiError("MINERU_TOKEN is not set")
+        raise MinerUApiError(f"{ENV_MINERU_TOKEN} is not set")
     return value
 
 
@@ -173,10 +204,16 @@ class MinerUApiClient:
         self,
         *,
         token: str | None = None,
+        env_file: str | Path | None = None,
+        env: Mapping[str, str] | None = None,
         base_url: str = "https://mineru.net",
         http_client: MinerUHttpClient | None = None,
     ) -> None:
-        self._token = _require_token(token)
+        self._token = load_mineru_token(
+            token=token,
+            env_file=Path(env_file) if env_file is not None else None,
+            env=env,
+        )
         self.base_url = base_url.rstrip("/")
         self.http_client = http_client or UrllibMinerUHttpClient()
 

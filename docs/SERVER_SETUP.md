@@ -98,13 +98,27 @@ Current status:
 parse_existing fixture: mock_verified
 existing real MinerU output consumption: real_model_verified
 real MinerU CLI local_cli: blocked, no isolated MinerU Conda env observed on 2026-06-30
+MinerU API client: implemented; reads MINERU_TOKEN from environment or
+  .secrets/mineru.env when present
 ```
 
 Allowed options:
 
 1. consume one real MinerU output produced externally;
-2. use an isolated CPU `mineru[pipeline]` environment for a small document set;
-3. create an isolated GPU MinerU environment only if throughput requires it.
+2. use MinerU API with `MINERU_TOKEN` supplied through environment variables
+   or `.secrets/mineru.env`;
+3. use an isolated CPU `mineru[pipeline]` environment for a small document set;
+4. create an isolated GPU MinerU environment only if throughput requires it.
+
+Recommended local secret file:
+
+```bash
+# .secrets/mineru.env
+MINERU_TOKEN=...
+```
+
+The file is ignored by Git. Server runs may also keep using a manually
+exported `MINERU_TOKEN` for one terminal session.
 
 Do not install `mineru[core]` or `mineru[all]` into the stable `docagent` environment.
 

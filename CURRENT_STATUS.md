@@ -191,6 +191,15 @@ cases passed, 3 cases had citations, and 3 cases had `evidence_used`. This is
 `real_model_verified` regression evidence for consuming existing real MinerU
 output through `mineru_existing`; it is not `local_cli` acceptance.
 
+MinerU API secret-file support is implemented locally in
+`docagent/integrations/mineru_api.py`, `scripts/ingest_document.py`, and
+`scripts/run_phase4b_mpdocvqa_ingestion.py`. `MinerUApiClient` still accepts
+the historical `MINERU_TOKEN` environment variable and now also accepts an
+explicit env file; the existing ingestion scripts default to
+`.secrets/mineru.env` when the file exists and expose `--mineru-env-file` for
+manual override. This is configuration support only; a live API smoke is still
+required before treating raw PDF API parsing as server-verified.
+
 Phase 5 AnswerPolicy IO candidate schema and citation allowlist are
 implemented locally in `docagent/workflow/answer_contract.py`,
 `docagent/models/output_parser.py`, `docagent/workflow/output_adapter.py`,

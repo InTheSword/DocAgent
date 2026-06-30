@@ -114,6 +114,10 @@ Phase 5 Personal-use DocAgent MVP
    cases, and confirmed citations/evidence_used on evidence-bearing cases;
    this is regression evidence for consuming real MinerU output, not
    `local_cli` acceptance, because the server has no isolated MinerU env
+-> MinerU API secret-file support implemented locally: the API client and
+   existing ingestion runners now keep the old `MINERU_TOKEN` terminal export
+   path while also supporting `.secrets/mineru.env` / `--mineru-env-file`,
+   matching the Router LLM secret-management pattern
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -219,6 +223,7 @@ Phase 5 full80 AnswerPolicy Qwen generic tablefix diagnostic gate -> real_model_
 Phase 5 final raw PDF local_cli smoke runner -> implemented
 Phase 5 final raw PDF existing MinerU output fallback smoke -> real_model_verified
 Phase 5 final raw PDF MinerU local_cli server smoke -> blocked
+Phase 5 MinerU API secret-file support -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted

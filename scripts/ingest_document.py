@@ -16,6 +16,8 @@ from docagent.retrieval.dense_encoder import DenseEncoder, DenseEncoderConfig
 from docagent.storage.db import connect
 from docagent.storage.repositories import DocumentRepository
 
+DEFAULT_MINERU_ENV_FILE = ".secrets/mineru.env"
+
 
 def _looks_like_local_absolute_path(value: str) -> bool:
     return (
@@ -35,6 +37,14 @@ def _sanitize_manifest_paths(value):
     return value
 
 
+def _resolve_optional_mineru_env_file(value: str | None) -> Path | None:
+    if value:
+        path = Path(value)
+        return path if path.is_absolute() else ROOT / path
+    default_path = ROOT / DEFAULT_MINERU_ENV_FILE
+    return default_path if default_path.is_file() else None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--file")
@@ -45,6 +55,7 @@ def main() -> None:
     parser.add_argument("--mineru-output")
     parser.add_argument("--mineru-command", default="mineru")
     parser.add_argument("--mineru-model-version", default="vlm")
+    parser.add_argument("--mineru-env-file", help=f"Optional MinerU API env file, defaults to {DEFAULT_MINERU_ENV_FILE} when present.")
     parser.add_argument("--mineru-data-id")
     parser.add_argument("--mineru-language", default="en")
     parser.add_argument("--mineru-ocr", action="store_true")
@@ -114,7 +125,7 @@ def main() -> None:
         if target.exists() and args.force_parse:
             shutil.rmtree(target)
         data_id = args.mineru_data_id or Path(input_file).stem
-        client = MinerUApiClient()
+        client = MinerUApiClient(env_file=_resolve_optional_mineru_env_file(args.mineru_env_file))
         client.run(
             file_path=ROOT / input_file,
             data_id=data_id,

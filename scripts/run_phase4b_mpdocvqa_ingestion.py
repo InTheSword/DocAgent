@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import shutil
 import sqlite3
@@ -19,7 +18,7 @@ sys.path.insert(0, str(ROOT))
 from docagent.ingestion.document_registry import DocumentRegistry
 from docagent.ingestion.hashing import sha256_file
 from docagent.ingestion.service import DocumentIngestionService
-from docagent.integrations.mineru_api import MinerUApiClient
+from docagent.integrations.mineru_api import MinerUApiClient, MinerUApiError, load_mineru_token
 from docagent.parser.mineru_backend import MinerUParserBackend
 from docagent.schemas import EvidenceBlock
 from docagent.storage.db import connect
@@ -31,6 +30,7 @@ COMMAND = "run_phase4b_mpdocvqa_ingestion"
 PHASE = "Phase 4B"
 GATE = "Gate 1"
 DEFAULT_OUTPUT_ROOT = "outputs/phase4/mpdocvqa_ingestion"
+DEFAULT_MINERU_ENV_FILE = ".secrets/mineru.env"
 ALLOWED_QUALITY_STATUSES = {"passed", "passed_with_warnings"}
 WINDOWS_DRIVE_PATH_RE = re.compile(r"^[A-Za-z]:[\\/]")
 UNC_PATH_RE = re.compile(r"^\\\\[A-Za-z0-9._-]+[\\/][^\s\\/]+")
@@ -63,6 +63,22 @@ class SampleInputs:
 def repo_path(path: str | Path) -> Path:
     value = Path(path)
     return value if value.is_absolute() else ROOT / value
+
+
+def _optional_mineru_env_file(args: argparse.Namespace) -> Path | None:
+    raw = str(getattr(args, "mineru_env_file", "") or "")
+    if raw:
+        return repo_path(raw)
+    default_path = ROOT / DEFAULT_MINERU_ENV_FILE
+    return default_path if default_path.is_file() else None
+
+
+def _mineru_token_configured(args: argparse.Namespace) -> bool:
+    try:
+        load_mineru_token(env_file=_optional_mineru_env_file(args))
+    except MinerUApiError:
+        return False
+    return True
 
 
 def _gate(args: argparse.Namespace) -> str:
@@ -346,7 +362,7 @@ def _validate_runtime(args: argparse.Namespace, *, validate_only: bool, revalida
     output_root = repo_path(args.output_root)
     if output_root.exists() and not output_root.is_dir():
         raise Phase4BIngestionError("--output-root exists and is not a directory")
-    if args.live_api and not bool(os.getenv("MINERU_TOKEN")):
+    if args.live_api and not _mineru_token_configured(args):
         raise Phase4BIngestionError("MINERU_TOKEN is not set")
     if not validate_only and not revalidate_existing and not args.live_api:
         raise Phase4BIngestionError("Gate 1 ingestion requires --live-api")
@@ -367,7 +383,7 @@ def _validate_only_payload(args: argparse.Namespace, sample: SampleInputs) -> di
         "pdf_page_count": sample.pdf_page_count,
         "qa_count": len(sample.qa_records),
         "live_api": bool(args.live_api),
-        "mineru_token_set": bool(os.getenv("MINERU_TOKEN")) if args.live_api else None,
+        "mineru_token_set": _mineru_token_configured(args) if args.live_api else None,
         "artifact_paths": [],
         "warnings": [],
         "failures": [],
@@ -392,7 +408,7 @@ def _run_mineru_api(
     mineru_dir: Path,
     api_client_factory: Callable[[], Any] | None,
 ) -> None:
-    factory = api_client_factory or (lambda: MinerUApiClient())
+    factory = api_client_factory or (lambda: MinerUApiClient(env_file=_optional_mineru_env_file(args)))
     client = factory()
     client.run(
         file_path=sample.pdf_path,
@@ -966,6 +982,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--parser-mode", choices=["parse_existing"], default="parse_existing")
     parser.add_argument("--gate", default=GATE)
     parser.add_argument("--live-api", action="store_true")
+    parser.add_argument("--mineru-env-file", help=f"Optional MinerU API env file, defaults to {DEFAULT_MINERU_ENV_FILE} when present.")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--validate-only", action="store_true")
     parser.add_argument("--revalidate-existing", action="store_true")
