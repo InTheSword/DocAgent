@@ -287,6 +287,20 @@ not from sample-specific tuning. This is diagnostic evidence for generic tool,
 prompt, or metric review before training decisions; it is not final answer
 quality acceptance or benchmark evaluation.
 
+Phase 5 AnswerPolicy generic tool-output pretraining inspection is implemented
+locally in `scripts/inspect_answer_policy_tool_outputs.py` with tests in
+`tests/test_inspect_answer_policy_tool_outputs.py`. It reads an existing
+AnswerPolicy baseline artifact directory, filters answer-miss rows that
+expected `table_lookup` or `simple_calculation`, and writes `result.json`,
+`summary.json`, `summary.md`, `tool_output_rows.jsonl`, `preview.json`, and
+`manifest.json`. The inspection separates tool execution or contract issues,
+generic table-selection issues, generic calculation operand or operation
+issues, model failures to use a gold-overlapping tool answer, and answer
+granularity or metric-normalization hints. It is artifact-only: it does not
+rerun Qwen, create training records, start SFT/GRPO, or tune against
+individual validation examples. Server validation on the full80 tablefix
+baseline artifact is pending.
+
 Phase 5 AnswerPolicy SFT candidate data builder is implemented locally in
 `scripts/build_answer_policy_sft_candidates.py` with tests in
 `tests/test_build_answer_policy_sft_candidates.py`. It reads a real-Qwen-marked

@@ -84,6 +84,11 @@ Phase 5 Personal-use DocAgent MVP
    bucketed them into table/calculation tool review, model extractive
    precision review, metric/granularity review, and repaired-parse answer
    miss; it does not create training data
+-> generic tool-output inspection before training implemented locally; it
+   reads answer_miss rows from existing AnswerPolicy baseline artifacts,
+   separates tool execution/contract issues, table-selection issues,
+   calculation operand/operation issues, model tool-use misses, and metric
+   granularity hints, without creating training data
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -183,6 +188,7 @@ Phase 5 larger AnswerPolicy Qwen tablefix diagnostic gate -> real_model_verified
 Phase 5 full80 AnswerPolicy Qwen tablefix diagnostic gate -> real_model_verified
 Phase 5 AnswerPolicy review gate repaired parse/schema semantics -> real_model_verified
 Phase 5 AnswerPolicy answer-miss artifact review -> real_model_verified
+Phase 5 AnswerPolicy generic tool-output pretraining inspection -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
@@ -1560,6 +1566,13 @@ answer_miss_artifact_review_tracked = server diagnostic success, run_id
   used_training false, formal_benchmark_acceptance false,
   validation_subset_used_for_training false, recommendation
   inspect_generic_tool_outputs_before_training
+generic_tool_output_inspection = implemented locally in
+  scripts/inspect_answer_policy_tool_outputs.py; reads existing
+  AnswerPolicy baseline results, inspects answer_miss rows whose
+  expected_tools include table_lookup or simple_calculation, writes
+  result.json, summary.json, summary.md, tool_output_rows.jsonl,
+  preview.json, and manifest.json, and does not rerun Qwen, train, or
+  create validation-derived training data; server validation pending
 sft_candidate_review = server validation success, run_id
   answer_policy_sft_candidate_review_larger40_20260629_tracked,
   candidate_record_count 13, failed_without_candidate_count 1,
