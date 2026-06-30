@@ -99,6 +99,10 @@ Phase 5 Personal-use DocAgent MVP
    server deterministic TAT-QA rerun improved answer_hit_rate to 0.7667 with
    46/60 answer hits and citation_block_hit_rate 1.0; remaining failures are
    still diagnostic and do not block moving back to real Qwen evaluation
+-> full80 real-Qwen diagnostic gate after generic table-tool repair improved
+   answer_hit_rate/pass_rate to 0.85 with citation_block_hit_rate 1.0;
+   review recommends continuing Qwen evaluation before training and skips SFT
+   candidates
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -200,6 +204,7 @@ Phase 5 AnswerPolicy review gate repaired parse/schema semantics -> real_model_v
 Phase 5 AnswerPolicy answer-miss artifact review -> real_model_verified
 Phase 5 AnswerPolicy generic tool-output pretraining inspection -> real_model_verified
 Phase 5 generic table-tool operation/column repair -> accepted
+Phase 5 full80 AnswerPolicy Qwen generic tablefix diagnostic gate -> real_model_verified
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
@@ -1610,6 +1615,15 @@ generic_table_tool_operation_column_repair = implemented locally in
   citation_block_hit_rate 1.0, failure_reason_distribution
   answer_miss:14, table_lookup_unsupported:3, used_qwen false,
   used_training false, formal_benchmark_acceptance false
+full80_qwen_generic_tablefix_diagnostic = success, run_id
+  answer_policy_training_gate_qwen_full80_generic_tablefix_20260630,
+  git_commit c0a7640, case_count 135, evaluated_count 80,
+  pass_rate 0.85, format_valid_rate 1.0, answer_hit_rate 0.85,
+  citation_block_hit_rate 1.0, failure_reason answer_miss:12,
+  review recommendation continue_qwen_eval_before_training,
+  sft_gate defer, sft_candidates skipped, used_qwen true,
+  used_training false, formal_benchmark_acceptance false,
+  next_action run_larger_real_qwen_baseline_or_manual_review
 sft_candidate_review = server validation success, run_id
   answer_policy_sft_candidate_review_larger40_20260629_tracked,
   candidate_record_count 13, failed_without_candidate_count 1,

@@ -333,6 +333,21 @@ the deterministic table-tool repair only. It used no Qwen, no training, no
 VLM, and is not final answer-quality acceptance or formal benchmark
 acceptance.
 
+The full 80-sample real-Qwen diagnostic gate was rerun after the generic
+table-tool repair with run id
+`answer_policy_training_gate_qwen_full80_generic_tablefix_20260630` at commit
+`c0a7640`. It evaluated the same 80 TAT-QA AnswerPolicy cases, skipped the
+55 MP-DocVQA manifest rows that still require raw PDF/MinerU/retrieval
+evidence, used Qwen base, did not train, and did not claim formal benchmark
+acceptance. The baseline improved to `pass_rate=0.85`,
+`answer_hit_rate=0.85`, `citation_block_hit_rate=1.0`,
+`format_valid_rate=1.0`, and `failure_reason_distribution=answer_miss:12`.
+The review recommendation is `continue_qwen_eval_before_training`, with
+`sft_gate=defer`, `grpo_gate=defer_until_sft_result`, and SFT candidates
+skipped. This is real-Qwen diagnostic evidence that the generic table-tool
+repair improves the model-enhanced path; it is not final answer-quality
+acceptance or benchmark evaluation.
+
 Phase 5 AnswerPolicy SFT candidate data builder is implemented locally in
 `scripts/build_answer_policy_sft_candidates.py` with tests in
 `tests/test_build_answer_policy_sft_candidates.py`. It reads a real-Qwen-marked
