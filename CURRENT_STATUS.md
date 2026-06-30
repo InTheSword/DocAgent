@@ -238,8 +238,13 @@ persists MinerU-backed EvidenceBlocks to a local SQLite database, and writes
 `documents.jsonl`, `sample_evidence_manifest.jsonl`, `summary.json`,
 `summary.md`, `preview.json`, and `manifest.json`. It records the mapping from
 MP-DocVQA window ids to actual ingested DocAgent ids and page-level evidence
-readiness. Status is `implemented`: local tests use a fake command runner;
-real MinerU API subset materialization still requires server validation.
+readiness. Status is `real_model_verified`: server run
+`mpdocvqa_evidence_api_smoke_20260630` at commit `d325800` used live MinerU
+API/OCR for 2 selected MP-DocVQA PDFs, passed 2/2 document materializations,
+and produced evidence-ready rows for 4/4 samples. This is a subset
+evidence-readiness smoke, not final answer-quality benchmark acceptance; full
+selected-subset materialization still requires server validation before
+MP-DocVQA rows should enter larger real-Qwen diagnostics.
 
 Phase 5 AnswerPolicy IO candidate schema and citation allowlist are
 implemented locally in `docagent/workflow/answer_contract.py`,

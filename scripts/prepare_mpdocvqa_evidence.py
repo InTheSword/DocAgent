@@ -501,6 +501,9 @@ def prepare_mpdocvqa_evidence(
         sample_rows=sample_rows,
         live_api=live_api,
     )
+    summary["db_path"] = safe_relpath(db_path)
+    summary["document_root"] = safe_relpath(document_root)
+    summary["cli_artifact_dir"] = safe_relpath(cli_output_dir)
     artifact_paths = [
         artifact_dir / "documents.jsonl",
         artifact_dir / "sample_evidence_manifest.jsonl",
@@ -510,6 +513,13 @@ def prepare_mpdocvqa_evidence(
         artifact_dir / "manifest.json",
     ]
     summary["artifact_paths"] = [safe_relpath(path) for path in artifact_paths]
+    if sync_output_root is not None:
+        sync_dir = sync_output_root / run_id
+        summary["sync_bundle_path"] = safe_relpath(sync_dir)
+        summary["sync_artifact_paths"] = [
+            safe_relpath(sync_dir / name)
+            for name in ("summary.json", "summary.md", "preview.json", "manifest.json")
+        ]
     write_jsonl(artifact_paths[0], document_results)
     write_jsonl(artifact_paths[1], sample_rows)
     write_json(artifact_paths[2], summary)
@@ -518,8 +528,7 @@ def prepare_mpdocvqa_evidence(
     write_manifest(artifact_paths[5], run_id=run_id, artifact_dir=artifact_dir, artifact_paths=artifact_paths, summary=summary)
     result = dict(summary)
     if sync_output_root is not None:
-        sync_dir, sync_paths = create_sync_bundle(sync_output_root, run_id, artifact_paths)
-        result["sync_bundle_path"] = safe_relpath(sync_dir)
+        _, sync_paths = create_sync_bundle(sync_output_root, run_id, artifact_paths)
         result["sync_artifact_paths"] = [safe_relpath(path) for path in sync_paths]
     return result
 

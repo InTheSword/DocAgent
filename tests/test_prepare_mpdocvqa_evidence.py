@@ -136,6 +136,10 @@ def test_prepare_mpdocvqa_evidence_writes_mapping_artifacts(tmp_path: Path) -> N
     assert summary["used_mineru_api"] is True
     assert summary["used_online_mineru_ocr"] is True
     assert summary["formal_benchmark_acceptance"] is False
+    assert summary["db_path"].endswith("docagent.db")
+    assert summary["document_root"].endswith("documents")
+    assert summary["cli_artifact_dir"].endswith("cli_artifacts")
+    assert summary["sync_bundle_path"].endswith("mpdocvqa_evidence_test")
     assert seen_commands[0][seen_commands[0].index("--parser") + 1] == "mineru_api"
     assert "--live-api" in seen_commands[0]
     assert "--mineru-env-file" in seen_commands[0]
@@ -152,6 +156,9 @@ def test_prepare_mpdocvqa_evidence_writes_mapping_artifacts(tmp_path: Path) -> N
     assert rows[0]["gold_page_block_ids"] == [f"{ingested_doc_id}_p002_page"]
     assert rows[0]["candidate_block_count_on_gold_pages"] == 1
     assert (tmp_path / "sync" / "mpdocvqa_evidence_test" / "manifest.json").is_file()
+    summary_file = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
+    assert summary_file["db_path"] == summary["db_path"]
+    assert summary_file["sync_bundle_path"] == summary["sync_bundle_path"]
 
 
 def test_prepare_mpdocvqa_evidence_requires_live_api(tmp_path: Path) -> None:

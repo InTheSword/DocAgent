@@ -216,8 +216,10 @@ python scripts\prepare_mpdocvqa_evidence.py `
 
 This writes a local SQLite database plus `sample_evidence_manifest.jsonl`
 mapping MP-DocVQA sample ids to the actual ingested DocAgent `doc_id` and
-gold-page evidence blocks. It is a MinerU/evidence-readiness diagnostic, not
-final answer-quality benchmark acceptance.
+gold-page evidence blocks. The generated `summary.json` records `db_path`,
+`document_root`, and `sample_evidence_manifest_path` for later AnswerPolicy
+baseline runs. It is a MinerU/evidence-readiness diagnostic, not final
+answer-quality benchmark acceptance.
 
 Run the final subset AnswerPolicy baseline locally with the heuristic policy:
 
