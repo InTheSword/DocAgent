@@ -296,6 +296,21 @@ and an optional compact sync bundle. This is artifact-only diagnostic tooling:
 it does not call Qwen, start SFT/GRPO, create training records, tune against
 validation rows, or claim benchmark acceptance.
 
+Phase 5 MP-DocVQA full-workflow diagnostic runner is implemented locally in
+`scripts/run_mpdocvqa_full_workflow_diagnostic.py` with tests in
+`tests/test_run_mpdocvqa_full_workflow_diagnostic.py`. The runner reads
+selected rows from the MP-DocVQA evidence manifest, calls
+`scripts/docagent_cli.py --doc-id <ingested_doc_id> --question <question>`
+with `--full-model-path`, configurable Router/Rewriter, BGE-M3,
+`hybrid_rerank`, reranker, and Qwen AnswerPolicy options, then evaluates the
+resulting CLI artifacts for execution success, retrieved/selected/cited
+gold-page hits, answer hit, trace steps, and failure buckets. This is the
+bridge from the old direct `run_qa_workflow` legacy-BM25 baseline to the
+accepted CLI full-model path. Status is `implemented`: local tests use a fake
+CLI runner and validate the artifact contract; real BGE/reranker/Qwen behavior
+still requires a server run and remains diagnostic-only, not formal benchmark
+acceptance.
+
 Phase 5 AnswerPolicy IO candidate schema and citation allowlist are
 implemented locally in `docagent/workflow/answer_contract.py`,
 `docagent/models/output_parser.py`, `docagent/workflow/output_adapter.py`,

@@ -167,6 +167,14 @@ Phase 5 Personal-use DocAgent MVP
    gold-page retrievable-block coverage, preview rows, manifest, and optional
    sync bundle; it does not call Qwen, start training, create training data,
    or tune against validation examples
+-> MP-DocVQA full-workflow diagnostic runner implemented locally:
+   `scripts/run_mpdocvqa_full_workflow_diagnostic.py` runs selected
+   MP-DocVQA evidence-manifest rows through `scripts/docagent_cli.py --doc-id`
+   with `--full-model-path` and configurable `hybrid_rerank` retrieval,
+   then reports CLI success, retrieved/selected/cited gold-page hits,
+   answer hit, buckets, trace evidence, and sync artifacts; this compares
+   the accepted CLI full-model path against the old legacy-BM25 baseline
+   without creating training data or claiming benchmark acceptance
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -278,6 +286,7 @@ Phase 5 AnswerPolicy MP-DocVQA evidence-aware baseline path -> implemented
 Phase 5 full-workflow real retriever CLI wiring -> real_model_verified
 Phase 5 raw PDF full-model workflow baseline -> real_model_verified
 Phase 5 MP-DocVQA retrieval inspection -> implemented
+Phase 5 MP-DocVQA full-workflow diagnostic runner -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
