@@ -5,10 +5,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+from docagent.models.base import HeuristicAnswerPolicy
 from docagent.ingestion.document_registry import DocumentRecord
 from docagent.schemas import EvidenceBlock, EvidenceLocation
 from docagent.storage.db import connect
-from docagent.storage.repositories import DocumentRepository
+from docagent.storage.repositories import DocumentRepository, TraceRepository
+from scripts import docagent_cli
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -265,6 +267,99 @@ def test_doc_id_local_fact_qa_can_use_configured_hybrid_rerank_retriever(tmp_pat
     trace = json.loads(Path(payload["artifact_dir"], "trace.json").read_text(encoding="utf-8"))
     assert trace["retriever"]["mode"] == "hybrid_rerank"
     assert any(step.get("step") == "retrieve_evidence" for step in trace["workflow_trace"])
+
+
+def test_hybrid_rerank_retriever_metadata_save_failure_is_non_blocking(tmp_path: Path) -> None:
+    db_path = _repository_with_document(tmp_path)
+    conn = connect(db_path)
+    repository = DocumentRepository(conn)
+
+    def fail_save_index_metadata(**_kwargs):
+        raise RuntimeError("metadata database is temporarily locked")
+
+    repository.save_index_metadata = fail_save_index_metadata  # type: ignore[method-assign]
+
+    try:
+        retriever, metadata = docagent_cli._build_indexed_retriever(
+            repository=repository,
+            doc_id="doc1",
+            document_root=tmp_path / "documents",
+            mode="hybrid_rerank",
+            dense_backend="hash",
+            dense_model_path="",
+            dense_device="cpu",
+            dense_fp16=False,
+            build_dense_index_if_missing=True,
+            reranker_backend="keyword",
+            reranker_model_path="",
+            reranker_device="cpu",
+            reranker_fp16=False,
+            query_plan=None,
+        )
+        result = retriever.retrieve(doc_id="doc1", question="What is the invoice date?", top_k=2)
+    finally:
+        conn.close()
+
+    assert metadata["mode"] == "hybrid_rerank"
+    assert metadata["dense"]["backend"] == "hash"
+    assert metadata["dense"]["repository_metadata_save_error"]["type"] == "RuntimeError"
+    assert metadata["uses_dense"] is True
+    assert metadata["uses_reranker"] is True
+    assert result.candidates
+
+
+def test_local_fact_qa_retriever_initialization_failure_keeps_planner_diagnostics(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    db_path = _repository_with_document(tmp_path)
+    conn = connect(db_path)
+    repository = DocumentRepository(conn)
+    trace_repository = TraceRepository(conn)
+
+    def fail_build_retriever(**_kwargs):
+        raise RuntimeError("dense index artifact is corrupt")
+
+    monkeypatch.setattr(docagent_cli, "_build_indexed_retriever", fail_build_retriever)
+
+    try:
+        payload = docagent_cli._run_local_fact_qa(
+            repository=repository,
+            trace_repository=trace_repository,
+            db_path=db_path,
+            document_root=tmp_path / "documents",
+            doc_id="doc1",
+            question="What is the invoice date?",
+            router_plan={"task_type": "local_fact_qa"},
+            dry_run=False,
+            run_id="retriever_failure_keeps_diagnostics",
+            enable_query_planning=True,
+            query_planner_mode="rule",
+            retriever_mode="hybrid_rerank",
+            dense_backend="hash",
+            dense_model_path="",
+            dense_device="cpu",
+            dense_fp16=False,
+            build_dense_index_if_missing=True,
+            reranker_backend="keyword",
+            reranker_model_path="",
+            reranker_device="cpu",
+            reranker_fp16=False,
+            answer_policy=HeuristicAnswerPolicy(),
+        )
+    finally:
+        conn.close()
+
+    assert payload["status"] == "error"
+    assert payload["error"]["type"] == "retriever_initialization_failed"
+    assert payload["error"]["cause"]["message"] == "dense index artifact is corrupt"
+    assert payload["query_planner"]["enabled"] is True
+    assert payload["query_planner_execution"]["query_planner_mode"] == "rule"
+    assert payload["retriever"]["mode"] == "hybrid_rerank"
+    assert payload["retriever"]["requested_mode"] == "hybrid_rerank"
+    assert payload["retriever"]["uses_dense"] is True
+    assert payload["retriever"]["uses_reranker"] is True
+    assert payload["retriever"]["initialization_status"] == "failed"
 
 
 def test_full_model_path_missing_llm_config_returns_structured_error(tmp_path: Path) -> None:

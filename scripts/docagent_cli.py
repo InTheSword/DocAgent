@@ -909,15 +909,24 @@ def _build_indexed_retriever(
             metadata = dense_index.save(index_dir)
             model_index_metadata = index_dir / f"index_metadata_{_safe_model_id(dense_encoder.model_id)}.json"
             model_index_metadata.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
-            repository.save_index_metadata(
-                doc_id=doc_id,
-                index_type="dense",
-                model_id=str(metadata.get("model_id") or ""),
-                artifact_path=str(index_dir),
-                metadata=metadata,
-            )
+            repository_metadata_save_error: dict[str, str] | None = None
+            try:
+                repository.save_index_metadata(
+                    doc_id=doc_id,
+                    index_type="dense",
+                    model_id=str(metadata.get("model_id") or ""),
+                    artifact_path=str(index_dir),
+                    metadata=metadata,
+                )
+            except Exception as exc:
+                repository_metadata_save_error = {
+                    "type": type(exc).__name__,
+                    "message": str(exc),
+                }
             dense_metadata["index_built"] = True
             dense_metadata["index_metadata_path"] = str(model_index_metadata)
+            if repository_metadata_save_error is not None:
+                dense_metadata["repository_metadata_save_error"] = repository_metadata_save_error
         else:
             dense_index = DenseIndex.load(index_dir=index_dir, blocks=blocks, metadata_path=index_metadata)
             dense_metadata["index_built"] = False
@@ -1004,7 +1013,13 @@ def _run_local_fact_qa(
         options["trace_path"] = str(db_path)
     query_planner_payload: dict[str, Any] = {}
     retriever = None
-    retriever_payload: dict[str, Any] = {"mode": "legacy_bm25", "uses_dense": False, "uses_reranker": False}
+    retriever_payload: dict[str, Any] = {
+        "mode": "legacy_bm25",
+        "requested_mode": retriever_mode,
+        "uses_dense": False,
+        "uses_reranker": False,
+        "initialization_status": "not_started",
+    }
     query_planner_warnings: list[str] = []
     query_plan = None
     if enable_query_planning:
@@ -1019,6 +1034,13 @@ def _run_local_fact_qa(
         query_planner_payload = {"enabled": True, **query_plan.to_dict()}
         query_planner_warnings = ["query_planning_enabled", *query_plan.warnings]
     if not dry_run and (enable_query_planning or retriever_mode != "bm25"):
+        retriever_payload = {
+            "mode": retriever_mode,
+            "requested_mode": retriever_mode,
+            "uses_dense": retriever_mode in {"dense", "hybrid", "hybrid_rerank"},
+            "uses_reranker": retriever_mode == "hybrid_rerank",
+            "initialization_status": "started",
+        }
         try:
             retriever, retriever_payload = _build_indexed_retriever(
                 repository=repository,
@@ -1036,8 +1058,17 @@ def _run_local_fact_qa(
                 reranker_fp16=reranker_fp16,
                 query_plan=query_plan,
             )
+            retriever_payload["requested_mode"] = retriever_mode
+            retriever_payload["initialization_status"] = "success"
         except Exception as exc:
-            return {
+            retriever_error = {"type": type(exc).__name__, "message": str(exc)}
+            failed_payload = {
+                **retriever_payload,
+                "requested_mode": retriever_mode,
+                "initialization_status": "failed",
+                "initialization_error": retriever_error,
+            }
+            payload = {
                 "status": "error",
                 "answer": "",
                 "citations": [],
@@ -1050,14 +1081,24 @@ def _run_local_fact_qa(
                 "citation_count": 0,
                 "structured_result": {},
                 "workflow_trace": [],
-                "retriever": {**retriever_payload, "requested_mode": retriever_mode},
+                "retriever": failed_payload,
                 "retriever_mode": retriever_mode,
                 "warnings": list(dict.fromkeys(query_planner_warnings + ["retriever_initialization_failed"])),
-                "error": {"type": "retriever_initialization_failed", "message": str(exc)},
+                "error": {"type": "retriever_initialization_failed", "message": str(exc), "cause": retriever_error},
                 **_answer_policy_metadata(answer_policy),
             }
+            if query_planner_payload:
+                payload["query_planner"] = query_planner_payload
+                payload["query_planner_execution"] = _query_planner_execution(query_planner_payload)
+            return payload
     elif dry_run:
-        retriever_payload = {"mode": retriever_mode if enable_query_planning else "dry_run_input_order", "uses_dense": False, "uses_reranker": False}
+        retriever_payload = {
+            "mode": retriever_mode if enable_query_planning else "dry_run_input_order",
+            "requested_mode": retriever_mode,
+            "uses_dense": False,
+            "uses_reranker": False,
+            "initialization_status": "dry_run",
+        }
     result = local_fact_qa(
         {"doc_id": doc_id, "question": question, "router_plan": router_plan, "options": options},
         document_repository=repository,
