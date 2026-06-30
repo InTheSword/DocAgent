@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 import zipfile
+import http.client
 from pathlib import Path
 
 import pytest
@@ -177,6 +178,51 @@ def test_mineru_api_client_rejects_empty_zip_and_zip_slip(tmp_path: Path, monkey
     zip_path.write_bytes(slip_zip)
     with pytest.raises(MinerUApiError, match="unsafe zip"):
         client.extract_result(zip_path=zip_path, output_dir=tmp_path / "extract")
+
+
+def test_mineru_api_client_retries_transient_result_download(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MINERU_TOKEN", "secret-token")
+    fake = FakeHttpClient()
+    calls = {"count": 0}
+
+    def flaky_get_bytes(url: str) -> HttpResponse:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise http.client.IncompleteRead(b"partial", 10)
+        return HttpResponse(status_code=200, content=fake.zip_bytes)
+
+    fake.get_bytes = flaky_get_bytes  # type: ignore[method-assign]
+    client = MinerUApiClient(http_client=fake)
+
+    zip_path = client.download_result(
+        batch_result={"extract_result": [{"state": "done", "full_zip_url": "https://download.example/signed.zip"}]},
+        output_dir=tmp_path,
+        retry_delay_seconds=0,
+    )
+
+    assert calls["count"] == 2
+    assert zip_path.is_file()
+
+
+def test_mineru_api_client_retries_retryable_download_status(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MINERU_TOKEN", "secret-token")
+    fake = FakeHttpClient()
+    responses = [HttpResponse(status_code=503, content=b"busy"), HttpResponse(status_code=200, content=fake.zip_bytes)]
+
+    def retryable_get_bytes(url: str) -> HttpResponse:
+        return responses.pop(0)
+
+    fake.get_bytes = retryable_get_bytes  # type: ignore[method-assign]
+    client = MinerUApiClient(http_client=fake)
+
+    zip_path = client.download_result(
+        batch_result={"extract_result": [{"state": "done", "full_zip_url": "https://download.example/signed.zip"}]},
+        output_dir=tmp_path,
+        retry_delay_seconds=0,
+    )
+
+    assert not responses
+    assert zip_path.is_file()
 
 
 def test_mineru_api_client_reuses_successful_existing_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

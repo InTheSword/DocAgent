@@ -425,23 +425,50 @@ def prepare_mpdocvqa_evidence(
     timeout_seconds: int = 1200,
     command_runner: CommandRunner = _default_command_runner,
     sync_output_root: Path | None = None,
+    previous_run_dir: Path | None = None,
+    retry_failed_only: bool = False,
 ) -> dict[str, Any]:
     run_id = run_id or now_run_id()
     if not live_api:
         raise ValueError("MP-DocVQA evidence materialization uses MinerU API and requires --live-api")
     artifact_dir = output_root / run_id
     cli_output_dir = artifact_dir / "cli_artifacts"
+    previous_summary: dict[str, Any] = {}
+    previous_document_rows: list[dict[str, Any]] = []
+    if previous_run_dir is not None:
+        previous_document_rows = load_rows(previous_run_dir / "documents.jsonl")
+        summary_path = previous_run_dir / "summary.json"
+        if summary_path.is_file():
+            previous_summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    if retry_failed_only and previous_run_dir is None:
+        raise ValueError("--retry-failed-only requires --previous-run-dir")
+    if db_path is None and previous_summary.get("db_path"):
+        db_path = repo_path(str(previous_summary["db_path"]))
+    if document_root is None and previous_summary.get("document_root"):
+        document_root = repo_path(str(previous_summary["document_root"]))
     db_path = db_path or (artifact_dir / "docagent.db")
     document_root = document_root or (artifact_dir / "documents")
     artifact_dir.mkdir(parents=True, exist_ok=True)
     cli_output_dir.mkdir(parents=True, exist_ok=True)
     document_root.mkdir(parents=True, exist_ok=True)
 
-    source_documents = load_rows(subset_root / "documents.jsonl")
+    all_source_documents = load_rows(subset_root / "documents.jsonl")
     if max_documents is not None:
-        source_documents = source_documents[: max(0, int(max_documents))]
+        all_source_documents = all_source_documents[: max(0, int(max_documents))]
+    source_documents = all_source_documents
+    if retry_failed_only:
+        failed_doc_ids = {
+            str(row.get("doc_id") or "")
+            for row in previous_document_rows
+            if row.get("pass_fail") != "passed"
+        }
+        source_documents = [row for row in all_source_documents if str(row.get("doc_id") or "") in failed_doc_ids]
     sample_manifests = load_rows(subset_root / "sample_manifest.jsonl")
-    selected_doc_ids = {str(row.get("doc_id") or "") for row in source_documents}
+    if previous_run_dir is not None:
+        selected_doc_ids = {str(row.get("doc_id") or "") for row in previous_document_rows}
+        selected_doc_ids.update(str(row.get("doc_id") or "") for row in source_documents)
+    else:
+        selected_doc_ids = {str(row.get("doc_id") or "") for row in source_documents}
     sample_manifests = [row for row in sample_manifests if str(row.get("doc_id") or "") in selected_doc_ids]
 
     document_results: list[dict[str, Any]] = []
@@ -483,12 +510,21 @@ def prepare_mpdocvqa_evidence(
             )
         )
 
+    if previous_run_dir is not None:
+        merged_by_doc_id = rows_by_doc_id(previous_document_rows)
+        merged_by_doc_id.update(rows_by_doc_id(document_results))
+        ordered_doc_ids = [str(row.get("doc_id") or "") for row in all_source_documents if str(row.get("doc_id") or "") in merged_by_doc_id]
+        extra_doc_ids = [doc_id for doc_id in merged_by_doc_id if doc_id not in set(ordered_doc_ids)]
+        document_rows_for_summary = [merged_by_doc_id[doc_id] for doc_id in [*ordered_doc_ids, *extra_doc_ids]]
+    else:
+        document_rows_for_summary = document_results
+
     conn = connect(db_path)
     try:
         repository = DocumentRepository(conn)
         sample_rows = build_sample_rows(
             sample_manifests=sample_manifests,
-            document_rows=rows_by_doc_id(document_results),
+            document_rows=rows_by_doc_id(document_rows_for_summary),
             repository=repository,
         )
     finally:
@@ -497,10 +533,14 @@ def prepare_mpdocvqa_evidence(
     summary = summarize(
         run_id=run_id,
         artifact_dir=artifact_dir,
-        document_rows=document_results,
+        document_rows=document_rows_for_summary,
         sample_rows=sample_rows,
         live_api=live_api,
     )
+    if previous_run_dir is not None:
+        summary["previous_run_dir"] = safe_relpath(previous_run_dir)
+        summary["retry_failed_only"] = bool(retry_failed_only)
+        summary["retried_document_count"] = len(document_results)
     summary["db_path"] = safe_relpath(db_path)
     summary["document_root"] = safe_relpath(document_root)
     summary["cli_artifact_dir"] = safe_relpath(cli_output_dir)
@@ -520,7 +560,7 @@ def prepare_mpdocvqa_evidence(
             safe_relpath(sync_dir / name)
             for name in ("summary.json", "summary.md", "preview.json", "manifest.json")
         ]
-    write_jsonl(artifact_paths[0], document_results)
+    write_jsonl(artifact_paths[0], document_rows_for_summary)
     write_jsonl(artifact_paths[1], sample_rows)
     write_json(artifact_paths[2], summary)
     write_summary_markdown(artifact_paths[3], summary)
@@ -549,6 +589,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--python-executable", default=sys.executable)
     parser.add_argument("--timeout-seconds", type=int, default=1200)
     parser.add_argument("--sync-output-dir")
+    parser.add_argument("--previous-run-dir")
+    parser.add_argument("--retry-failed-only", action="store_true")
     return parser
 
 
@@ -570,6 +612,8 @@ def main(argv: list[str] | None = None) -> int:
             python_executable=str(args.python_executable),
             timeout_seconds=int(args.timeout_seconds),
             sync_output_root=repo_path(args.sync_output_dir),
+            previous_run_dir=repo_path(args.previous_run_dir),
+            retry_failed_only=bool(args.retry_failed_only),
         )
     except Exception as exc:
         result = {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import time
@@ -23,6 +24,7 @@ ACTIVE_STATES = {"waiting-file", "pending", "running", "converting"}
 TERMINAL_STATES = {DONE_STATE, FAILED_STATE}
 ENV_MINERU_TOKEN = "MINERU_TOKEN"
 ENV_FILE_TOKEN_KEYS = (ENV_MINERU_TOKEN, "API_TOKEN")
+RETRYABLE_DOWNLOAD_STATUS_CODES = {408, 429, 500, 502, 503, 504}
 
 
 class MinerUApiError(RuntimeError):
@@ -304,7 +306,14 @@ class MinerUApiClient:
             time.sleep(poll_interval_seconds)
         raise TimeoutError(f"MinerU batch did not finish before timeout; last_state={last_state}")
 
-    def download_result(self, *, batch_result: dict[str, Any], output_dir: str | Path) -> Path:
+    def download_result(
+        self,
+        *,
+        batch_result: dict[str, Any],
+        output_dir: str | Path,
+        max_attempts: int = 3,
+        retry_delay_seconds: float = 2.0,
+    ) -> Path:
         done_result = _first_done_result(batch_result)
         url = done_result.get("full_zip_url")
         if not url:
@@ -312,7 +321,26 @@ class MinerUApiClient:
         output = Path(output_dir)
         output.mkdir(parents=True, exist_ok=True)
         zip_path = output / "mineru_result.zip"
-        response = self.http_client.get_bytes(str(url))
+        attempts = max(1, int(max_attempts))
+        response: HttpResponse | None = None
+        last_exception: Exception | None = None
+        for attempt in range(1, attempts + 1):
+            try:
+                response = self.http_client.get_bytes(str(url))
+                last_exception = None
+            except (http.client.IncompleteRead, urllib.error.URLError, TimeoutError, ConnectionError, OSError) as exc:
+                last_exception = exc
+                if attempt >= attempts:
+                    break
+                time.sleep(max(0.0, retry_delay_seconds))
+                continue
+            if response.status_code not in RETRYABLE_DOWNLOAD_STATUS_CODES or attempt >= attempts:
+                break
+            time.sleep(max(0.0, retry_delay_seconds))
+        if last_exception is not None:
+            raise MinerUApiError(f"MinerU result download failed after retries: {type(last_exception).__name__}") from last_exception
+        if response is None:
+            raise MinerUApiError("MinerU result download failed before response")
         if response.status_code < 200 or response.status_code >= 300:
             raise MinerUApiError(f"MinerU result download failed with HTTP {response.status_code}")
         content = response.content or b""

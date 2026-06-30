@@ -221,6 +221,21 @@ gold-page evidence blocks. The generated `summary.json` records `db_path`,
 baseline runs. It is a MinerU/evidence-readiness diagnostic, not final
 answer-quality benchmark acceptance.
 
+If a batch run has transient MinerU/API download failures, retry only failed
+documents while reusing the previous database and document root:
+
+```powershell
+python scripts\prepare_mpdocvqa_evidence.py `
+  --subset-root outputs\final_eval\mpdocvqa_val_subset `
+  --output-dir outputs\final_eval\mpdocvqa_val_evidence `
+  --live-api `
+  --mineru-env-file .secrets\mineru.env `
+  --previous-run-dir outputs\final_eval\mpdocvqa_val_evidence\<previous_run_id> `
+  --retry-failed-only `
+  --sync-output-dir outputs\sync `
+  --run-id mpdocvqa_evidence_retry_failed
+```
+
 Run the final subset AnswerPolicy baseline locally with the heuristic policy:
 
 ```powershell

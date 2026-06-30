@@ -170,3 +170,189 @@ def test_prepare_mpdocvqa_evidence_requires_live_api(tmp_path: Path) -> None:
         assert "--live-api" in str(exc)
     else:
         raise AssertionError("expected live API preflight failure")
+
+
+def test_prepare_mpdocvqa_evidence_retries_failed_previous_documents(tmp_path: Path) -> None:
+    subset_root = tmp_path / "subset"
+    for doc_id in ("doc_ok", "doc_fail"):
+        doc_dir = subset_root / "documents" / doc_id
+        doc_dir.mkdir(parents=True)
+        (doc_dir / "document.pdf").write_bytes(b"%PDF-1.4\n")
+    write_jsonl(
+        subset_root / "documents.jsonl",
+        [
+            {"doc_id": "doc_ok", "source_doc_id": "source_ok", "pdf_path": "documents/doc_ok/document.pdf"},
+            {"doc_id": "doc_fail", "source_doc_id": "source_fail", "pdf_path": "documents/doc_fail/document.pdf"},
+        ],
+    )
+    write_jsonl(
+        subset_root / "sample_manifest.jsonl",
+        [
+            {
+                "sample_id": "q_ok",
+                "dataset": "mp_docvqa",
+                "doc_id": "doc_ok",
+                "source_document": "source_ok",
+                "question": "What is the approved amount?",
+                "answers": ["$10"],
+                "gold_evidence": [{"page": 1}],
+            },
+            {
+                "sample_id": "q_fail",
+                "dataset": "mp_docvqa",
+                "doc_id": "doc_fail",
+                "source_document": "source_fail",
+                "question": "What is the budget estimate?",
+                "answers": ["$100,000"],
+                "gold_evidence": [{"page": 1}],
+            },
+        ],
+    )
+
+    previous_run = tmp_path / "previous"
+    previous_run.mkdir()
+    db_path = tmp_path / "shared" / "docagent.db"
+    document_root = tmp_path / "shared" / "documents"
+    document_root.mkdir(parents=True)
+    conn = connect(db_path)
+    try:
+        repository = DocumentRepository(conn)
+        repository.upsert_document(
+            DocumentRecord(
+                doc_id="ingested_ok",
+                sha256="b" * 64,
+                original_name="ok.pdf",
+                mime_type="application/pdf",
+                file_size=10,
+                file_path=str(document_root / "ingested_ok" / "source" / "original.pdf"),
+                document_dir=str(document_root / "ingested_ok"),
+                page_count=1,
+                parser_backend="mineru_api",
+                parse_status="parsed",
+                index_status="not_started",
+            )
+        )
+        repository.save_evidence_blocks(
+            [
+                EvidenceBlock(
+                    doc_id="ingested_ok",
+                    block_id="ingested_ok_p001_b0001",
+                    block_type="text",
+                    text="Approved amount $10",
+                    page_id=1,
+                    location=EvidenceLocation(page=1, block_id="ingested_ok_p001_b0001"),
+                ),
+                EvidenceBlock(
+                    doc_id="ingested_ok",
+                    block_id="ingested_ok_p001_page",
+                    block_type="page",
+                    text="Approved amount $10",
+                    page_id=1,
+                    location=EvidenceLocation(page=1, block_id="ingested_ok_p001_page"),
+                    metadata={"child_block_ids": ["ingested_ok_p001_b0001"]},
+                ),
+            ]
+        )
+    finally:
+        conn.close()
+    write_jsonl(
+        previous_run / "documents.jsonl",
+        [
+            {"doc_id": "doc_ok", "ingested_doc_id": "ingested_ok", "pass_fail": "passed", "failure_reasons": []},
+            {
+                "doc_id": "doc_fail",
+                "ingested_doc_id": "",
+                "pass_fail": "failed",
+                "failure_reasons": ["status_not_success:file_ingestion_failed"],
+            },
+        ],
+    )
+    (previous_run / "summary.json").write_text(
+        json.dumps({"db_path": str(db_path), "document_root": str(document_root)}),
+        encoding="utf-8",
+    )
+    seen_commands: list[list[str]] = []
+
+    def fake_runner(command: list[str], _cwd: Path, _timeout_seconds: int) -> CommandResult:
+        seen_commands.append(command)
+        assert "doc_fail" in command[command.index("--file") + 1]
+        conn = connect(db_path)
+        try:
+            repository = DocumentRepository(conn)
+            repository.upsert_document(
+                DocumentRecord(
+                    doc_id="ingested_fail",
+                    sha256="c" * 64,
+                    original_name="fail.pdf",
+                    mime_type="application/pdf",
+                    file_size=10,
+                    file_path=str(document_root / "ingested_fail" / "source" / "original.pdf"),
+                    document_dir=str(document_root / "ingested_fail"),
+                    page_count=1,
+                    parser_backend="mineru_api",
+                    parse_status="parsed",
+                    index_status="not_started",
+                )
+            )
+            repository.save_evidence_blocks(
+                [
+                    EvidenceBlock(
+                        doc_id="ingested_fail",
+                        block_id="ingested_fail_p001_b0001",
+                        block_type="text",
+                        text="Budget Estimate $100,000",
+                        page_id=1,
+                        location=EvidenceLocation(page=1, block_id="ingested_fail_p001_b0001"),
+                    ),
+                    EvidenceBlock(
+                        doc_id="ingested_fail",
+                        block_id="ingested_fail_p001_page",
+                        block_type="page",
+                        text="Budget Estimate $100,000",
+                        page_id=1,
+                        location=EvidenceLocation(page=1, block_id="ingested_fail_p001_page"),
+                        metadata={"child_block_ids": ["ingested_fail_p001_b0001"]},
+                    ),
+                ]
+            )
+        finally:
+            conn.close()
+        return CommandResult(
+            0,
+            json.dumps(
+                {
+                    "status": "success",
+                    "doc_id": "ingested_fail",
+                    "source": {
+                        "was_ingested": True,
+                        "reused_existing": False,
+                        "parser": "mineru_api",
+                        "parser_mode": "parse_existing",
+                        "used_mineru_api": True,
+                        "mineru_api": {"api_status": "submitted"},
+                        "ingestion": {"parse_status": "parsed", "page_count": 1, "block_count": 2},
+                    },
+                }
+            ),
+        )
+
+    summary = prepare_mpdocvqa_evidence(
+        subset_root=subset_root,
+        output_root=tmp_path / "evidence",
+        run_id="retry_failed",
+        live_api=True,
+        previous_run_dir=previous_run,
+        retry_failed_only=True,
+        mineru_env_file=tmp_path / "mineru.env",
+        command_runner=fake_runner,
+    )
+
+    assert len(seen_commands) == 1
+    assert summary["status"] == "success"
+    assert summary["document_count"] == 2
+    assert summary["document_passed_count"] == 2
+    assert summary["sample_count"] == 2
+    assert summary["sample_evidence_ready_count"] == 2
+    assert summary["retried_document_count"] == 1
+    rows = read_jsonl(tmp_path / "evidence" / "retry_failed" / "sample_evidence_manifest.jsonl")
+    assert {row["sample_id"] for row in rows if row["evidence_ready"]} == {"q_ok", "q_fail"}
