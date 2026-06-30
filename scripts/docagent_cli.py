@@ -371,6 +371,8 @@ def _run_mineru_api_to_document_cache(
     enable_formula: bool,
     timeout_seconds: float,
     poll_interval_seconds: float,
+    api_max_attempts: int,
+    api_retry_delay_seconds: float,
 ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
     preview_record = DocumentRegistry(document_root).register(file_path)
     target = Path(preview_record.document_dir) / "mineru"
@@ -381,10 +383,7 @@ def _run_mineru_api_to_document_cache(
                 "api_status": "cached_existing_output",
                 "output_dir": str(target),
             }
-        return {
-            "type": "file_ingestion_failed",
-            "message": f"Document cache MinerU directory exists but has no content list: {target}",
-        }, {"status": "failed"}
+        shutil.rmtree(target)
 
     client = MinerUApiClient(env_file=env_file)
     manifest = client.run(
@@ -398,6 +397,8 @@ def _run_mineru_api_to_document_cache(
         language=language,
         timeout_seconds=timeout_seconds,
         poll_interval_seconds=poll_interval_seconds,
+        api_max_attempts=api_max_attempts,
+        api_retry_delay_seconds=api_retry_delay_seconds,
     )
     return None, {
         "status": "success",
@@ -408,6 +409,8 @@ def _run_mineru_api_to_document_cache(
             "batch_id_present": bool(manifest.get("batch_id")),
             "source_sha256_present": bool(manifest.get("source_sha256")),
             "result_zip_sha256_present": bool(manifest.get("result_zip_sha256")),
+            "api_attempt_count": manifest.get("api_attempt_count"),
+            "retry_error_count": len(manifest.get("retry_errors") or []),
         },
     }
 
@@ -470,6 +473,8 @@ def _ingest_file(
     mineru_enable_formula: bool,
     mineru_api_timeout_seconds: float,
     mineru_api_poll_interval_seconds: float,
+    mineru_api_max_attempts: int,
+    mineru_api_retry_delay_seconds: float,
 ) -> tuple[str | None, dict[str, Any] | None, dict[str, Any]]:
     parser_backend, parser_error = _parser_backend_for_file(
         file_path,
@@ -508,6 +513,8 @@ def _ingest_file(
                 enable_formula=mineru_enable_formula,
                 timeout_seconds=mineru_api_timeout_seconds,
                 poll_interval_seconds=mineru_api_poll_interval_seconds,
+                api_max_attempts=mineru_api_max_attempts,
+                api_retry_delay_seconds=mineru_api_retry_delay_seconds,
             )
         except Exception as exc:
             error = {"type": "file_ingestion_failed", "message": str(exc)}
@@ -1369,6 +1376,8 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
                     mineru_enable_formula=not bool(args.disable_mineru_formula),
                     mineru_api_timeout_seconds=float(args.mineru_api_timeout_seconds),
                     mineru_api_poll_interval_seconds=float(args.mineru_api_poll_interval_seconds),
+                    mineru_api_max_attempts=int(args.mineru_api_max_attempts),
+                    mineru_api_retry_delay_seconds=float(args.mineru_api_retry_delay_seconds),
                 )
                 if ingestion_error is not None:
                     source["ingestion_status"] = "failed"
@@ -1631,6 +1640,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--disable-mineru-formula", action="store_true")
     parser.add_argument("--mineru-api-timeout-seconds", type=float, default=600.0)
     parser.add_argument("--mineru-api-poll-interval-seconds", type=float, default=5.0)
+    parser.add_argument("--mineru-api-max-attempts", type=int, default=3)
+    parser.add_argument("--mineru-api-retry-delay-seconds", type=float, default=10.0)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--list-documents", action="store_true")
     parser.add_argument("--limit", type=int, default=20)

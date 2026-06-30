@@ -225,6 +225,42 @@ def test_mineru_api_client_retries_retryable_download_status(tmp_path: Path, mon
     assert zip_path.is_file()
 
 
+def test_mineru_api_client_retries_full_run_after_download_attempts_exhausted(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MINERU_TOKEN", "secret-token")
+    source = tmp_path / "sample.pdf"
+    source.write_bytes(b"%PDF-1.4\nsample")
+    fake = FakeHttpClient()
+    calls = {"count": 0}
+
+    def flaky_get_bytes(url: str) -> HttpResponse:
+        calls["count"] += 1
+        if calls["count"] <= 3:
+            raise http.client.IncompleteRead(b"partial", 10)
+        return HttpResponse(status_code=200, content=fake.zip_bytes)
+
+    fake.get_bytes = flaky_get_bytes  # type: ignore[method-assign]
+    client = MinerUApiClient(http_client=fake)
+
+    manifest = client.run(
+        file_path=source,
+        data_id="sample_data",
+        output_dir=tmp_path / "mineru",
+        poll_interval_seconds=0,
+        timeout_seconds=5,
+        api_max_attempts=2,
+        api_retry_delay_seconds=0,
+    )
+
+    assert len(fake.post_payloads) == 2
+    assert calls["count"] == 4
+    assert manifest["api_attempt_count"] == 2
+    assert manifest["retry_errors"][0]["error_type"] == "MinerUApiError"
+    assert (tmp_path / "mineru" / "sample_content_list.json").is_file()
+
+
 def test_mineru_api_client_reuses_successful_existing_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MINERU_TOKEN", "secret-token")
     source = tmp_path / "sample.pdf"
@@ -247,6 +283,23 @@ def test_mineru_api_client_reuses_successful_existing_output(tmp_path: Path, mon
 
     assert result["status"] == "success"
     assert fake.post_payloads == []
+
+
+def test_mineru_api_client_replaces_invalid_existing_manifest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MINERU_TOKEN", "secret-token")
+    source = tmp_path / "sample.pdf"
+    source.write_bytes(b"%PDF-1.4\nsample")
+    output = tmp_path / "mineru"
+    output.mkdir()
+    (output / "mineru_api_manifest.json").write_text("{broken", encoding="utf-8")
+    fake = FakeHttpClient()
+    client = MinerUApiClient(http_client=fake)
+
+    result = client.run(file_path=source, data_id="sample_data", output_dir=output)
+
+    assert result["status"] == "success"
+    assert len(fake.post_payloads) == 1
+    assert (output / "sample_content_list.json").is_file()
 
 
 def test_ingest_document_mineru_api_requires_live_api_before_network(tmp_path: Path) -> None:

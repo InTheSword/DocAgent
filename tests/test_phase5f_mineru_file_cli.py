@@ -164,6 +164,66 @@ def test_mineru_api_file_ingestion_routes_to_document_statistics(
     assert summary["used_external_api"] is True
 
 
+def test_mineru_api_file_ingestion_replaces_incomplete_cache(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    source, db_path, document_root, output_dir = _paths(tmp_path)
+    preview_record = docagent_cli.DocumentRegistry(document_root).register(source)
+    stale_mineru_dir = Path(preview_record.document_dir) / "mineru"
+    stale_mineru_dir.mkdir(parents=True)
+    (stale_mineru_dir / "mineru_result.zip").write_bytes(b"partial")
+    created_clients = []
+
+    class FakeMinerUApiClient:
+        def __init__(self, **kwargs):
+            self.calls = []
+            created_clients.append(self)
+
+        def run(self, **kwargs):
+            self.calls.append(kwargs)
+            assert not (stale_mineru_dir / "mineru_result.zip").exists()
+            shutil.copytree(MINERU_FIXTURE, kwargs["output_dir"])
+            return {
+                "status": "success",
+                "batch_id": "batch-1",
+                "source_sha256": "sha",
+                "result_zip_sha256": "zip-sha",
+                "api_attempt_count": 1,
+                "retry_errors": [],
+            }
+
+    monkeypatch.setattr(docagent_cli, "MinerUApiClient", FakeMinerUApiClient)
+    args = docagent_cli.build_parser().parse_args(
+        [
+            "--db-path",
+            str(db_path),
+            "--document-root",
+            str(document_root),
+            "--file",
+            str(source),
+            "--parser",
+            "mineru_api",
+            "--live-api",
+            "--question",
+            "How many pages are in this document?",
+            "--output-dir",
+            str(output_dir),
+            "--mineru-api-max-attempts",
+            "5",
+            "--mineru-api-retry-delay-seconds",
+            "0",
+        ]
+    )
+
+    payload = docagent_cli.run_cli(args)
+
+    assert payload["status"] == "success"
+    assert len(created_clients) == 1
+    assert created_clients[0].calls[0]["api_max_attempts"] == 5
+    assert payload["source"]["mineru_api"]["manifest"]["api_attempt_count"] == 1
+
+
 def test_mineru_existing_file_ingestion_routes_to_document_statistics(tmp_path: Path) -> None:
     source, db_path, document_root, output_dir = _paths(tmp_path)
 

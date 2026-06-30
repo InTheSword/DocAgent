@@ -3,6 +3,7 @@ from __future__ import annotations
 import http.client
 import json
 import os
+import shutil
 import time
 import urllib.error
 import urllib.request
@@ -209,6 +210,12 @@ def _safe_extract(zip_path: Path, target_dir: Path) -> None:
         archive.extractall(target_dir)
 
 
+def _reset_incomplete_output(path: Path) -> None:
+    if path.exists():
+        shutil.rmtree(path)
+    path.mkdir(parents=True, exist_ok=True)
+
+
 class MinerUApiClient:
     def __init__(
         self,
@@ -334,20 +341,43 @@ class MinerUApiClient:
                     break
                 time.sleep(max(0.0, retry_delay_seconds))
                 continue
-            if response.status_code not in RETRYABLE_DOWNLOAD_STATUS_CODES or attempt >= attempts:
+            if response.status_code in RETRYABLE_DOWNLOAD_STATUS_CODES and attempt < attempts:
+                time.sleep(max(0.0, retry_delay_seconds))
+                continue
+            if response.status_code < 200 or response.status_code >= 300:
                 break
-            time.sleep(max(0.0, retry_delay_seconds))
+            content = response.content or b""
+            if not content:
+                last_exception = MinerUApiError("MinerU result ZIP is empty")
+                if attempt >= attempts:
+                    break
+                time.sleep(max(0.0, retry_delay_seconds))
+                continue
+            zip_path.write_bytes(content)
+            try:
+                with zipfile.ZipFile(zip_path) as archive:
+                    bad_member = archive.testzip()
+                    if bad_member:
+                        raise zipfile.BadZipFile(f"bad zip member: {bad_member}")
+            except zipfile.BadZipFile as exc:
+                zip_path.unlink(missing_ok=True)
+                last_exception = exc
+                if attempt >= attempts:
+                    break
+                time.sleep(max(0.0, retry_delay_seconds))
+                continue
+            return zip_path
         if last_exception is not None:
-            raise MinerUApiError(f"MinerU result download failed after retries: {type(last_exception).__name__}") from last_exception
+            detail = " ".join(str(last_exception).split())[:160]
+            suffix = f": {detail}" if detail else ""
+            raise MinerUApiError(
+                f"MinerU result download failed after retries: {type(last_exception).__name__}{suffix}"
+            ) from last_exception
         if response is None:
             raise MinerUApiError("MinerU result download failed before response")
         if response.status_code < 200 or response.status_code >= 300:
             raise MinerUApiError(f"MinerU result download failed with HTTP {response.status_code}")
-        content = response.content or b""
-        if not content:
-            raise MinerUApiError("MinerU result ZIP is empty")
-        zip_path.write_bytes(content)
-        return zip_path
+        raise MinerUApiError("MinerU result download failed after retries")
 
     def extract_result(self, *, zip_path: str | Path, output_dir: str | Path) -> Path:
         target = Path(output_dir)
@@ -368,13 +398,18 @@ class MinerUApiClient:
         language: str | None = "en",
         timeout_seconds: float = 600,
         poll_interval_seconds: float = 5,
+        api_max_attempts: int = 3,
+        api_retry_delay_seconds: float = 10.0,
     ) -> dict[str, Any]:
         source = Path(file_path)
         output = Path(output_dir)
         manifest_path = output / "mineru_api_manifest.json"
         source_sha256 = sha256_file(source)
         if manifest_path.exists():
-            existing = json.loads(manifest_path.read_text(encoding="utf-8"))
+            try:
+                existing = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except Exception:
+                existing = {}
             try:
                 cached_content_list = find_content_list(output)
             except Exception:
@@ -382,22 +417,52 @@ class MinerUApiClient:
             if existing.get("source_sha256") == source_sha256 and existing.get("status") == "success" and cached_content_list:
                 return existing
 
-        submission = self.submit_local_pdf(
-            file_path=source,
-            data_id=data_id,
-            model_version=model_version,
-            is_ocr=is_ocr,
-            enable_table=enable_table,
-            enable_formula=enable_formula,
-            language=language,
-        )
-        batch_result = self.wait_until_done(
-            batch_id=str(submission["batch_id"]),
-            timeout_seconds=timeout_seconds,
-            poll_interval_seconds=poll_interval_seconds,
-        )
-        zip_path = self.download_result(batch_result=batch_result, output_dir=output)
-        self.extract_result(zip_path=zip_path, output_dir=output)
+        attempts = max(1, int(api_max_attempts))
+        retry_errors: list[dict[str, Any]] = []
+        last_exception: Exception | None = None
+        submission: dict[str, Any] = {}
+        batch_result: dict[str, Any] = {}
+        zip_path: Path | None = None
+        for attempt in range(1, attempts + 1):
+            _reset_incomplete_output(output)
+            try:
+                submission = self.submit_local_pdf(
+                    file_path=source,
+                    data_id=data_id,
+                    model_version=model_version,
+                    is_ocr=is_ocr,
+                    enable_table=enable_table,
+                    enable_formula=enable_formula,
+                    language=language,
+                )
+                batch_result = self.wait_until_done(
+                    batch_id=str(submission["batch_id"]),
+                    timeout_seconds=timeout_seconds,
+                    poll_interval_seconds=poll_interval_seconds,
+                )
+                zip_path = self.download_result(
+                    batch_result=batch_result,
+                    output_dir=output,
+                    retry_delay_seconds=min(2.0, max(0.0, api_retry_delay_seconds)),
+                )
+                self.extract_result(zip_path=zip_path, output_dir=output)
+                break
+            except Exception as exc:
+                last_exception = exc
+                retry_errors.append(
+                    {
+                        "attempt": attempt,
+                        "error_type": type(exc).__name__,
+                        "message": " ".join(str(exc).split())[:240],
+                    }
+                )
+                if attempt >= attempts:
+                    raise MinerUApiError(
+                        f"MinerU API run failed after {attempts} attempts; last_error={type(exc).__name__}"
+                    ) from exc
+                time.sleep(max(0.0, api_retry_delay_seconds))
+        if zip_path is None or last_exception is not None and len(retry_errors) >= attempts:
+            raise MinerUApiError("MinerU API run failed before result extraction")
         manifest = {
             "status": "success",
             "batch_id": submission["batch_id"],
@@ -408,6 +473,8 @@ class MinerUApiClient:
             "data_id": data_id,
             "result_zip_size": zip_path.stat().st_size,
             "result_zip_sha256": sha256_file(zip_path),
+            "api_attempt_count": len(retry_errors) + 1,
+            "retry_errors": retry_errors,
             "batch_result": _sanitize_result(batch_result),
         }
         manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")

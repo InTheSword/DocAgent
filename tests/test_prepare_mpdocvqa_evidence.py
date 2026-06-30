@@ -143,6 +143,8 @@ def test_prepare_mpdocvqa_evidence_writes_mapping_artifacts(tmp_path: Path) -> N
     assert seen_commands[0][seen_commands[0].index("--parser") + 1] == "mineru_api"
     assert "--live-api" in seen_commands[0]
     assert "--mineru-env-file" in seen_commands[0]
+    assert seen_commands[0][seen_commands[0].index("--mineru-api-max-attempts") + 1] == "3"
+    assert seen_commands[0][seen_commands[0].index("--mineru-api-retry-delay-seconds") + 1] == "10.0"
 
     run_dir = tmp_path / "evidence" / "mpdocvqa_evidence_test"
     assert (run_dir / "documents.jsonl").is_file()

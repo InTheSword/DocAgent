@@ -124,6 +124,8 @@ def build_cli_command(
     mineru_env_file: Path | None,
     mineru_api_timeout_seconds: int,
     mineru_api_poll_interval_seconds: float,
+    mineru_api_max_attempts: int,
+    mineru_api_retry_delay_seconds: float,
     python_executable: str,
 ) -> list[str]:
     command = [
@@ -148,6 +150,10 @@ def build_cli_command(
             str(mineru_api_timeout_seconds),
             "--mineru-api-poll-interval-seconds",
             str(mineru_api_poll_interval_seconds),
+            "--mineru-api-max-attempts",
+            str(mineru_api_max_attempts),
+            "--mineru-api-retry-delay-seconds",
+            str(mineru_api_retry_delay_seconds),
             "--question",
             DEFAULT_QUESTION,
             "--output-dir",
@@ -420,6 +426,8 @@ def prepare_mpdocvqa_evidence(
     mineru_env_file: Path | None = None,
     mineru_api_timeout_seconds: int = 900,
     mineru_api_poll_interval_seconds: float = 5.0,
+    mineru_api_max_attempts: int = 3,
+    mineru_api_retry_delay_seconds: float = 10.0,
     max_documents: int | None = None,
     python_executable: str = sys.executable,
     timeout_seconds: int = 1200,
@@ -495,6 +503,8 @@ def prepare_mpdocvqa_evidence(
             mineru_env_file=mineru_env_file,
             mineru_api_timeout_seconds=mineru_api_timeout_seconds,
             mineru_api_poll_interval_seconds=mineru_api_poll_interval_seconds,
+            mineru_api_max_attempts=mineru_api_max_attempts,
+            mineru_api_retry_delay_seconds=mineru_api_retry_delay_seconds,
             python_executable=python_executable,
         )
         completed = command_runner(command, ROOT, timeout_seconds)
@@ -585,6 +595,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mineru-env-file")
     parser.add_argument("--mineru-api-timeout-seconds", type=int, default=900)
     parser.add_argument("--mineru-api-poll-interval-seconds", type=float, default=5.0)
+    parser.add_argument("--mineru-api-max-attempts", type=int, default=3)
+    parser.add_argument("--mineru-api-retry-delay-seconds", type=float, default=10.0)
     parser.add_argument("--max-documents", type=int)
     parser.add_argument("--python-executable", default=sys.executable)
     parser.add_argument("--timeout-seconds", type=int, default=1200)
@@ -608,6 +620,8 @@ def main(argv: list[str] | None = None) -> int:
             mineru_env_file=repo_path(args.mineru_env_file),
             mineru_api_timeout_seconds=int(args.mineru_api_timeout_seconds),
             mineru_api_poll_interval_seconds=float(args.mineru_api_poll_interval_seconds),
+            mineru_api_max_attempts=int(args.mineru_api_max_attempts),
+            mineru_api_retry_delay_seconds=float(args.mineru_api_retry_delay_seconds),
             max_documents=args.max_documents,
             python_executable=str(args.python_executable),
             timeout_seconds=int(args.timeout_seconds),

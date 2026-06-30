@@ -230,6 +230,8 @@ python scripts\prepare_mpdocvqa_evidence.py `
   --output-dir outputs\final_eval\mpdocvqa_val_evidence `
   --live-api `
   --mineru-env-file .secrets\mineru.env `
+  --mineru-api-max-attempts 5 `
+  --mineru-api-retry-delay-seconds 20 `
   --previous-run-dir outputs\final_eval\mpdocvqa_val_evidence\<previous_run_id> `
   --retry-failed-only `
   --sync-output-dir outputs\sync `
