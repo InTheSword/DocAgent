@@ -323,7 +323,15 @@ period/quarter/as-reported lookup columns, multi-column respective lookup
 values, and who/name table answers. The repair is general table-tool behavior,
 not per-sample logic, does not change AnswerPolicy prompts, does not rerun
 Qwen locally, and does not start SFT/GRPO. Server rerun on the full80 tablefix
-baseline is pending.
+baseline succeeded with run id `final_eval_tatqa_table_tool_repair_20260630`
+at commit `7cac9fe`. The deterministic TAT-QA subset diagnostic returned
+`case_count=80`, `pass_rate=0.825`, `tool_executed_count=60`,
+`tool_success_count=57`, `answer_hit_count=46`, `answer_hit_rate=0.7667`,
+`numeric_accuracy_rate=0.7`, and `citation_block_hit_rate=1.0`; remaining
+failures were `answer_miss=14` and `table_lookup_unsupported=3`. This accepts
+the deterministic table-tool repair only. It used no Qwen, no training, no
+VLM, and is not final answer-quality acceptance or formal benchmark
+acceptance.
 
 Phase 5 AnswerPolicy SFT candidate data builder is implemented locally in
 `scripts/build_answer_policy_sft_candidates.py` with tests in

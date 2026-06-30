@@ -96,7 +96,9 @@ Phase 5 Personal-use DocAgent MVP
    patterns: total-across-years sum, percentage increase/decrease wording,
    same-row multi-year average with currency-parentheses negatives, requested
    period/quarter/as-reported column priority, and who/name table answers;
-   server rerun pending
+   server deterministic TAT-QA rerun improved answer_hit_rate to 0.7667 with
+   46/60 answer hits and citation_block_hit_rate 1.0; remaining failures are
+   still diagnostic and do not block moving back to real Qwen evaluation
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -197,7 +199,7 @@ Phase 5 full80 AnswerPolicy Qwen tablefix diagnostic gate -> real_model_verified
 Phase 5 AnswerPolicy review gate repaired parse/schema semantics -> real_model_verified
 Phase 5 AnswerPolicy answer-miss artifact review -> real_model_verified
 Phase 5 AnswerPolicy generic tool-output pretraining inspection -> real_model_verified
-Phase 5 generic table-tool operation/column repair -> implemented
+Phase 5 generic table-tool operation/column repair -> accepted
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
@@ -1600,7 +1602,14 @@ generic_table_tool_operation_column_repair = implemented locally in
   percentage-of-total expressions, same-row multi-year averages with
   currency-parentheses negative numbers, requested period/quarter/as-reported
   lookup columns, multi-column respective lookup values, and who/name table
-  answers; local targeted regression passed, server rerun pending
+  answers; local targeted regression passed, server deterministic validation
+  success, run_id final_eval_tatqa_table_tool_repair_20260630,
+  git_commit 7cac9fe, case_count 80, tool_executed_count 60,
+  tool_success_count 57, pass_rate 0.825, answer_hit_count 46,
+  answer_hit_rate 0.7667, numeric_accuracy_rate 0.7,
+  citation_block_hit_rate 1.0, failure_reason_distribution
+  answer_miss:14, table_lookup_unsupported:3, used_qwen false,
+  used_training false, formal_benchmark_acceptance false
 sft_candidate_review = server validation success, run_id
   answer_policy_sft_candidate_review_larger40_20260629_tracked,
   candidate_record_count 13, failed_without_candidate_count 1,
