@@ -189,6 +189,20 @@ The file should contain `MINERU_TOKEN=...`; `API_TOKEN=...` is also accepted
 inside this MinerU-specific env file for compatibility. The file must stay
 uncommitted.
 
+Run the raw-PDF delivery smoke through MinerU API:
+
+```powershell
+python scripts\run_final_raw_pdf_smoke.py `
+  --pdf-path data\example.pdf `
+  --parser mineru_api `
+  --live-api `
+  --mineru-env-file .secrets\mineru.env `
+  --run-id final_raw_pdf_mineru_api_cli_smoke
+```
+
+This smoke validates parser-to-CLI execution and artifact/citation contracts.
+It is not a final answer-quality benchmark.
+
 Attempt raw PDF parsing through an installed local MinerU CLI:
 
 ```powershell

@@ -22,6 +22,8 @@ def _payload(
     was_ingested: bool = False,
     parser: str = "",
     parser_mode: str = "",
+    used_mineru_api: bool = False,
+    mineru_api: dict | None = None,
     citations: list[dict] | None = None,
     evidence_used: list[dict] | None = None,
 ) -> dict:
@@ -37,6 +39,8 @@ def _payload(
             "reused_existing": not was_ingested,
             "parser": parser,
             "parser_mode": parser_mode,
+            "used_mineru_api": used_mineru_api,
+            "mineru_api": mineru_api or {},
             "resolved_doc_id": doc_id,
             "ingestion": {
                 "parse_status": "parsed",
@@ -135,6 +139,7 @@ def test_final_raw_pdf_smoke_validates_cli_contract(tmp_path: Path) -> None:
     assert summary["passed_count"] == 4
     assert summary["failed_count"] == 0
     assert summary["used_mineru_local_cli"] is True
+    assert summary["used_mineru_api"] is False
     assert summary["used_qwen"] is False
     assert summary["formal_benchmark_acceptance"] is False
     assert summary["task_type_distribution"] == {
@@ -157,6 +162,88 @@ def test_final_raw_pdf_smoke_validates_cli_contract(tmp_path: Path) -> None:
     assert (run_dir / "summary.md").is_file()
     assert (run_dir / "preview.json").is_file()
     assert (run_dir / "manifest.json").is_file()
+
+
+def test_final_raw_pdf_smoke_supports_mineru_api_parser(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "sample.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4\n")
+    document_root = tmp_path / "documents"
+    doc_id = "doc_raw_pdf"
+    mineru_dir = document_root / doc_id / "mineru"
+    mineru_dir.mkdir(parents=True)
+    (mineru_dir / "mineru_api_manifest.json").write_text(
+        json.dumps({"status": "success", "batch_id": "batch-1"}),
+        encoding="utf-8",
+    )
+    env_file = tmp_path / "mineru.env"
+    env_file.write_text("API_TOKEN=fake-token\n", encoding="utf-8")
+    seen_commands: list[list[str]] = []
+
+    def fake_runner(command: list[str], _cwd: Path, _timeout_seconds: int) -> CommandResult:
+        seen_commands.append(command)
+        question = command[command.index("--question") + 1]
+        citation = {
+            "doc_id": doc_id,
+            "page": 1,
+            "block_id": "b1",
+            "block_type": "text",
+            "text_preview": "AFRICA",
+        }
+        evidence = [dict(citation)]
+        if question == "How many pages are in this document?":
+            payload = _payload(
+                tmp_path=tmp_path,
+                case_id="stats",
+                doc_id=doc_id,
+                task_type="document_statistics",
+                tools_used=["count_pages"],
+                was_ingested=True,
+                parser="mineru_api",
+                parser_mode="parse_existing",
+                used_mineru_api=True,
+                mineru_api={"api_status": "submitted"},
+            )
+            return CommandResult(0, json.dumps(payload))
+        task_type = "page_lookup" if "page 1" in question else "document_summary"
+        tools = ["get_page_text"] if "page 1" in question else ["document_summary"]
+        if question == "What information is mentioned in the document?":
+            task_type = "local_fact_qa"
+            tools = ["local_fact_qa"]
+        payload = _payload(
+            tmp_path=tmp_path,
+            case_id=task_type,
+            doc_id=doc_id,
+            task_type=task_type,
+            tools_used=tools,
+            citations=[citation],
+            evidence_used=evidence,
+        )
+        return CommandResult(0, json.dumps(payload))
+
+    summary = run_final_raw_pdf_smoke(
+        pdf_path=pdf_path,
+        output_root=tmp_path / "smoke",
+        document_root=document_root,
+        parser_name="mineru_api",
+        live_api=True,
+        mineru_env_file=env_file,
+        command_runner=fake_runner,
+        run_id="raw_pdf_api_smoke_test",
+    )
+
+    assert summary["status"] == "success"
+    assert summary["parser"] == "mineru_api"
+    assert summary["used_mineru_local_cli"] is False
+    assert summary["used_mineru_api"] is True
+    assert summary["used_external_api"] is True
+    assert summary["used_online_mineru_ocr"] is True
+    assert len(seen_commands) == 4
+    for command in seen_commands:
+        assert command[command.index("--parser") + 1] == "mineru_api"
+        assert "--live-api" in command
+        assert command[command.index("--mineru-env-file") + 1] == str(env_file)
+        assert "--mineru-command" not in command
+        assert "--parser-mode" not in command
 
 
 def test_final_raw_pdf_smoke_fails_on_missing_citation_contract(tmp_path: Path) -> None:

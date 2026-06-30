@@ -104,10 +104,11 @@ Phase 5 Personal-use DocAgent MVP
    review recommends continuing Qwen evaluation before training and skips SFT
    candidates
 -> final raw PDF smoke runner implemented locally; it wraps the existing
-   `docagent_cli.py --parser mineru --parser-mode local_cli` path into a
-   reproducible smoke that checks raw PDF ingestion, MinerU CLI result
-   artifacts, EvidenceBlock persistence, CLI artifact files, citations, and
-   evidence_used without rerunning training, VLM, or benchmark scoring
+   `docagent_cli.py --parser mineru --parser-mode local_cli` path and the
+   `--parser mineru_api --live-api` path into a reproducible smoke that checks
+   raw PDF ingestion, MinerU result artifacts, EvidenceBlock persistence, CLI
+   artifact files, citations, and evidence_used without rerunning training,
+   VLM, or benchmark scoring
 -> raw PDF existing-MinerU-output fallback smoke completed on server:
    run_id `final_raw_pdf_existing_mineru_audit_20260630` consumed a previously
    generated real MinerU output via `mineru_existing`, passed 4/4 CLI contract

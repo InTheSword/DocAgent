@@ -156,11 +156,16 @@ def _build_cli_command(
     document_root: Path,
     cli_output_dir: Path,
     cli_path: Path,
+    parser_name: str,
     mineru_command: str,
     mineru_timeout_seconds: int,
+    live_api: bool,
+    mineru_env_file: Path | None,
+    mineru_api_timeout_seconds: int,
+    mineru_api_poll_interval_seconds: float,
     python_executable: str,
 ) -> list[str]:
-    return [
+    command = [
         python_executable,
         str(cli_path),
         "--db-path",
@@ -170,18 +175,41 @@ def _build_cli_command(
         "--file",
         str(pdf_path),
         "--parser",
-        "mineru",
-        "--parser-mode",
-        "local_cli",
-        "--mineru-command",
-        mineru_command,
-        "--mineru-timeout-seconds",
-        str(mineru_timeout_seconds),
+        parser_name,
+    ]
+    if parser_name == "mineru":
+        command.extend(
+            [
+                "--parser-mode",
+                "local_cli",
+                "--mineru-command",
+                mineru_command,
+                "--mineru-timeout-seconds",
+                str(mineru_timeout_seconds),
+            ]
+        )
+    elif parser_name == "mineru_api":
+        if live_api:
+            command.append("--live-api")
+        if mineru_env_file is not None:
+            command.extend(["--mineru-env-file", str(mineru_env_file)])
+        command.extend(
+            [
+                "--mineru-api-timeout-seconds",
+                str(mineru_api_timeout_seconds),
+                "--mineru-api-poll-interval-seconds",
+                str(mineru_api_poll_interval_seconds),
+            ]
+        )
+    command.extend(
+        [
         "--question",
         case.question,
         "--output-dir",
         str(cli_output_dir),
-    ]
+        ]
+    )
+    return command
 
 
 def _artifact_failures(payload: dict[str, Any] | None) -> list[str]:
@@ -216,16 +244,17 @@ def _citation_contract_failures(payload: dict[str, Any], *, require_citation: bo
     return failures
 
 
-def _first_ingestion_failures(payload: dict[str, Any], *, document_root: Path) -> list[str]:
+def _first_ingestion_failures(payload: dict[str, Any], *, document_root: Path, parser_name: str) -> list[str]:
     failures: list[str] = []
     source = payload.get("source") if isinstance(payload.get("source"), dict) else {}
     doc_id = str(payload.get("doc_id") or source.get("resolved_doc_id") or "")
     if source.get("was_ingested") is not True:
         failures.append("source_was_ingested_false")
-    if source.get("parser") != "mineru":
-        failures.append(f"source_parser_not_mineru:{source.get('parser')}")
-    if source.get("parser_mode") != "local_cli":
-        failures.append(f"source_parser_mode_not_local_cli:{source.get('parser_mode')}")
+    if source.get("parser") != parser_name:
+        failures.append(f"source_parser_mismatch:{source.get('parser')}!={parser_name}")
+    expected_mode = "local_cli" if parser_name == "mineru" else "parse_existing"
+    if source.get("parser_mode") != expected_mode:
+        failures.append(f"source_parser_mode_mismatch:{source.get('parser_mode')}!={expected_mode}")
     ingestion = source.get("ingestion") if isinstance(source.get("ingestion"), dict) else {}
     if ingestion.get("parse_status") != "parsed":
         failures.append(f"ingestion_parse_status_not_parsed:{ingestion.get('parse_status')}")
@@ -233,7 +262,17 @@ def _first_ingestion_failures(payload: dict[str, Any], *, document_root: Path) -
         failures.append("ingestion_block_count_empty")
     if int(ingestion.get("page_count") or 0) <= 0:
         failures.append("ingestion_page_count_empty")
-    cli_result_path = document_root / doc_id / "mineru" / "mineru_cli_result.json"
+    mineru_dir = document_root / doc_id / "mineru"
+    if parser_name == "mineru_api":
+        if source.get("used_mineru_api") is not True:
+            failures.append("source_used_mineru_api_false")
+        api_summary = source.get("mineru_api") if isinstance(source.get("mineru_api"), dict) else {}
+        if api_summary.get("api_status") not in {"submitted", "cached"}:
+            failures.append(f"mineru_api_status_unexpected:{api_summary.get('api_status')}")
+        if not (mineru_dir / "mineru_api_manifest.json").is_file():
+            failures.append("mineru_api_manifest_missing")
+        return failures
+    cli_result_path = mineru_dir / "mineru_cli_result.json"
     if not cli_result_path.is_file():
         failures.append("mineru_cli_result_missing")
         return failures
@@ -258,6 +297,7 @@ def _validate_case(
     parse_error: str,
     returncode: int,
     document_root: Path,
+    parser_name: str,
 ) -> list[str]:
     failures: list[str] = []
     if parse_error:
@@ -283,7 +323,7 @@ def _validate_case(
         )
     )
     if case.require_first_ingestion:
-        failures.extend(_first_ingestion_failures(payload, document_root=document_root))
+        failures.extend(_first_ingestion_failures(payload, document_root=document_root, parser_name=parser_name))
     return failures
 
 
@@ -293,6 +333,7 @@ def _row_for_case(
     command: list[str],
     completed: CommandResult,
     document_root: Path,
+    parser_name: str,
 ) -> dict[str, Any]:
     payload, parse_error = _parse_stdout(completed.stdout)
     failures = _validate_case(
@@ -301,6 +342,7 @@ def _row_for_case(
         parse_error=parse_error,
         returncode=completed.returncode,
         document_root=document_root,
+        parser_name=parser_name,
     )
     source = payload.get("source") if payload and isinstance(payload.get("source"), dict) else {}
     ingestion = source.get("ingestion") if isinstance(source.get("ingestion"), dict) else {}
@@ -338,6 +380,7 @@ def _build_summary(
     pdf_path: Path,
     db_path: Path,
     document_root: Path,
+    parser_name: str,
     rows: list[dict[str, Any]],
 ) -> dict[str, Any]:
     pass_counts = Counter(str(row.get("pass_fail") or "") for row in rows)
@@ -363,13 +406,16 @@ def _build_summary(
         "evidence_used_case_count": sum(1 for row in rows if int(row.get("evidence_used_count") or 0) > 0),
         "task_type_distribution": dict(sorted(task_counts.items())),
         "failure_reason_distribution": dict(sorted(failure_counts.items())),
-        "used_mineru_local_cli": True,
-        "used_online_mineru_ocr": False,
+        "parser": parser_name,
+        "used_mineru_local_cli": parser_name == "mineru",
+        "used_mineru_api": parser_name == "mineru_api",
+        "used_online_mineru_ocr": parser_name == "mineru_api",
+        "used_external_api": parser_name == "mineru_api",
         "used_qwen": False,
         "used_training": False,
         "used_vlm": False,
         "formal_benchmark_acceptance": False,
-        "acceptance_note": "Raw PDF execution smoke validates CLI parsing, ingestion, citation/artifact contract, and local MinerU CLI integration; it does not evaluate answer correctness.",
+        "acceptance_note": "Raw PDF execution smoke validates CLI parsing, ingestion, citation/artifact contract, and MinerU parser integration; it does not evaluate answer correctness.",
     }
 
 
@@ -383,7 +429,9 @@ def _write_summary_md(path: Path, summary: dict[str, Any]) -> None:
         f"- case_count: {summary['case_count']}",
         f"- passed_count: {summary['passed_count']}",
         f"- failed_count: {summary['failed_count']}",
+        f"- parser: `{summary['parser']}`",
         f"- used_mineru_local_cli: `{str(summary['used_mineru_local_cli']).lower()}`",
+        f"- used_mineru_api: `{str(summary['used_mineru_api']).lower()}`",
         f"- used_qwen: `{str(summary['used_qwen']).lower()}`",
         f"- used_training: `{str(summary['used_training']).lower()}`",
         f"- formal_benchmark_acceptance: `{str(summary['formal_benchmark_acceptance']).lower()}`",
@@ -413,14 +461,21 @@ def run_final_raw_pdf_smoke(
     db_path: Path | None = None,
     document_root: Path | None = None,
     cli_path: Path = DEFAULT_CLI_PATH,
+    parser_name: str = "mineru",
     mineru_command: str = "mineru",
     mineru_timeout_seconds: int = 600,
+    live_api: bool = False,
+    mineru_env_file: Path | None = None,
+    mineru_api_timeout_seconds: int = 900,
+    mineru_api_poll_interval_seconds: float = 5.0,
     python_executable: str = sys.executable,
     timeout_seconds: int = 900,
     command_runner: CommandRunner = _default_command_runner,
     run_id: str | None = None,
 ) -> dict[str, Any]:
     run_id = run_id or _now_run_id()
+    if parser_name not in {"mineru", "mineru_api"}:
+        raise ValueError(f"unsupported parser for raw PDF smoke: {parser_name}")
     run_dir = output_root / run_id
     cli_output_dir = run_dir / "cli_artifacts"
     db_path = db_path or (run_dir / "docagent.db")
@@ -439,12 +494,25 @@ def run_final_raw_pdf_smoke(
             document_root=document_root,
             cli_output_dir=cli_output_dir,
             cli_path=cli_path,
+            parser_name=parser_name,
             mineru_command=mineru_command,
             mineru_timeout_seconds=mineru_timeout_seconds,
+            live_api=live_api,
+            mineru_env_file=mineru_env_file,
+            mineru_api_timeout_seconds=mineru_api_timeout_seconds,
+            mineru_api_poll_interval_seconds=mineru_api_poll_interval_seconds,
             python_executable=python_executable,
         )
         completed = command_runner(command, ROOT, timeout_seconds)
-        rows.append(_row_for_case(case=case, command=command, completed=completed, document_root=document_root))
+        rows.append(
+            _row_for_case(
+                case=case,
+                command=command,
+                completed=completed,
+                document_root=document_root,
+                parser_name=parser_name,
+            )
+        )
 
     summary = _build_summary(
         run_id=run_id,
@@ -452,6 +520,7 @@ def run_final_raw_pdf_smoke(
         pdf_path=pdf_path,
         db_path=db_path,
         document_root=document_root,
+        parser_name=parser_name,
         rows=rows,
     )
     paths = {
@@ -483,14 +552,19 @@ def run_final_raw_pdf_smoke(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run a final-delivery raw PDF -> MinerU local_cli -> CLI QA smoke.")
+    parser = argparse.ArgumentParser(description="Run a final-delivery raw PDF -> MinerU parser -> CLI QA smoke.")
     parser.add_argument("--pdf-path", required=True)
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_ROOT))
     parser.add_argument("--db-path")
     parser.add_argument("--document-root")
     parser.add_argument("--cli-path", default=str(DEFAULT_CLI_PATH))
+    parser.add_argument("--parser", choices=["mineru", "mineru_api"], default="mineru")
     parser.add_argument("--mineru-command", default="mineru")
     parser.add_argument("--mineru-timeout-seconds", type=int, default=600)
+    parser.add_argument("--live-api", action="store_true")
+    parser.add_argument("--mineru-env-file")
+    parser.add_argument("--mineru-api-timeout-seconds", type=int, default=900)
+    parser.add_argument("--mineru-api-poll-interval-seconds", type=float, default=5.0)
     parser.add_argument("--python-executable", default=sys.executable)
     parser.add_argument("--timeout-seconds", type=int, default=900)
     parser.add_argument("--run-id")
@@ -506,8 +580,13 @@ def main(argv: list[str] | None = None) -> int:
             db_path=_project_path(args.db_path) if args.db_path else None,
             document_root=_project_path(args.document_root) if args.document_root else None,
             cli_path=_project_path(args.cli_path),
+            parser_name=str(args.parser),
             mineru_command=str(args.mineru_command),
             mineru_timeout_seconds=int(args.mineru_timeout_seconds),
+            live_api=bool(args.live_api),
+            mineru_env_file=_project_path(args.mineru_env_file) if args.mineru_env_file else None,
+            mineru_api_timeout_seconds=int(args.mineru_api_timeout_seconds),
+            mineru_api_poll_interval_seconds=float(args.mineru_api_poll_interval_seconds),
             python_executable=str(args.python_executable),
             timeout_seconds=int(args.timeout_seconds),
             run_id=str(args.run_id or "") or None,
@@ -518,7 +597,9 @@ def main(argv: list[str] | None = None) -> int:
             "status": "failed",
             "quality_status": "blocked",
             "error": {"type": type(exc).__name__, "message": str(exc)},
-            "used_mineru_local_cli": True,
+            "parser": str(getattr(args, "parser", "mineru")),
+            "used_mineru_local_cli": str(getattr(args, "parser", "mineru")) == "mineru",
+            "used_mineru_api": str(getattr(args, "parser", "mineru")) == "mineru_api",
             "used_qwen": False,
             "used_training": False,
             "used_vlm": False,
