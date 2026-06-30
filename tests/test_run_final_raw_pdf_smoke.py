@@ -57,114 +57,7 @@ def _payload(
     return payload
 
 
-def test_final_raw_pdf_smoke_validates_cli_contract(tmp_path: Path) -> None:
-    pdf_path = tmp_path / "sample.pdf"
-    pdf_path.write_bytes(b"%PDF-1.4\n")
-    document_root = tmp_path / "documents"
-    doc_id = "doc_raw_pdf"
-    mineru_dir = document_root / doc_id / "mineru"
-    mineru_dir.mkdir(parents=True)
-    (mineru_dir / "mineru_cli_result.json").write_text(
-        json.dumps({"command_found": True, "timed_out": False, "returncode": 0}),
-        encoding="utf-8",
-    )
-    seen_commands: list[list[str]] = []
-
-    def fake_runner(command: list[str], _cwd: Path, _timeout_seconds: int) -> CommandResult:
-        seen_commands.append(command)
-        question = command[command.index("--question") + 1]
-        citation = {
-            "doc_id": doc_id,
-            "page": 1,
-            "block_id": "b1",
-            "block_type": "text",
-            "text_preview": "AFRICA",
-        }
-        evidence = [dict(citation)]
-        if question == "How many pages are in this document?":
-            payload = _payload(
-                tmp_path=tmp_path,
-                case_id="stats",
-                doc_id=doc_id,
-                task_type="document_statistics",
-                tools_used=["count_pages"],
-                was_ingested=True,
-                parser="mineru",
-                parser_mode="local_cli",
-            )
-            return CommandResult(0, json.dumps(payload))
-        if question == "Show the text from page 1.":
-            payload = _payload(
-                tmp_path=tmp_path,
-                case_id="page",
-                doc_id=doc_id,
-                task_type="page_lookup",
-                tools_used=["get_page_text"],
-                citations=[citation],
-                evidence_used=evidence,
-            )
-            return CommandResult(0, json.dumps(payload))
-        if question == "Summarize this document.":
-            payload = _payload(
-                tmp_path=tmp_path,
-                case_id="summary",
-                doc_id=doc_id,
-                task_type="document_summary",
-                tools_used=["document_summary"],
-                citations=[citation],
-                evidence_used=evidence,
-            )
-            return CommandResult(0, json.dumps(payload))
-        payload = _payload(
-            tmp_path=tmp_path,
-            case_id="fact",
-            doc_id=doc_id,
-            task_type="local_fact_qa",
-            tools_used=["local_fact_qa"],
-            citations=[citation],
-            evidence_used=evidence,
-        )
-        return CommandResult(0, json.dumps(payload))
-
-    summary = run_final_raw_pdf_smoke(
-        pdf_path=pdf_path,
-        output_root=tmp_path / "smoke",
-        document_root=document_root,
-        mineru_command="fake_mineru",
-        command_runner=fake_runner,
-        run_id="raw_pdf_smoke_test",
-    )
-
-    assert summary["status"] == "success"
-    assert summary["passed_count"] == 4
-    assert summary["failed_count"] == 0
-    assert summary["used_mineru_local_cli"] is True
-    assert summary["used_mineru_api"] is False
-    assert summary["used_qwen"] is False
-    assert summary["formal_benchmark_acceptance"] is False
-    assert summary["task_type_distribution"] == {
-        "document_statistics": 1,
-        "document_summary": 1,
-        "local_fact_qa": 1,
-        "page_lookup": 1,
-    }
-    assert len(seen_commands) == 4
-    for command in seen_commands:
-        assert "--parser" in command
-        assert command[command.index("--parser") + 1] == "mineru"
-        assert command[command.index("--parser-mode") + 1] == "local_cli"
-        assert command[command.index("--mineru-command") + 1] == "fake_mineru"
-
-    run_dir = Path(summary["artifact_dir"])
-    assert (run_dir / "cases.jsonl").is_file()
-    assert (run_dir / "results.jsonl").is_file()
-    assert (run_dir / "summary.json").is_file()
-    assert (run_dir / "summary.md").is_file()
-    assert (run_dir / "preview.json").is_file()
-    assert (run_dir / "manifest.json").is_file()
-
-
-def test_final_raw_pdf_smoke_supports_mineru_api_parser(tmp_path: Path) -> None:
+def test_final_raw_pdf_smoke_validates_mineru_api_cli_contract(tmp_path: Path) -> None:
     pdf_path = tmp_path / "sample.pdf"
     pdf_path.write_bytes(b"%PDF-1.4\n")
     document_root = tmp_path / "documents"
@@ -204,17 +97,34 @@ def test_final_raw_pdf_smoke_supports_mineru_api_parser(tmp_path: Path) -> None:
                 mineru_api={"api_status": "submitted"},
             )
             return CommandResult(0, json.dumps(payload))
-        task_type = "page_lookup" if "page 1" in question else "document_summary"
-        tools = ["get_page_text"] if "page 1" in question else ["document_summary"]
-        if question == "What information is mentioned in the document?":
-            task_type = "local_fact_qa"
-            tools = ["local_fact_qa"]
+        if question == "Show the text from page 1.":
+            payload = _payload(
+                tmp_path=tmp_path,
+                case_id="page",
+                doc_id=doc_id,
+                task_type="page_lookup",
+                tools_used=["get_page_text"],
+                citations=[citation],
+                evidence_used=evidence,
+            )
+            return CommandResult(0, json.dumps(payload))
+        if question == "Summarize this document.":
+            payload = _payload(
+                tmp_path=tmp_path,
+                case_id="summary",
+                doc_id=doc_id,
+                task_type="document_summary",
+                tools_used=["document_summary"],
+                citations=[citation],
+                evidence_used=evidence,
+            )
+            return CommandResult(0, json.dumps(payload))
         payload = _payload(
             tmp_path=tmp_path,
-            case_id=task_type,
+            case_id="fact",
             doc_id=doc_id,
-            task_type=task_type,
-            tools_used=tools,
+            task_type="local_fact_qa",
+            tools_used=["local_fact_qa"],
             citations=[citation],
             evidence_used=evidence,
         )
@@ -224,19 +134,27 @@ def test_final_raw_pdf_smoke_supports_mineru_api_parser(tmp_path: Path) -> None:
         pdf_path=pdf_path,
         output_root=tmp_path / "smoke",
         document_root=document_root,
-        parser_name="mineru_api",
         live_api=True,
         mineru_env_file=env_file,
         command_runner=fake_runner,
-        run_id="raw_pdf_api_smoke_test",
+        run_id="raw_pdf_smoke_test",
     )
 
     assert summary["status"] == "success"
+    assert summary["passed_count"] == 4
+    assert summary["failed_count"] == 0
     assert summary["parser"] == "mineru_api"
-    assert summary["used_mineru_local_cli"] is False
     assert summary["used_mineru_api"] is True
     assert summary["used_external_api"] is True
     assert summary["used_online_mineru_ocr"] is True
+    assert summary["used_qwen"] is False
+    assert summary["formal_benchmark_acceptance"] is False
+    assert summary["task_type_distribution"] == {
+        "document_statistics": 1,
+        "document_summary": 1,
+        "local_fact_qa": 1,
+        "page_lookup": 1,
+    }
     assert len(seen_commands) == 4
     for command in seen_commands:
         assert command[command.index("--parser") + 1] == "mineru_api"
@@ -244,6 +162,14 @@ def test_final_raw_pdf_smoke_supports_mineru_api_parser(tmp_path: Path) -> None:
         assert command[command.index("--mineru-env-file") + 1] == str(env_file)
         assert "--mineru-command" not in command
         assert "--parser-mode" not in command
+
+    run_dir = Path(summary["artifact_dir"])
+    assert (run_dir / "cases.jsonl").is_file()
+    assert (run_dir / "results.jsonl").is_file()
+    assert (run_dir / "summary.json").is_file()
+    assert (run_dir / "summary.md").is_file()
+    assert (run_dir / "preview.json").is_file()
+    assert (run_dir / "manifest.json").is_file()
 
 
 def test_final_raw_pdf_smoke_fails_on_missing_citation_contract(tmp_path: Path) -> None:
@@ -253,8 +179,8 @@ def test_final_raw_pdf_smoke_fails_on_missing_citation_contract(tmp_path: Path) 
     doc_id = "doc_raw_pdf"
     mineru_dir = document_root / doc_id / "mineru"
     mineru_dir.mkdir(parents=True)
-    (mineru_dir / "mineru_cli_result.json").write_text(
-        json.dumps({"command_found": True, "timed_out": False, "returncode": 0}),
+    (mineru_dir / "mineru_api_manifest.json").write_text(
+        json.dumps({"status": "success", "batch_id": "batch-1"}),
         encoding="utf-8",
     )
 
@@ -268,8 +194,10 @@ def test_final_raw_pdf_smoke_fails_on_missing_citation_contract(tmp_path: Path) 
                 task_type="document_statistics",
                 tools_used=["count_pages"],
                 was_ingested=True,
-                parser="mineru",
-                parser_mode="local_cli",
+                parser="mineru_api",
+                parser_mode="parse_existing",
+                used_mineru_api=True,
+                mineru_api={"api_status": "submitted"},
             )
         else:
             payload = _payload(
@@ -285,6 +213,7 @@ def test_final_raw_pdf_smoke_fails_on_missing_citation_contract(tmp_path: Path) 
         pdf_path=pdf_path,
         output_root=tmp_path / "smoke",
         document_root=document_root,
+        live_api=True,
         command_runner=fake_runner,
         run_id="raw_pdf_smoke_missing_citation",
     )

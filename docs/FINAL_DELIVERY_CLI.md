@@ -1,6 +1,6 @@
 # DocAgent Final Delivery CLI Guide
 
-Updated: 2026-06-29
+Updated: 2026-06-30
 
 This guide describes the current local, CLI-only delivery surface for the
 Phase 5 personal-use DocAgent MVP. It is the practical entry point for running
@@ -26,7 +26,6 @@ Implemented local capabilities:
 - text file ingestion through `TextParserBackend`
 - existing MinerU output ingestion through `--parser mineru_existing`
 - MinerU API ingestion through `--parser mineru_api --live-api`
-- raw PDF MinerU local CLI wrapper with structured failure artifacts
 - deterministic document statistics and page lookup
 - deterministic extractive `document_summary`
 - deterministic persisted-evidence `structured_extraction`
@@ -53,7 +52,7 @@ Not included in the current local delivery:
 - multi-turn memory
 - multilingual QA acceptance
 - pixel-level VLM chart/image interpretation
-- accepted online MinerU OCR smoke from raw PDF
+- local MinerU CLI execution path
 - accepted MP-DocVQA/TAT-QA final answer benchmark
 - new SFT/GRPO training or training-quality claims
 
@@ -202,24 +201,6 @@ python scripts\run_final_raw_pdf_smoke.py `
 
 This smoke validates parser-to-CLI execution and artifact/citation contracts.
 It is not a final answer-quality benchmark.
-
-Attempt raw PDF parsing through an installed local MinerU CLI:
-
-```powershell
-python scripts\docagent_cli.py `
-  --file data\example.pdf `
-  --parser mineru `
-  --parser-mode local_cli `
-  --mineru-command mineru `
-  --mineru-timeout-seconds 600 `
-  --question "What is reported on page 1?" `
-  --output-dir outputs\cli
-```
-
-This path requires a working MinerU executable outside the current project. If
-MinerU is missing, times out, or exits nonzero, DocAgent writes a structured
-`mineru_cli_result.json` failure artifact. That failure artifact is implemented
-locally; it is not an accepted online OCR capability by itself.
 
 Run the final subset AnswerPolicy baseline locally with the heuristic policy:
 

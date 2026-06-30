@@ -416,10 +416,7 @@ def _parser_backend_for_file(
     file_path: Path,
     *,
     parser_name: str,
-    parser_mode: str,
     mineru_output_dir: Path | None,
-    mineru_command: str,
-    mineru_timeout_seconds: int,
 ) -> tuple[Any | None, dict[str, str] | None]:
     extension = file_path.suffix.lower()
     if extension not in SUPPORTED_EXTENSIONS:
@@ -434,18 +431,13 @@ def _parser_backend_for_file(
                 "message": f"Text parser only supports .txt files, not {extension}.",
             }
         return TextParserBackend(), None
-    if parser_name in {"mineru_existing", "mineru", "mineru_api"} or (
+    if parser_name in {"mineru_existing", "mineru_api"} or (
         parser_name == "auto" and extension in {".pdf", ".png", ".jpg", ".jpeg"} and mineru_output_dir is not None
     ):
-        mode = "parse_existing" if parser_name in {"mineru_existing", "mineru_api"} or mineru_output_dir is not None else parser_mode
-        backend_name = "mineru_existing" if mode == "parse_existing" else "mineru"
-        if parser_name == "mineru_api":
-            backend_name = "mineru_api"
+        backend_name = "mineru_api" if parser_name == "mineru_api" else "mineru_existing"
         return (
             MinerUParserBackend(
-                mode=mode,
-                command=mineru_command,
-                timeout_seconds=mineru_timeout_seconds,
+                mode="parse_existing",
                 backend_name=backend_name,
             ),
             None,
@@ -467,10 +459,7 @@ def _ingest_file(
     file_path: Path,
     document_root: Path,
     parser_name: str,
-    parser_mode: str,
     mineru_output_dir: Path | None,
-    mineru_command: str,
-    mineru_timeout_seconds: int,
     live_api: bool,
     mineru_env_file: Path | None,
     mineru_model_version: str,
@@ -485,10 +474,7 @@ def _ingest_file(
     parser_backend, parser_error = _parser_backend_for_file(
         file_path,
         parser_name=parser_name,
-        parser_mode=parser_mode,
         mineru_output_dir=mineru_output_dir,
-        mineru_command=mineru_command,
-        mineru_timeout_seconds=mineru_timeout_seconds,
     )
     if parser_error is not None:
         return None, parser_error, {"status": "failed", "error": parser_error}
@@ -1372,10 +1358,7 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
                     file_path=file_path,
                     document_root=document_root,
                     parser_name=str(args.parser),
-                    parser_mode=str(args.parser_mode),
                     mineru_output_dir=mineru_output_dir,
-                    mineru_command=str(args.mineru_command),
-                    mineru_timeout_seconds=int(args.mineru_timeout_seconds),
                     live_api=bool(args.live_api),
                     mineru_env_file=mineru_env_file,
                     mineru_model_version=str(args.mineru_model_version),
@@ -1417,7 +1400,7 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
                 source["ingestion_status"] = str(ingestion_summary.get("parse_status") or ingestion_summary.get("status") or "success")
                 source["ingestion"] = ingestion_summary
                 source["parser"] = str(args.parser)
-                source["parser_mode"] = "parse_existing" if str(args.parser) == "mineru_api" else str(args.parser_mode)
+                source["parser_mode"] = "parse_existing"
                 if mineru_output_dir is not None:
                     source["mineru_output_dir"] = str(mineru_output_dir)
                 if str(args.parser) == "mineru_api":
@@ -1636,11 +1619,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--question")
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR))
     parser.add_argument("--document-root", default=str(DEFAULT_DOCUMENT_ROOT))
-    parser.add_argument("--parser", choices=["auto", "text", "mineru_existing", "mineru", "mineru_api"], default="auto")
-    parser.add_argument("--parser-mode", choices=["parse_existing", "local_cli"], default="parse_existing")
+    parser.add_argument("--parser", choices=["auto", "text", "mineru_existing", "mineru_api"], default="auto")
     parser.add_argument("--mineru-output-dir", "--mineru-output", dest="mineru_output_dir")
-    parser.add_argument("--mineru-command", default="mineru")
-    parser.add_argument("--mineru-timeout-seconds", type=int, default=600)
     parser.add_argument("--live-api", action="store_true")
     parser.add_argument("--mineru-env-file", help=f"Optional MinerU API env file, defaults to {DEFAULT_MINERU_ENV_FILE} when present.")
     parser.add_argument("--mineru-model-version", default="vlm")

@@ -97,7 +97,7 @@ Current status:
 ```text
 parse_existing fixture: mock_verified
 existing real MinerU output consumption: real_model_verified
-real MinerU CLI local_cli: blocked, no isolated MinerU Conda env observed on 2026-06-30
+real MinerU CLI: not_started; no longer a final-delivery target
 MinerU API raw PDF smoke: accepted on 2026-06-30, run_id
   final_raw_pdf_mineru_api_cli_smoke_20260630, commit 31cdd18, 4/4 CLI
   contract cases passed with used_mineru_api=true and used_online_mineru_ocr=true
@@ -110,8 +110,8 @@ Allowed options:
 1. consume one real MinerU output produced externally;
 2. use MinerU API with `MINERU_TOKEN` supplied through environment variables
    or `MINERU_TOKEN`/`API_TOKEN` in `.secrets/mineru.env`;
-3. use an isolated CPU `mineru[pipeline]` environment for a small document set;
-4. create an isolated GPU MinerU environment only if throughput requires it.
+3. create an isolated MinerU CLI environment only if a future task explicitly
+   reopens local CLI execution.
 
 Recommended local secret file:
 
@@ -125,7 +125,7 @@ MINERU_TOKEN=...
 The file is ignored by Git. Server runs may also keep using a manually
 exported `MINERU_TOKEN` for one terminal session.
 
-Do not install `mineru[core]` or `mineru[all]` into the stable `docagent` environment.
+Do not install MinerU CLI packages into the stable `docagent` environment.
 
 MinerU installation must not block the current Phase 2A retrieval milestone.
 

@@ -86,7 +86,7 @@ commits.
 - unified CLI and artifact contract;
 - text file ingestion;
 - existing MinerU output ingestion;
-- raw PDF MinerU local CLI wrapper with structured failure artifacts;
+- raw PDF MinerU API ingestion with accepted live execution smoke;
 - deterministic document statistics and page lookup;
 - deterministic extractive document summary;
 - deterministic structured extraction over persisted evidence;
@@ -100,7 +100,6 @@ commits.
 
 - formal MP-DocVQA/TAT-QA final answer benchmark;
 - final Qwen answer-quality acceptance;
-- accepted online MinerU OCR run from raw PDF;
 - pixel-level image/chart VLM reasoning;
 - new SFT/GRPO training;
 - UI, FastAPI, Gradio, cloud storage, or multi-user service.

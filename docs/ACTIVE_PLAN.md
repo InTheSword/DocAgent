@@ -30,7 +30,8 @@ Phase 5 Personal-use DocAgent MVP
 -> Final Delivery Contract local update implemented:
    answer + reasoning_summary + evidence_used + citations + trace_path
 -> deterministic table_lookup and simple_calculation implemented locally
--> raw PDF MinerU local_cli failure artifacts hardened locally
+-> raw PDF MinerU API accepted as the final raw PDF parser path; local MinerU
+   CLI execution is no longer a delivery target
 -> final-evaluation subset preparation implemented locally for TAT-QA dev and
    MP-DocVQA val shards 1-2
 -> final-evaluation local subset diagnostic runner implemented locally
@@ -103,18 +104,16 @@ Phase 5 Personal-use DocAgent MVP
    answer_hit_rate/pass_rate to 0.85 with citation_block_hit_rate 1.0;
    review recommends continuing Qwen evaluation before training and skips SFT
    candidates
--> final raw PDF smoke runner implemented locally; it wraps the existing
-   `docagent_cli.py --parser mineru --parser-mode local_cli` path and the
-   `--parser mineru_api --live-api` path into a reproducible smoke that checks
-   raw PDF ingestion, MinerU result artifacts, EvidenceBlock persistence, CLI
-   artifact files, citations, and evidence_used without rerunning training,
-   VLM, or benchmark scoring
+-> final raw PDF smoke runner implemented locally as an API-only reproducible
+   smoke around `docagent_cli.py --parser mineru_api --live-api`; it checks
+   raw PDF ingestion, MinerU API result artifacts, EvidenceBlock persistence,
+   CLI artifact files, citations, and evidence_used without rerunning
+   training, VLM, or benchmark scoring
 -> raw PDF existing-MinerU-output fallback smoke completed on server:
    run_id `final_raw_pdf_existing_mineru_audit_20260630` consumed a previously
    generated real MinerU output via `mineru_existing`, passed 4/4 CLI contract
    cases, and confirmed citations/evidence_used on evidence-bearing cases;
-   this is regression evidence for consuming real MinerU output, not
-   `local_cli` acceptance, because the server has no isolated MinerU env
+   this is regression evidence for consuming real MinerU output
 -> MinerU API secret-file support accepted: the API client and
    existing ingestion runners now keep the old `MINERU_TOKEN` terminal export
    path while also supporting `.secrets/mineru.env` / `--mineru-env-file`;
@@ -204,7 +203,6 @@ Phase 5 structured_extraction deterministic CLI -> implemented
 Phase 5 final output contract cleanup -> implemented
 Phase 5 table_lookup deterministic CLI -> implemented
 Phase 5 simple_calculation deterministic CLI -> implemented
-Phase 5 raw PDF MinerU local_cli structured failure artifact -> implemented
 Phase 5 final evaluation subset preparation -> implemented
 Phase 5 final evaluation local subset diagnostic runner -> implemented
 Phase 5 final delivery CLI guide -> implemented
@@ -228,9 +226,8 @@ Phase 5 AnswerPolicy answer-miss artifact review -> real_model_verified
 Phase 5 AnswerPolicy generic tool-output pretraining inspection -> real_model_verified
 Phase 5 generic table-tool operation/column repair -> accepted
 Phase 5 full80 AnswerPolicy Qwen generic tablefix diagnostic gate -> real_model_verified
-Phase 5 final raw PDF local_cli smoke runner -> implemented
+Phase 5 final raw PDF MinerU API smoke runner -> implemented
 Phase 5 final raw PDF existing MinerU output fallback smoke -> real_model_verified
-Phase 5 final raw PDF MinerU local_cli server smoke -> blocked
 Phase 5 final raw PDF MinerU API server smoke -> accepted
 Phase 5 MinerU API secret-file support -> accepted
 Phase 5 MinerU API file-to-answer CLI support -> accepted
@@ -1003,7 +1000,8 @@ implementation_commit = 3eaf488cd7870af2e64dcd74f0f807edd8a1cb01
 entrypoint = scripts/docagent_cli.py
 parser_backend = docagent/parser/mineru_backend.py
 supported_parser_mode = mineru_existing / parse_existing
-optional_parser_mode = mineru / local_cli when MinerU CLI is installed separately
+legacy_optional_parser_mode = local MinerU CLI removed from final delivery;
+  use mineru_api or mineru_existing
 existing_mineru_output_arg = --mineru-output-dir / --mineru-output
 server_status = success
 tested_file = data/real_documents/globocan_africa_2022/source/original.pdf
@@ -1794,7 +1792,7 @@ Phase 4D-B1.3 server sanity accepted
 + Final Delivery Contract local update implemented with top-level
   `reasoning_summary`, `evidence_used`, normalized citations,
   deterministic `table_lookup`, deterministic `simple_calculation`, and
-  MinerU `local_cli` failure artifact writing
+  MinerU API raw PDF ingestion support
 + Final raw PDF MinerU API smoke accepted with run id
   `final_raw_pdf_mineru_api_cli_smoke_20260630`: live API/OCR used,
   4/4 CLI contract cases passed, citations/evidence_used present on

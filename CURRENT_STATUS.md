@@ -117,11 +117,10 @@ Phase 5 Final Delivery local contract update is implemented in
 `reasoning_summary` and `evidence_used`, normalizes citation fields across
 text/table/image/page evidence, dispatches `table_lookup_or_calculation` to a
 deterministic table tool, supports traceable simple difference/sum/percentage
-calculations from cited table values, and writes `mineru_cli_result.json` for
-MinerU local_cli command-missing/timeout/nonzero failures. Status is
-`implemented`: local tests verify the contract and deterministic table paths,
-but MP-DocVQA/TAT-QA evaluation, real Qwen answer-quality acceptance, and real
-MinerU OCR server smoke remain pending.
+calculations from cited table values, and supports raw PDF ingestion through
+the MinerU API path. Status is `implemented`: local tests verify the contract
+and deterministic table paths, while MP-DocVQA/TAT-QA final evaluation and
+real Qwen answer-quality acceptance remain pending.
 
 Phase 5 final evaluation subset preparation is implemented in
 `scripts/prepare_final_eval_subset.py` with local tests in
@@ -171,26 +170,22 @@ diagnostics to `benchmark_evaluated`.
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in
 `tests/test_run_final_raw_pdf_smoke.py`. The runner executes
-`scripts/docagent_cli.py` over one raw PDF with either
-`--parser mineru --parser-mode local_cli` or `--parser mineru_api --live-api`
-and checks the final delivery execution contract: first-run file ingestion,
-MinerU result artifacts, EvidenceBlock-backed document metadata, required CLI
-artifacts, citations, `evidence_used`, and trace path. It writes
+`scripts/docagent_cli.py` over one raw PDF with
+`--parser mineru_api --live-api` and checks the final delivery execution
+contract: first-run file ingestion, MinerU API result artifacts,
+EvidenceBlock-backed document metadata, required CLI artifacts, citations,
+`evidence_used`, and trace path. It writes
 `cases.jsonl`, `results.jsonl`, `summary.json`, `summary.md`, `preview.json`,
-and `manifest.json` under `outputs/smoke/final_raw_pdf/<run_id>/`. Local
-validation uses a fake command runner only; real MinerU API execution is now
-server-verified below. Real MinerU local_cli execution, final answer quality,
-VLM, training, and formal benchmark acceptance remain out of this smoke.
+and `manifest.json` under `outputs/smoke/final_raw_pdf/<run_id>/`. Real
+MinerU API execution is server-verified below. Final answer quality, VLM,
+training, and formal benchmark acceptance remain out of this smoke.
 
-Server preflight for run
-`final_raw_pdf_mineru_local_cli_smoke_20260630` reached commit `e52a862` but
-was blocked before execution because no isolated Conda environment containing
-`mineru` or `magic-pdf` was present. A read-only fallback audit then found
-previously generated real MinerU output and completed
+A read-only fallback audit found previously generated real MinerU output and
+completed
 `final_raw_pdf_existing_mineru_audit_20260630` successfully: 4/4 CLI contract
 cases passed, 3 cases had citations, and 3 cases had `evidence_used`. This is
 `real_model_verified` regression evidence for consuming existing real MinerU
-output through `mineru_existing`; it is not `local_cli` acceptance.
+output through `mineru_existing`.
 
 MinerU API raw-PDF file-to-answer execution is accepted as an execution smoke
 after server run `final_raw_pdf_mineru_api_cli_smoke_20260630` at commit
@@ -205,8 +200,8 @@ Artifacts were written under
 with a compact sync bundle under
 `outputs/sync/final_raw_pdf_mineru_api_cli_smoke_20260630/`. This accepts the
 raw PDF -> MinerU API -> EvidenceBlock -> CLI artifact/citation contract path;
-it does not evaluate final answer correctness or replace the blocked local_cli
-path.
+it does not evaluate final answer correctness. Local MinerU CLI execution is
+no longer a final-delivery target unless explicitly reopened later.
 
 MinerU API secret-file support is implemented and server-verified in
 `docagent/integrations/mineru_api.py`, `scripts/ingest_document.py`, and
@@ -1189,7 +1184,7 @@ implementation_commit = 3eaf488cd7870af2e64dcd74f0f807edd8a1cb01
 entrypoint = scripts/docagent_cli.py
 parser_backend = docagent/parser/mineru_backend.py
 supported_parser_mode = mineru_existing / parse_existing
-optional_parser_mode = mineru / local_cli when MinerU CLI is installed separately
+current_raw_pdf_parser = mineru_api
 existing_mineru_output_arg = --mineru-output-dir / --mineru-output
 server_status = success
 tested_file_type = pdf

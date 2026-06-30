@@ -6,7 +6,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-from docagent.ingestion.hashing import doc_id_from_sha256, sha256_file
 from scripts import docagent_cli
 
 
@@ -77,42 +76,6 @@ def test_mineru_backend_unavailable_without_existing_output_is_structured(tmp_pa
     assert payload["source"]["was_ingested"] is False
     assert payload["source"]["reused_existing"] is False
     assert Path(payload["artifact_dir"], "result.json").is_file()
-
-
-def test_mineru_local_cli_missing_command_writes_structured_artifact(tmp_path: Path) -> None:
-    source, db_path, document_root, output_dir = _paths(tmp_path)
-    missing_command = "definitely_missing_mineru_command_for_test"
-
-    payload, raw = _run_cli(
-        "--db-path",
-        str(db_path),
-        "--document-root",
-        str(document_root),
-        "--file",
-        str(source),
-        "--parser",
-        "mineru",
-        "--parser-mode",
-        "local_cli",
-        "--mineru-command",
-        missing_command,
-        "--question",
-        "How many pages are in this document?",
-        "--output-dir",
-        str(output_dir),
-    )
-
-    assert raw.startswith("{") and raw.endswith("}")
-    assert payload["status"] == "error"
-    assert payload["error"]["type"] == "file_ingestion_failed"
-    assert missing_command in payload["error"]["message"]
-    doc_id = doc_id_from_sha256(sha256_file(source))
-    cli_result_path = document_root / doc_id / "mineru" / "mineru_cli_result.json"
-    assert cli_result_path.is_file()
-    cli_result = json.loads(cli_result_path.read_text(encoding="utf-8"))
-    assert cli_result["command"] == missing_command
-    assert cli_result["command_found"] is False
-    assert cli_result["timed_out"] is False
 
 
 def test_mineru_api_requires_live_api_before_ingestion(tmp_path: Path) -> None:
