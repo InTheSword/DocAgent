@@ -88,7 +88,10 @@ Phase 5 Personal-use DocAgent MVP
    reads answer_miss rows from existing AnswerPolicy baseline artifacts,
    separates tool execution/contract issues, table-selection issues,
    calculation operand/operation issues, model tool-use misses, and metric
-   granularity hints, without creating training data
+   granularity hints, without creating training data; server validation on
+   the real-Qwen full80 tablefix artifact found 12 tool-expected answer
+   misses, all with successful tool execution, dominated by generic
+   calculation operand/operation and table selection review
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -188,7 +191,7 @@ Phase 5 larger AnswerPolicy Qwen tablefix diagnostic gate -> real_model_verified
 Phase 5 full80 AnswerPolicy Qwen tablefix diagnostic gate -> real_model_verified
 Phase 5 AnswerPolicy review gate repaired parse/schema semantics -> real_model_verified
 Phase 5 AnswerPolicy answer-miss artifact review -> real_model_verified
-Phase 5 AnswerPolicy generic tool-output pretraining inspection -> implemented
+Phase 5 AnswerPolicy generic tool-output pretraining inspection -> real_model_verified
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
@@ -1572,7 +1575,19 @@ generic_tool_output_inspection = implemented locally in
   expected_tools include table_lookup or simple_calculation, writes
   result.json, summary.json, summary.md, tool_output_rows.jsonl,
   preview.json, and manifest.json, and does not rerun Qwen, train, or
-  create validation-derived training data; server validation pending
+  create validation-derived training data; server validation success, run_id
+  answer_policy_tool_output_inspect_full80_tablefix_20260630,
+  git_commit 61d5321, source_run_id
+  answer_policy_training_gate_qwen_full80_tablefix_20260629_baseline,
+  answer_miss_count 19, tool_expected_answer_miss_count 12,
+  non_tool_answer_miss_count 7, bucket_counts
+  generic_calculation_operand_or_operation_review:6,
+  generic_table_selection_or_column_review:4,
+  model_did_not_use_correct_tool_output:2, tool_status success:12,
+  tool_operation_counts simple_calculation:7, table_lookup:5,
+  used_training false, formal_benchmark_acceptance false,
+  validation_subset_used_for_training false, recommendation
+  inspect_generic_table_or_calculation_tool_outputs_before_training
 sft_candidate_review = server validation success, run_id
   answer_policy_sft_candidate_review_larger40_20260629_tracked,
   candidate_record_count 13, failed_without_candidate_count 1,

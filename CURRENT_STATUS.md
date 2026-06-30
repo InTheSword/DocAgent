@@ -299,7 +299,19 @@ issues, model failures to use a gold-overlapping tool answer, and answer
 granularity or metric-normalization hints. It is artifact-only: it does not
 rerun Qwen, create training records, start SFT/GRPO, or tune against
 individual validation examples. Server validation on the full80 tablefix
-baseline artifact is pending.
+baseline artifact succeeded with run id
+`answer_policy_tool_output_inspect_full80_tablefix_20260630` at commit
+`61d5321`. It used the existing real-Qwen full80 tablefix baseline artifact,
+did not rerun Qwen, did not train, and returned
+`answer_miss_count=19`, `tool_expected_answer_miss_count=12`,
+`non_tool_answer_miss_count=7`, `tool_status_counts=success:12`,
+`tool_operation_counts=simple_calculation:7, table_lookup:5`, and bucket
+counts `generic_calculation_operand_or_operation_review=6`,
+`generic_table_selection_or_column_review=4`, and
+`model_did_not_use_correct_tool_output=2`. The recommendation is
+`inspect_generic_table_or_calculation_tool_outputs_before_training`, with
+`used_training=false`, `formal_benchmark_acceptance=false`, and
+`validation_subset_used_for_training=false`.
 
 Phase 5 AnswerPolicy SFT candidate data builder is implemented locally in
 `scripts/build_answer_policy_sft_candidates.py` with tests in
