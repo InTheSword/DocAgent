@@ -134,7 +134,11 @@ Phase 5 Personal-use DocAgent MVP
    that manifest plus DB to evaluate MP-DocVQA rows with page-level citation
    checks instead of skipping them; a 2-document live MinerU API server smoke
    `mpdocvqa_evidence_api_smoke_20260630` at commit `d325800` passed with
-   document_passed_count 2/2 and sample_evidence_ready_count 4/4
+   document_passed_count 2/2 and sample_evidence_ready_count 4/4; after
+   hardened MinerU API retry/resume handling, full selected-subset server run
+   `mpdocvqa_evidence_api_retry_failed_hardened_20260630` at commit
+   `13b1dc1` passed with document_passed_count 10/10 and
+   sample_evidence_ready_count 55/55
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -241,7 +245,7 @@ Phase 5 final raw PDF existing MinerU output fallback smoke -> real_model_verifi
 Phase 5 final raw PDF MinerU API server smoke -> accepted
 Phase 5 MinerU API secret-file support -> accepted
 Phase 5 MinerU API file-to-answer CLI support -> accepted
-Phase 5 MP-DocVQA evidence materialization runner -> real_model_verified
+Phase 5 MP-DocVQA evidence materialization runner -> accepted
 Phase 5 AnswerPolicy MP-DocVQA evidence-aware baseline path -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
@@ -1817,8 +1821,9 @@ Phase 4D-B1.3 server sanity accepted
   SQLite EvidenceBlocks; 2-document live MinerU API smoke
   `mpdocvqa_evidence_api_smoke_20260630` verified raw PDF -> MinerU API ->
   EvidenceBlock -> sample evidence manifest on 4 samples; full selected-subset
-  materialization remains server-required before MP-DocVQA rows should enter
-  larger real-Qwen diagnostics
+  retry/resume run `mpdocvqa_evidence_api_retry_failed_hardened_20260630`
+  verified 10/10 MP-DocVQA documents and 55/55 samples as evidence-ready,
+  enabling MP-DocVQA rows to enter the next real-Qwen diagnostic baseline
 + Final evaluation subset preparation implemented locally with TAT-QA dev and
   MP-DocVQA val shard 1-2 manifests, filter reports, source hashes, and
   previews under `outputs/final_eval/`

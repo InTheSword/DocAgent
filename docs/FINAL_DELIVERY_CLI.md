@@ -266,6 +266,8 @@ Recommended server-side single command for the Qwen baseline gate:
 python scripts\run_final_answer_policy_training_gate.py `
   --answer-policy base `
   --base-model-path /root/autodl-tmp/models/Qwen3-1.7B `
+  --mpdocvqa-evidence-manifest outputs/final_eval/mpdocvqa_val_evidence/<run_id>/sample_evidence_manifest.jsonl `
+  --mpdocvqa-db-path outputs/final_eval/mpdocvqa_val_evidence/mpdocvqa_evidence_api_full_subset_20260630/docagent.db `
   --sync-output-dir outputs\sync `
   --preserve-input-order
 ```

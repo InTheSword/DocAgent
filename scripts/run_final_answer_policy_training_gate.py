@@ -22,6 +22,8 @@ from scripts.review_answer_policy_baseline import (
     review_answer_policy_baseline,
 )
 from scripts.run_final_answer_policy_baseline import (
+    DEFAULT_MPDOCVQA_DB_PATH,
+    DEFAULT_MPDOCVQA_EVIDENCE_MANIFEST,
     DEFAULT_MPDOCVQA_MANIFEST,
     DEFAULT_OUTPUT_ROOT as DEFAULT_BASELINE_OUTPUT_ROOT,
     DEFAULT_QWEN_BASE_MODEL_PATH,
@@ -81,6 +83,7 @@ def compact_baseline(result: dict[str, Any]) -> dict[str, Any]:
         "format_valid_rate": result.get("format_valid_rate"),
         "answer_hit_rate": result.get("answer_hit_rate"),
         "citation_block_hit_rate": result.get("citation_block_hit_rate"),
+        "citation_page_hit_rate": result.get("citation_page_hit_rate"),
         "failure_reason_distribution": result.get("failure_reason_distribution") or {},
     }
 
@@ -133,6 +136,8 @@ def run_final_answer_policy_training_gate(
     tatqa_samples: Path | None = DEFAULT_TATQA_SAMPLES,
     tatqa_manifest: Path | None = DEFAULT_TATQA_MANIFEST,
     mpdocvqa_manifest: Path | None = DEFAULT_MPDOCVQA_MANIFEST,
+    mpdocvqa_evidence_manifest: Path | None = DEFAULT_MPDOCVQA_EVIDENCE_MANIFEST,
+    mpdocvqa_db_path: Path | None = DEFAULT_MPDOCVQA_DB_PATH,
     max_samples: int | None = None,
     answer_policy_mode: str = "base",
     base_model_path: str = DEFAULT_QWEN_BASE_MODEL_PATH,
@@ -161,6 +166,8 @@ def run_final_answer_policy_training_gate(
         tatqa_samples=tatqa_samples,
         tatqa_manifest=tatqa_manifest,
         mpdocvqa_manifest=mpdocvqa_manifest,
+        mpdocvqa_evidence_manifest=mpdocvqa_evidence_manifest,
+        mpdocvqa_db_path=mpdocvqa_db_path,
         max_samples=max_samples,
         answer_policy_mode=answer_policy_mode,
         base_model_path=base_model_path,
@@ -381,6 +388,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tatqa-samples", default=str(DEFAULT_TATQA_SAMPLES))
     parser.add_argument("--tatqa-manifest", default=str(DEFAULT_TATQA_MANIFEST))
     parser.add_argument("--mpdocvqa-manifest", default=str(DEFAULT_MPDOCVQA_MANIFEST))
+    parser.add_argument("--mpdocvqa-evidence-manifest", default=str(DEFAULT_MPDOCVQA_EVIDENCE_MANIFEST))
+    parser.add_argument("--mpdocvqa-db-path", default=str(DEFAULT_MPDOCVQA_DB_PATH))
     parser.add_argument("--max-samples", type=int)
     parser.add_argument("--answer-policy", choices=["heuristic", "base", "sft", "grpo"], default="base")
     parser.add_argument("--base-model-path", default=DEFAULT_QWEN_BASE_MODEL_PATH)
@@ -409,6 +418,8 @@ def main(argv: list[str] | None = None) -> int:
         tatqa_samples=repo_path(args.tatqa_samples),
         tatqa_manifest=repo_path(args.tatqa_manifest),
         mpdocvqa_manifest=repo_path(args.mpdocvqa_manifest),
+        mpdocvqa_evidence_manifest=repo_path(args.mpdocvqa_evidence_manifest),
+        mpdocvqa_db_path=repo_path(args.mpdocvqa_db_path),
         max_samples=args.max_samples,
         answer_policy_mode=str(args.answer_policy),
         base_model_path=str(args.base_model_path),

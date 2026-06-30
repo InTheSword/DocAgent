@@ -4,8 +4,11 @@ import json
 from pathlib import Path
 from typing import Any
 
+from docagent.ingestion.document_registry import DocumentRecord
 from docagent.models.base import GenerationResult
 from docagent.schemas import DocAgentSample, EvidenceBlock, EvidenceLocation
+from docagent.storage.db import connect
+from docagent.storage.repositories import DocumentRepository
 from docagent.utils.jsonl import read_jsonl, write_jsonl
 from scripts.run_final_answer_policy_training_gate import run_final_answer_policy_training_gate
 
@@ -125,6 +128,91 @@ def test_training_gate_builds_sft_candidates_for_qwen_failures(tmp_path: Path) -
     assert (tmp_path / "sync" / "gate_run" / "result.json").is_file()
     assert (tmp_path / "sync" / "gate_run" / "baseline_summary.json").is_file()
     assert (tmp_path / "sync" / "gate_run" / "review.json").is_file()
+
+
+def test_training_gate_passes_mpdocvqa_evidence_to_baseline(tmp_path: Path) -> None:
+    samples_path, manifest_path, mp_manifest_path = _write_inputs(tmp_path)
+    db_path = tmp_path / "mp" / "docagent.db"
+    document_root = tmp_path / "mp" / "documents"
+    document_root.mkdir(parents=True)
+    conn = connect(db_path)
+    try:
+        repository = DocumentRepository(conn)
+        repository.upsert_document(
+            DocumentRecord(
+                doc_id="mp_ingested",
+                sha256="d" * 64,
+                original_name="mp.pdf",
+                mime_type="application/pdf",
+                file_size=10,
+                file_path=str(document_root / "mp_ingested" / "source" / "original.pdf"),
+                document_dir=str(document_root / "mp_ingested"),
+                page_count=6,
+                parser_backend="mineru_api",
+                parse_status="parsed",
+                index_status="not_started",
+            )
+        )
+        repository.save_evidence_blocks(
+            [
+                EvidenceBlock(
+                    doc_id="mp_ingested",
+                    block_id="mp_ingested_p006_b0001",
+                    block_type="text",
+                    text="Budget: $100,000",
+                    page_id=6,
+                    location=EvidenceLocation(page=6, block_id="mp_ingested_p006_b0001"),
+                ),
+                EvidenceBlock(
+                    doc_id="mp_ingested",
+                    block_id="mp_ingested_p006_page",
+                    block_type="page",
+                    text="Budget: $100,000",
+                    page_id=6,
+                    location=EvidenceLocation(page=6, block_id="mp_ingested_p006_page"),
+                    metadata={"child_block_ids": ["mp_ingested_p006_b0001"]},
+                ),
+            ]
+        )
+    finally:
+        conn.close()
+    mp_evidence_manifest = tmp_path / "mp" / "sample_evidence_manifest.jsonl"
+    write_jsonl(
+        mp_evidence_manifest,
+        [
+            {
+                "sample_id": "mp_q",
+                "doc_id": "mp_doc",
+                "ingested_doc_id": "mp_ingested",
+                "gold_pages": [6],
+                "gold_page_block_ids": ["mp_ingested_p006_page"],
+                "gold_page_child_block_ids": ["mp_ingested_p006_b0001"],
+                "evidence_ready": True,
+            }
+        ],
+    )
+
+    result = run_final_answer_policy_training_gate(
+        output_root=tmp_path / "gate",
+        run_id="mp_gate",
+        baseline_output_root=tmp_path / "baseline",
+        review_output_root=tmp_path / "review",
+        sft_candidate_output_root=tmp_path / "candidates",
+        tatqa_samples=samples_path,
+        tatqa_manifest=manifest_path,
+        mpdocvqa_manifest=mp_manifest_path,
+        mpdocvqa_evidence_manifest=mp_evidence_manifest,
+        mpdocvqa_db_path=db_path,
+        answer_policy=WrongAnswerPolicy(),
+        preserve_input_order=True,
+    )
+
+    rows = read_jsonl(tmp_path / "baseline" / "mp_gate_baseline" / "results.jsonl")
+    mp_rows = [row for row in rows if row.get("dataset") == "mp_docvqa"]
+    assert len(mp_rows) == 1
+    assert mp_rows[0]["evaluation_mode"] == "mpdocvqa_answer_policy_generation"
+    assert result["baseline"]["case_count"] == 2
+    assert "citation_page_hit_rate" in result["baseline"]
 
 
 def test_training_gate_skips_sft_candidates_without_qwen(tmp_path: Path) -> None:
