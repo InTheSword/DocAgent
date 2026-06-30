@@ -260,9 +260,13 @@ def rank_hit(rows: list[dict[str, Any]], k: int) -> int:
 
 
 def recommendation(bucket_counts: Counter[str]) -> dict[str, Any]:
-    if bucket_counts.get("gold_page_blocks_missing", 0) or bucket_counts.get("gold_page_without_retrievable_blocks", 0):
+    mapping_issue_count = bucket_counts.get("gold_page_blocks_missing", 0) + bucket_counts.get(
+        "gold_page_without_retrievable_blocks", 0
+    )
+    retrieval_issue_count = bucket_counts.get("retrieval_gold_page_miss", 0) + bucket_counts.get("retrieved_blocks_empty", 0)
+    if mapping_issue_count and mapping_issue_count >= retrieval_issue_count:
         next_action = "inspect_mineru_evidence_mapping_or_block_text_before_training"
-    elif bucket_counts.get("retrieval_gold_page_miss", 0) or bucket_counts.get("retrieved_blocks_empty", 0):
+    elif retrieval_issue_count:
         next_action = "inspect_retrieval_query_or_block_granularity_before_training"
     elif bucket_counts.get("selected_context_gold_page_miss", 0):
         next_action = "inspect_context_selection_before_training"

@@ -7,7 +7,7 @@ from docagent.schemas import EvidenceBlock, EvidenceLocation
 from docagent.storage.db import connect
 from docagent.storage.repositories import DocumentRepository
 from docagent.utils.jsonl import read_jsonl, write_jsonl
-from scripts.inspect_mpdocvqa_retrieval import inspect_mpdocvqa_retrieval
+from scripts.inspect_mpdocvqa_retrieval import inspect_mpdocvqa_retrieval, recommendation
 
 
 def write_json(path: Path, payload: dict) -> None:
@@ -187,3 +187,15 @@ def test_inspect_mpdocvqa_retrieval_buckets_generic_signals(tmp_path: Path) -> N
     assert buckets["mp_selected_miss"] == "selected_context_gold_page_miss"
     assert buckets["mp_no_retrievable_gold_page"] == "gold_page_without_retrievable_blocks"
     assert rows[0]["retrieved_gold_page_rank"] == 1
+
+
+def test_recommendation_prefers_dominant_retrieval_issue() -> None:
+    result = recommendation(
+        {
+            "gold_page_without_retrievable_blocks": 1,
+            "retrieval_gold_page_miss": 32,
+            "passed": 7,
+        }
+    )
+
+    assert result["next_action"] == "inspect_retrieval_query_or_block_granularity_before_training"
