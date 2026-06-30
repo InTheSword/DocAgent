@@ -195,10 +195,11 @@ MinerU API secret-file support is implemented locally in
 `docagent/integrations/mineru_api.py`, `scripts/ingest_document.py`, and
 `scripts/run_phase4b_mpdocvqa_ingestion.py`. `MinerUApiClient` still accepts
 the historical `MINERU_TOKEN` environment variable and now also accepts an
-explicit env file; the existing ingestion scripts default to
-`.secrets/mineru.env` when the file exists and expose `--mineru-env-file` for
-manual override. This is configuration support only; a live API smoke is still
-required before treating raw PDF API parsing as server-verified.
+explicit env file containing either `MINERU_TOKEN=...` or `API_TOKEN=...`;
+the existing ingestion scripts default to `.secrets/mineru.env` when the file
+exists and expose `--mineru-env-file` for manual override. This is
+configuration support only; a live API smoke is still required before treating
+raw PDF API parsing as server-verified.
 
 MinerU API file-to-answer support is implemented locally in
 `scripts/docagent_cli.py`. The final CLI now accepts

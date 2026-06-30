@@ -116,8 +116,9 @@ Phase 5 Personal-use DocAgent MVP
    `local_cli` acceptance, because the server has no isolated MinerU env
 -> MinerU API secret-file support implemented locally: the API client and
    existing ingestion runners now keep the old `MINERU_TOKEN` terminal export
-   path while also supporting `.secrets/mineru.env` / `--mineru-env-file`,
-   matching the Router LLM secret-management pattern
+   path while also supporting `.secrets/mineru.env` / `--mineru-env-file`;
+   MinerU env files may use `MINERU_TOKEN=...` or `API_TOKEN=...`, matching
+   the Router LLM secret-management pattern without committing secrets
 -> MinerU API file-to-answer support implemented locally in `docagent_cli.py`:
    `--parser mineru_api --live-api` writes API output into the document cache,
    then uses the existing EvidenceBlock/Router/tool/artifact path; live server

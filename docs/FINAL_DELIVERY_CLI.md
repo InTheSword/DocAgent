@@ -185,7 +185,9 @@ python scripts\docagent_cli.py `
 
 The secret file is optional when `MINERU_TOKEN` is already exported in the
 current shell. If `.secrets/mineru.env` exists, the CLI uses it by default.
-The file should contain `MINERU_TOKEN=...` and must stay uncommitted.
+The file should contain `MINERU_TOKEN=...`; `API_TOKEN=...` is also accepted
+inside this MinerU-specific env file for compatibility. The file must stay
+uncommitted.
 
 Attempt raw PDF parsing through an installed local MinerU CLI:
 

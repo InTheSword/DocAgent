@@ -22,6 +22,7 @@ FAILED_STATE = "failed"
 ACTIVE_STATES = {"waiting-file", "pending", "running", "converting"}
 TERMINAL_STATES = {DONE_STATE, FAILED_STATE}
 ENV_MINERU_TOKEN = "MINERU_TOKEN"
+ENV_FILE_TOKEN_KEYS = (ENV_MINERU_TOKEN, "API_TOKEN")
 
 
 class MinerUApiError(RuntimeError):
@@ -131,10 +132,17 @@ def load_mineru_token(
         return token
     values = dict(os.environ if env is None else env)
     if env_file is not None:
-        values.update(read_env_file(env_file))
+        env_file_values = read_env_file(env_file)
+        for key in ENV_FILE_TOKEN_KEYS:
+            value = env_file_values.get(key)
+            if value:
+                return value
     value = values.get(ENV_MINERU_TOKEN)
     if not value:
-        raise MinerUApiError(f"{ENV_MINERU_TOKEN} is not set")
+        raise MinerUApiError(
+            f"{ENV_MINERU_TOKEN} is not set; MinerU env files may contain "
+            f"{' or '.join(ENV_FILE_TOKEN_KEYS)}"
+        )
     return value
 
 
