@@ -98,8 +98,11 @@ Current status:
 parse_existing fixture: mock_verified
 existing real MinerU output consumption: real_model_verified
 real MinerU CLI local_cli: blocked, no isolated MinerU Conda env observed on 2026-06-30
-MinerU API client: implemented; reads MINERU_TOKEN from environment, or
-  MINERU_TOKEN/API_TOKEN from .secrets/mineru.env when present
+MinerU API raw PDF smoke: accepted on 2026-06-30, run_id
+  final_raw_pdf_mineru_api_cli_smoke_20260630, commit 31cdd18, 4/4 CLI
+  contract cases passed with used_mineru_api=true and used_online_mineru_ocr=true
+MinerU API client: accepted for secret-file execution; reads MINERU_TOKEN from
+  environment, or MINERU_TOKEN/API_TOKEN from .secrets/mineru.env when present
 ```
 
 Allowed options:

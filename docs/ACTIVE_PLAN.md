@@ -115,15 +115,17 @@ Phase 5 Personal-use DocAgent MVP
    cases, and confirmed citations/evidence_used on evidence-bearing cases;
    this is regression evidence for consuming real MinerU output, not
    `local_cli` acceptance, because the server has no isolated MinerU env
--> MinerU API secret-file support implemented locally: the API client and
+-> MinerU API secret-file support accepted: the API client and
    existing ingestion runners now keep the old `MINERU_TOKEN` terminal export
    path while also supporting `.secrets/mineru.env` / `--mineru-env-file`;
    MinerU env files may use `MINERU_TOKEN=...` or `API_TOKEN=...`, matching
    the Router LLM secret-management pattern without committing secrets
--> MinerU API file-to-answer support implemented locally in `docagent_cli.py`:
+-> MinerU API file-to-answer support accepted after live server smoke:
    `--parser mineru_api --live-api` writes API output into the document cache,
-   then uses the existing EvidenceBlock/Router/tool/artifact path; live server
-   API smoke is pending before server verification
+   then uses the existing EvidenceBlock/Router/tool/artifact path; server run
+   `final_raw_pdf_mineru_api_cli_smoke_20260630` at commit `31cdd18` used
+   `.secrets/mineru.env`, live MinerU API/OCR, passed 4/4 CLI contract cases,
+   and confirmed citations/evidence_used on evidence-bearing cases
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -229,8 +231,9 @@ Phase 5 full80 AnswerPolicy Qwen generic tablefix diagnostic gate -> real_model_
 Phase 5 final raw PDF local_cli smoke runner -> implemented
 Phase 5 final raw PDF existing MinerU output fallback smoke -> real_model_verified
 Phase 5 final raw PDF MinerU local_cli server smoke -> blocked
-Phase 5 MinerU API secret-file support -> implemented
-Phase 5 MinerU API file-to-answer CLI support -> implemented
+Phase 5 final raw PDF MinerU API server smoke -> accepted
+Phase 5 MinerU API secret-file support -> accepted
+Phase 5 MinerU API file-to-answer CLI support -> accepted
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
@@ -1792,6 +1795,11 @@ Phase 4D-B1.3 server sanity accepted
   `reasoning_summary`, `evidence_used`, normalized citations,
   deterministic `table_lookup`, deterministic `simple_calculation`, and
   MinerU `local_cli` failure artifact writing
++ Final raw PDF MinerU API smoke accepted with run id
+  `final_raw_pdf_mineru_api_cli_smoke_20260630`: live API/OCR used,
+  4/4 CLI contract cases passed, citations/evidence_used present on
+  evidence-bearing cases; this is execution/citation-contract evidence, not
+  final answer-quality benchmark evidence
 + Final evaluation subset preparation implemented locally with TAT-QA dev and
   MP-DocVQA val shard 1-2 manifests, filter reports, source hashes, and
   previews under `outputs/final_eval/`

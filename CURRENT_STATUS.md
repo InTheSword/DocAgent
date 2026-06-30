@@ -178,9 +178,9 @@ MinerU result artifacts, EvidenceBlock-backed document metadata, required CLI
 artifacts, citations, `evidence_used`, and trace path. It writes
 `cases.jsonl`, `results.jsonl`, `summary.json`, `summary.md`, `preview.json`,
 and `manifest.json` under `outputs/smoke/final_raw_pdf/<run_id>/`. Local
-validation uses a fake command runner only; real MinerU local_cli/API
-execution, final answer quality, VLM, training, and formal benchmark
-acceptance remain pending server validation.
+validation uses a fake command runner only; real MinerU API execution is now
+server-verified below. Real MinerU local_cli execution, final answer quality,
+VLM, training, and formal benchmark acceptance remain out of this smoke.
 
 Server preflight for run
 `final_raw_pdf_mineru_local_cli_smoke_20260630` reached commit `e52a862` but
@@ -192,15 +192,31 @@ cases passed, 3 cases had citations, and 3 cases had `evidence_used`. This is
 `real_model_verified` regression evidence for consuming existing real MinerU
 output through `mineru_existing`; it is not `local_cli` acceptance.
 
-MinerU API secret-file support is implemented locally in
+MinerU API raw-PDF file-to-answer execution is accepted as an execution smoke
+after server run `final_raw_pdf_mineru_api_cli_smoke_20260630` at commit
+`31cdd18`. The run used `/root/autodl-tmp/docagent/.secrets/mineru.env`,
+confirmed the MinerU token was configured without printing it, selected a real
+PDF under `data/real_documents/globocan_africa_2022/`, executed
+`scripts/run_final_raw_pdf_smoke.py --parser mineru_api --live-api`, and
+reported `used_mineru_api=true`, `used_online_mineru_ocr=true`, 4/4 passed
+cases, 0 failures, 3 citation-bearing cases, and 3 `evidence_used` cases.
+Artifacts were written under
+`outputs/smoke/final_raw_pdf_api/final_raw_pdf_mineru_api_cli_smoke_20260630/`
+with a compact sync bundle under
+`outputs/sync/final_raw_pdf_mineru_api_cli_smoke_20260630/`. This accepts the
+raw PDF -> MinerU API -> EvidenceBlock -> CLI artifact/citation contract path;
+it does not evaluate final answer correctness or replace the blocked local_cli
+path.
+
+MinerU API secret-file support is implemented and server-verified in
 `docagent/integrations/mineru_api.py`, `scripts/ingest_document.py`, and
 `scripts/run_phase4b_mpdocvqa_ingestion.py`. `MinerUApiClient` still accepts
 the historical `MINERU_TOKEN` environment variable and now also accepts an
 explicit env file containing either `MINERU_TOKEN=...` or `API_TOKEN=...`;
 the existing ingestion scripts default to `.secrets/mineru.env` when the file
-exists and expose `--mineru-env-file` for manual override. This is
-configuration support only; a live API smoke is still required before treating
-raw PDF API parsing as server-verified.
+exists and expose `--mineru-env-file` for manual override. The server
+`final_raw_pdf_mineru_api_cli_smoke_20260630` run verified this secret-file
+path without committing or printing the token.
 
 MinerU API file-to-answer support is implemented locally in
 `scripts/docagent_cli.py`. The final CLI now accepts
@@ -209,7 +225,9 @@ MinerU API file-to-answer support is implemented locally in
 `MinerUParserBackend(mode=parse_existing)`, EvidenceBlock persistence, Router,
 tools, citations, and artifact-writing path as existing MinerU output. Local
 tests cover missing `--live-api`, fake API ingestion, artifact flags, and
-secret-file argument plumbing. A live server API smoke is still pending.
+secret-file argument plumbing. The live server API smoke
+`final_raw_pdf_mineru_api_cli_smoke_20260630` accepted this path as execution
+stability evidence, not final answer-quality evidence.
 
 Phase 5 AnswerPolicy IO candidate schema and citation allowlist are
 implemented locally in `docagent/workflow/answer_contract.py`,
