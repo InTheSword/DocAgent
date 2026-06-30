@@ -281,6 +281,21 @@ check_format -> check_location -> finalize`. This is the current whole-chain
 usability baseline for future changes; it is not final answer-quality or
 formal benchmark acceptance.
 
+Phase 5 MP-DocVQA retrieval inspection is implemented locally in
+`scripts/inspect_mpdocvqa_retrieval.py` with tests in
+`tests/test_inspect_mpdocvqa_retrieval.py`. The script reads existing
+AnswerPolicy baseline or attribution artifacts plus the MP-DocVQA evidence
+SQLite DB, then separates generic retrieval-stage signals: whether the gold
+page has retrievable MinerU/EvidenceBlock text, whether retrieved/selected/
+cited blocks hit the gold page, first gold-page retrieval rank, recall@1/3/5,
+and buckets such as `retrieval_gold_page_miss`,
+`gold_page_without_retrievable_blocks`, `selected_context_gold_page_miss`, and
+`answer_generation_or_metric_miss`. It writes `result.json`, `summary.json`,
+`summary.md`, `mpdocvqa_retrieval_rows.jsonl`, `preview.json`, `manifest.json`,
+and an optional compact sync bundle. This is artifact-only diagnostic tooling:
+it does not call Qwen, start SFT/GRPO, create training records, tune against
+validation rows, or claim benchmark acceptance.
+
 Phase 5 AnswerPolicy IO candidate schema and citation allowlist are
 implemented locally in `docagent/workflow/answer_contract.py`,
 `docagent/models/output_parser.py`, `docagent/workflow/output_adapter.py`,

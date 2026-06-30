@@ -160,6 +160,13 @@ Phase 5 Personal-use DocAgent MVP
    plus summary/result/trace/router_plan artifacts in one CLI workflow; this
    is now the execution-chain usability baseline, not final answer-quality
    or benchmark acceptance
+-> MP-DocVQA retrieval inspection implemented locally:
+   `scripts/inspect_mpdocvqa_retrieval.py` reads existing AnswerPolicy
+   baseline or attribution artifacts plus the MP-DocVQA evidence SQLite DB,
+   then writes diagnostic retrieval buckets, gold-page rank/recall signals,
+   gold-page retrievable-block coverage, preview rows, manifest, and optional
+   sync bundle; it does not call Qwen, start training, create training data,
+   or tune against validation examples
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -270,6 +277,7 @@ Phase 5 MP-DocVQA evidence materialization runner -> accepted
 Phase 5 AnswerPolicy MP-DocVQA evidence-aware baseline path -> implemented
 Phase 5 full-workflow real retriever CLI wiring -> real_model_verified
 Phase 5 raw PDF full-model workflow baseline -> real_model_verified
+Phase 5 MP-DocVQA retrieval inspection -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
