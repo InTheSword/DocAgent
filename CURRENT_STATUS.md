@@ -265,6 +265,22 @@ citation, and passed all execution-chain checks. This is `real_model_verified`
 execution evidence only; it does not evaluate final answer correctness or mark
 MP-DocVQA/TAT-QA benchmark acceptance.
 
+Phase 5 raw PDF full-model workflow baseline is real-model verified after
+fresh server run
+`final_raw_pdf_full_workflow_api_hybrid_qwen_fresh_20260630_172350` at commit
+`8a61600`. The run started from one `--file` raw PDF input, used a fresh DB,
+ingested the document through live MinerU API without reusing an existing
+record, then completed one CLI workflow through LLM Router fallback, LLM Query
+Planner/Rewriter, `hybrid_rerank` retrieval, real BGE-M3 dense embeddings on
+`cuda:0`, real bge-reranker-v2-m3 cross-encoder reranking on CPU, and Qwen
+base AnswerPolicy. It produced non-empty `answer`, `reasoning_summary`,
+`evidence_used`, and `citations`, wrote `summary.json`, `result.json`,
+`trace.json`, and `router_plan.json`, and recorded workflow steps
+`retrieve_evidence -> build_evidence_context -> generate_answer ->
+check_format -> check_location -> finalize`. This is the current whole-chain
+usability baseline for future changes; it is not final answer-quality or
+formal benchmark acceptance.
+
 Phase 5 AnswerPolicy IO candidate schema and citation allowlist are
 implemented locally in `docagent/workflow/answer_contract.py`,
 `docagent/models/output_parser.py`, `docagent/workflow/output_adapter.py`,

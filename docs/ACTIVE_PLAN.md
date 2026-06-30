@@ -150,6 +150,16 @@ Phase 5 Personal-use DocAgent MVP
    `retrieve_evidence -> build_evidence_context -> generate_answer ->
    check_format -> check_location -> answer_repair -> finalize`; this is
    execution-chain evidence, not final answer-quality benchmark evidence
+-> raw PDF full-model workflow baseline real-model verified: fresh server run
+   `final_raw_pdf_full_workflow_api_hybrid_qwen_fresh_20260630_172350` at
+   commit `8a61600` started from `--file` raw PDF input with a fresh DB,
+   ingested through live MinerU API without reusing an existing document,
+   used LLM Router fallback, LLM Query Planner/Rewriter, real BGE-M3 dense
+   retrieval, real bge-reranker-v2-m3 reranking, Qwen base AnswerPolicy,
+   and produced non-empty answer/reasoning_summary/evidence_used/citations
+   plus summary/result/trace/router_plan artifacts in one CLI workflow; this
+   is now the execution-chain usability baseline, not final answer-quality
+   or benchmark acceptance
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -259,6 +269,7 @@ Phase 5 MinerU API file-to-answer CLI support -> accepted
 Phase 5 MP-DocVQA evidence materialization runner -> accepted
 Phase 5 AnswerPolicy MP-DocVQA evidence-aware baseline path -> implemented
 Phase 5 full-workflow real retriever CLI wiring -> real_model_verified
+Phase 5 raw PDF full-model workflow baseline -> real_model_verified
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
@@ -1843,6 +1854,14 @@ Phase 4D-B1.3 server sanity accepted
   workflow trace including `retrieve_evidence`; separate Router probe used LLM
   fallback. This is full execution-chain smoke evidence, not final answer
   correctness or benchmark acceptance.
++ Raw PDF full-model workflow baseline real-model verified with run id
+  `final_raw_pdf_full_workflow_api_hybrid_qwen_fresh_20260630_172350`: one
+  fresh CLI workflow started from `--file` raw PDF input, ingested via live
+  MinerU API into a new DB, used LLM Router fallback, LLM Query Planner,
+  real BGE-M3 dense retrieval, real bge-reranker-v2-m3 reranking, Qwen base
+  AnswerPolicy, and wrote answer/evidence/citation plus trace artifacts. This
+  is the current whole-chain usability baseline, not answer-quality benchmark
+  acceptance.
 + Final evaluation subset preparation implemented locally with TAT-QA dev and
   MP-DocVQA val shard 1-2 manifests, filter reports, source hashes, and
   previews under `outputs/final_eval/`
