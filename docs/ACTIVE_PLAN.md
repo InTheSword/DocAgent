@@ -174,7 +174,12 @@ Phase 5 Personal-use DocAgent MVP
    then reports CLI success, retrieved/selected/cited gold-page hits,
    answer hit, buckets, trace evidence, and sync artifacts; this compares
    the accepted CLI full-model path against the old legacy-BM25 baseline
-   without creating training data or claiming benchmark acceptance
+   without creating training data or claiming benchmark acceptance; server
+   diagnostic `mpdocvqa_full_workflow_hybrid_qwen_limit8_20260630` at commit
+   `0fe4859` passed with cli_success_rate 1.0, 8/8 Qwen/dense/reranker use,
+   retrieved_gold_page_hit_rate 0.875, citation_page_hit_rate 0.875,
+   answer_hit_rate 0.5, and bucket_counts passed:4,
+   answer_generation_or_metric_miss:3, retrieval_gold_page_miss:1
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -286,7 +291,7 @@ Phase 5 AnswerPolicy MP-DocVQA evidence-aware baseline path -> implemented
 Phase 5 full-workflow real retriever CLI wiring -> real_model_verified
 Phase 5 raw PDF full-model workflow baseline -> real_model_verified
 Phase 5 MP-DocVQA retrieval inspection -> implemented
-Phase 5 MP-DocVQA full-workflow diagnostic runner -> implemented
+Phase 5 MP-DocVQA full-workflow diagnostic runner -> real_model_verified
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted

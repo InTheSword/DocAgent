@@ -307,9 +307,21 @@ resulting CLI artifacts for execution success, retrieved/selected/cited
 gold-page hits, answer hit, trace steps, and failure buckets. This is the
 bridge from the old direct `run_qa_workflow` legacy-BM25 baseline to the
 accepted CLI full-model path. Status is `implemented`: local tests use a fake
-CLI runner and validate the artifact contract; real BGE/reranker/Qwen behavior
-still requires a server run and remains diagnostic-only, not formal benchmark
-acceptance.
+CLI runner and validate the artifact contract. Server evidence below upgrades
+the runner to `real_model_verified` for diagnostic execution only, not formal
+benchmark acceptance.
+
+Server diagnostic `mpdocvqa_full_workflow_hybrid_qwen_limit8_20260630` at
+commit `0fe4859` real-model verified the runner on 8 MP-DocVQA evidence-ready
+rows. The run completed with `cli_success_rate=1.0`, `used_qwen_answer_policy`
+8/8, dense retrieval 8/8, reranker 8/8, `retrieved_gold_page_hit_rate=0.875`,
+`selected_gold_page_hit_rate=0.875`, `citation_page_hit_rate=0.875`,
+`answer_hit_rate=0.5`, and bucket counts `passed=4`,
+`answer_generation_or_metric_miss=3`, `retrieval_gold_page_miss=1`. This
+confirms the accepted CLI full-model/hybrid_rerank path behaves materially
+better than the old direct legacy-BM25 MP-DocVQA baseline on this small
+diagnostic slice. It remains diagnostic-only and is not formal MP-DocVQA
+benchmark acceptance.
 
 Phase 5 AnswerPolicy IO candidate schema and citation allowlist are
 implemented locally in `docagent/workflow/answer_contract.py`,
