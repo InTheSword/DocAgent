@@ -96,7 +96,8 @@ Current status:
 
 ```text
 parse_existing fixture: mock_verified
-real MinerU CLI: not verified
+existing real MinerU output consumption: real_model_verified
+real MinerU CLI local_cli: blocked, no isolated MinerU Conda env observed on 2026-06-30
 ```
 
 Allowed options:

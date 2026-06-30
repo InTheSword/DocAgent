@@ -108,6 +108,12 @@ Phase 5 Personal-use DocAgent MVP
    reproducible smoke that checks raw PDF ingestion, MinerU CLI result
    artifacts, EvidenceBlock persistence, CLI artifact files, citations, and
    evidence_used without rerunning training, VLM, or benchmark scoring
+-> raw PDF existing-MinerU-output fallback smoke completed on server:
+   run_id `final_raw_pdf_existing_mineru_audit_20260630` consumed a previously
+   generated real MinerU output via `mineru_existing`, passed 4/4 CLI contract
+   cases, and confirmed citations/evidence_used on evidence-bearing cases;
+   this is regression evidence for consuming real MinerU output, not
+   `local_cli` acceptance, because the server has no isolated MinerU env
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -211,6 +217,8 @@ Phase 5 AnswerPolicy generic tool-output pretraining inspection -> real_model_ve
 Phase 5 generic table-tool operation/column repair -> accepted
 Phase 5 full80 AnswerPolicy Qwen generic tablefix diagnostic gate -> real_model_verified
 Phase 5 final raw PDF local_cli smoke runner -> implemented
+Phase 5 final raw PDF existing MinerU output fallback smoke -> real_model_verified
+Phase 5 final raw PDF MinerU local_cli server smoke -> blocked
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted

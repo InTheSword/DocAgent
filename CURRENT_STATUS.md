@@ -181,6 +181,16 @@ It writes `cases.jsonl`, `results.jsonl`, `summary.json`, `summary.md`,
 runner only; real MinerU local_cli execution, final answer quality, VLM,
 training, and formal benchmark acceptance remain pending server validation.
 
+Server preflight for run
+`final_raw_pdf_mineru_local_cli_smoke_20260630` reached commit `e52a862` but
+was blocked before execution because no isolated Conda environment containing
+`mineru` or `magic-pdf` was present. A read-only fallback audit then found
+previously generated real MinerU output and completed
+`final_raw_pdf_existing_mineru_audit_20260630` successfully: 4/4 CLI contract
+cases passed, 3 cases had citations, and 3 cases had `evidence_used`. This is
+`real_model_verified` regression evidence for consuming existing real MinerU
+output through `mineru_existing`; it is not `local_cli` acceptance.
+
 Phase 5 AnswerPolicy IO candidate schema and citation allowlist are
 implemented locally in `docagent/workflow/answer_contract.py`,
 `docagent/models/output_parser.py`, `docagent/workflow/output_adapter.py`,
