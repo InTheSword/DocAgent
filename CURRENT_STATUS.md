@@ -57,9 +57,9 @@ existing SHA-matched documents, return generated or reused `doc_id`, and
 continue through Router dispatch to deterministic tools or `local_fact_qa`.
 The accepted server file-to-answer smoke validates lightweight `.txt`
 execution stability and SHA reuse, not benchmark-level answer quality.
-PDF/image inputs without a configured CLI parser backend return structured
-`parser_backend_unavailable`; new-file MinerU-backed PDF ingestion inside
-`docagent_cli.py` remains not_started.
+PDF/image inputs without a configured CLI parser backend still return
+structured `parser_backend_unavailable`; MinerU-backed PDF ingestion is split
+across existing-output, API, and local CLI paths below.
 
 Phase 5F-3 MinerU-backed file-to-answer support is accepted in
 `scripts/docagent_cli.py` by reusing `MinerUParserBackend`,
@@ -199,6 +199,15 @@ explicit env file; the existing ingestion scripts default to
 `.secrets/mineru.env` when the file exists and expose `--mineru-env-file` for
 manual override. This is configuration support only; a live API smoke is still
 required before treating raw PDF API parsing as server-verified.
+
+MinerU API file-to-answer support is implemented locally in
+`scripts/docagent_cli.py`. The final CLI now accepts
+`--parser mineru_api --live-api` with optional `--mineru-env-file`, runs
+`MinerUApiClient` into the document cache, then reuses the same
+`MinerUParserBackend(mode=parse_existing)`, EvidenceBlock persistence, Router,
+tools, citations, and artifact-writing path as existing MinerU output. Local
+tests cover missing `--live-api`, fake API ingestion, artifact flags, and
+secret-file argument plumbing. A live server API smoke is still pending.
 
 Phase 5 AnswerPolicy IO candidate schema and citation allowlist are
 implemented locally in `docagent/workflow/answer_contract.py`,

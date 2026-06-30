@@ -17,7 +17,9 @@ if str(ROOT) not in sys.path:
 from docagent.ingestion.document_registry import SUPPORTED_EXTENSIONS, DocumentRegistry
 from docagent.ingestion.hashing import sha256_file
 from docagent.ingestion.service import DocumentIngestionService
+from docagent.integrations.mineru_api import MinerUApiClient
 from docagent.parser.mineru_backend import MinerUParserBackend
+from docagent.parser.mineru_converter import find_content_list
 from docagent.parser.text_backend import TextParserBackend
 from docagent.retrieval.index_manager import IndexedDocumentRetriever
 from docagent.retrieval.query_planner import plan_queries
@@ -59,6 +61,7 @@ AVAILABLE_TOOLS = [
 DEFAULT_OUTPUT_DIR = ROOT / "outputs" / "cli"
 DEFAULT_DOCUMENT_ROOT = ROOT / "data" / "documents"
 DEFAULT_ROUTER_LLM_ENV_FILE = ".secrets/router_llm.env"
+DEFAULT_MINERU_ENV_FILE = ".secrets/mineru.env"
 DEFAULT_QWEN_BASE_MODEL_PATH = "/root/autodl-tmp/models/Qwen3-1.7B"
 ANSWER_POLICY_CHOICES = {"heuristic", "base", "sft", "grpo"}
 
@@ -340,6 +343,75 @@ def _copy_mineru_output_to_document_cache(
     return None
 
 
+def _resolve_optional_mineru_env_file(value: str | None) -> Path | None:
+    if value:
+        return _project_path(value)
+    default_path = ROOT / DEFAULT_MINERU_ENV_FILE
+    return default_path if default_path.is_file() else None
+
+
+def _cached_mineru_output_ready(path: Path) -> bool:
+    try:
+        find_content_list(path)
+    except Exception:
+        return False
+    return True
+
+
+def _run_mineru_api_to_document_cache(
+    *,
+    file_path: Path,
+    document_root: Path,
+    env_file: Path | None,
+    data_id: str | None,
+    model_version: str,
+    language: str,
+    is_ocr: bool,
+    enable_table: bool,
+    enable_formula: bool,
+    timeout_seconds: float,
+    poll_interval_seconds: float,
+) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    preview_record = DocumentRegistry(document_root).register(file_path)
+    target = Path(preview_record.document_dir) / "mineru"
+    if target.exists():
+        if _cached_mineru_output_ready(target):
+            return None, {
+                "status": "success",
+                "api_status": "cached_existing_output",
+                "output_dir": str(target),
+            }
+        return {
+            "type": "file_ingestion_failed",
+            "message": f"Document cache MinerU directory exists but has no content list: {target}",
+        }, {"status": "failed"}
+
+    client = MinerUApiClient(env_file=env_file)
+    manifest = client.run(
+        file_path=file_path,
+        data_id=data_id or file_path.stem,
+        output_dir=target,
+        model_version=model_version,
+        is_ocr=is_ocr,
+        enable_table=enable_table,
+        enable_formula=enable_formula,
+        language=language,
+        timeout_seconds=timeout_seconds,
+        poll_interval_seconds=poll_interval_seconds,
+    )
+    return None, {
+        "status": "success",
+        "api_status": "submitted",
+        "output_dir": str(target),
+        "manifest": {
+            "status": manifest.get("status"),
+            "batch_id_present": bool(manifest.get("batch_id")),
+            "source_sha256_present": bool(manifest.get("source_sha256")),
+            "result_zip_sha256_present": bool(manifest.get("result_zip_sha256")),
+        },
+    }
+
+
 def _parser_backend_for_file(
     file_path: Path,
     *,
@@ -362,11 +434,13 @@ def _parser_backend_for_file(
                 "message": f"Text parser only supports .txt files, not {extension}.",
             }
         return TextParserBackend(), None
-    if parser_name in {"mineru_existing", "mineru"} or (
+    if parser_name in {"mineru_existing", "mineru", "mineru_api"} or (
         parser_name == "auto" and extension in {".pdf", ".png", ".jpg", ".jpeg"} and mineru_output_dir is not None
     ):
-        mode = "parse_existing" if parser_name == "mineru_existing" or mineru_output_dir is not None else parser_mode
+        mode = "parse_existing" if parser_name in {"mineru_existing", "mineru_api"} or mineru_output_dir is not None else parser_mode
         backend_name = "mineru_existing" if mode == "parse_existing" else "mineru"
+        if parser_name == "mineru_api":
+            backend_name = "mineru_api"
         return (
             MinerUParserBackend(
                 mode=mode,
@@ -381,6 +455,7 @@ def _parser_backend_for_file(
         "message": (
             f"No CLI parser backend is configured for {extension} files. "
             "Use --parser mineru_existing with --mineru-output-dir for existing MinerU output, "
+            "--parser mineru_api --live-api for MinerU API parsing, "
             "or use a UTF-8 .txt file."
         ),
     }
@@ -396,6 +471,16 @@ def _ingest_file(
     mineru_output_dir: Path | None,
     mineru_command: str,
     mineru_timeout_seconds: int,
+    live_api: bool,
+    mineru_env_file: Path | None,
+    mineru_model_version: str,
+    mineru_data_id: str | None,
+    mineru_language: str,
+    mineru_ocr: bool,
+    mineru_enable_table: bool,
+    mineru_enable_formula: bool,
+    mineru_api_timeout_seconds: float,
+    mineru_api_poll_interval_seconds: float,
 ) -> tuple[str | None, dict[str, Any] | None, dict[str, Any]]:
     parser_backend, parser_error = _parser_backend_for_file(
         file_path,
@@ -408,6 +493,7 @@ def _ingest_file(
     if parser_error is not None:
         return None, parser_error, {"status": "failed", "error": parser_error}
     assert parser_backend is not None
+    mineru_api_summary: dict[str, Any] = {}
     if isinstance(parser_backend, MinerUParserBackend) and parser_backend.mode == "parse_existing" and mineru_output_dir is not None:
         copy_error = _copy_mineru_output_to_document_cache(
             file_path=file_path,
@@ -416,6 +502,32 @@ def _ingest_file(
         )
         if copy_error is not None:
             return None, copy_error, {"status": "failed", "error": copy_error}
+    elif parser_name == "mineru_api":
+        if not live_api:
+            error = {
+                "type": "mineru_api_requires_live_api",
+                "message": "--parser mineru_api requires --live-api.",
+            }
+            return None, error, {"status": "failed", "error": error}
+        try:
+            api_error, mineru_api_summary = _run_mineru_api_to_document_cache(
+                file_path=file_path,
+                document_root=document_root,
+                env_file=mineru_env_file,
+                data_id=mineru_data_id,
+                model_version=mineru_model_version,
+                language=mineru_language,
+                is_ocr=mineru_ocr,
+                enable_table=mineru_enable_table,
+                enable_formula=mineru_enable_formula,
+                timeout_seconds=mineru_api_timeout_seconds,
+                poll_interval_seconds=mineru_api_poll_interval_seconds,
+            )
+        except Exception as exc:
+            error = {"type": "file_ingestion_failed", "message": str(exc)}
+            return None, error, {"status": "failed", "error": error}
+        if api_error is not None:
+            return None, api_error, {"status": "failed", "error": api_error}
     service = DocumentIngestionService(document_root=document_root, repository=repository)
     try:
         ingestion_result = service.ingest(file_path=file_path, parser_backend=parser_backend)
@@ -429,6 +541,8 @@ def _ingest_file(
         return None, error, {"status": "failed", "error": error}
     payload = ingestion_result.to_dict()
     payload["status"] = "success"
+    if mineru_api_summary:
+        payload["mineru_api"] = mineru_api_summary
     return ingestion_result.document.doc_id, None, payload
 
 
@@ -1083,7 +1197,10 @@ def _finalize_qa_result(
         "retrieval_candidate_count": int(result.get("retrieval_candidate_count") or 0),
         "citation_count": int(result.get("citation_count") or 0),
         "trace_run_id": str(result.get("trace_run_id") or ""),
-        "used_external_api": _router_used_external_api(router_plan) or _query_planner_used_external_api(result.get("query_planner") or {}),
+        "used_mineru_api": bool(source.get("used_mineru_api", False)),
+        "used_external_api": bool(source.get("used_mineru_api", False))
+        or _router_used_external_api(router_plan)
+        or _query_planner_used_external_api(result.get("query_planner") or {}),
         "used_vlm": False,
         "used_training": False,
         "used_full_e2e": False,
@@ -1144,6 +1261,7 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
     output_dir = _project_path(args.output_dir)
     document_root = _project_path(args.document_root)
     mineru_output_dir = _project_path(args.mineru_output_dir) if args.mineru_output_dir else None
+    mineru_env_file = _resolve_optional_mineru_env_file(args.mineru_env_file)
     limit = max(0, int(args.limit))
     full_model_path = bool(getattr(args, "full_model_path", False))
     allow_llm_router = bool(args.allow_llm_router or full_model_path)
@@ -1258,6 +1376,16 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
                     mineru_output_dir=mineru_output_dir,
                     mineru_command=str(args.mineru_command),
                     mineru_timeout_seconds=int(args.mineru_timeout_seconds),
+                    live_api=bool(args.live_api),
+                    mineru_env_file=mineru_env_file,
+                    mineru_model_version=str(args.mineru_model_version),
+                    mineru_data_id=str(args.mineru_data_id) if args.mineru_data_id else None,
+                    mineru_language=str(args.mineru_language),
+                    mineru_ocr=bool(args.mineru_ocr),
+                    mineru_enable_table=not bool(args.disable_mineru_table),
+                    mineru_enable_formula=not bool(args.disable_mineru_formula),
+                    mineru_api_timeout_seconds=float(args.mineru_api_timeout_seconds),
+                    mineru_api_poll_interval_seconds=float(args.mineru_api_poll_interval_seconds),
                 )
                 if ingestion_error is not None:
                     source["ingestion_status"] = "failed"
@@ -1289,9 +1417,14 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
                 source["ingestion_status"] = str(ingestion_summary.get("parse_status") or ingestion_summary.get("status") or "success")
                 source["ingestion"] = ingestion_summary
                 source["parser"] = str(args.parser)
-                source["parser_mode"] = str(args.parser_mode)
+                source["parser_mode"] = "parse_existing" if str(args.parser) == "mineru_api" else str(args.parser_mode)
                 if mineru_output_dir is not None:
                     source["mineru_output_dir"] = str(mineru_output_dir)
+                if str(args.parser) == "mineru_api":
+                    source["used_mineru_api"] = True
+                    if mineru_env_file is not None:
+                        source["mineru_env_file"] = str(mineru_env_file)
+                    source["mineru_api"] = ingestion_summary.get("mineru_api") or {}
                 warnings.append("file_ingested")
         else:
             source = {"type": "doc_id", "doc_id": doc_id, "db_path": str(db_path)}
@@ -1503,11 +1636,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--question")
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR))
     parser.add_argument("--document-root", default=str(DEFAULT_DOCUMENT_ROOT))
-    parser.add_argument("--parser", choices=["auto", "text", "mineru_existing", "mineru"], default="auto")
+    parser.add_argument("--parser", choices=["auto", "text", "mineru_existing", "mineru", "mineru_api"], default="auto")
     parser.add_argument("--parser-mode", choices=["parse_existing", "local_cli"], default="parse_existing")
     parser.add_argument("--mineru-output-dir", "--mineru-output", dest="mineru_output_dir")
     parser.add_argument("--mineru-command", default="mineru")
     parser.add_argument("--mineru-timeout-seconds", type=int, default=600)
+    parser.add_argument("--live-api", action="store_true")
+    parser.add_argument("--mineru-env-file", help=f"Optional MinerU API env file, defaults to {DEFAULT_MINERU_ENV_FILE} when present.")
+    parser.add_argument("--mineru-model-version", default="vlm")
+    parser.add_argument("--mineru-data-id")
+    parser.add_argument("--mineru-language", default="en")
+    parser.add_argument("--mineru-ocr", action="store_true")
+    parser.add_argument("--disable-mineru-table", action="store_true")
+    parser.add_argument("--disable-mineru-formula", action="store_true")
+    parser.add_argument("--mineru-api-timeout-seconds", type=float, default=600.0)
+    parser.add_argument("--mineru-api-poll-interval-seconds", type=float, default=5.0)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--list-documents", action="store_true")
     parser.add_argument("--limit", type=int, default=20)

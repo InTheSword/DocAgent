@@ -25,6 +25,7 @@ Implemented local capabilities:
 - CLI entry point: `scripts/docagent_cli.py`
 - text file ingestion through `TextParserBackend`
 - existing MinerU output ingestion through `--parser mineru_existing`
+- MinerU API ingestion through `--parser mineru_api --live-api`
 - raw PDF MinerU local CLI wrapper with structured failure artifacts
 - deterministic document statistics and page lookup
 - deterministic extractive `document_summary`
@@ -169,6 +170,22 @@ python scripts\docagent_cli.py `
   --question "Which table supports the answer?" `
   --output-dir outputs\cli
 ```
+
+Ingest a PDF through MinerU API:
+
+```powershell
+python scripts\docagent_cli.py `
+  --file data\example.pdf `
+  --parser mineru_api `
+  --live-api `
+  --mineru-env-file .secrets\mineru.env `
+  --question "What is reported on page 1?" `
+  --output-dir outputs\cli
+```
+
+The secret file is optional when `MINERU_TOKEN` is already exported in the
+current shell. If `.secrets/mineru.env` exists, the CLI uses it by default.
+The file should contain `MINERU_TOKEN=...` and must stay uncommitted.
 
 Attempt raw PDF parsing through an installed local MinerU CLI:
 
