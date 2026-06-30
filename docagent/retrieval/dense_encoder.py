@@ -50,21 +50,33 @@ class DenseEncoder:
         return self._encode(texts)
 
     def _encode(self, texts: list[str]) -> np.ndarray:
-        clean_texts = [text for text in texts if text and text.strip()]
-        if not clean_texts:
-            return np.zeros((0, 0), dtype=np.float32)
+        text_items = [str(text or "") for text in texts]
+        clean_items = [(index, text) for index, text in enumerate(text_items) if text.strip()]
+        if not clean_items:
+            return np.zeros((len(text_items), 0), dtype=np.float32)
         model = self._load_model()
         result = model.encode(
-            clean_texts,
+            [text for _index, text in clean_items],
             batch_size=self.config.batch_size,
             max_length=self.config.max_length,
             return_dense=True,
         )
         vectors = result.get("dense_vecs") if isinstance(result, dict) else result
         array = np.asarray(vectors, dtype=np.float32)
+        if array.ndim == 1:
+            array = array.reshape(1, -1)
+        if len(array) != len(clean_items):
+            raise RuntimeError(
+                f"dense encoder returned {len(array)} embeddings for {len(clean_items)} non-empty texts"
+            )
         if self.config.normalize_embeddings:
             array = _normalize(array)
-        return array
+        if len(clean_items) == len(text_items):
+            return array
+        padded = np.zeros((len(text_items), int(array.shape[1])), dtype=np.float32)
+        for (index, _text), vector in zip(clean_items, array):
+            padded[index] = vector
+        return padded
 
 
 class HashDenseEncoder:

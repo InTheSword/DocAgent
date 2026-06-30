@@ -46,6 +46,58 @@ def test_dense_encoder_passes_flagembedding_devices(monkeypatch, tmp_path: Path)
     assert calls[0]["kwargs"]["use_fp16"] is True
 
 
+def test_dense_encoder_preserves_rows_for_empty_texts(monkeypatch, tmp_path: Path) -> None:
+    encoded_texts: list[str] = []
+
+    class FakeBGEM3FlagModel:
+        def __init__(self, model_path: str, **kwargs) -> None:
+            pass
+
+        def encode(self, texts, **kwargs):
+            encoded_texts.extend(texts)
+            return {
+                "dense_vecs": np.asarray(
+                    [[1.0, 0.0, 0.0], [0.0, 3.0, 4.0]],
+                    dtype=np.float32,
+                )
+            }
+
+    fake_module = types.SimpleNamespace(BGEM3FlagModel=FakeBGEM3FlagModel)
+    monkeypatch.setitem(sys.modules, "FlagEmbedding", fake_module)
+
+    model_path = tmp_path / "bge-m3"
+    model_path.mkdir()
+    encoder = DenseEncoder(DenseEncoderConfig(model_path=str(model_path)))
+
+    embeddings = encoder.encode_documents(["alpha", "", "   ", "beta"])
+
+    assert encoded_texts == ["alpha", "beta"]
+    assert embeddings.shape == (4, 3)
+    assert embeddings[0].tolist() == pytest.approx([1.0, 0.0, 0.0])
+    assert embeddings[1].tolist() == pytest.approx([0.0, 0.0, 0.0])
+    assert embeddings[2].tolist() == pytest.approx([0.0, 0.0, 0.0])
+    assert embeddings[3].tolist() == pytest.approx([0.0, 0.6, 0.8])
+
+
+def test_dense_encoder_reports_backend_row_count_mismatch(monkeypatch, tmp_path: Path) -> None:
+    class FakeBGEM3FlagModel:
+        def __init__(self, model_path: str, **kwargs) -> None:
+            pass
+
+        def encode(self, texts, **kwargs):
+            return {"dense_vecs": np.ones((1, 3), dtype=np.float32)}
+
+    fake_module = types.SimpleNamespace(BGEM3FlagModel=FakeBGEM3FlagModel)
+    monkeypatch.setitem(sys.modules, "FlagEmbedding", fake_module)
+
+    model_path = tmp_path / "bge-m3"
+    model_path.mkdir()
+    encoder = DenseEncoder(DenseEncoderConfig(model_path=str(model_path)))
+
+    with pytest.raises(RuntimeError, match="returned 1 embeddings for 2 non-empty texts"):
+        encoder.encode_documents(["alpha", "beta"])
+
+
 def test_cross_encoder_reranker_uses_transformers_pair_scoring(monkeypatch, tmp_path: Path) -> None:
     state = _install_fake_transformers(monkeypatch)
 
