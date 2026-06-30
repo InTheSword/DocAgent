@@ -92,6 +92,11 @@ Phase 5 Personal-use DocAgent MVP
    the real-Qwen full80 tablefix artifact found 12 tool-expected answer
    misses, all with successful tool execution, dominated by generic
    calculation operand/operation and table selection review
+-> generic deterministic table-tool repair implemented locally for the above
+   patterns: total-across-years sum, percentage increase/decrease wording,
+   same-row multi-year average with currency-parentheses negatives, requested
+   period/quarter/as-reported column priority, and who/name table answers;
+   server rerun pending
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -192,6 +197,7 @@ Phase 5 full80 AnswerPolicy Qwen tablefix diagnostic gate -> real_model_verified
 Phase 5 AnswerPolicy review gate repaired parse/schema semantics -> real_model_verified
 Phase 5 AnswerPolicy answer-miss artifact review -> real_model_verified
 Phase 5 AnswerPolicy generic tool-output pretraining inspection -> real_model_verified
+Phase 5 generic table-tool operation/column repair -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
@@ -1588,6 +1594,13 @@ generic_tool_output_inspection = implemented locally in
   used_training false, formal_benchmark_acceptance false,
   validation_subset_used_for_training false, recommendation
   inspect_generic_table_or_calculation_tool_outputs_before_training
+generic_table_tool_operation_column_repair = implemented locally in
+  docagent/tools/table_tools.py; adds generic operation/column handling for
+  total-across-year sums, percentage increase/decrease wording,
+  percentage-of-total expressions, same-row multi-year averages with
+  currency-parentheses negative numbers, requested period/quarter/as-reported
+  lookup columns, multi-column respective lookup values, and who/name table
+  answers; local targeted regression passed, server rerun pending
 sft_candidate_review = server validation success, run_id
   answer_policy_sft_candidate_review_larger40_20260629_tracked,
   candidate_record_count 13, failed_without_candidate_count 1,

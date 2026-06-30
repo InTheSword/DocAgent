@@ -341,9 +341,43 @@ def _select_lookup_value(candidate: TableCandidate, question: str) -> dict[str, 
     best_row = _best_row(rows, question, required_labels=row_required_labels)
     if best_row is None:
         return None
-    column_index = _year_column(candidate.header, years)
+    requested_columns = _requested_lookup_columns(candidate.header, question)
+    if len(requested_columns) >= 2 and _asks_for_multiple_column_values(question):
+        selected_values = []
+        for index in requested_columns:
+            value_index = _aligned_column_index(candidate.header, best_row, index)
+            if value_index is None or value_index >= len(best_row):
+                continue
+            selected_values.append(
+                {
+                    "value": _lookup_display_value(best_row[value_index], candidate.header[index] if index < len(candidate.header) else ""),
+                    "raw_value": best_row[value_index],
+                    "column": candidate.header[index] if index < len(candidate.header) else "",
+                }
+            )
+        if selected_values:
+            return {
+                "value": ", ".join(str(item["value"]) for item in selected_values),
+                "raw_value": ", ".join(str(item["raw_value"]) for item in selected_values),
+                "column": ", ".join(str(item["column"]) for item in selected_values if item.get("column")),
+                "row": best_row,
+                "row_label": _row_label(best_row, years),
+            }
+    if _asks_for_name_value(question):
+        name_index = _name_column(candidate.header)
+        if name_index is not None and name_index < len(best_row):
+            return {
+                "value": best_row[name_index],
+                "raw_value": best_row[name_index],
+                "column": candidate.header[name_index] if name_index < len(candidate.header) else "",
+                "row": best_row,
+                "row_label": _row_label(best_row, years),
+            }
+    column_index = _priority_column(candidate.header, question)
     if column_index is None:
         column_index = _metric_column(candidate.header, question)
+    if column_index is None:
+        column_index = _year_column(candidate.header, years)
     column_index = _aligned_column_index(candidate.header, best_row, column_index)
     if column_index is None or column_index >= len(best_row):
         column_index = _last_numeric_column(best_row, exclude_values=set(years))
@@ -369,6 +403,10 @@ def _calculation_values(candidate: TableCandidate, question: str) -> list[dict[s
     high_low_values = _high_low_values(candidate, question)
     if len(high_low_values) >= 2:
         return high_low_values
+    if operation == "percentage_of_total":
+        percentage_values = _percentage_of_total_values(candidate, question)
+        if len(percentage_values) >= 2:
+            return percentage_values
     if operation == "average":
         row_values = _average_values_from_best_row(candidate, question, years)
         if len(row_values) >= 2:
@@ -451,6 +489,8 @@ def _expression_for_operation(values: list[dict[str, Any]], operation: str) -> t
         return f"({' + '.join(terms)}) / {len(terms)}", ""
     if operation == "sum":
         return f"{first} + {second}", ""
+    if operation == "percentage_of_total":
+        return f"({first} / {second}) * 100", "%"
     if operation == "percentage_change":
         return f"(({second} - {first}) / {abs(first)}) * 100", "%"
     return f"{second} - {first}", ""
@@ -460,9 +500,23 @@ def _calculation_operation(question: str) -> str:
     normalized = question.casefold()
     if "average" in normalized or "mean" in normalized:
         return "average"
-    if any(token in normalized for token in ("percent change", "percentage change", "growth rate", "% change")):
+    if re.search(r"\bas\s+a\s+percentage\s+of\b|\bwhat\s+percentage\s+of\b", normalized):
+        return "percentage_of_total"
+    if any(
+        token in normalized
+        for token in (
+            "percent change",
+            "percentage change",
+            "percentage increase",
+            "percentage decrease",
+            "percent increase",
+            "percent decrease",
+            "growth rate",
+            "% change",
+        )
+    ):
         return "percentage_change"
-    if any(token in normalized for token in ("sum", "total of", "add ")):
+    if any(token in normalized for token in ("sum", "total of", "add ")) or _asks_for_total_across_values(normalized):
         return "sum"
     return "difference"
 
@@ -541,6 +595,47 @@ def _average_values_from_best_row(candidate: TableCandidate, question: str, year
         if max_values and len(values) >= max_values:
             break
     return values
+
+
+def _percentage_of_total_values(candidate: TableCandidate, question: str) -> list[dict[str, Any]]:
+    rows = _selectable_rows(candidate.data_rows or candidate.rows)
+    value_column = _metric_column(candidate.header, question)
+    target_row = _best_row(rows, _percentage_target_phrase(question) or question, required_labels=[])
+    denominator_row = _best_row(rows, _percentage_denominator_phrase(question) or "total", required_labels=[])
+    if target_row is None or denominator_row is None:
+        return []
+    values: list[dict[str, Any]] = []
+    for label, row in (("numerator", target_row), ("denominator", denominator_row)):
+        value_index = value_column if value_column is not None and value_column < len(row) else None
+        value_index = _aligned_column_index(candidate.header, row, value_index)
+        if value_index is None or value_index >= len(row):
+            value_index = _last_numeric_column(row, exclude_values=set(_years(question)))
+        if value_index is None:
+            continue
+        numeric = _parse_number(row[value_index])
+        if numeric is None:
+            continue
+        values.append(
+            {
+                "label": _row_label(row, []),
+                "value": numeric,
+                "text": row[value_index],
+                "row": row,
+                "column": candidate.header[value_index] if value_index < len(candidate.header) else "",
+                "role": label,
+            }
+        )
+    return values
+
+
+def _percentage_target_phrase(question: str) -> str:
+    match = re.search(r"\bof\s+(.+?)\s+as\s+a\s+percentage\s+of\b", question or "", flags=re.I)
+    return match.group(1) if match else ""
+
+
+def _percentage_denominator_phrase(question: str) -> str:
+    match = re.search(r"\bas\s+a\s+percentage\s+of\s+(.+?)(?:\?|$)", question or "", flags=re.I)
+    return match.group(1) if match else ""
 
 
 def _best_row(rows: list[list[str]], question: str, *, required_labels: list[str]) -> list[str] | None:
@@ -643,6 +738,24 @@ def _asks_for_multiple_activity_values(question: str) -> bool:
     return "respective" in normalized or "respectively" in normalized
 
 
+def _asks_for_multiple_column_values(question: str) -> bool:
+    normalized = question.casefold()
+    return "respective" in normalized or "respectively" in normalized or bool(re.search(r"\band\s+between\b", normalized))
+
+
+def _asks_for_name_value(question: str) -> bool:
+    normalized = question.casefold()
+    return bool(re.search(r"\bwho\b|\bwhat\s+is\s+the\s+name\b", normalized))
+
+
+def _asks_for_total_across_values(normalized_question: str) -> bool:
+    if any(token in normalized_question for token in ("difference", "change", "increase", "decrease", "percentage", "percent")):
+        return False
+    if not re.search(r"\btotal\b", normalized_question):
+        return False
+    return bool(re.search(r"\b(?:and|across|combined|together)\b", normalized_question))
+
+
 def _row_label_matches(row: list[str], label: str) -> bool:
     first = (row[0] if row else "").casefold().strip()
     return bool(re.fullmatch(rf"{re.escape(label)}\.?", first))
@@ -675,6 +788,57 @@ def _question_column(header: list[str], question: str) -> int | None:
     return best[1] if best is not None else None
 
 
+def _priority_column(header: list[str], question: str) -> int | None:
+    normalized_question = _normalize_for_match(question)
+    phrase_groups = [
+        ("as reported",),
+        ("less than 1 year", "less than one year"),
+        ("2-5 years", "2 5 years", "between 2-5 years"),
+        ("first quarter",),
+        ("second quarter",),
+        ("third quarter",),
+        ("fourth quarter",),
+        ("total",),
+    ]
+    for phrases in phrase_groups:
+        if not any(phrase in normalized_question for phrase in phrases):
+            continue
+        for index, value in enumerate(header):
+            normalized_header = _normalize_for_match(value)
+            if any(phrase in normalized_header for phrase in phrases):
+                return index
+    return None
+
+
+def _requested_lookup_columns(header: list[str], question: str) -> list[int]:
+    normalized_question = _normalize_for_match(question)
+    requested: list[int] = []
+    phrase_groups = [
+        ("less than 1 year", "less than one year"),
+        ("2-5 years", "2 5 years", "between 2-5 years"),
+        ("first quarter",),
+        ("second quarter",),
+        ("third quarter",),
+        ("fourth quarter",),
+    ]
+    for phrases in phrase_groups:
+        if not any(phrase in normalized_question for phrase in phrases):
+            continue
+        for index, value in enumerate(header):
+            normalized_header = _normalize_for_match(value)
+            if any(phrase in normalized_header for phrase in phrases) and index not in requested:
+                requested.append(index)
+    return requested
+
+
+def _name_column(header: list[str]) -> int | None:
+    for index, value in enumerate(header):
+        normalized = _normalize_for_match(value)
+        if normalized in {"name", "names"} or normalized.endswith(" name"):
+            return index
+    return 0 if header else None
+
+
 def _metric_column(header: list[str], question: str) -> int | None:
     if not header:
         return None
@@ -703,6 +867,14 @@ def _header_label_index(header: list[str], label: str) -> int | None:
         if label in str(value):
             return index
     return None
+
+
+def _normalize_for_match(value: Any) -> str:
+    normalized = str(value or "").casefold()
+    normalized = normalized.replace("one", "1")
+    normalized = re.sub(r"[–—-]", "-", normalized)
+    normalized = re.sub(r"[^a-z0-9%$.-]+", " ", normalized)
+    return _normalize_space(normalized)
 
 
 def _year_column(header: list[str], years: list[str]) -> int | None:
@@ -850,7 +1022,7 @@ def _split_header(rows: list[list[str]]) -> tuple[list[str], list[list[str]]]:
     header_rows: list[list[str]] = []
     data_start = 0
     for index, row in enumerate(rows):
-        if _looks_like_initial_header_row(row):
+        if _looks_like_initial_header_row(row) or (header_rows and _looks_like_header_continuation(row)):
             header_rows.append(row)
             data_start = index + 1
             continue
@@ -880,6 +1052,32 @@ def _looks_like_initial_header_row(row: list[str]) -> bool:
     if re.fullmatch(r"\([^)]*(?:millions|thousands|usd|dollars)[^)]*\)", first, flags=re.I):
         return True
     return False
+
+
+def _looks_like_header_continuation(row: list[str]) -> bool:
+    cells = [_normalize_space(cell) for cell in row]
+    non_empty = [cell for cell in cells if cell]
+    if len(non_empty) < 2:
+        return False
+    if any(_parse_number(cell) is not None for cell in non_empty):
+        return False
+    label_tokens = {
+        "period",
+        "year",
+        "years",
+        "quarter",
+        "quarters",
+        "total",
+        "reported",
+        "balance",
+        "balances",
+        "obligations",
+        "name",
+        "age",
+        "title",
+    }
+    row_tokens = set(_content_tokens(" ".join(non_empty)))
+    return bool(row_tokens & label_tokens)
 
 
 def _merge_header_rows(header_rows: list[list[str]]) -> list[str]:
@@ -957,13 +1155,15 @@ def _parse_number(value: str) -> float | None:
     cleaned = str(value or "").strip()
     if not cleaned:
         return None
-    negative = cleaned.startswith("(") and cleaned.endswith(")")
-    cleaned = cleaned.strip("()").replace("$", "").replace(",", "").replace("%", "")
+    negative = bool(re.search(r"\(\s*\$?\s*-?\d", cleaned)) and ")" in cleaned
+    cleaned = cleaned.replace("$", "").replace(",", "").replace("%", "")
+    cleaned = cleaned.replace("(", "").replace(")", "")
+    cleaned = re.sub(r"\s+", "", cleaned)
     try:
         parsed = float(cleaned)
     except ValueError:
         return None
-    return -parsed if negative else parsed
+    return -abs(parsed) if negative else parsed
 
 
 def _format_number(value: float) -> str:

@@ -313,6 +313,18 @@ counts `generic_calculation_operand_or_operation_review=6`,
 `used_training=false`, `formal_benchmark_acceptance=false`, and
 `validation_subset_used_for_training=false`.
 
+The first generic table-tool repair after that inspection is implemented
+locally in `docagent/tools/table_tools.py` with tests in
+`tests/test_phase5_table_tools.py`. It improves deterministic table lookup
+and simple calculation for total-across-year sums, percentage
+increase/decrease wording, percentage-of-total expressions, same-row
+multi-year averages with currency-parentheses negative numbers, requested
+period/quarter/as-reported lookup columns, multi-column respective lookup
+values, and who/name table answers. The repair is general table-tool behavior,
+not per-sample logic, does not change AnswerPolicy prompts, does not rerun
+Qwen locally, and does not start SFT/GRPO. Server rerun on the full80 tablefix
+baseline is pending.
+
 Phase 5 AnswerPolicy SFT candidate data builder is implemented locally in
 `scripts/build_answer_policy_sft_candidates.py` with tests in
 `tests/test_build_answer_policy_sft_candidates.py`. It reads a real-Qwen-marked
