@@ -323,6 +323,27 @@ better than the old direct legacy-BM25 MP-DocVQA baseline on this small
 diagnostic slice. It remains diagnostic-only and is not formal MP-DocVQA
 benchmark acceptance.
 
+Server diagnostic `mpdocvqa_full_workflow_hybrid_qwen_offset8_limit16_20260630`
+at commit `afaf8a5` extended the same path to the next 16 MP-DocVQA
+evidence-ready rows. The run completed with `cli_success_rate=1.0`, Qwen,
+dense retrieval, and reranker use on 15/16 rows, `retrieved_gold_page_hit_rate`
+`0.4375`, `selected_gold_page_hit_rate=0.4375`, `citation_page_hit_rate=0.4375`,
+`answer_hit_rate=0.375`, and bucket counts `retrieval_gold_page_miss=8`,
+`answer_generation_or_metric_miss=4`, `passed=3`, and
+`task_type_not_local_fact_qa=1`. This keeps the execution chain
+real-model verified but shows that MP-DocVQA quality bottlenecks vary by
+chunk and should be inspected at the retrieval/query/block-granularity level
+before any training decision.
+
+Phase 5 MP-DocVQA full-workflow comparison is implemented locally in
+`scripts/compare_mpdocvqa_full_workflow_runs.py` with tests in
+`tests/test_compare_mpdocvqa_full_workflow_runs.py`. The script reads existing
+full-workflow diagnostic artifacts, aggregates per-run and cross-run
+CLI/component use, retrieved/selected/cited gold-page hits, answer hits,
+failure buckets, preview rows, manifest, and an optional sync bundle. It does
+not call Qwen, start SFT/GRPO, create training records, tune against validation
+rows, or claim benchmark acceptance.
+
 Phase 5 AnswerPolicy IO candidate schema and citation allowlist are
 implemented locally in `docagent/workflow/answer_contract.py`,
 `docagent/models/output_parser.py`, `docagent/workflow/output_adapter.py`,

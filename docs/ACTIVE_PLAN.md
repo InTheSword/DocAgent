@@ -179,7 +179,19 @@ Phase 5 Personal-use DocAgent MVP
    `0fe4859` passed with cli_success_rate 1.0, 8/8 Qwen/dense/reranker use,
    retrieved_gold_page_hit_rate 0.875, citation_page_hit_rate 0.875,
    answer_hit_rate 0.5, and bucket_counts passed:4,
-   answer_generation_or_metric_miss:3, retrieval_gold_page_miss:1
+   answer_generation_or_metric_miss:3, retrieval_gold_page_miss:1; second
+   diagnostic `mpdocvqa_full_workflow_hybrid_qwen_offset8_limit16_20260630`
+   at commit `afaf8a5` passed with cli_success_rate 1.0, 15/16
+   Qwen/dense/reranker use, retrieved_gold_page_hit_rate 0.4375,
+   citation_page_hit_rate 0.4375, answer_hit_rate 0.375, and bucket_counts
+   retrieval_gold_page_miss:8, answer_generation_or_metric_miss:4, passed:3,
+   task_type_not_local_fact_qa:1
+-> MP-DocVQA full-workflow comparison implemented locally:
+   `scripts/compare_mpdocvqa_full_workflow_runs.py` reads existing
+   full-workflow diagnostic artifacts, aggregates per-run and cross-run
+   CLI/component use, retrieval/citation/answer hit rates, failure buckets,
+   preview rows, manifest, and optional sync bundle; it does not call Qwen,
+   start training, create training data, or tune against validation examples
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -292,6 +304,7 @@ Phase 5 full-workflow real retriever CLI wiring -> real_model_verified
 Phase 5 raw PDF full-model workflow baseline -> real_model_verified
 Phase 5 MP-DocVQA retrieval inspection -> implemented
 Phase 5 MP-DocVQA full-workflow diagnostic runner -> real_model_verified
+Phase 5 MP-DocVQA full-workflow comparison -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
