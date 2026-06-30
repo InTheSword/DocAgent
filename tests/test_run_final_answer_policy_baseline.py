@@ -4,8 +4,11 @@ import json
 from pathlib import Path
 from typing import Any
 
+from docagent.ingestion.document_registry import DocumentRecord
 from docagent.models.base import GenerationResult
 from docagent.schemas import DocAgentSample, EvidenceBlock, EvidenceLocation
+from docagent.storage.db import connect
+from docagent.storage.repositories import DocumentRepository
 from docagent.utils.jsonl import read_jsonl, write_jsonl
 from scripts.run_final_answer_policy_baseline import run_final_answer_policy_baseline
 
@@ -15,6 +18,7 @@ class CandidatePolicy:
 
     def generate(self, **kwargs: Any) -> GenerationResult:
         block = kwargs["evidence_blocks"][0]
+        question = str(kwargs.get("question") or "").lower()
         tool_results = kwargs.get("tool_results") or []
         if tool_results:
             tool_result = tool_results[0]
@@ -24,6 +28,23 @@ class CandidatePolicy:
                 "reasoning_summary": "The table tool result selected the cited value.",
                 "citation_block_ids": [citation["block_id"]],
                 "evidence_used": [{"block_id": citation["block_id"], "text_preview": citation.get("text_preview", "")}],
+            }
+            return GenerationResult(
+                raw_text=json.dumps(parsed),
+                parsed=parsed,
+                prompt_text="prompt",
+                prompt_token_count=1,
+                completion_token_count=1,
+                finish_reason="stop",
+                latency_ms=1.0,
+                metadata={"parse_result": {"raw_json_ok": True, "schema_ok": True}},
+            )
+        if "budget" in question:
+            parsed = {
+                "answer": "$100,000",
+                "reasoning_summary": "The cited MP-DocVQA evidence states the budget estimate.",
+                "citation_block_ids": [block.block_id],
+                "evidence_used": [{"block_id": block.block_id, "text_preview": block.retrieval_text}],
             }
             return GenerationResult(
                 raw_text=json.dumps(parsed),
@@ -145,6 +166,59 @@ def _write_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
     return samples_path, manifest_path, mp_manifest_path
 
 
+def _write_mpdocvqa_evidence(tmp_path: Path) -> tuple[Path, Path]:
+    db_path = tmp_path / "mp_evidence" / "docagent.db"
+    evidence_path = tmp_path / "mp_evidence" / "sample_evidence_manifest.jsonl"
+    ingested_doc_id = "ingested_mp_doc"
+    conn = connect(db_path)
+    try:
+        repository = DocumentRepository(conn)
+        repository.upsert_document(
+            DocumentRecord(
+                doc_id=ingested_doc_id,
+                sha256="b" * 64,
+                original_name="document.pdf",
+                mime_type="application/pdf",
+                file_size=10,
+                file_path=str(tmp_path / "document.pdf"),
+                document_dir=str(tmp_path / "documents" / ingested_doc_id),
+                page_count=6,
+                parser_backend="mineru_api",
+                parse_status="parsed",
+                index_status="not_started",
+            )
+        )
+        repository.save_evidence_blocks(
+            [
+                EvidenceBlock(
+                    doc_id=ingested_doc_id,
+                    block_id=f"{ingested_doc_id}_p006_b0001",
+                    block_type="text",
+                    text="Budget Estimate for Pharmaceutical Compendia Surveillance is $100,000.",
+                    page_id=6,
+                    location=EvidenceLocation(page=6, block_id=f"{ingested_doc_id}_p006_b0001"),
+                )
+            ]
+        )
+    finally:
+        conn.close()
+    write_jsonl(
+        evidence_path,
+        [
+            {
+                "sample_id": "mp_q",
+                "dataset": "mp_docvqa",
+                "doc_id": "mp_doc",
+                "ingested_doc_id": ingested_doc_id,
+                "gold_pages": [6],
+                "gold_page_block_ids": [f"{ingested_doc_id}_p006_page"],
+                "evidence_ready": True,
+            }
+        ],
+    )
+    return evidence_path, db_path
+
+
 def test_answer_policy_baseline_writes_diagnostic_artifacts(tmp_path: Path) -> None:
     samples_path, manifest_path, mp_manifest_path = _write_inputs(tmp_path)
 
@@ -200,7 +274,8 @@ def test_answer_policy_baseline_writes_diagnostic_artifacts(tmp_path: Path) -> N
     assert rows["table_q"]["model_tool_result_count"] == 1
     assert rows["table_q"]["pass_fail"] == "passed"
     assert rows["table_q"]["final_answer_compact"]["citation_block_ids"] == ["table_doc_table"]
-    assert rows["mp_q"]["evaluation_mode"] == "skipped_requires_raw_pdf_mineru_retrieval"
+    assert rows["mp_q"]["evaluation_mode"] == "skipped_missing_mpdocvqa_evidence"
+    assert rows["mp_q"]["skip_reason"] == "mpdocvqa_evidence_manifest_missing"
     result = json.loads((run_dir / "result.json").read_text(encoding="utf-8"))
     assert result["metrics"]["evaluated_count"] == 2
     assert result["metrics"]["tool_success_count"] == 1
@@ -213,6 +288,36 @@ def test_answer_policy_baseline_writes_diagnostic_artifacts(tmp_path: Path) -> N
     assert (sync_dir / "manifest.json").is_file()
     assert (sync_dir / "log_tail.txt").is_file()
     assert (sync_dir / "stderr_tail.txt").is_file()
+
+
+def test_answer_policy_baseline_can_evaluate_mpdocvqa_with_evidence_manifest(tmp_path: Path) -> None:
+    samples_path, manifest_path, mp_manifest_path = _write_inputs(tmp_path)
+    mp_evidence_manifest, mp_db_path = _write_mpdocvqa_evidence(tmp_path)
+
+    summary = run_final_answer_policy_baseline(
+        output_root=tmp_path / "runs",
+        run_id="candidate_run_with_mp",
+        tatqa_samples=samples_path,
+        tatqa_manifest=manifest_path,
+        mpdocvqa_manifest=mp_manifest_path,
+        mpdocvqa_evidence_manifest=mp_evidence_manifest,
+        mpdocvqa_db_path=mp_db_path,
+        answer_policy=CandidatePolicy(),
+        preserve_input_order=True,
+    )
+
+    assert summary["status"] == "success"
+    assert summary["case_count"] == 3
+    assert summary["evaluated_count"] == 3
+    assert summary["skipped_count"] == 0
+    assert summary["answer_hit_rate"] == 1.0
+    assert summary["citation_page_hit_rate"] == 1.0
+    rows = {row["sample_id"]: row for row in read_jsonl(tmp_path / "runs" / "candidate_run_with_mp" / "results.jsonl")}
+    assert rows["mp_q"]["evaluation_mode"] == "mpdocvqa_answer_policy_generation"
+    assert rows["mp_q"]["ingested_doc_id"] == "ingested_mp_doc"
+    assert rows["mp_q"]["answer_hit"] is True
+    assert rows["mp_q"]["citation_page_hit"] is True
+    assert rows["mp_q"]["citation_pages"] == [6]
 
 
 def test_answer_policy_baseline_blocks_missing_qwen_model(tmp_path: Path) -> None:

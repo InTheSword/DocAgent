@@ -124,7 +124,15 @@ Phase 5 Personal-use DocAgent MVP
    then uses the existing EvidenceBlock/Router/tool/artifact path; server run
    `final_raw_pdf_mineru_api_cli_smoke_20260630` at commit `31cdd18` used
    `.secrets/mineru.env`, live MinerU API/OCR, passed 4/4 CLI contract cases,
-   and confirmed citations/evidence_used on evidence-bearing cases
+   and confirmed citations/evidence_used on evidence-bearing cases; API-only
+   cleanup rerun `final_raw_pdf_mineru_api_api_only_cleanup_20260630` at
+   commit `060ad85` again passed 4/4 cases
+-> MP-DocVQA evidence materialization runner implemented locally:
+   `scripts/prepare_mpdocvqa_evidence.py` maps prepared MP-DocVQA PDFs through
+   MinerU API/file-to-answer ingestion into SQLite EvidenceBlocks and
+   `sample_evidence_manifest.jsonl`; AnswerPolicy baseline can optionally use
+   that manifest plus DB to evaluate MP-DocVQA rows with page-level citation
+   checks instead of skipping them
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -231,6 +239,8 @@ Phase 5 final raw PDF existing MinerU output fallback smoke -> real_model_verifi
 Phase 5 final raw PDF MinerU API server smoke -> accepted
 Phase 5 MinerU API secret-file support -> accepted
 Phase 5 MinerU API file-to-answer CLI support -> accepted
+Phase 5 MP-DocVQA evidence materialization runner -> implemented
+Phase 5 AnswerPolicy MP-DocVQA evidence-aware baseline path -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
@@ -1057,7 +1067,9 @@ Known Phase 5F-3 limitations:
 
 ```text
 Phase 5F-3 accepts existing MinerU output-backed file-to-answer execution.
-Online MinerU OCR/parser execution from raw PDF remains a later task.
+At Phase 5F-3 acceptance time, online MinerU OCR/parser execution from raw PDF
+was still a later task. It is now covered by the accepted MinerU API raw PDF
+smoke in the current Phase 5 final-delivery track.
 Router correctly classifies "What is this document about?" as document_summary,
 but at Phase 5F-3 acceptance time Phase 5E document_summary was not
 implemented, so CLI fell back to local_fact_qa dry-run. This did not block
@@ -1798,6 +1810,10 @@ Phase 4D-B1.3 server sanity accepted
   4/4 CLI contract cases passed, citations/evidence_used present on
   evidence-bearing cases; this is execution/citation-contract evidence, not
   final answer-quality benchmark evidence
++ MP-DocVQA evidence materialization runner implemented locally with optional
+  AnswerPolicy baseline consumption of `sample_evidence_manifest.jsonl` plus
+  SQLite EvidenceBlocks; real MinerU API subset materialization remains
+  server-required before MP-DocVQA rows should enter real-Qwen diagnostics
 + Final evaluation subset preparation implemented locally with TAT-QA dev and
   MP-DocVQA val shard 1-2 manifests, filter reports, source hashes, and
   previews under `outputs/final_eval/`

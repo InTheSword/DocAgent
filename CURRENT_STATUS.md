@@ -202,6 +202,11 @@ with a compact sync bundle under
 raw PDF -> MinerU API -> EvidenceBlock -> CLI artifact/citation contract path;
 it does not evaluate final answer correctness. Local MinerU CLI execution is
 no longer a final-delivery target unless explicitly reopened later.
+After removing the final-delivery local CLI path, server rerun
+`final_raw_pdf_mineru_api_api_only_cleanup_20260630` at commit `060ad85`
+confirmed the API-only smoke remains accepted: parser `mineru_api`,
+`used_mineru_api=true`, `used_online_mineru_ocr=true`, 4/4 cases passed, and
+no failure reasons.
 
 MinerU API secret-file support is implemented and server-verified in
 `docagent/integrations/mineru_api.py`, `scripts/ingest_document.py`, and
@@ -223,6 +228,18 @@ tests cover missing `--live-api`, fake API ingestion, artifact flags, and
 secret-file argument plumbing. The live server API smoke
 `final_raw_pdf_mineru_api_cli_smoke_20260630` accepted this path as execution
 stability evidence, not final answer-quality evidence.
+
+Phase 5 MP-DocVQA evidence materialization is implemented locally in
+`scripts/prepare_mpdocvqa_evidence.py` with tests in
+`tests/test_prepare_mpdocvqa_evidence.py`. The runner reads the prepared
+`outputs/final_eval/mpdocvqa_val_subset` documents and sample manifest, calls
+`scripts/docagent_cli.py --parser mineru_api --live-api` per selected PDF,
+persists MinerU-backed EvidenceBlocks to a local SQLite database, and writes
+`documents.jsonl`, `sample_evidence_manifest.jsonl`, `summary.json`,
+`summary.md`, `preview.json`, and `manifest.json`. It records the mapping from
+MP-DocVQA window ids to actual ingested DocAgent ids and page-level evidence
+readiness. Status is `implemented`: local tests use a fake command runner;
+real MinerU API subset materialization still requires server validation.
 
 Phase 5 AnswerPolicy IO candidate schema and citation allowlist are
 implemented locally in `docagent/workflow/answer_contract.py`,
@@ -259,7 +276,10 @@ result return. Per-row diagnostics include compact final answers, citation
 validation, raw output previews, token/latency metadata, selected/dropped
 block ids, compact tool results for table/calculation prompts, and evidence
 context hashes, without syncing full prompts or logs. It explicitly skips
-MP-DocVQA manifest rows until raw PDF/MinerU/retrieval evidence is available.
+MP-DocVQA manifest rows unless `--mpdocvqa-evidence-manifest` and
+`--mpdocvqa-db-path` point to materialized MinerU EvidenceBlocks from
+`scripts/prepare_mpdocvqa_evidence.py`; when those artifacts are present it
+evaluates MP-DocVQA rows with page-level citation checks.
 Local smoke uses heuristic/fake policies only. The first server-side Qwen base
 diagnostic smoke ran with run id
 `answer_policy_training_gate_qwen_smoke_20260629`: `used_qwen=true`,
@@ -1238,7 +1258,9 @@ Known Phase 5F-3 limitations:
 
 ```text
 Phase 5F-3 accepts existing MinerU output-backed file-to-answer execution.
-Online MinerU OCR/parser execution from raw PDF remains a later task.
+At Phase 5F-3 acceptance time, online MinerU OCR/parser execution from raw PDF
+was still a later task. It is now covered by the accepted MinerU API raw PDF
+smoke in the current Phase 5 final-delivery track.
 At Phase 5F-3 acceptance time, document_summary was not implemented and
 summary-like questions could fall back to local_fact_qa dry-run with warnings.
 Phase 5E document_summary was implemented later as a deterministic local tool.

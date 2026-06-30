@@ -16,6 +16,8 @@ if str(ROOT) not in sys.path:
 
 from docagent.models.base import AnswerPolicy, HeuristicAnswerPolicy
 from docagent.schemas import DocAgentSample
+from docagent.storage.db import connect
+from docagent.storage.repositories import DocumentRepository
 from docagent.utils.jsonl import read_jsonl, write_jsonl
 from docagent.workflow.answer_contract import candidate_citation_ids, primary_location_from_output
 from docagent.workflow.graph import run_qa_workflow
@@ -36,6 +38,8 @@ DEFAULT_OUTPUT_ROOT = ROOT / "outputs" / "final_eval" / "answer_policy_baseline"
 DEFAULT_TATQA_SAMPLES = ROOT / "outputs" / "final_eval" / "tatqa_dev_subset" / "samples.jsonl"
 DEFAULT_TATQA_MANIFEST = ROOT / "outputs" / "final_eval" / "tatqa_dev_subset" / "sample_manifest.jsonl"
 DEFAULT_MPDOCVQA_MANIFEST = ROOT / "outputs" / "final_eval" / "mpdocvqa_val_subset" / "sample_manifest.jsonl"
+DEFAULT_MPDOCVQA_EVIDENCE_MANIFEST = ROOT / "outputs" / "final_eval" / "mpdocvqa_val_evidence" / "sample_evidence_manifest.jsonl"
+DEFAULT_MPDOCVQA_DB_PATH = ROOT / "outputs" / "final_eval" / "mpdocvqa_val_evidence" / "docagent.db"
 DEFAULT_QWEN_BASE_MODEL_PATH = "/root/autodl-tmp/models/Qwen3-1.7B"
 RAW_OUTPUT_PREVIEW_CHARS = 1000
 
@@ -157,6 +161,13 @@ def row_from_skipped_mpdocvqa(manifest: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def row_from_missing_mpdocvqa_evidence(manifest: dict[str, Any], reason: str) -> dict[str, Any]:
+    row = row_from_skipped_mpdocvqa(manifest)
+    row["skip_reason"] = reason
+    row["evaluation_mode"] = "skipped_missing_mpdocvqa_evidence"
+    return row
+
+
 def should_run_answer_policy(manifest: dict[str, Any]) -> bool:
     tools = {str(item) for item in manifest.get("expected_tools") or []}
     return bool(tools.intersection({"local_fact_qa", "table_lookup", "simple_calculation"}))
@@ -217,6 +228,183 @@ def table_tool_result_for_sample(sample: DocAgentSample, expected_tools: list[st
         sample.question,
         selected_tools=expected_tools,
     )
+
+
+def _page_from_block(block: Any) -> int | None:
+    if getattr(block, "page_id", None) is not None:
+        return int(block.page_id)
+    location = getattr(block, "location", None)
+    if location is not None and getattr(location, "page", None) is not None:
+        return int(location.page)
+    return None
+
+
+def _gold_pages_from_manifest(manifest: dict[str, Any]) -> set[int]:
+    pages: set[int] = set()
+    for item in manifest.get("gold_evidence") or []:
+        value = item.get("page") if isinstance(item, dict) else None
+        try:
+            pages.add(int(value))
+        except (TypeError, ValueError):
+            continue
+    return pages
+
+
+def _citation_pages(final_answer: dict[str, Any], block_by_id: dict[str, Any]) -> set[int]:
+    pages: set[int] = set()
+    for citation in final_answer.get("citations") or []:
+        if not isinstance(citation, dict):
+            continue
+        try:
+            if citation.get("page") is not None:
+                pages.add(int(citation.get("page")))
+        except (TypeError, ValueError):
+            pass
+    location = primary_location_from_output(final_answer)
+    block_ids = set(candidate_citation_ids(final_answer))
+    if location.get("block_id"):
+        block_ids.add(str(location["block_id"]))
+    for block_id in block_ids:
+        page = _page_from_block(block_by_id.get(block_id))
+        if page is not None:
+            pages.add(page)
+    return pages
+
+
+def evaluate_mpdocvqa_sample(
+    *,
+    manifest: dict[str, Any],
+    evidence_manifest: dict[str, Any],
+    repository: DocumentRepository,
+    answer_policy: AnswerPolicy,
+    top_k: int,
+    preserve_input_order: bool,
+) -> dict[str, Any]:
+    answers = as_list(manifest.get("answers"))
+    expected_answer_type = str(manifest.get("expected_answer_type") or "extractive")
+    gold_pages = _gold_pages_from_manifest(manifest)
+    ingested_doc_id = str(evidence_manifest.get("ingested_doc_id") or "")
+    base = {
+        "sample_id": str(manifest.get("sample_id") or ""),
+        "dataset": "mp_docvqa",
+        "doc_id": str(manifest.get("doc_id") or ""),
+        "ingested_doc_id": ingested_doc_id,
+        "source_document": str(manifest.get("source_document") or ""),
+        "question": str(manifest.get("question") or ""),
+        "answers": answers,
+        "expected_tools": [str(item) for item in manifest.get("expected_tools") or []],
+        "expected_answer_type": expected_answer_type,
+        "gold_pages": sorted(gold_pages),
+        "gold_page_block_ids": [str(item) for item in evidence_manifest.get("gold_page_block_ids") or []],
+        "requires_model_answer": True,
+        "requires_mineru_or_retrieval": False,
+        "answer_policy_mode": str(getattr(answer_policy, "mode", "unknown")),
+        "used_qwen": str(getattr(answer_policy, "mode", "")) in {"base", "sft", "grpo"},
+        "tool_executed": False,
+        "tool_status": "not_run",
+        "tool_results_count": 0,
+    }
+    if not ingested_doc_id or evidence_manifest.get("evidence_ready") is not True:
+        return {
+            **base,
+            "evaluation_mode": "skipped_missing_mpdocvqa_evidence",
+            "skip_reason": "mpdocvqa_evidence_manifest_not_ready",
+            "pass_fail": "skipped",
+            "answer_evaluated": False,
+            "citation_evaluated": False,
+            "format_valid": False,
+            "used_qwen": False,
+        }
+    blocks = repository.load_evidence_blocks(ingested_doc_id, include_page_blocks=False)
+    if not blocks:
+        return {
+            **base,
+            "evaluation_mode": "skipped_missing_mpdocvqa_evidence",
+            "skip_reason": "mpdocvqa_evidence_blocks_missing",
+            "pass_fail": "skipped",
+            "answer_evaluated": False,
+            "citation_evaluated": False,
+            "format_valid": False,
+            "used_qwen": False,
+        }
+    try:
+        state = run_qa_workflow(
+            qid=str(manifest.get("sample_id") or ""),
+            question=str(manifest.get("question") or ""),
+            blocks=blocks,
+            answer_policy=answer_policy,
+            top_k=top_k,
+            answer_type_hint=expected_answer_type,
+            doc_id=ingested_doc_id,
+            preserve_input_order=preserve_input_order,
+        )
+    except Exception as exc:
+        return {
+            **base,
+            "evaluation_mode": "mpdocvqa_answer_policy_generation",
+            "pass_fail": "failed",
+            "failure_stage": "answer_policy",
+            "failure_reasons": [type(exc).__name__],
+            "error": {"type": type(exc).__name__, "message": str(exc)},
+            "answer_evaluated": False,
+            "citation_evaluated": False,
+            "format_valid": False,
+        }
+
+    final_answer = state.final_answer if isinstance(state.final_answer, dict) else {}
+    prediction = str(final_answer.get("answer") or "")
+    metrics = answer_metrics(prediction, answers, expected_answer_type)
+    block_by_id = {block.block_id: block for block in blocks}
+    citation_ids = set(candidate_citation_ids(final_answer))
+    location = primary_location_from_output(final_answer)
+    if location.get("block_id"):
+        citation_ids.add(str(location["block_id"]))
+    cited_pages = _citation_pages(final_answer, block_by_id)
+    citation_page_hit = bool(gold_pages and cited_pages and gold_pages.intersection(cited_pages))
+    citation_evaluated = bool(gold_pages)
+    format_valid = bool((state.format_check or {}).get("success"))
+    location_valid = bool((state.location_check or {}).get("success"))
+    pass_fail = "passed" if format_valid and location_valid and metrics.get("answer_hit") and (not citation_evaluated or citation_page_hit) else "failed"
+    failure_reasons = failure_reasons_for_row(
+        format_valid=format_valid,
+        location_valid=location_valid,
+        answer_hit=bool(metrics.get("answer_hit")),
+        citation_evaluated=citation_evaluated,
+        citation_block_hit=citation_page_hit,
+    )
+    return {
+        **base,
+        "evaluation_mode": "mpdocvqa_answer_policy_generation",
+        "pass_fail": pass_fail,
+        "failure_reasons": failure_reasons,
+        "failure_stage": failure_stage(failure_reasons),
+        "format_valid": format_valid,
+        "location_valid": location_valid,
+        "answer_evaluated": True,
+        "prediction_answer": prediction,
+        "reasoning_summary": str(final_answer.get("reasoning_summary") or final_answer.get("reason") or ""),
+        "citation_evaluated": citation_evaluated,
+        "citation_block_hit": citation_page_hit,
+        "citation_page_hit": citation_page_hit,
+        "citation_pages": sorted(cited_pages),
+        "citation_block_ids": sorted(citation_ids),
+        "final_answer_compact": compact_final_answer(final_answer),
+        "final_answer_keys": sorted(final_answer),
+        "prompt_version": state.generation_metadata.get("prompt_version"),
+        "parse_result": state.parse_result,
+        "raw_model_output_preview": compact_text(state.generation_metadata.get("raw_model_output")),
+        "prompt_token_count": state.generation_metadata.get("prompt_token_count"),
+        "completion_token_count": state.generation_metadata.get("completion_token_count"),
+        "finish_reason": state.generation_metadata.get("finish_reason"),
+        "latency_ms": state.generation_metadata.get("latency_ms"),
+        "evidence_context_hash": state.generation_metadata.get("evidence_context_hash"),
+        "selected_block_ids": [str(item) for item in state.generation_metadata.get("selected_block_ids") or []],
+        "dropped_block_ids": [str(item) for item in state.generation_metadata.get("dropped_block_ids") or []],
+        "retrieved_block_ids": [block.block_id for block in state.retrieved_blocks],
+        "model_tool_result_count": int(state.generation_metadata.get("tool_result_count") or 0),
+        "trace_step_count": len(state.trace),
+        **metrics,
+    }
 
 
 def evaluate_tatqa_sample(
@@ -414,6 +602,7 @@ def summarize(rows: list[dict[str, Any]], *, run_id: str, artifact_dir: Path, an
     modes = Counter(str(row.get("evaluation_mode") or "") for row in rows)
     tool_statuses = Counter(str(row.get("tool_status") or "") for row in rows if row.get("tool_executed"))
     evaluated = [row for row in rows if row.get("answer_evaluated")]
+    page_evaluated = [row for row in evaluated if row.get("gold_pages")]
     evaluated_count = len(evaluated)
     failure_reasons = Counter(reason for row in rows for reason in row.get("failure_reasons") or [])
     failure_stages = Counter(str(row.get("failure_stage") or "") for row in rows if row.get("failure_stage"))
@@ -451,6 +640,8 @@ def summarize(rows: list[dict[str, Any]], *, run_id: str, artifact_dir: Path, an
         "answer_hit_rate": rate(sum(1 for row in evaluated if row.get("answer_hit")), evaluated_count),
         "citation_block_hit_count": sum(1 for row in evaluated if row.get("citation_block_hit")),
         "citation_block_hit_rate": rate(sum(1 for row in evaluated if row.get("citation_block_hit")), sum(1 for row in evaluated if row.get("citation_evaluated"))),
+        "citation_page_hit_count": sum(1 for row in page_evaluated if row.get("citation_page_hit")),
+        "citation_page_hit_rate": rate(sum(1 for row in page_evaluated if row.get("citation_page_hit")), len(page_evaluated)),
         "json_valid_count": sum(1 for row in evaluated if (row.get("parse_result") or {}).get("raw_json_ok")),
         "schema_valid_count": sum(1 for row in evaluated if (row.get("parse_result") or {}).get("schema_ok")),
         "used_qwen": used_qwen,
@@ -513,6 +704,7 @@ def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
         f"- location_valid_rate: {summary['location_valid_rate']}",
         f"- answer_hit_rate: {summary['answer_hit_rate']}",
         f"- citation_block_hit_rate: {summary['citation_block_hit_rate']}",
+        f"- citation_page_hit_rate: {summary.get('citation_page_hit_rate', 0.0)}",
         f"- json_valid_count: {summary['json_valid_count']}",
         f"- schema_valid_count: {summary['schema_valid_count']}",
         "",
@@ -583,6 +775,7 @@ def result_payload(summary: dict[str, Any], artifact_paths: list[Path]) -> dict[
             "location_valid_rate": summary.get("location_valid_rate", 0.0),
             "answer_hit_rate": summary.get("answer_hit_rate", 0.0),
             "citation_block_hit_rate": summary.get("citation_block_hit_rate", 0.0),
+            "citation_page_hit_rate": summary.get("citation_page_hit_rate", 0.0),
         },
         "artifact_paths": [safe_relpath(path) for path in artifact_paths if path.is_file() or path.name == "result.json"],
     }
@@ -684,6 +877,7 @@ def default_count_summary() -> dict[str, Any]:
         "location_valid_rate": 0.0,
         "answer_hit_rate": 0.0,
         "citation_block_hit_rate": 0.0,
+        "citation_page_hit_rate": 0.0,
         "json_valid_count": 0,
         "schema_valid_count": 0,
         "failure_stage_distribution": {},
@@ -697,6 +891,8 @@ def run_final_answer_policy_baseline(
     tatqa_samples: Path | None = DEFAULT_TATQA_SAMPLES,
     tatqa_manifest: Path | None = DEFAULT_TATQA_MANIFEST,
     mpdocvqa_manifest: Path | None = DEFAULT_MPDOCVQA_MANIFEST,
+    mpdocvqa_evidence_manifest: Path | None = DEFAULT_MPDOCVQA_EVIDENCE_MANIFEST,
+    mpdocvqa_db_path: Path | None = DEFAULT_MPDOCVQA_DB_PATH,
     max_samples: int | None = None,
     answer_policy_mode: str = "base",
     base_model_path: str = DEFAULT_QWEN_BASE_MODEL_PATH,
@@ -761,7 +957,30 @@ def run_final_answer_policy_baseline(
     mp_rows = list(load_manifest(mpdocvqa_manifest).values())
     if max_samples is not None:
         mp_rows = mp_rows[: max(0, int(max_samples))]
-    rows.extend(row_from_skipped_mpdocvqa(row) for row in mp_rows)
+    mp_evidence_by_id = load_manifest(mpdocvqa_evidence_manifest)
+    can_run_mpdocvqa = bool(mp_evidence_by_id and mpdocvqa_db_path is not None and mpdocvqa_db_path.is_file())
+    if can_run_mpdocvqa:
+        conn = connect(mpdocvqa_db_path)
+        try:
+            repository = DocumentRepository(conn)
+            rows.extend(
+                evaluate_mpdocvqa_sample(
+                    manifest=row,
+                    evidence_manifest=mp_evidence_by_id.get(str(row.get("sample_id") or ""), {}),
+                    repository=repository,
+                    answer_policy=answer_policy,
+                    top_k=top_k,
+                    preserve_input_order=preserve_input_order,
+                )
+                for row in mp_rows
+            )
+        finally:
+            conn.close()
+    else:
+        reason = "mpdocvqa_evidence_manifest_missing"
+        if mp_evidence_by_id and (mpdocvqa_db_path is None or not mpdocvqa_db_path.is_file()):
+            reason = "mpdocvqa_evidence_db_missing"
+        rows.extend(row_from_missing_mpdocvqa_evidence(row, reason) for row in mp_rows)
 
     summary = summarize(rows, run_id=run_id, artifact_dir=artifact_dir, answer_policy=str(getattr(answer_policy, "mode", answer_policy_mode)))
     failures = [row for row in rows if row.get("pass_fail") == "failed"][:50]
@@ -807,6 +1026,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tatqa-samples", default=str(DEFAULT_TATQA_SAMPLES))
     parser.add_argument("--tatqa-manifest", default=str(DEFAULT_TATQA_MANIFEST))
     parser.add_argument("--mpdocvqa-manifest", default=str(DEFAULT_MPDOCVQA_MANIFEST))
+    parser.add_argument("--mpdocvqa-evidence-manifest", default=str(DEFAULT_MPDOCVQA_EVIDENCE_MANIFEST))
+    parser.add_argument("--mpdocvqa-db-path", default=str(DEFAULT_MPDOCVQA_DB_PATH))
     parser.add_argument("--max-samples", type=int)
     parser.add_argument("--answer-policy", choices=["heuristic", "base", "sft", "grpo"], default="base")
     parser.add_argument("--base-model-path", default=DEFAULT_QWEN_BASE_MODEL_PATH)
@@ -831,6 +1052,8 @@ def main(argv: list[str] | None = None) -> int:
         tatqa_samples=repo_path(args.tatqa_samples),
         tatqa_manifest=repo_path(args.tatqa_manifest),
         mpdocvqa_manifest=repo_path(args.mpdocvqa_manifest),
+        mpdocvqa_evidence_manifest=repo_path(args.mpdocvqa_evidence_manifest),
+        mpdocvqa_db_path=repo_path(args.mpdocvqa_db_path),
         max_samples=args.max_samples,
         answer_policy_mode=str(args.answer_policy),
         base_model_path=str(args.base_model_path),

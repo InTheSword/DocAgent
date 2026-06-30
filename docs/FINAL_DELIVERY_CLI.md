@@ -202,6 +202,23 @@ python scripts\run_final_raw_pdf_smoke.py `
 This smoke validates parser-to-CLI execution and artifact/citation contracts.
 It is not a final answer-quality benchmark.
 
+Materialize MP-DocVQA final-subset PDFs into MinerU-backed evidence:
+
+```powershell
+python scripts\prepare_mpdocvqa_evidence.py `
+  --subset-root outputs\final_eval\mpdocvqa_val_subset `
+  --output-dir outputs\final_eval\mpdocvqa_val_evidence `
+  --live-api `
+  --mineru-env-file .secrets\mineru.env `
+  --sync-output-dir outputs\sync `
+  --run-id mpdocvqa_evidence_smoke
+```
+
+This writes a local SQLite database plus `sample_evidence_manifest.jsonl`
+mapping MP-DocVQA sample ids to the actual ingested DocAgent `doc_id` and
+gold-page evidence blocks. It is a MinerU/evidence-readiness diagnostic, not
+final answer-quality benchmark acceptance.
+
 Run the final subset AnswerPolicy baseline locally with the heuristic policy:
 
 ```powershell
@@ -220,8 +237,9 @@ diagnostic prompt-v2 baseline, not formal benchmark acceptance. With
 `result.json`, summaries, previews, failure samples, manifest, and log-tail
 placeholders suitable for server result return.
 TAT-QA table/calculation cases run deterministic table tools first and pass
-the compact tool result into the AnswerPolicy prompt; MP-DocVQA manifest cases
-remain skipped until raw PDF/MinerU/retrieval evidence is available.
+the compact tool result into the AnswerPolicy prompt. MP-DocVQA manifest cases
+remain skipped unless `--mpdocvqa-evidence-manifest` and `--mpdocvqa-db-path`
+point to artifacts from `scripts\prepare_mpdocvqa_evidence.py`.
 
 Recommended server-side single command for the Qwen baseline gate:
 

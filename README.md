@@ -94,6 +94,7 @@ commits.
 - `local_fact_qa` workflow wrapper;
 - AnswerPolicy candidate output schema and citation allowlist filtering;
 - local TAT-QA / MP-DocVQA validation-subset preparation;
+- MP-DocVQA evidence materialization runner for MinerU API-produced evidence maps;
 - local diagnostic reporting with `summary.json` and `summary.md`.
 
 ## Not Accepted Yet
