@@ -38,6 +38,13 @@ def test_structure_quality_report_summarizes_real_schema_fixture(tmp_path: Path)
     assert report["source_pdf"]["path"] == "source/original.pdf"
     assert report["mineru_origin_pdf"]["path"] == "mineru/sample_origin.pdf"
     assert report["content_list_file"] == "mineru/sample_content_list.json"
+    assert report["mineru_output_ordinary_content_list_count"] == 1
+    assert report["mineru_output_content_list_v2_count"] == 1
+    assert report["mineru_output_markdown_file_count"] == 0
+    assert report["mineru_output_layout_json_count"] == 1
+    assert report["mineru_output_image_resource_count"] == 1
+    assert report["mineru_output_table_image_resource_count"] == 1
+    assert report["mineru_output_inventory"]["file_count"] >= 6
     assert report["mineru_model"] == "vlm"
     assert report["mineru_backend"] == "vlm"
     assert report["layout_page_count"] == 2
@@ -109,4 +116,6 @@ def test_structure_quality_report_distinguishes_remote_and_missing_local_resourc
     assert report["image_reference_count"] == 2
     assert report["missing_image_reference_count"] == 1
     assert report["missing_image_reference_block_ids"] == [blocks[1].block_id]
+    assert report["mineru_output_ordinary_content_list_count"] == 1
+    assert report["mineru_output_inventory"]["category_counts"]["ordinary_content_list"] == 1
     assert "missing_image_references" in report["warnings"]

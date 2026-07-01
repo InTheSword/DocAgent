@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from docagent.ingestion.hashing import sha256_file
+from docagent.integrations.mineru_api import build_mineru_output_inventory
 from docagent.parser.mineru_converter import find_content_list, raw_content_list_stats
 from docagent.schemas import EvidenceBlock
 
@@ -180,6 +181,10 @@ def build_structure_quality_report(
     content_list = find_content_list(mineru_dir)
     raw_stats = raw_content_list_stats(content_list)
     layout = _layout_info(mineru_dir, doc_dir)
+    inventory = build_mineru_output_inventory(mineru_dir)
+    inventory_categories = inventory.get("category_counts")
+    if not isinstance(inventory_categories, dict):
+        inventory_categories = {}
     manifest = _source_manifest(doc_dir, mineru_dir)
     origin_pdf = _origin_pdf(mineru_dir)
     source_info = _file_info(source_path, doc_dir)
@@ -274,6 +279,23 @@ def build_structure_quality_report(
         "layout_page_count": layout["layout_page_count"],
         "content_list_page_count": raw_stats["content_list_pages"],
         "content_list_file": _relative_posix(content_list, doc_dir),
+        "mineru_output_inventory": {
+            "file_count": inventory.get("file_count"),
+            "total_size": inventory.get("total_size"),
+            "category_counts": inventory_categories,
+            "truncated": inventory.get("truncated"),
+        },
+        "mineru_output_ordinary_content_list_count": inventory_categories.get(
+            "ordinary_content_list", 0
+        ),
+        "mineru_output_content_list_v2_count": inventory_categories.get(
+            "content_list_v2", 0
+        ),
+        "mineru_output_markdown_file_count": inventory_categories.get("markdown", 0),
+        "mineru_output_layout_json_count": inventory_categories.get("layout_json", 0),
+        "mineru_output_image_resource_count": inventory_categories.get("image_resource", 0),
+        "mineru_output_table_image_resource_count": inventory_categories.get("table_image_resource", 0),
+        "mineru_output_table_html_artifact_count": inventory_categories.get("table_html_artifact", 0),
         "raw_block_count": raw_stats["raw_block_count"],
         "converted_block_count": len(blocks),
         "page_document_count": len(page_blocks),
