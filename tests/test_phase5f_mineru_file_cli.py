@@ -224,6 +224,76 @@ def test_mineru_api_file_ingestion_replaces_incomplete_cache(
     assert payload["source"]["mineru_api"]["manifest"]["api_attempt_count"] == 1
 
 
+def test_mineru_api_file_ingestion_replaces_cache_when_parse_options_change(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    source, db_path, document_root, output_dir = _paths(tmp_path)
+    preview_record = docagent_cli.DocumentRegistry(document_root).register(source)
+    stale_mineru_dir = Path(preview_record.document_dir) / "mineru"
+    shutil.copytree(MINERU_FIXTURE, stale_mineru_dir)
+    (stale_mineru_dir / "mineru_api_manifest.json").write_text(
+        json.dumps(
+            {
+                "status": "success",
+                "parse_options": {
+                    "model_version": "vlm",
+                    "is_ocr": False,
+                    "enable_table": True,
+                    "enable_formula": True,
+                    "language": "en",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    created_clients = []
+
+    class FakeMinerUApiClient:
+        def __init__(self, **kwargs):
+            self.calls = []
+            created_clients.append(self)
+
+        def run(self, **kwargs):
+            self.calls.append(kwargs)
+            assert not stale_mineru_dir.exists()
+            shutil.copytree(MINERU_FIXTURE, kwargs["output_dir"])
+            return {
+                "status": "success",
+                "batch_id": "batch-1",
+                "source_sha256": "sha",
+                "result_zip_sha256": "zip-sha",
+                "api_attempt_count": 1,
+                "retry_errors": [],
+            }
+
+    monkeypatch.setattr(docagent_cli, "MinerUApiClient", FakeMinerUApiClient)
+    args = docagent_cli.build_parser().parse_args(
+        [
+            "--db-path",
+            str(db_path),
+            "--document-root",
+            str(document_root),
+            "--file",
+            str(source),
+            "--parser",
+            "mineru_api",
+            "--live-api",
+            "--question",
+            "How many pages are in this document?",
+            "--output-dir",
+            str(output_dir),
+            "--mineru-ocr",
+        ]
+    )
+
+    payload = docagent_cli.run_cli(args)
+
+    assert payload["status"] == "success"
+    assert len(created_clients) == 1
+    assert created_clients[0].calls[0]["is_ocr"] is True
+
+
 def test_mineru_existing_file_ingestion_routes_to_document_statistics(tmp_path: Path) -> None:
     source, db_path, document_root, output_dir = _paths(tmp_path)
 

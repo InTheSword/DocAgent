@@ -126,6 +126,7 @@ def build_cli_command(
     mineru_api_poll_interval_seconds: float,
     mineru_api_max_attempts: int,
     mineru_api_retry_delay_seconds: float,
+    mineru_ocr: bool,
     python_executable: str,
 ) -> list[str]:
     command = [
@@ -144,6 +145,10 @@ def build_cli_command(
         command.append("--live-api")
     if mineru_env_file is not None:
         command.extend(["--mineru-env-file", str(mineru_env_file)])
+    if mineru_ocr:
+        command.append("--mineru-ocr")
+    else:
+        command.append("--no-mineru-ocr")
     command.extend(
         [
             "--mineru-api-timeout-seconds",
@@ -304,6 +309,7 @@ def summarize(
     document_rows: list[dict[str, Any]],
     sample_rows: list[dict[str, Any]],
     live_api: bool,
+    mineru_ocr: bool,
 ) -> dict[str, Any]:
     document_status = Counter(str(row.get("pass_fail") or "") for row in document_rows)
     sample_status = Counter(str(row.get("pass_fail") or "") for row in sample_rows)
@@ -327,7 +333,7 @@ def summarize(
         "answer_text_gold_page_hit_rate": rate(sum(1 for row in sample_rows if row.get("answer_text_gold_page_hit")), sample_count),
         "failure_reason_distribution": dict(sorted(failure_reasons.items())),
         "used_mineru_api": True,
-        "used_online_mineru_ocr": bool(live_api),
+        "used_online_mineru_ocr": bool(live_api and mineru_ocr),
         "used_external_api": bool(live_api),
         "used_qwen": False,
         "used_vlm": False,
@@ -428,6 +434,7 @@ def prepare_mpdocvqa_evidence(
     mineru_api_poll_interval_seconds: float = 5.0,
     mineru_api_max_attempts: int = 3,
     mineru_api_retry_delay_seconds: float = 10.0,
+    mineru_ocr: bool = True,
     max_documents: int | None = None,
     python_executable: str = sys.executable,
     timeout_seconds: int = 1200,
@@ -505,6 +512,7 @@ def prepare_mpdocvqa_evidence(
             mineru_api_poll_interval_seconds=mineru_api_poll_interval_seconds,
             mineru_api_max_attempts=mineru_api_max_attempts,
             mineru_api_retry_delay_seconds=mineru_api_retry_delay_seconds,
+            mineru_ocr=mineru_ocr,
             python_executable=python_executable,
         )
         completed = command_runner(command, ROOT, timeout_seconds)
@@ -546,6 +554,7 @@ def prepare_mpdocvqa_evidence(
         document_rows=document_rows_for_summary,
         sample_rows=sample_rows,
         live_api=live_api,
+        mineru_ocr=mineru_ocr,
     )
     if previous_run_dir is not None:
         summary["previous_run_dir"] = safe_relpath(previous_run_dir)
@@ -597,6 +606,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mineru-api-poll-interval-seconds", type=float, default=5.0)
     parser.add_argument("--mineru-api-max-attempts", type=int, default=3)
     parser.add_argument("--mineru-api-retry-delay-seconds", type=float, default=10.0)
+    parser.add_argument("--mineru-ocr", dest="mineru_ocr", action="store_true", default=True)
+    parser.add_argument("--no-mineru-ocr", dest="mineru_ocr", action="store_false")
     parser.add_argument("--max-documents", type=int)
     parser.add_argument("--python-executable", default=sys.executable)
     parser.add_argument("--timeout-seconds", type=int, default=1200)
@@ -622,6 +633,7 @@ def main(argv: list[str] | None = None) -> int:
             mineru_api_poll_interval_seconds=float(args.mineru_api_poll_interval_seconds),
             mineru_api_max_attempts=int(args.mineru_api_max_attempts),
             mineru_api_retry_delay_seconds=float(args.mineru_api_retry_delay_seconds),
+            mineru_ocr=bool(args.mineru_ocr),
             max_documents=args.max_documents,
             python_executable=str(args.python_executable),
             timeout_seconds=int(args.timeout_seconds),

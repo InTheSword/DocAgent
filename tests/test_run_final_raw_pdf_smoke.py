@@ -160,6 +160,7 @@ def test_final_raw_pdf_smoke_validates_mineru_api_cli_contract(tmp_path: Path) -
         assert command[command.index("--parser") + 1] == "mineru_api"
         assert "--live-api" in command
         assert command[command.index("--mineru-env-file") + 1] == str(env_file)
+        assert "--mineru-ocr" in command
         assert "--mineru-command" not in command
         assert "--parser-mode" not in command
 

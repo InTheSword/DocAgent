@@ -356,11 +356,24 @@ def _resolve_optional_mineru_env_file(value: str | None) -> Path | None:
     return default_path if default_path.is_file() else None
 
 
-def _cached_mineru_output_ready(path: Path) -> bool:
+def _cached_mineru_output_ready(path: Path, *, parse_options: dict[str, Any] | None = None) -> bool:
     try:
         find_content_list(path)
     except Exception:
         return False
+    if parse_options is None:
+        return True
+    manifest_path = path / "mineru_api_manifest.json"
+    if not manifest_path.is_file():
+        return False
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    existing_options = manifest.get("parse_options")
+    if not isinstance(existing_options, dict):
+        return False
+    return {key: existing_options.get(key) for key in parse_options} == parse_options
     return True
 
 
@@ -382,8 +395,15 @@ def _run_mineru_api_to_document_cache(
 ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
     preview_record = DocumentRegistry(document_root).register(file_path)
     target = Path(preview_record.document_dir) / "mineru"
+    parse_options = {
+        "model_version": model_version,
+        "is_ocr": is_ocr,
+        "enable_table": enable_table,
+        "enable_formula": enable_formula,
+        "language": language,
+    }
     if target.exists():
-        if _cached_mineru_output_ready(target):
+        if _cached_mineru_output_ready(target, parse_options=parse_options):
             return None, {
                 "status": "success",
                 "api_status": "cached_existing_output",
@@ -1899,7 +1919,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mineru-model-version", default="vlm")
     parser.add_argument("--mineru-data-id")
     parser.add_argument("--mineru-language", default="en")
-    parser.add_argument("--mineru-ocr", action="store_true")
+    parser.add_argument("--mineru-ocr", dest="mineru_ocr", action="store_true", default=True)
+    parser.add_argument("--no-mineru-ocr", dest="mineru_ocr", action="store_false")
     parser.add_argument("--disable-mineru-table", action="store_true")
     parser.add_argument("--disable-mineru-formula", action="store_true")
     parser.add_argument("--mineru-api-timeout-seconds", type=float, default=600.0)

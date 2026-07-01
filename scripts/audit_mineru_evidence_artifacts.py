@@ -1,0 +1,550 @@
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import re
+import shutil
+import sqlite3
+import sys
+from collections import Counter
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from docagent.storage.db import connect
+from docagent.storage.repositories import DocumentRepository
+from docagent.utils.jsonl import read_jsonl, write_jsonl
+from scripts.run_final_eval_subset import as_list, normalize_text
+
+
+SCRIPT_VERSION = "mineru-evidence-artifact-audit-v1"
+EVALUATION_SCOPE = "mineru_artifact_to_evidence_audit_not_training"
+DEFAULT_OUTPUT_ROOT = ROOT / "outputs" / "final_eval" / "mineru_evidence_artifact_audit"
+
+
+def repo_path(path: str | Path | None) -> Path | None:
+    if path is None:
+        return None
+    value = Path(path)
+    return value if value.is_absolute() else ROOT / value
+
+
+def safe_relpath(path: Path | None) -> str:
+    if path is None:
+        return ""
+    try:
+        return path.resolve().relative_to(ROOT.resolve()).as_posix()
+    except ValueError:
+        return path.resolve().as_posix()
+
+
+def now_run_id() -> str:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    return f"mineru_evidence_artifact_audit_{stamp}"
+
+
+def write_json(path: Path, payload: dict[str, Any] | list[Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def load_json(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def rate(numerator: int, denominator: int) -> float:
+    return round(numerator / denominator, 4) if denominator else 0.0
+
+
+def compact(text: str) -> str:
+    return " ".join(str(text or "").split())
+
+
+def text_preview(text: str, answers: list[str], *, max_chars: int = 500) -> str:
+    normalized = compact(text)
+    lowered = normalized.lower()
+    for answer in answers:
+        needle = compact(answer).lower()
+        if needle and needle in lowered:
+            start = max(0, lowered.index(needle) - 180)
+            return normalized[start : start + max_chars]
+    return normalized[:max_chars]
+
+
+def answer_hit(text: str, answers: list[str]) -> bool:
+    normalized = normalize_text(text)
+    return any(answer and normalize_text(answer) in normalized for answer in answers)
+
+
+def page_from_item(item: dict[str, Any]) -> int | None:
+    for key in ("page_idx", "page", "page_id"):
+        value = item.get(key)
+        if value is None:
+            continue
+        try:
+            return int(value) + 1
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def clean_text(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, list):
+        return compact(" ".join(clean_text(item) for item in value))
+    return compact(re.sub(r"<[^>]+>", " ", str(value)))
+
+
+def item_text(item: dict[str, Any]) -> str:
+    raw_type = str(item.get("type") or item.get("block_type") or "").lower()
+    keys = ["text", "content"]
+    if raw_type == "table":
+        keys = ["table_caption", "table_text", "table_body", "table_html", "table_footnote", *keys]
+    if raw_type in {"image", "figure", "chart"}:
+        keys = ["caption", "image_caption", "chart_caption", "nearby_text", *keys]
+    return "\n".join(part for key in keys if (part := clean_text(item.get(key)))).strip()
+
+
+def load_content_items(path: Path) -> list[dict[str, Any]]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return []
+    if isinstance(payload, dict):
+        payload = payload.get("content_list") or payload.get("blocks") or payload.get("items") or []
+    if not isinstance(payload, list):
+        return []
+    return [item for item in payload if isinstance(item, dict)]
+
+
+def content_list_stats(path: Path | None, answers: list[str], gold_pages: set[int]) -> dict[str, Any]:
+    if path is None or not path.is_file():
+        return {"path": "", "exists": False}
+    items = load_content_items(path)
+    page_texts: dict[int, list[str]] = {}
+    for item in items:
+        page = page_from_item(item)
+        if page is not None:
+            page_texts.setdefault(page, []).append(item_text(item))
+    gold_text = "\n".join(
+        "\n".join(parts) for page, parts in sorted(page_texts.items()) if page in gold_pages
+    )
+    all_text = "\n".join("\n".join(parts) for _, parts in sorted(page_texts.items()))
+    return {
+        "path": safe_relpath(path),
+        "exists": True,
+        "item_count": len(items),
+        "page_count": len(page_texts),
+        "gold_page_char_count": len(gold_text),
+        "all_text_char_count": len(all_text),
+        "gold_page_answer_hit": answer_hit(gold_text, answers),
+        "any_page_answer_hit": answer_hit(all_text, answers),
+        "gold_page_preview": text_preview(gold_text, answers),
+    }
+
+
+def full_markdown_stats(mineru_dir: Path, answers: list[str]) -> dict[str, Any]:
+    candidates = sorted(mineru_dir.rglob("full.md"))
+    if not candidates:
+        return {"path": "", "exists": False}
+    path = candidates[0]
+    text = path.read_text(encoding="utf-8-sig", errors="replace")
+    return {
+        "path": safe_relpath(path),
+        "exists": True,
+        "char_count": len(text),
+        "answer_hit": answer_hit(text, answers),
+        "preview": text_preview(text, answers),
+    }
+
+
+def find_content_list(mineru_dir: Path, *, v2: bool = False) -> Path | None:
+    for path in sorted(mineru_dir.rglob("*content_list*.json")):
+        is_v2 = path.name.endswith("_content_list_v2.json") or path.name == "content_list_v2.json"
+        if is_v2 == v2:
+            return path
+    return None
+
+
+def manifest_stats(mineru_dir: Path) -> dict[str, Any]:
+    path = mineru_dir / "mineru_api_manifest.json"
+    payload = load_json(path)
+    parse_options = payload.get("parse_options") if isinstance(payload.get("parse_options"), dict) else {}
+    submission = payload.get("submission_payload") if isinstance(payload.get("submission_payload"), dict) else {}
+    files = submission.get("files") if isinstance(submission.get("files"), list) else []
+    first_file = files[0] if files and isinstance(files[0], dict) else {}
+    return {
+        "path": safe_relpath(path),
+        "exists": path.is_file(),
+        "status": payload.get("status") or "",
+        "model_version": parse_options.get("model_version") or payload.get("model_version") or "",
+        "parse_options_is_ocr": parse_options.get("is_ocr"),
+        "submission_file_is_ocr": first_file.get("is_ocr"),
+        "api_attempt_count": payload.get("api_attempt_count"),
+        "retry_error_count": len(payload.get("retry_errors") or []),
+        "result_zip_size": payload.get("result_zip_size"),
+    }
+
+
+def db_page_stats(
+    *,
+    repository: DocumentRepository | None,
+    ingested_doc_id: str,
+    gold_pages: set[int],
+    answers: list[str],
+) -> dict[str, Any]:
+    if repository is None or not ingested_doc_id:
+        return {"db_available": repository is not None, "block_count": 0}
+    blocks = repository.load_evidence_blocks(ingested_doc_id, include_page_blocks=True)
+    page_texts = [
+        block.retrieval_text
+        for block in blocks
+        if block.block_type == "page" and block.page_id is not None and int(block.page_id) in gold_pages
+    ]
+    child_blocks = [
+        block
+        for block in blocks
+        if block.block_type != "page" and block.page_id is not None and int(block.page_id) in gold_pages
+    ]
+    gold_text = "\n".join(page_texts)
+    return {
+        "db_available": True,
+        "block_count": len(blocks),
+        "page_block_count": sum(1 for block in blocks if block.block_type == "page"),
+        "gold_page_text_char_count": len(gold_text),
+        "gold_page_answer_hit": answer_hit(gold_text, answers),
+        "gold_page_child_block_count": len(child_blocks),
+        "gold_page_child_type_counts": dict(Counter(block.block_type for block in child_blocks)),
+        "gold_page_preview": text_preview(gold_text, answers),
+    }
+
+
+def diagnostic_bucket(row: dict[str, Any]) -> str:
+    if not row["mineru_dir_exists"]:
+        return "mineru_output_missing"
+    manifest = row["mineru_manifest"]
+    if manifest.get("parse_options_is_ocr") is False or manifest.get("submission_file_is_ocr") is False:
+        return "mineru_ocr_disabled_or_uncertain"
+    ordinary = row["ordinary_content_list"]
+    full_md = row["full_md"]
+    db = row["db_evidence"]
+    if ordinary.get("gold_page_answer_hit") and not db.get("gold_page_answer_hit"):
+        return "raw_content_list_gold_page_has_answer_but_db_missing"
+    if full_md.get("answer_hit") and not ordinary.get("any_page_answer_hit"):
+        return "markdown_has_answer_but_content_list_missing"
+    if ordinary.get("any_page_answer_hit") and not ordinary.get("gold_page_answer_hit"):
+        return "raw_mineru_answer_on_non_gold_page"
+    if db.get("gold_page_answer_hit"):
+        return "db_gold_page_has_answer"
+    if full_md.get("answer_hit") or ordinary.get("any_page_answer_hit"):
+        return "raw_mineru_has_answer_but_gold_page_or_conversion_mismatch"
+    return "raw_mineru_answer_not_found"
+
+
+def load_rows(path: Path) -> list[dict[str, Any]]:
+    if not path.is_file():
+        return []
+    return [row for row in read_jsonl(path) if isinstance(row, dict)]
+
+
+def selected_sample_rows(rows: list[dict[str, Any]], sample_ids: set[str], max_samples: int | None) -> list[dict[str, Any]]:
+    selected = [row for row in rows if not sample_ids or str(row.get("sample_id") or "") in sample_ids]
+    if max_samples is not None:
+        selected = selected[: max(0, int(max_samples))]
+    return selected
+
+
+def audit_row(
+    sample: dict[str, Any],
+    *,
+    document_rows_by_doc: dict[str, dict[str, Any]],
+    document_root: Path | None,
+    repository: DocumentRepository | None,
+) -> dict[str, Any]:
+    doc_id = str(sample.get("doc_id") or "")
+    document_row = document_rows_by_doc.get(doc_id, {})
+    ingested_doc_id = str(sample.get("ingested_doc_id") or document_row.get("ingested_doc_id") or "")
+    answers = [str(item) for item in as_list(sample.get("answers")) if str(item)]
+    gold_pages = {int(page) for page in sample.get("gold_pages") or [] if str(page).isdigit()}
+    mineru_dir = document_root / ingested_doc_id / "mineru" if document_root is not None and ingested_doc_id else None
+    mineru_dir_exists = bool(mineru_dir and mineru_dir.is_dir())
+    ordinary = content_list_stats(find_content_list(mineru_dir) if mineru_dir_exists else None, answers, gold_pages)
+    v2 = content_list_stats(find_content_list(mineru_dir, v2=True) if mineru_dir_exists else None, answers, gold_pages)
+    row = {
+        "sample_id": str(sample.get("sample_id") or ""),
+        "doc_id": doc_id,
+        "ingested_doc_id": ingested_doc_id,
+        "source_document": str(sample.get("source_document") or ""),
+        "question": str(sample.get("question") or ""),
+        "answers": answers,
+        "gold_pages": sorted(gold_pages),
+        "mineru_dir": safe_relpath(mineru_dir),
+        "mineru_dir_exists": mineru_dir_exists,
+        "mineru_manifest": manifest_stats(mineru_dir) if mineru_dir_exists else {"exists": False},
+        "ordinary_content_list": ordinary,
+        "content_list_v2": v2,
+        "full_md": full_markdown_stats(mineru_dir, answers) if mineru_dir_exists else {"exists": False},
+        "db_evidence": db_page_stats(
+            repository=repository,
+            ingested_doc_id=ingested_doc_id,
+            gold_pages=gold_pages,
+            answers=answers,
+        ),
+    }
+    row["diagnostic_bucket"] = diagnostic_bucket(row)
+    return row
+
+
+def summarize(
+    *,
+    run_id: str,
+    artifact_dir: Path,
+    evidence_run_dir: Path,
+    db_path: Path | None,
+    rows: list[dict[str, Any]],
+    missing: list[str],
+) -> dict[str, Any]:
+    buckets = Counter(row.get("diagnostic_bucket") for row in rows)
+    return {
+        "command": "audit_mineru_evidence_artifacts",
+        "status": "failed" if missing else "success",
+        "script_version": SCRIPT_VERSION,
+        "evaluation_scope": EVALUATION_SCOPE,
+        "quality_status": "diagnostic_only" if not missing else "blocked",
+        "run_id": run_id,
+        "artifact_dir": safe_relpath(artifact_dir),
+        "source_evidence_run_dir": safe_relpath(evidence_run_dir),
+        "db_path": safe_relpath(db_path),
+        "row_count": len(rows),
+        "missing": missing,
+        "bucket_counts": dict(sorted(buckets.items())),
+        "manifest_ocr_enabled_or_requested_rate": rate(
+            sum(
+                1
+                for row in rows
+                if row.get("mineru_manifest", {}).get("parse_options_is_ocr") is True
+                or row.get("mineru_manifest", {}).get("submission_file_is_ocr") is True
+            ),
+            len(rows),
+        ),
+        "ordinary_gold_page_answer_hit_rate": rate(
+            sum(1 for row in rows if row.get("ordinary_content_list", {}).get("gold_page_answer_hit")),
+            len(rows),
+        ),
+        "markdown_answer_hit_rate": rate(sum(1 for row in rows if row.get("full_md", {}).get("answer_hit")), len(rows)),
+        "db_gold_page_answer_hit_rate": rate(
+            sum(1 for row in rows if row.get("db_evidence", {}).get("gold_page_answer_hit")),
+            len(rows),
+        ),
+        "used_qwen": False,
+        "used_training": False,
+        "used_vlm": False,
+        "formal_benchmark_acceptance": False,
+        "validation_subset_used_for_training": False,
+        "recommendation": {
+            "next_action": "rerun_mpdocvqa_evidence_with_mineru_ocr_if_raw_artifacts_show_ocr_disabled",
+            "do_not_train_yet": True,
+            "reason": (
+                "This audit separates raw MinerU artifact availability from EvidenceBlock persistence. "
+                "It does not call models, change retrieval, alter gold pages, or create training data."
+            ),
+        },
+    }
+
+
+def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
+    lines = [
+        "# MinerU Evidence Artifact Audit",
+        "",
+        f"- status: `{summary.get('status')}`",
+        f"- quality_status: `{summary.get('quality_status')}`",
+        f"- row_count: {summary.get('row_count', 0)}",
+        f"- manifest_ocr_enabled_or_requested_rate: {summary.get('manifest_ocr_enabled_or_requested_rate')}",
+        f"- ordinary_gold_page_answer_hit_rate: {summary.get('ordinary_gold_page_answer_hit_rate')}",
+        f"- markdown_answer_hit_rate: {summary.get('markdown_answer_hit_rate')}",
+        f"- db_gold_page_answer_hit_rate: {summary.get('db_gold_page_answer_hit_rate')}",
+        "",
+        "## Buckets",
+        "",
+        *[f"- {key}: {value}" for key, value in sorted((summary.get("bucket_counts") or {}).items())],
+        "",
+        "This is diagnostic only. It does not call Qwen, tune retrieval, change MP-DocVQA gold pages, or create training data.",
+    ]
+    if summary.get("missing"):
+        lines.extend(["", "## Missing", "", *[f"- {item}" for item in summary["missing"]]])
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def write_manifest(path: Path, *, run_id: str, artifact_paths: list[Path]) -> None:
+    files = []
+    for artifact in artifact_paths:
+        if artifact.is_file():
+            files.append({"path": safe_relpath(artifact), "size_bytes": artifact.stat().st_size, "sha256": sha256_file(artifact)})
+    write_json(path, {"run_id": run_id, "script_version": SCRIPT_VERSION, "files": files})
+
+
+def sync_outputs(sync_dir: Path, paths: dict[str, Path]) -> None:
+    sync_dir.mkdir(parents=True, exist_ok=True)
+    for key in ("result", "summary", "summary_md", "preview", "manifest"):
+        if paths[key].is_file():
+            shutil.copy2(paths[key], sync_dir / paths[key].name)
+
+
+def audit_mineru_evidence_artifacts(
+    *,
+    evidence_run_dir: Path,
+    output_root: Path = DEFAULT_OUTPUT_ROOT,
+    run_id: str | None = None,
+    db_path: Path | None = None,
+    sample_ids: set[str] | None = None,
+    max_samples: int | None = None,
+    sync_output_root: Path | None = None,
+) -> dict[str, Any]:
+    run_id = run_id or now_run_id()
+    artifact_dir = output_root / run_id
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    summary_path = evidence_run_dir / "summary.json"
+    evidence_summary = load_json(summary_path)
+    documents_path = evidence_run_dir / "documents.jsonl"
+    samples_path = evidence_run_dir / "sample_evidence_manifest.jsonl"
+    document_root = repo_path(evidence_summary.get("document_root")) if evidence_summary.get("document_root") else None
+    db_path = db_path or (repo_path(evidence_summary.get("db_path")) if evidence_summary.get("db_path") else None)
+
+    missing = [
+        safe_relpath(path)
+        for path in (summary_path, documents_path, samples_path)
+        if not path.is_file()
+    ]
+    if document_root is None or not document_root.is_dir():
+        missing.append("document_root_missing")
+    if db_path is None or not db_path.is_file():
+        missing.append("db_path_missing")
+
+    document_rows = load_rows(documents_path)
+    sample_rows = selected_sample_rows(load_rows(samples_path), sample_ids or set(), max_samples)
+    repository: DocumentRepository | None = None
+    conn: sqlite3.Connection | None = None
+    try:
+        if db_path is not None and db_path.is_file():
+            conn = connect(db_path)
+            repository = DocumentRepository(conn)
+        rows = [
+            audit_row(
+                sample,
+                document_rows_by_doc={str(row.get("doc_id") or ""): row for row in document_rows},
+                document_root=document_root,
+                repository=repository,
+            )
+            for sample in sample_rows
+        ]
+    finally:
+        if conn is not None:
+            conn.close()
+
+    paths = {
+        "result": artifact_dir / "result.json",
+        "summary": artifact_dir / "summary.json",
+        "summary_md": artifact_dir / "summary.md",
+        "rows": artifact_dir / "rows.jsonl",
+        "preview": artifact_dir / "preview.json",
+        "manifest": artifact_dir / "manifest.json",
+    }
+    summary = summarize(
+        run_id=run_id,
+        artifact_dir=artifact_dir,
+        evidence_run_dir=evidence_run_dir,
+        db_path=db_path,
+        rows=rows,
+        missing=missing,
+    )
+    summary.update(
+        {
+            "summary_path": safe_relpath(paths["summary"]),
+            "summary_markdown_path": safe_relpath(paths["summary_md"]),
+            "rows_path": safe_relpath(paths["rows"]),
+            "preview_path": safe_relpath(paths["preview"]),
+            "manifest_path": safe_relpath(paths["manifest"]),
+            "artifact_paths": [safe_relpath(path) for path in paths.values()],
+        }
+    )
+    result = {
+        "command": summary["command"],
+        "status": summary["status"],
+        "run_id": run_id,
+        "row_count": len(rows),
+        "bucket_counts": summary["bucket_counts"],
+        "manifest_ocr_enabled_or_requested_rate": summary["manifest_ocr_enabled_or_requested_rate"],
+        "ordinary_gold_page_answer_hit_rate": summary["ordinary_gold_page_answer_hit_rate"],
+        "markdown_answer_hit_rate": summary["markdown_answer_hit_rate"],
+        "db_gold_page_answer_hit_rate": summary["db_gold_page_answer_hit_rate"],
+        "recommendation": summary["recommendation"],
+        "artifact_paths": summary["artifact_paths"],
+        "used_training": False,
+        "formal_benchmark_acceptance": False,
+    }
+    write_json(paths["summary"], summary)
+    write_summary_markdown(paths["summary_md"], summary)
+    write_jsonl(paths["rows"], rows)
+    write_json(paths["preview"], rows[:12])
+    write_json(paths["result"], result)
+    write_manifest(paths["manifest"], run_id=run_id, artifact_paths=list(paths.values()))
+    if sync_output_root is not None:
+        sync_dir = sync_output_root / run_id
+        summary["sync_bundle_path"] = safe_relpath(sync_dir)
+        result["sync_bundle_path"] = safe_relpath(sync_dir)
+        write_json(paths["summary"], summary)
+        write_json(paths["result"], result)
+        sync_outputs(sync_dir, paths)
+    return {**result, **summary}
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Audit MinerU raw artifacts against persisted EvidenceBlocks.")
+    parser.add_argument("--evidence-run-dir", required=True)
+    parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_ROOT))
+    parser.add_argument("--run-id")
+    parser.add_argument("--db-path")
+    parser.add_argument("--sample-ids", default="")
+    parser.add_argument("--max-samples", type=int)
+    parser.add_argument("--sync-output-dir")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    sample_ids = {item.strip() for item in str(args.sample_ids or "").split(",") if item.strip()}
+    result = audit_mineru_evidence_artifacts(
+        evidence_run_dir=repo_path(args.evidence_run_dir) or Path(args.evidence_run_dir),
+        output_root=repo_path(args.output_dir) or Path(args.output_dir),
+        run_id=args.run_id,
+        db_path=repo_path(args.db_path),
+        sample_ids=sample_ids,
+        max_samples=args.max_samples,
+        sync_output_root=repo_path(args.sync_output_dir) if args.sync_output_dir else None,
+    )
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0 if result.get("status") == "success" else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -145,6 +145,8 @@ def test_prepare_mpdocvqa_evidence_writes_mapping_artifacts(tmp_path: Path) -> N
     assert "--mineru-env-file" in seen_commands[0]
     assert seen_commands[0][seen_commands[0].index("--mineru-api-max-attempts") + 1] == "3"
     assert seen_commands[0][seen_commands[0].index("--mineru-api-retry-delay-seconds") + 1] == "10.0"
+    assert "--mineru-ocr" in seen_commands[0]
+    assert "--no-mineru-ocr" not in seen_commands[0]
 
     run_dir = tmp_path / "evidence" / "mpdocvqa_evidence_test"
     assert (run_dir / "documents.jsonl").is_file()
@@ -358,3 +360,40 @@ def test_prepare_mpdocvqa_evidence_retries_failed_previous_documents(tmp_path: P
     assert summary["retried_document_count"] == 1
     rows = read_jsonl(tmp_path / "evidence" / "retry_failed" / "sample_evidence_manifest.jsonl")
     assert {row["sample_id"] for row in rows if row["evidence_ready"]} == {"q_ok", "q_fail"}
+
+
+def test_prepare_mpdocvqa_evidence_can_disable_mineru_ocr(tmp_path: Path) -> None:
+    subset_root = _write_subset(tmp_path)
+    seen_commands: list[list[str]] = []
+
+    def fake_runner(command: list[str], _cwd: Path, _timeout_seconds: int) -> CommandResult:
+        seen_commands.append(command)
+        return CommandResult(
+            0,
+            json.dumps(
+                {
+                    "status": "success",
+                    "doc_id": "ingested_doc",
+                    "source": {
+                        "parser": "mineru_api",
+                        "parser_mode": "parse_existing",
+                        "used_mineru_api": True,
+                        "mineru_api": {"api_status": "submitted"},
+                        "ingestion": {"parse_status": "parsed", "page_count": 1, "block_count": 0},
+                    },
+                }
+            ),
+        )
+
+    summary = prepare_mpdocvqa_evidence(
+        subset_root=subset_root,
+        output_root=tmp_path / "evidence",
+        run_id="no_ocr",
+        live_api=True,
+        mineru_ocr=False,
+        command_runner=fake_runner,
+    )
+
+    assert "--no-mineru-ocr" in seen_commands[0]
+    assert "--mineru-ocr" not in seen_commands[0]
+    assert summary["used_online_mineru_ocr"] is False

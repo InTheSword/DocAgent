@@ -88,8 +88,9 @@ def test_mineru_api_client_reads_token_and_writes_sanitized_manifest(tmp_path: P
         timeout_seconds=5,
     )
 
-    assert fake.post_payloads[0]["files"] == [{"name": "sample.pdf", "data_id": "sample_data"}]
+    assert fake.post_payloads[0]["files"] == [{"name": "sample.pdf", "data_id": "sample_data", "is_ocr": False}]
     assert fake.post_payloads[0]["model_version"] == "vlm"
+    assert "is_ocr" not in fake.post_payloads[0]
     assert fake.put_calls[0][0] == "https://upload.example/signed"
     assert fake.put_calls[0][2] == (10.0, 600.0)
     manifest_text = (tmp_path / "mineru" / "mineru_api_manifest.json").read_text(encoding="utf-8")
@@ -97,6 +98,8 @@ def test_mineru_api_client_reads_token_and_writes_sanitized_manifest(tmp_path: P
     assert "upload.example" not in manifest_text
     assert "download.example" not in manifest_text
     assert manifest["batch_result"]["extract_result"][0]["full_zip_url"] == "<redacted>"
+    assert manifest["parse_options"]["is_ocr"] is False
+    assert manifest["submission_payload"]["files"][0]["is_ocr"] is False
     assert (tmp_path / "mineru" / "sample_content_list.json").is_file()
 
 
@@ -271,6 +274,13 @@ def test_mineru_api_client_reuses_successful_existing_output(tmp_path: Path, mon
     manifest = {
         "status": "success",
         "source_sha256": "placeholder",
+        "parse_options": {
+            "model_version": "vlm",
+            "is_ocr": False,
+            "enable_table": True,
+            "enable_formula": True,
+            "language": "en",
+        },
     }
     from docagent.ingestion.hashing import sha256_file
 
@@ -283,6 +293,40 @@ def test_mineru_api_client_reuses_successful_existing_output(tmp_path: Path, mon
 
     assert result["status"] == "success"
     assert fake.post_payloads == []
+
+
+def test_mineru_api_client_invalidates_cache_when_parse_options_change(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MINERU_TOKEN", "secret-token")
+    source = tmp_path / "sample.pdf"
+    source.write_bytes(b"%PDF-1.4\nsample")
+    output = tmp_path / "mineru"
+    output.mkdir()
+    (output / "sample_content_list.json").write_text("[]", encoding="utf-8")
+    from docagent.ingestion.hashing import sha256_file
+
+    manifest = {
+        "status": "success",
+        "source_sha256": sha256_file(source),
+        "parse_options": {
+            "model_version": "vlm",
+            "is_ocr": False,
+            "enable_table": True,
+            "enable_formula": True,
+            "language": "en",
+        },
+    }
+    (output / "mineru_api_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    fake = FakeHttpClient()
+    client = MinerUApiClient(http_client=fake)
+
+    result = client.run(file_path=source, data_id="sample_data", output_dir=output, is_ocr=True)
+
+    assert result["parse_options"]["is_ocr"] is True
+    assert len(fake.post_payloads) == 1
+    assert fake.post_payloads[0]["files"][0]["is_ocr"] is True
 
 
 def test_mineru_api_client_replaces_invalid_existing_manifest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

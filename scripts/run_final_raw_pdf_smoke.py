@@ -160,6 +160,7 @@ def _build_cli_command(
     mineru_env_file: Path | None,
     mineru_api_timeout_seconds: int,
     mineru_api_poll_interval_seconds: float,
+    mineru_ocr: bool,
     python_executable: str,
 ) -> list[str]:
     command = [
@@ -178,6 +179,10 @@ def _build_cli_command(
         command.append("--live-api")
     if mineru_env_file is not None:
         command.extend(["--mineru-env-file", str(mineru_env_file)])
+    if mineru_ocr:
+        command.append("--mineru-ocr")
+    else:
+        command.append("--no-mineru-ocr")
     command.extend(
         [
             "--mineru-api-timeout-seconds",
@@ -345,6 +350,7 @@ def _build_summary(
     db_path: Path,
     document_root: Path,
     rows: list[dict[str, Any]],
+    mineru_ocr: bool,
 ) -> dict[str, Any]:
     pass_counts = Counter(str(row.get("pass_fail") or "") for row in rows)
     task_counts = Counter(str(row.get("task_type") or "") for row in rows if row.get("task_type"))
@@ -371,7 +377,7 @@ def _build_summary(
         "failure_reason_distribution": dict(sorted(failure_counts.items())),
         "parser": "mineru_api",
         "used_mineru_api": True,
-        "used_online_mineru_ocr": True,
+        "used_online_mineru_ocr": bool(mineru_ocr),
         "used_external_api": True,
         "used_qwen": False,
         "used_training": False,
@@ -426,6 +432,7 @@ def run_final_raw_pdf_smoke(
     mineru_env_file: Path | None = None,
     mineru_api_timeout_seconds: int = 900,
     mineru_api_poll_interval_seconds: float = 5.0,
+    mineru_ocr: bool = True,
     python_executable: str = sys.executable,
     timeout_seconds: int = 900,
     command_runner: CommandRunner = _default_command_runner,
@@ -456,6 +463,7 @@ def run_final_raw_pdf_smoke(
             mineru_env_file=mineru_env_file,
             mineru_api_timeout_seconds=mineru_api_timeout_seconds,
             mineru_api_poll_interval_seconds=mineru_api_poll_interval_seconds,
+            mineru_ocr=mineru_ocr,
             python_executable=python_executable,
         )
         completed = command_runner(command, ROOT, timeout_seconds)
@@ -475,6 +483,7 @@ def run_final_raw_pdf_smoke(
         db_path=db_path,
         document_root=document_root,
         rows=rows,
+        mineru_ocr=mineru_ocr,
     )
     paths = {
         "cases": run_dir / "cases.jsonl",
@@ -516,6 +525,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mineru-env-file")
     parser.add_argument("--mineru-api-timeout-seconds", type=int, default=900)
     parser.add_argument("--mineru-api-poll-interval-seconds", type=float, default=5.0)
+    parser.add_argument("--mineru-ocr", dest="mineru_ocr", action="store_true", default=True)
+    parser.add_argument("--no-mineru-ocr", dest="mineru_ocr", action="store_false")
     parser.add_argument("--python-executable", default=sys.executable)
     parser.add_argument("--timeout-seconds", type=int, default=900)
     parser.add_argument("--run-id")
@@ -535,6 +546,7 @@ def main(argv: list[str] | None = None) -> int:
             mineru_env_file=_project_path(args.mineru_env_file) if args.mineru_env_file else None,
             mineru_api_timeout_seconds=int(args.mineru_api_timeout_seconds),
             mineru_api_poll_interval_seconds=float(args.mineru_api_poll_interval_seconds),
+            mineru_ocr=bool(args.mineru_ocr),
             python_executable=str(args.python_executable),
             timeout_seconds=int(args.timeout_seconds),
             run_id=str(args.run_id or "") or None,

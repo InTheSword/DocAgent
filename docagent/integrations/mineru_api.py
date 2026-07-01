@@ -216,6 +216,30 @@ def _reset_incomplete_output(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
+def _parse_options(
+    *,
+    model_version: str,
+    is_ocr: bool | None,
+    enable_table: bool | None,
+    enable_formula: bool | None,
+    language: str | None,
+) -> dict[str, Any]:
+    return {
+        "model_version": model_version,
+        "is_ocr": is_ocr,
+        "enable_table": enable_table,
+        "enable_formula": enable_formula,
+        "language": language,
+    }
+
+
+def _parse_options_match(existing: dict[str, Any], requested: dict[str, Any]) -> bool:
+    existing_options = existing.get("parse_options")
+    if not isinstance(existing_options, dict):
+        return False
+    return {key: existing_options.get(key) for key in requested} == requested
+
+
 class MinerUApiClient:
     def __init__(
         self,
@@ -253,12 +277,14 @@ class MinerUApiClient:
         upload_timeout: tuple[float, float] = (10.0, 600.0),
     ) -> dict[str, Any]:
         path = Path(file_path)
+        file_entry: dict[str, Any] = {"name": path.name, "data_id": data_id}
+        if is_ocr is not None:
+            file_entry["is_ocr"] = is_ocr
         payload: dict[str, Any] = {
-            "files": [{"name": path.name, "data_id": data_id}],
+            "files": [file_entry],
             "model_version": model_version,
         }
         for key, value in {
-            "is_ocr": is_ocr,
             "enable_table": enable_table,
             "enable_formula": enable_formula,
             "language": language,
@@ -405,6 +431,13 @@ class MinerUApiClient:
         output = Path(output_dir)
         manifest_path = output / "mineru_api_manifest.json"
         source_sha256 = sha256_file(source)
+        requested_options = _parse_options(
+            model_version=model_version,
+            is_ocr=is_ocr,
+            enable_table=enable_table,
+            enable_formula=enable_formula,
+            language=language,
+        )
         if manifest_path.exists():
             try:
                 existing = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -414,7 +447,12 @@ class MinerUApiClient:
                 cached_content_list = find_content_list(output)
             except Exception:
                 cached_content_list = None
-            if existing.get("source_sha256") == source_sha256 and existing.get("status") == "success" and cached_content_list:
+            if (
+                existing.get("source_sha256") == source_sha256
+                and existing.get("status") == "success"
+                and _parse_options_match(existing, requested_options)
+                and cached_content_list
+            ):
                 return existing
 
         attempts = max(1, int(api_max_attempts))
@@ -470,6 +508,8 @@ class MinerUApiClient:
             "source_size": submission["source_size"],
             "source_sha256": source_sha256,
             "model_version": model_version,
+            "parse_options": requested_options,
+            "submission_payload": submission.get("payload", {}),
             "data_id": data_id,
             "result_zip_size": zip_path.stat().st_size,
             "result_zip_sha256": sha256_file(zip_path),
