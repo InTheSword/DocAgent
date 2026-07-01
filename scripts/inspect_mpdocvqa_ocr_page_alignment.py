@@ -173,9 +173,12 @@ def inspect_row(row: dict[str, Any], blocks_by_doc: dict[str, dict[str, Any]], i
     block_by_id = blocks_by_doc.get(ingested_doc_id, {})
     gold_pages = as_int_set(row.get("gold_pages") or [])
     retrieved_pages = as_int_set(row.get("retrieved_pages") or [])
+    selected_pages = as_int_set(row.get("selected_pages") or [])
+    citation_pages = as_int_set(row.get("citation_pages") or [])
     answers = as_str_list(row.get("answers") or [])
     pages = document_pages(block_by_id)
     hit_pages = answer_hit_pages(block_by_id, answers)
+    hit_page_set = set(hit_pages)
     gold_retrievable_pages = [page for page in sorted(gold_pages) if page_has_retrievable_text(block_by_id, page)]
     bucket = alignment_bucket(
         gold_pages=gold_pages,
@@ -197,7 +200,12 @@ def inspect_row(row: dict[str, Any], blocks_by_doc: dict[str, dict[str, Any]], i
         "answers": answers,
         "gold_pages": sorted(gold_pages),
         "retrieved_pages": sorted(retrieved_pages),
+        "selected_pages": sorted(selected_pages),
+        "citation_pages": sorted(citation_pages),
         "answer_hit_pages": hit_pages,
+        "retrieved_answer_page_hit": bool(hit_page_set and hit_page_set.intersection(retrieved_pages)),
+        "selected_answer_page_hit": bool(hit_page_set and hit_page_set.intersection(selected_pages)),
+        "citation_answer_page_hit": bool(hit_page_set and hit_page_set.intersection(citation_pages)),
         "gold_minus_one_pages": sorted(shifted_pages(gold_pages, -1, pages)),
         "gold_plus_one_pages": sorted(shifted_pages(gold_pages, 1, pages)),
         "gold_retrievable_pages": gold_retrievable_pages,
@@ -273,6 +281,9 @@ def inspect_mpdocvqa_ocr_page_alignment(
     source_run_id = str(source_summary.get("run_id") or source_result.get("run_id") or run_dir.name)
     answer_found_count = sum(1 for row in inspected_rows if row.get("answer_hit_pages"))
     adjacent_count = bucket_counts.get("answer_on_gold_minus_one_page", 0) + bucket_counts.get("answer_on_gold_plus_one_page", 0)
+    retrieved_answer_page_hit_count = sum(1 for row in inspected_rows if row.get("retrieved_answer_page_hit"))
+    selected_answer_page_hit_count = sum(1 for row in inspected_rows if row.get("selected_answer_page_hit"))
+    citation_answer_page_hit_count = sum(1 for row in inspected_rows if row.get("citation_answer_page_hit"))
     summary = {
         "command": "inspect_mpdocvqa_ocr_page_alignment",
         "status": "success",
@@ -292,6 +303,16 @@ def inspect_mpdocvqa_ocr_page_alignment(
         "answer_found_anywhere_rate": rate(answer_found_count, len(inspected_rows)),
         "answer_found_adjacent_page_count": adjacent_count,
         "answer_found_adjacent_page_rate": rate(adjacent_count, len(inspected_rows)),
+        "retrievable_answer_page_count": answer_found_count,
+        "retrieved_answer_page_hit_count": retrieved_answer_page_hit_count,
+        "retrieved_answer_page_hit_rate": rate(retrieved_answer_page_hit_count, len(inspected_rows)),
+        "retrieved_answer_page_hit_rate_among_answer_found": rate(retrieved_answer_page_hit_count, answer_found_count),
+        "selected_answer_page_hit_count": selected_answer_page_hit_count,
+        "selected_answer_page_hit_rate": rate(selected_answer_page_hit_count, len(inspected_rows)),
+        "selected_answer_page_hit_rate_among_answer_found": rate(selected_answer_page_hit_count, answer_found_count),
+        "citation_answer_page_hit_count": citation_answer_page_hit_count,
+        "citation_answer_page_hit_rate": rate(citation_answer_page_hit_count, len(inspected_rows)),
+        "citation_answer_page_hit_rate_among_answer_found": rate(citation_answer_page_hit_count, answer_found_count),
         "alignment_bucket_counts": dict(sorted(bucket_counts.items())),
         "used_qwen": bool(source_summary.get("used_qwen", True)),
         "used_training": False,
@@ -344,6 +365,18 @@ def write_outputs(
         "inspected_count": summary.get("inspected_count", 0),
         "answer_found_anywhere_rate": summary.get("answer_found_anywhere_rate", 0.0),
         "answer_found_adjacent_page_rate": summary.get("answer_found_adjacent_page_rate", 0.0),
+        "retrieved_answer_page_hit_rate": summary.get("retrieved_answer_page_hit_rate", 0.0),
+        "retrieved_answer_page_hit_rate_among_answer_found": summary.get(
+            "retrieved_answer_page_hit_rate_among_answer_found", 0.0
+        ),
+        "selected_answer_page_hit_rate": summary.get("selected_answer_page_hit_rate", 0.0),
+        "selected_answer_page_hit_rate_among_answer_found": summary.get(
+            "selected_answer_page_hit_rate_among_answer_found", 0.0
+        ),
+        "citation_answer_page_hit_rate": summary.get("citation_answer_page_hit_rate", 0.0),
+        "citation_answer_page_hit_rate_among_answer_found": summary.get(
+            "citation_answer_page_hit_rate_among_answer_found", 0.0
+        ),
         "alignment_bucket_counts": summary.get("alignment_bucket_counts", {}),
         "recommendation": summary.get("recommendation", {}),
         "used_training": False,
@@ -383,6 +416,9 @@ def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
         "",
         f"- answer_found_anywhere_rate: {summary.get('answer_found_anywhere_rate', 0.0)}",
         f"- answer_found_adjacent_page_rate: {summary.get('answer_found_adjacent_page_rate', 0.0)}",
+        f"- retrieved_answer_page_hit_rate: {summary.get('retrieved_answer_page_hit_rate', 0.0)}",
+        f"- selected_answer_page_hit_rate: {summary.get('selected_answer_page_hit_rate', 0.0)}",
+        f"- citation_answer_page_hit_rate: {summary.get('citation_answer_page_hit_rate', 0.0)}",
         "",
         "## Buckets",
         "",

@@ -63,7 +63,9 @@ def write_query_inspect_run(tmp_path: Path) -> Path:
                 "question": "What is the Budget Estimate?",
                 "answers": ["$100,000"],
                 "gold_pages": [1],
-                "retrieved_pages": [3],
+                "retrieved_pages": [2],
+                "selected_pages": [2],
+                "citation_pages": [2],
             },
             {
                 "source_run_id": "compare",
@@ -75,6 +77,8 @@ def write_query_inspect_run(tmp_path: Path) -> Path:
                 "answers": ["AlphaValue"],
                 "gold_pages": [3],
                 "retrieved_pages": [1],
+                "selected_pages": [1],
+                "citation_pages": [1],
             },
             {
                 "source_run_id": "compare",
@@ -86,6 +90,8 @@ def write_query_inspect_run(tmp_path: Path) -> Path:
                 "answers": ["MissingValue"],
                 "gold_pages": [6],
                 "retrieved_pages": [1],
+                "selected_pages": [1],
+                "citation_pages": [1],
             },
             {
                 "source_run_id": "compare",
@@ -122,6 +128,10 @@ def test_inspect_mpdocvqa_ocr_page_alignment_buckets(tmp_path: Path) -> None:
     assert result["inspected_count"] == 3
     assert result["answer_found_anywhere_rate"] == 0.6667
     assert result["answer_found_adjacent_page_rate"] == 0.3333
+    assert result["retrieved_answer_page_hit_rate"] == 0.3333
+    assert result["retrieved_answer_page_hit_rate_among_answer_found"] == 0.5
+    assert result["selected_answer_page_hit_rate"] == 0.3333
+    assert result["citation_answer_page_hit_rate"] == 0.3333
     assert result["alignment_bucket_counts"] == {
         "answer_elsewhere_in_document": 1,
         "answer_not_found_in_document_text": 1,
@@ -135,3 +145,5 @@ def test_inspect_mpdocvqa_ocr_page_alignment_buckets(tmp_path: Path) -> None:
     assert buckets["plus_one"] == "answer_on_gold_plus_one_page"
     assert buckets["elsewhere"] == "answer_elsewhere_in_document"
     assert buckets["not_found"] == "answer_not_found_in_document_text"
+    answer_page_hits = {row["sample_id"]: row["retrieved_answer_page_hit"] for row in rows}
+    assert answer_page_hits == {"plus_one": True, "elsewhere": False, "not_found": False}
