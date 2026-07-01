@@ -145,10 +145,22 @@ def content_list_stats(path: Path | None, answers: list[str], gold_pages: set[in
         return {"path": "", "exists": False}
     items = load_content_items(path)
     page_texts: dict[int, list[str]] = {}
+    gold_hit_items: list[dict[str, Any]] = []
     for item in items:
         page = page_from_item(item)
         if page is not None:
-            page_texts.setdefault(page, []).append(item_text(item))
+            text = item_text(item)
+            page_texts.setdefault(page, []).append(text)
+            if page in gold_pages and answer_hit(text, answers):
+                gold_hit_items.append(
+                    {
+                        "page": page,
+                        "raw_type": str(item.get("type") or item.get("block_type") or ""),
+                        "keys": sorted(str(key) for key in item.keys())[:30],
+                        "text_char_count": len(text),
+                        "text_preview": text_preview(text, answers, max_chars=240),
+                    }
+                )
     gold_text = "\n".join(
         "\n".join(parts) for page, parts in sorted(page_texts.items()) if page in gold_pages
     )
@@ -162,6 +174,7 @@ def content_list_stats(path: Path | None, answers: list[str], gold_pages: set[in
         "all_text_char_count": len(all_text),
         "gold_page_answer_hit": answer_hit(gold_text, answers),
         "any_page_answer_hit": answer_hit(all_text, answers),
+        "gold_page_answer_hit_items": gold_hit_items[:5],
         "gold_page_preview": text_preview(gold_text, answers),
     }
 

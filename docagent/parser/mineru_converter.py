@@ -44,6 +44,38 @@ def _clean_text(value: object) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip()
 
 
+def _is_page_number_like(text: str) -> bool:
+    normalized = _clean_text(text).casefold()
+    normalized = normalized.strip(" -–—|·•")
+    if not normalized:
+        return True
+    return bool(
+        re.fullmatch(
+            r"(page\s*)?\d{1,4}(\s*(of|/)\s*\d{1,4})?",
+            normalized,
+        )
+        or re.fullmatch(r"[ivxlcdm]{1,8}", normalized)
+    )
+
+
+def _has_substantive_signal(text: str) -> bool:
+    normalized = _clean_text(text)
+    if not normalized:
+        return False
+    if re.search(r"[$€£¥%]|\d[\d,]*(?:\.\d+)?", normalized):
+        return True
+    tokens = re.findall(r"[A-Za-z0-9]+", normalized)
+    return len(tokens) >= 6
+
+
+def _is_boilerplate(raw_type: str, text: str) -> bool:
+    if raw_type not in BOILERPLATE_TYPES:
+        return False
+    if _is_page_number_like(text):
+        return True
+    return not _has_substantive_signal(text)
+
+
 def _strip_html(value: str | None) -> str:
     if not value:
         return ""
@@ -211,10 +243,10 @@ def _make_block(
 ) -> EvidenceBlock | None:
     raw_type = _raw_type(item)
     block_type = _block_type(raw_type)
-    boilerplate = raw_type in BOILERPLATE_TYPES
     page = _docagent_page(item)
     mineru_page_idx = _page_idx(item)
     text = _item_text(item, raw_type, block_type)
+    boilerplate = _is_boilerplate(raw_type, text)
     table_html = _table_html(item) if block_type == "table" else None
     raw_image_path = _image_path(item)
     resource_path, resource_exists = _resolve_resource_path(raw_image_path, resource_root, document_dir)
@@ -231,6 +263,7 @@ def _make_block(
         "reading_order": index,
         "raw_item_index": index,
         "raw_mineru_type": raw_type,
+        "raw_boilerplate_type": raw_type in BOILERPLATE_TYPES,
         "is_boilerplate": boilerplate,
         "exclude_from_retrieval": boilerplate,
         "mineru_provenance": provenance,

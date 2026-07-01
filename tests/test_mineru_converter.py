@@ -99,6 +99,28 @@ def test_mineru_content_list_to_blocks_preserves_nested_unknown_text_fields(tmp_
     assert "$100,000" in pages[0].text
 
 
+def test_mineru_content_list_to_blocks_keeps_substantive_boilerplate_typed_text(tmp_path: Path) -> None:
+    content = [
+        {"type": "footer", "page_idx": 0, "text": "Budget Estimate $100,000"},
+        {"type": "page_number", "page_idx": 0, "text": "13"},
+    ]
+    path = tmp_path / "sample_content_list.json"
+    path.write_text(json.dumps(content), encoding="utf-8")
+
+    blocks = content_list_to_blocks(doc_id="doc123", content_list_path=path)
+    pages = build_page_blocks("doc123", blocks)
+
+    assert blocks[0].metadata["raw_mineru_type"] == "footer"
+    assert blocks[0].metadata["raw_boilerplate_type"] is True
+    assert blocks[0].metadata["is_boilerplate"] is False
+    assert blocks[0].metadata["exclude_from_retrieval"] is False
+    assert "$100,000" in blocks[0].retrieval_text
+    assert blocks[1].metadata["is_boilerplate"] is True
+    assert blocks[1].retrieval_text == ""
+    assert "$100,000" in pages[0].text
+    assert "13" not in pages[0].text
+
+
 def test_mineru_real_schema_preserves_boilerplate_chart_and_resources(tmp_path: Path) -> None:
     fixture = Path("tests/fixtures/mineru_real_schema")
     work = tmp_path / "mineru"
@@ -122,6 +144,7 @@ def test_mineru_real_schema_preserves_boilerplate_chart_and_resources(tmp_path: 
     assert chart.metadata["raw_mineru_type"] == "chart"
     assert chart.metadata["sub_type"] == "bar"
     assert chart.metadata["resource_exists"] is True
+    assert [block.metadata["raw_boilerplate_type"] for block in blocks[3:]] == [True, True, True]
     assert [block.metadata["is_boilerplate"] for block in blocks[3:]] == [True, True, True]
     assert all(block.metadata["exclude_from_retrieval"] for block in blocks[3:])
     assert all(block.retrieval_text == "" for block in blocks[3:])
