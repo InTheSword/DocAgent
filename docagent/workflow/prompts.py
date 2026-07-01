@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any
 
 from docagent.schemas import EvidenceBlock
@@ -164,6 +165,46 @@ def _context_location(block: EvidenceBlock, *, rank_aware_context: bool = False)
     return payload
 
 
+def _context_media(block: EvidenceBlock) -> dict[str, Any]:
+    payload = {
+        "table_caption": _metadata_text(block, "table_caption"),
+        "image_caption": _metadata_text(block, "caption", "image_caption", "chart_caption"),
+        "image_path": _safe_prompt_image_path(block.image_path),
+    }
+    return {key: value for key, value in payload.items() if value not in {None, ""}}
+
+
+def _metadata_text(block: EvidenceBlock, *keys: str) -> str:
+    parts: list[str] = []
+    for key in keys:
+        value = block.metadata.get(key)
+        if isinstance(value, list):
+            parts.extend(str(item).strip() for item in value if str(item or "").strip())
+        elif value not in {None, ""}:
+            parts.append(str(value).strip())
+    result: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        compact = re.sub(r"\s+", " ", part).strip()
+        marker = compact.casefold()
+        if not compact or marker in seen:
+            continue
+        seen.add(marker)
+        result.append(compact)
+    return " ".join(result)
+
+
+def _safe_prompt_image_path(value: str | None) -> str:
+    if not value:
+        return ""
+    text = str(value).strip().replace("\\", "/")
+    if re.match(r"^https?://", text, flags=re.IGNORECASE):
+        return "<remote_image_resource>"
+    if PureWindowsPath(text).is_absolute() or PurePosixPath(text).is_absolute():
+        return ""
+    return text
+
+
 def _context_block_type(block: EvidenceBlock) -> str:
     raw_type = str(block.metadata.get("raw_mineru_type") or "").lower()
     if raw_type == "chart":
@@ -236,6 +277,7 @@ def build_evidence_context(
                 "block_type": _context_block_type(block),
                 **_retrieval_context(block, enabled=rank_aware_context),
                 "location": _context_location(block, rank_aware_context=rank_aware_context),
+                "media": _context_media(block),
                 "content": content,
             }
         )
@@ -278,7 +320,9 @@ def format_evidence_blocks(
         block = by_id[item["block_id"]]
         location_target = build_location_target(block, rank_aware_context=rank_aware_context)
         location_text = json.dumps(location_target, ensure_ascii=False)
-        header = f"[{block.block_type.upper()} | block_id={block.block_id} | location={location_text}]"
+        media = _context_media(block)
+        media_text = f" | media={json.dumps(media, ensure_ascii=False)}" if media else ""
+        header = f"[{block.block_type.upper()} | block_id={block.block_id} | location={location_text}{media_text}]"
         parts.append(f"{header}\n{item['content']}")
     return "\n\n".join(parts)
 

@@ -116,8 +116,25 @@ def test_context_hash_is_stable_and_order_sensitive() -> None:
 def test_context_serializes_text_table_chart_location_and_truncation() -> None:
     blocks = [
         _block("text", "alpha " * 20),
-        _block("table", "<table><tr><td>42</td></tr></table>", block_type="table"),
-        _block("chart", "chart says 9.9", block_type="image", raw_type="chart"),
+        EvidenceBlock(
+            doc_id="doc1",
+            block_id="table",
+            block_type="table",
+            text="Budget Estimate $100,000",
+            table_html="<table><tr><td>Budget Estimate</td><td>$100,000</td></tr></table>",
+            image_path="https://mineru.example/signed-table.png",
+            location=EvidenceLocation(page=1, block_id="table"),
+            metadata={"table_caption": ["Budget table"]},
+        ),
+        EvidenceBlock(
+            doc_id="doc1",
+            block_id="chart",
+            block_type="image",
+            text="chart says 9.9",
+            image_path="images/chart.png",
+            location=EvidenceLocation(page=1, block_id="chart"),
+            metadata={"raw_mineru_type": "chart", "image_caption": "Revenue chart"},
+        ),
         EvidenceBlock(
             doc_id="doc1",
             block_id="boiler",
@@ -134,7 +151,22 @@ def test_context_serializes_text_table_chart_location_and_truncation() -> None:
     assert "boiler" in context["dropped_block_ids"]
     assert context["evidence"][0]["block_type"] == "text"
     assert context["evidence"][0]["location"]["bbox"] == [0, 1, 2, 3]
+    table_item = next(item for item in context["evidence"] if item["block_id"] == "table")
+    chart_item = next(item for item in context["evidence"] if item["block_id"] == "chart")
+    assert table_item["media"] == {
+        "table_caption": "Budget table",
+        "image_path": "<remote_image_resource>",
+    }
+    assert chart_item["media"] == {
+        "image_caption": "Revenue chart",
+        "image_path": "images/chart.png",
+    }
     assert format_evidence_blocks(blocks[:1], max_chars_per_block=20).startswith("[TEXT | block_id=text")
+    formatted = format_evidence_blocks(blocks[1:3], max_chars_per_block=80)
+    assert "Budget table" in formatted
+    assert "<remote_image_resource>" in formatted
+    assert "signed-table.png" not in formatted
+    assert "images/chart.png" in formatted
 
 
 def test_canonical_output_adapter_adds_doc_id_page_and_bbox() -> None:
