@@ -17,7 +17,7 @@ if str(ROOT) not in sys.path:
 from docagent.ingestion.document_registry import SUPPORTED_EXTENSIONS, DocumentRegistry
 from docagent.ingestion.hashing import sha256_file
 from docagent.ingestion.service import DocumentIngestionService
-from docagent.integrations.mineru_api import MinerUApiClient
+from docagent.integrations.mineru_api import MinerUApiClient, refresh_mineru_api_manifest_inventory
 from docagent.parser.mineru_backend import MinerUParserBackend
 from docagent.parser.mineru_converter import find_content_list
 from docagent.parser.text_backend import TextParserBackend
@@ -374,7 +374,41 @@ def _cached_mineru_output_ready(path: Path, *, parse_options: dict[str, Any] | N
     if not isinstance(existing_options, dict):
         return False
     return {key: existing_options.get(key) for key in parse_options} == parse_options
-    return True
+
+
+def _load_mineru_api_manifest(path: Path) -> dict[str, Any]:
+    manifest_path = path / "mineru_api_manifest.json"
+    if not manifest_path.is_file():
+        return {}
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _mineru_api_manifest_summary(manifest: dict[str, Any]) -> dict[str, Any]:
+    inventory = manifest.get("output_inventory") if isinstance(manifest.get("output_inventory"), dict) else {}
+    category_counts = inventory.get("category_counts") if isinstance(inventory.get("category_counts"), dict) else {}
+    return {
+        "status": manifest.get("status"),
+        "batch_id_present": bool(manifest.get("batch_id")),
+        "source_sha256_present": bool(manifest.get("source_sha256")),
+        "result_zip_sha256_present": bool(manifest.get("result_zip_sha256")),
+        "api_attempt_count": manifest.get("api_attempt_count"),
+        "retry_error_count": len(manifest.get("retry_errors") or []),
+        "output_file_count": inventory.get("file_count"),
+        "output_total_size": inventory.get("total_size"),
+        "output_inventory_truncated": inventory.get("truncated"),
+        "output_category_counts": category_counts,
+        "ordinary_content_list_count": category_counts.get("ordinary_content_list", 0),
+        "content_list_v2_count": category_counts.get("content_list_v2", 0),
+        "markdown_file_count": category_counts.get("markdown", 0),
+        "layout_json_count": category_counts.get("layout_json", 0),
+        "image_resource_count": category_counts.get("image_resource", 0),
+        "table_image_resource_count": category_counts.get("table_image_resource", 0),
+        "table_html_artifact_count": category_counts.get("table_html_artifact", 0),
+    }
 
 
 def _run_mineru_api_to_document_cache(
@@ -404,10 +438,12 @@ def _run_mineru_api_to_document_cache(
     }
     if target.exists():
         if _cached_mineru_output_ready(target, parse_options=parse_options):
+            manifest = refresh_mineru_api_manifest_inventory(target) or _load_mineru_api_manifest(target)
             return None, {
                 "status": "success",
                 "api_status": "cached_existing_output",
                 "output_dir": str(target),
+                "manifest": _mineru_api_manifest_summary(manifest),
             }
         shutil.rmtree(target)
 
@@ -430,14 +466,7 @@ def _run_mineru_api_to_document_cache(
         "status": "success",
         "api_status": "submitted",
         "output_dir": str(target),
-        "manifest": {
-            "status": manifest.get("status"),
-            "batch_id_present": bool(manifest.get("batch_id")),
-            "source_sha256_present": bool(manifest.get("source_sha256")),
-            "result_zip_sha256_present": bool(manifest.get("result_zip_sha256")),
-            "api_attempt_count": manifest.get("api_attempt_count"),
-            "retry_error_count": len(manifest.get("retry_errors") or []),
-        },
+        "manifest": _mineru_api_manifest_summary(manifest),
     }
 
 

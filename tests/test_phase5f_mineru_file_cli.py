@@ -126,6 +126,16 @@ def test_mineru_api_file_ingestion_routes_to_document_statistics(
                 "batch_id": "batch-1",
                 "source_sha256": "sha",
                 "result_zip_sha256": "zip-sha",
+                "output_inventory": {
+                    "file_count": 4,
+                    "total_size": 1234,
+                    "truncated": False,
+                    "category_counts": {
+                        "ordinary_content_list": 1,
+                        "markdown": 1,
+                        "image_resource": 2,
+                    },
+                },
             }
 
     monkeypatch.setattr(docagent_cli, "MinerUApiClient", FakeMinerUApiClient)
@@ -157,6 +167,10 @@ def test_mineru_api_file_ingestion_routes_to_document_statistics(
     assert payload["source"]["parser_mode"] == "parse_existing"
     assert payload["source"]["used_mineru_api"] is True
     assert payload["source"]["mineru_api"]["api_status"] == "submitted"
+    assert payload["source"]["mineru_api"]["manifest"]["output_file_count"] == 4
+    assert payload["source"]["mineru_api"]["manifest"]["ordinary_content_list_count"] == 1
+    assert payload["source"]["mineru_api"]["manifest"]["markdown_file_count"] == 1
+    assert payload["source"]["mineru_api"]["manifest"]["image_resource_count"] == 2
     assert created_clients[0].kwargs["env_file"] == env_file
     assert created_clients[0].calls[0]["file_path"] == source
     summary = json.loads(Path(payload["artifact_dir"], "summary.json").read_text(encoding="utf-8"))
@@ -222,6 +236,63 @@ def test_mineru_api_file_ingestion_replaces_incomplete_cache(
     assert len(created_clients) == 1
     assert created_clients[0].calls[0]["api_max_attempts"] == 5
     assert payload["source"]["mineru_api"]["manifest"]["api_attempt_count"] == 1
+
+
+def test_mineru_api_file_ingestion_refreshes_cached_manifest_inventory(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    source, db_path, document_root, output_dir = _paths(tmp_path)
+    preview_record = docagent_cli.DocumentRegistry(document_root).register(source)
+    cached_mineru_dir = Path(preview_record.document_dir) / "mineru"
+    shutil.copytree(MINERU_FIXTURE, cached_mineru_dir)
+    (cached_mineru_dir / "mineru_api_manifest.json").write_text(
+        json.dumps(
+            {
+                "status": "success",
+                "parse_options": {
+                    "model_version": "vlm",
+                    "is_ocr": True,
+                    "enable_table": True,
+                    "enable_formula": True,
+                    "language": "en",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class UnexpectedMinerUApiClient:
+        def __init__(self, **kwargs):
+            raise AssertionError("cached MinerU output should not call live API")
+
+    monkeypatch.setattr(docagent_cli, "MinerUApiClient", UnexpectedMinerUApiClient)
+    args = docagent_cli.build_parser().parse_args(
+        [
+            "--db-path",
+            str(db_path),
+            "--document-root",
+            str(document_root),
+            "--file",
+            str(source),
+            "--parser",
+            "mineru_api",
+            "--live-api",
+            "--question",
+            "How many pages are in this document?",
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    payload = docagent_cli.run_cli(args)
+    manifest = json.loads((cached_mineru_dir / "mineru_api_manifest.json").read_text(encoding="utf-8"))
+
+    assert payload["status"] == "success"
+    assert payload["source"]["mineru_api"]["api_status"] == "cached_existing_output"
+    assert payload["source"]["mineru_api"]["manifest"]["output_file_count"] >= 1
+    assert payload["source"]["mineru_api"]["manifest"]["ordinary_content_list_count"] >= 1
+    assert manifest["output_inventory"]["category_counts"]["ordinary_content_list"] >= 1
 
 
 def test_mineru_api_file_ingestion_replaces_cache_when_parse_options_change(

@@ -9,6 +9,7 @@ import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 import zipfile
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Protocol
@@ -26,6 +27,9 @@ TERMINAL_STATES = {DONE_STATE, FAILED_STATE}
 ENV_MINERU_TOKEN = "MINERU_TOKEN"
 ENV_FILE_TOKEN_KEYS = (ENV_MINERU_TOKEN, "API_TOKEN")
 RETRYABLE_DOWNLOAD_STATUS_CODES = {408, 429, 500, 502, 503, 504}
+OUTPUT_FILE_INVENTORY_LIMIT = 500
+IMAGE_SUFFIXES = {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"}
+MARKDOWN_SUFFIXES = {".md", ".markdown"}
 
 
 class MinerUApiError(RuntimeError):
@@ -208,6 +212,97 @@ def _safe_extract(zip_path: Path, target_dir: Path) -> None:
             if not str(destination).startswith(str(target_root)):
                 raise MinerUApiError(f"unsafe zip member path: {member.filename}")
         archive.extractall(target_dir)
+
+
+def _relative_posix(path: Path, root: Path) -> str:
+    try:
+        return path.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return path.name
+
+
+def _is_content_list_v2(path: Path) -> bool:
+    name = path.name.lower()
+    return name.endswith("_content_list_v2.json") or name == "content_list_v2.json"
+
+
+def _is_ordinary_content_list(path: Path) -> bool:
+    name = path.name.lower()
+    return name.endswith("content_list.json") and not _is_content_list_v2(path)
+
+
+def _classify_output_file(path: Path) -> str:
+    name = path.name.lower()
+    suffix = path.suffix.lower()
+    parts = {part.lower() for part in path.parts}
+    if name == "mineru_result.zip":
+        return "result_archive"
+    if _is_ordinary_content_list(path):
+        return "ordinary_content_list"
+    if _is_content_list_v2(path):
+        return "content_list_v2"
+    if name == "layout.json":
+        return "layout_json"
+    if name == "mineru_api_manifest.json":
+        return "api_manifest"
+    if suffix in MARKDOWN_SUFFIXES:
+        return "markdown"
+    if suffix in IMAGE_SUFFIXES:
+        return "table_image_resource" if "tables" in parts or "table" in name else "image_resource"
+    if suffix in {".html", ".htm"}:
+        return "table_html_artifact" if "tables" in parts or "table" in name else "html_artifact"
+    if suffix == ".json":
+        return "json_artifact"
+    return "other"
+
+
+def _output_file_inventory(output_dir: Path) -> dict[str, Any]:
+    files: list[dict[str, Any]] = []
+    category_counts: Counter[str] = Counter()
+    total_size = 0
+    for path in sorted(output_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        rel_path = _relative_posix(path, output_dir)
+        if rel_path == "mineru_api_manifest.json":
+            continue
+        category = _classify_output_file(path)
+        try:
+            size = path.stat().st_size
+        except OSError:
+            size = 0
+        category_counts[category] += 1
+        total_size += size
+        if len(files) < OUTPUT_FILE_INVENTORY_LIMIT:
+            files.append({"path": rel_path, "size": size, "category": category})
+    return {
+        "file_count": sum(category_counts.values()),
+        "total_size": total_size,
+        "category_counts": dict(sorted(category_counts.items())),
+        "inventory_limit": OUTPUT_FILE_INVENTORY_LIMIT,
+        "truncated": sum(category_counts.values()) > OUTPUT_FILE_INVENTORY_LIMIT,
+        "files": files,
+    }
+
+
+def build_mineru_output_inventory(output_dir: str | Path) -> dict[str, Any]:
+    return _output_file_inventory(Path(output_dir))
+
+
+def refresh_mineru_api_manifest_inventory(output_dir: str | Path) -> dict[str, Any]:
+    output = Path(output_dir)
+    manifest_path = output / "mineru_api_manifest.json"
+    if not manifest_path.is_file():
+        return {}
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(manifest, dict):
+        return {}
+    manifest["output_inventory"] = _output_file_inventory(output)
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    return manifest
 
 
 def _reset_incomplete_output(path: Path) -> None:
@@ -453,7 +548,8 @@ class MinerUApiClient:
                 and _parse_options_match(existing, requested_options)
                 and cached_content_list
             ):
-                return existing
+                refreshed = refresh_mineru_api_manifest_inventory(output)
+                return refreshed or existing
 
         attempts = max(1, int(api_max_attempts))
         retry_errors: list[dict[str, Any]] = []
@@ -516,6 +612,7 @@ class MinerUApiClient:
             "api_attempt_count": len(retry_errors) + 1,
             "retry_errors": retry_errors,
             "batch_result": _sanitize_result(batch_result),
+            "output_inventory": build_mineru_output_inventory(output),
         }
         manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
         return manifest

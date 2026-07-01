@@ -100,7 +100,55 @@ def test_mineru_api_client_reads_token_and_writes_sanitized_manifest(tmp_path: P
     assert manifest["batch_result"]["extract_result"][0]["full_zip_url"] == "<redacted>"
     assert manifest["parse_options"]["is_ocr"] is False
     assert manifest["submission_payload"]["files"][0]["is_ocr"] is False
+    assert manifest["output_inventory"]["category_counts"]["ordinary_content_list"] == 1
+    assert manifest["output_inventory"]["category_counts"]["result_archive"] == 1
     assert (tmp_path / "mineru" / "sample_content_list.json").is_file()
+
+
+def test_mineru_api_client_records_extracted_output_inventory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MINERU_TOKEN", "secret-token")
+    source = tmp_path / "sample.pdf"
+    source.write_bytes(b"%PDF-1.4\nsample")
+    fake = FakeHttpClient(
+        zip_bytes=_zip_bytes(
+            {
+                "sample_content_list.json": "[]",
+                "sample_content_list_v2.json": "[]",
+                "layout.json": "{}",
+                "full.md": "# Parsed document",
+                "images/page.png": "fake-image",
+                "tables/table_1.png": "fake-table-image",
+                "tables/table_1.html": "<table></table>",
+            }
+        )
+    )
+    client = MinerUApiClient(http_client=fake)
+
+    manifest = client.run(
+        file_path=source,
+        data_id="sample_data",
+        output_dir=tmp_path / "mineru",
+        poll_interval_seconds=0,
+        timeout_seconds=5,
+    )
+
+    inventory = manifest["output_inventory"]
+    assert inventory["file_count"] == 8
+    assert inventory["truncated"] is False
+    assert inventory["category_counts"] == {
+        "content_list_v2": 1,
+        "image_resource": 1,
+        "layout_json": 1,
+        "markdown": 1,
+        "ordinary_content_list": 1,
+        "result_archive": 1,
+        "table_html_artifact": 1,
+        "table_image_resource": 1,
+    }
+    paths = {item["path"] for item in inventory["files"]}
+    assert "mineru_api_manifest.json" not in paths
+    assert "full.md" in paths
+    assert "tables/table_1.html" in paths
 
 
 def test_mineru_api_client_reads_token_from_env_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -293,6 +341,8 @@ def test_mineru_api_client_reuses_successful_existing_output(tmp_path: Path, mon
 
     assert result["status"] == "success"
     assert fake.post_payloads == []
+    refreshed_manifest = json.loads((output / "mineru_api_manifest.json").read_text(encoding="utf-8"))
+    assert refreshed_manifest["output_inventory"]["category_counts"]["ordinary_content_list"] == 1
 
 
 def test_mineru_api_client_invalidates_cache_when_parse_options_change(

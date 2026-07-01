@@ -373,6 +373,8 @@ def manifest_stats(mineru_dir: Path) -> dict[str, Any]:
     submission = payload.get("submission_payload") if isinstance(payload.get("submission_payload"), dict) else {}
     files = submission.get("files") if isinstance(submission.get("files"), list) else []
     first_file = files[0] if files and isinstance(files[0], dict) else {}
+    inventory = payload.get("output_inventory") if isinstance(payload.get("output_inventory"), dict) else {}
+    category_counts = inventory.get("category_counts") if isinstance(inventory.get("category_counts"), dict) else {}
     return {
         "path": safe_relpath(path),
         "exists": path.is_file(),
@@ -383,6 +385,17 @@ def manifest_stats(mineru_dir: Path) -> dict[str, Any]:
         "api_attempt_count": payload.get("api_attempt_count"),
         "retry_error_count": len(payload.get("retry_errors") or []),
         "result_zip_size": payload.get("result_zip_size"),
+        "output_file_count": inventory.get("file_count"),
+        "output_total_size": inventory.get("total_size"),
+        "output_inventory_truncated": inventory.get("truncated"),
+        "output_category_counts": category_counts,
+        "ordinary_content_list_count": category_counts.get("ordinary_content_list", 0),
+        "content_list_v2_count": category_counts.get("content_list_v2", 0),
+        "markdown_file_count": category_counts.get("markdown", 0),
+        "layout_json_count": category_counts.get("layout_json", 0),
+        "image_resource_count": category_counts.get("image_resource", 0),
+        "table_image_resource_count": category_counts.get("table_image_resource", 0),
+        "table_html_artifact_count": category_counts.get("table_html_artifact", 0),
     }
 
 
