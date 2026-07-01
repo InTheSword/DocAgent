@@ -204,7 +204,17 @@ Phase 5 Personal-use DocAgent MVP
    comparison/full-workflow rows plus the MP-DocVQA EvidenceBlock SQLite DB
    and separates retrieval misses into evidence mapping, gold-page OCR/text,
    query-answer bridge, and retriever/block scoring buckets without model
-   calls or validation-derived training data
+   calls or validation-derived training data; server artifact-only validation
+   `mpdocvqa_query_block_granularity_24rows_20260701` at commit `bd64f64`
+   passed targeted tests and found 9 retrieval misses, with 8
+   gold_page_answer_text_not_found and 1 gold_page_without_retrievable_blocks,
+   so the next diagnostic is OCR/page alignment before retrieval changes
+-> MP-DocVQA OCR/page alignment inspection implemented locally:
+   `scripts/inspect_mpdocvqa_ocr_page_alignment.py` reads the query/block
+   inspection rows plus the MP-DocVQA EvidenceBlock SQLite DB and checks
+   exact gold pages, gold page +/-1, retrieved pages, and all document pages
+   for answer text; it is artifact-only and does not call models, train, or
+   tune against validation examples
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -318,7 +328,8 @@ Phase 5 raw PDF full-model workflow baseline -> real_model_verified
 Phase 5 MP-DocVQA retrieval inspection -> implemented
 Phase 5 MP-DocVQA full-workflow diagnostic runner -> real_model_verified
 Phase 5 MP-DocVQA full-workflow comparison -> real_model_verified
-Phase 5 MP-DocVQA query/block granularity inspection -> implemented
+Phase 5 MP-DocVQA query/block granularity inspection -> real_model_verified
+Phase 5 MP-DocVQA OCR/page alignment inspection -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted

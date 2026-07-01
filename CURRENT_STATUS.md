@@ -364,6 +364,25 @@ OCR or answer-text availability, query-answer bridge weakness, and
 retriever/block scoring buckets. It does not call Qwen, start SFT/GRPO, create
 training records, tune against validation rows, or claim benchmark acceptance.
 
+Server artifact-only diagnostic `mpdocvqa_query_block_granularity_24rows_20260701`
+at commit `bd64f64` real-model verified the query/block granularity tool
+against the 24-row comparison artifact and MP-DocVQA EvidenceBlock DB. It
+inspected 9 retrieval misses and found `gold_page_answer_text_not_found=8` and
+`gold_page_without_retrievable_blocks=1`, with `gold_page_answer_text_hit_rate`
+`0.0` and `gold_page_question_overlap_rate=0.0`. This means the next useful
+diagnostic is OCR/page alignment or gold-page text availability before changing
+retrieval scoring, query rewriting, or training.
+
+Phase 5 MP-DocVQA OCR/page alignment inspection is implemented locally in
+`scripts/inspect_mpdocvqa_ocr_page_alignment.py` with tests in
+`tests/test_inspect_mpdocvqa_ocr_page_alignment.py`. The script reads the
+query/block inspection rows plus the MP-DocVQA EvidenceBlock SQLite DB, then
+checks exact gold pages, gold page -1, gold page +1, retrieved pages, and all
+document pages for answer text. It separates likely page-index offset,
+gold-page mapping mismatch, missing retrievable page blocks, and answer text
+not found in OCR. It does not call Qwen, start SFT/GRPO, create training
+records, tune against validation rows, or claim benchmark acceptance.
+
 Phase 5 AnswerPolicy IO candidate schema and citation allowlist are
 implemented locally in `docagent/workflow/answer_contract.py`,
 `docagent/models/output_parser.py`, `docagent/workflow/output_adapter.py`,
