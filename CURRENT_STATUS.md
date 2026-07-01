@@ -410,6 +410,27 @@ normalization. It is diagnostic-only: it does not change gold pages, call Qwen,
 start training, create training data, tune per validation row, or claim
 benchmark acceptance.
 
+Server artifact-only diagnostic
+`mpdocvqa_page_index_alignment_semantic_24rows_20260701` at commit `b377d1c`
+validated the page-index audit on the 24-row full-workflow lineage. It
+inspected 9 rows, found dominant answer-page shift `-1` at rate `0.8333`, but
+also confirmed `answer_page_idx`, prepared manifests, and materialized
+EvidenceBlock gold pages are mutually consistent at rate `1.0`. Therefore this
+does not justify shifting MP-DocVQA gold pages or changing citation page
+semantics. The next action is manual/OCR answer-text-hit review before retrieval
+or training changes.
+
+Phase 5 MP-DocVQA page-alignment manual review extraction is implemented
+locally in `scripts/extract_mpdocvqa_page_alignment_review.py` with tests in
+`tests/test_extract_mpdocvqa_page_alignment_review.py`. The script reads a
+page-index audit artifact, prepared document manifests, page image paths, and
+the EvidenceBlock DB, then emits compact `manual_review.jsonl` and
+`manual_review.md` rows with current-window page numbers, source page ids, PDF
+and image paths, OCR previews, and review buckets. It does not call models,
+change page mappings, create training data, tune retrieval, or claim benchmark
+acceptance. Server validation is pending because the required page-index
+artifact and MP-DocVQA EvidenceBlock DB are server-side.
+
 Phase 5 AnswerPolicy IO candidate schema and citation allowlist are
 implemented locally in `docagent/workflow/answer_contract.py`,
 `docagent/models/output_parser.py`, `docagent/workflow/output_adapter.py`,

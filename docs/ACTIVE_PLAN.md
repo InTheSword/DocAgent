@@ -228,7 +228,18 @@ Phase 5 Personal-use DocAgent MVP
    1..N, preserves source page ids such as `fpbw0217_p17` only for traceability,
    and requires manifest/evidence page disagreement before recommending page
    mapping repair; adjacent-page answer-text hits now lead to manual/OCR review
-   before retrieval or training changes
+   before retrieval or training changes; server validation
+   `mpdocvqa_page_index_alignment_semantic_24rows_20260701` at commit
+   `b377d1c` passed targeted tests, confirmed answer_page_idx/manifest/evidence
+   page consistency rates of 1.0, and kept the next action at manual/OCR
+   answer-text-hit review rather than page-index normalization
+-> MP-DocVQA page-alignment manual review extraction implemented locally:
+   `scripts/extract_mpdocvqa_page_alignment_review.py` reads the page-index
+   alignment artifact, prepared document manifests, page image paths, and the
+   EvidenceBlock DB to emit compact `manual_review.jsonl`/`manual_review.md`
+   rows with current-window page numbers, source page ids, image paths, PDF
+   paths, and OCR previews for human inspection; it does not call models,
+   create training data, change gold pages, or tune retrieval
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -344,7 +355,8 @@ Phase 5 MP-DocVQA full-workflow diagnostic runner -> real_model_verified
 Phase 5 MP-DocVQA full-workflow comparison -> real_model_verified
 Phase 5 MP-DocVQA query/block granularity inspection -> real_model_verified
 Phase 5 MP-DocVQA OCR/page alignment inspection -> real_model_verified
-Phase 5 MP-DocVQA page-index alignment inspection -> implemented
+Phase 5 MP-DocVQA page-index alignment inspection -> real_model_verified
+Phase 5 MP-DocVQA page-alignment manual review extraction -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
