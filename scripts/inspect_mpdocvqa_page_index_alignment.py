@@ -85,6 +85,24 @@ def rows_by_sample_id(path: Path, *, id_getter=sample_id) -> dict[str, dict[str,
     return rows
 
 
+def load_document_manifests(subset_root: Path) -> dict[str, dict[str, Any]]:
+    documents_path = subset_root / "documents.jsonl"
+    manifests: dict[str, dict[str, Any]] = {}
+    if not documents_path.is_file():
+        return manifests
+    for row in read_jsonl(documents_path):
+        if not isinstance(row, dict):
+            continue
+        doc_id = str(row.get("doc_id") or "")
+        manifest_path = row.get("document_manifest")
+        if not doc_id or not manifest_path:
+            continue
+        path = subset_root / str(manifest_path)
+        if path.is_file():
+            manifests[doc_id] = load_json(path)
+    return manifests
+
+
 def int_list(values: Any) -> list[int]:
     return sorted(as_int_set(values))
 
@@ -128,6 +146,24 @@ def page_hit_with_shift(reference_pages: list[int], observed_pages: list[int], s
     return bool(shifted.intersection(set(observed_pages)))
 
 
+def source_page_id_for_ordinal(document_manifest: dict[str, Any], page: int | None) -> str:
+    if page is None:
+        return ""
+    for item in document_manifest.get("pages") or []:
+        if not isinstance(item, dict):
+            continue
+        if first_int(item.get("page_ordinal")) == page:
+            return str(item.get("page_id") or "")
+    ordered = document_manifest.get("ordered_page_ids") or []
+    if isinstance(ordered, list) and 1 <= page <= len(ordered):
+        return str(ordered[page - 1] or "")
+    return ""
+
+
+def source_page_ids_for_ordinals(document_manifest: dict[str, Any], pages: list[int]) -> list[str]:
+    return [value for value in (source_page_id_for_ordinal(document_manifest, page) for page in pages) if value]
+
+
 def counter_to_dict(counter: Counter[Any]) -> dict[str, int]:
     return {str(key): counter[key] for key in sorted(counter, key=lambda item: str(item))}
 
@@ -149,6 +185,7 @@ def inspect_row(
     qa_by_id: dict[str, dict[str, Any]],
     manifest_by_id: dict[str, dict[str, Any]],
     sample_evidence_by_id: dict[str, dict[str, Any]],
+    document_manifests_by_doc: dict[str, dict[str, Any]],
     blocks_by_doc: dict[str, dict[str, Any]],
     index: int,
 ) -> dict[str, Any]:
@@ -156,6 +193,8 @@ def inspect_row(
     qa = qa_by_id.get(sid, {})
     manifest = manifest_by_id.get(sid, {})
     sample_evidence = sample_evidence_by_id.get(sid, {})
+    doc_id = str(row.get("doc_id") or sample_evidence.get("doc_id") or qa.get("doc_id") or "")
+    document_manifest = document_manifests_by_doc.get(doc_id, {})
     ingested_doc_id = str(row.get("ingested_doc_id") or sample_evidence.get("ingested_doc_id") or "")
     block_by_id = blocks_by_doc.get(ingested_doc_id, {})
     alignment_gold_pages = int_list(row.get("gold_pages") or [])
@@ -193,7 +232,7 @@ def inspect_row(
     return {
         "source_row_index": index,
         "sample_id": sid,
-        "doc_id": str(row.get("doc_id") or sample_evidence.get("doc_id") or qa.get("doc_id") or ""),
+        "doc_id": doc_id,
         "ingested_doc_id": ingested_doc_id,
         "source_document": str(row.get("source_document") or sample_evidence.get("source_document") or qa.get("source_doc_id") or ""),
         "question": str(row.get("question") or qa.get("question") or ""),
@@ -203,6 +242,10 @@ def inspect_row(
         "qa_answer_page_idx": qa_answer_page_idx,
         "qa_gold_page_ordinal": qa_gold_ordinal,
         "qa_gold_page_id": str(qa.get("gold_page_id") or ""),
+        "document_window_page_count": first_int(document_manifest.get("page_count")),
+        "document_window_ordered_page_ids": [str(item) for item in document_manifest.get("ordered_page_ids") or []],
+        "current_gold_source_page_ids": source_page_ids_for_ordinals(document_manifest, alignment_gold_pages),
+        "answer_hit_source_page_ids": source_page_ids_for_ordinals(document_manifest, observed_answer_pages),
         "final_manifest_gold_pages": final_manifest_pages,
         "sample_evidence_gold_pages": evidence_gold_pages,
         "alignment_gold_pages": alignment_gold_pages,
@@ -218,6 +261,7 @@ def inspect_row(
         "gold_minus_one_answer_hit": page_hit_with_shift(alignment_gold_pages, observed_answer_pages, -1),
         "gold_plus_one_answer_hit": page_hit_with_shift(alignment_gold_pages, observed_answer_pages, 1),
         "has_qa_record": bool(qa),
+        "has_document_manifest": bool(document_manifest),
         "has_final_manifest_record": bool(manifest),
         "has_sample_evidence_record": bool(sample_evidence),
     }
@@ -231,25 +275,20 @@ def recommendation(
     shifted_hit_rates: dict[str, float],
     manifest_consistent_rate: float,
     evidence_consistent_rate: float,
+    qa_ordinal_consistent_rate: float,
 ) -> dict[str, Any]:
-    shifted_key = str(dominant_shift) if dominant_shift is not None else ""
-    shifted_rate = shifted_hit_rates.get(shifted_key, 0.0)
-    if (
-        dominant_shift in {-1, 1}
-        and dominant_shift_rate >= 0.5
-        and shifted_rate > current_hit_rate
-        and manifest_consistent_rate >= 0.8
-        and evidence_consistent_rate >= 0.8
-    ):
-        next_action = "normalize_mpdocvqa_eval_gold_pages_for_ingested_evidence_before_retrieval_changes"
-    elif dominant_shift in {-1, 1}:
+    if manifest_consistent_rate < 0.8 or evidence_consistent_rate < 0.8 or qa_ordinal_consistent_rate < 0.8:
         next_action = "inspect_mpdocvqa_manifest_and_evidence_page_mapping_before_retrieval_changes"
+    elif dominant_shift in {-1, 1} and dominant_shift_rate >= 0.5:
+        next_action = "manual_review_answer_text_hits_before_retrieval_changes"
+    elif shifted_hit_rates.get("0", 0.0) < current_hit_rate:
+        next_action = "inspect_mpdocvqa_page_index_summary_logic"
     else:
-        next_action = "continue_mpdocvqa_retrieval_diagnostics_without_page_shift"
+        next_action = "inspect_ocr_or_answer_text_matching_before_retrieval_changes"
     return {
         "next_action": next_action,
         "do_not_train_yet": True,
-        "reason": "This audit checks whether MP-DocVQA page labels, prepared manifests, and ingested EvidenceBlock pages have a consistent generic offset before changing retrieval or training.",
+        "reason": "This audit treats MP-DocVQA pages as the current input document pages (1..N). It only recommends mapping repair when answer_page_idx, manifests, or EvidenceBlock evidence pages disagree; answer-text hits on adjacent pages require manual/OCR review before retrieval or training changes.",
     }
 
 
@@ -282,6 +321,7 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
     manifest_consistent_rate = rate(manifest_delta_counts.get(0, 0), sum(manifest_delta_counts.values()))
     evidence_consistent_rate = rate(evidence_delta_counts.get(0, 0), sum(evidence_delta_counts.values()))
+    qa_ordinal_consistent_rate = rate(qa_ordinal_counts.get(1, 0), sum(qa_ordinal_counts.values()))
     return {
         "inspected_count": total,
         "answer_page_shift_observed_count": observed_shift_count,
@@ -299,6 +339,7 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "shifted_gold_page_answer_hit_rates": shifted_hit_rates,
         "manifest_consistent_with_qa_gold_page_rate": manifest_consistent_rate,
         "sample_evidence_consistent_with_manifest_gold_page_rate": evidence_consistent_rate,
+        "qa_gold_page_ordinal_consistent_with_answer_page_idx_rate": qa_ordinal_consistent_rate,
         "recommendation": recommendation(
             dominant_shift=dominant_shift,
             dominant_shift_rate=dominant_shift_rate,
@@ -306,6 +347,7 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
             shifted_hit_rates=shifted_hit_rates,
             manifest_consistent_rate=manifest_consistent_rate,
             evidence_consistent_rate=evidence_consistent_rate,
+            qa_ordinal_consistent_rate=qa_ordinal_consistent_rate,
         ),
     }
 
@@ -359,6 +401,7 @@ def inspect_mpdocvqa_page_index_alignment(
     qa_by_id = rows_by_sample_id(qa_path, id_getter=lambda row: str(row.get("qid") or row.get("raw_question_id") or ""))
     manifest_by_id = rows_by_sample_id(manifest_path)
     sample_evidence_by_id = rows_by_sample_id(sample_evidence_manifest_path)
+    document_manifests_by_doc = load_document_manifests(subset_root)
     blocks_by_doc, db_available = load_blocks(alignment_rows, mpdocvqa_db_path)
     inspected_rows = [
         inspect_row(
@@ -366,6 +409,7 @@ def inspect_mpdocvqa_page_index_alignment(
             qa_by_id=qa_by_id,
             manifest_by_id=manifest_by_id,
             sample_evidence_by_id=sample_evidence_by_id,
+            document_manifests_by_doc=document_manifests_by_doc,
             blocks_by_doc=blocks_by_doc,
             index=index,
         )

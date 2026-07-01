@@ -48,6 +48,34 @@ def write_db(tmp_path: Path) -> Path:
 
 def write_subset(tmp_path: Path) -> Path:
     subset = tmp_path / "subset"
+    doc_dir = subset / "documents" / "window_doc"
+    doc_dir.mkdir(parents=True)
+    write_json(
+        doc_dir / "document_manifest.json",
+        {
+            "doc_id": "window_doc",
+            "source_doc_id": "source_doc",
+            "page_count": 5,
+            "ordered_page_ids": ["source_doc_p12", "source_doc_p13", "source_doc_p14", "source_doc_p15", "source_doc_p16"],
+            "pages": [
+                {"page_ordinal": 1, "page_id": "source_doc_p12"},
+                {"page_ordinal": 2, "page_id": "source_doc_p13"},
+                {"page_ordinal": 3, "page_id": "source_doc_p14"},
+                {"page_ordinal": 4, "page_id": "source_doc_p15"},
+                {"page_ordinal": 5, "page_id": "source_doc_p16"},
+            ],
+        },
+    )
+    write_jsonl(
+        subset / "documents.jsonl",
+        [
+            {
+                "doc_id": "window_doc",
+                "source_doc_id": "source_doc",
+                "document_manifest": "documents/window_doc/document_manifest.json",
+            }
+        ],
+    )
     write_jsonl(
         subset / "qa.jsonl",
         [
@@ -202,11 +230,16 @@ def test_inspect_mpdocvqa_page_index_alignment_detects_generic_shift(tmp_path: P
     assert result["answer_page_minus_alignment_gold_page_delta_distribution"] == {"-1": 2, "0": 1}
     assert result["current_gold_page_answer_hit_rate"] == 0.3333
     assert result["shifted_gold_page_answer_hit_rates"]["-1"] == 0.6667
+    assert result["qa_gold_page_ordinal_consistent_with_answer_page_idx_rate"] == 1.0
     assert (
         result["recommendation"]["next_action"]
-        == "normalize_mpdocvqa_eval_gold_pages_for_ingested_evidence_before_retrieval_changes"
+        == "manual_review_answer_text_hits_before_retrieval_changes"
     )
     assert (tmp_path / "sync" / "page_index" / "summary.json").is_file()
 
     rows = read_jsonl(tmp_path / "inspect" / "page_index" / "rows.jsonl")
     assert {row["page_index_bucket"] for row in rows} == {"answer_on_current_gold_page", "answer_on_gold_minus_one_page"}
+    budget = next(row for row in rows if row["sample_id"] == "q_budget")
+    assert budget["document_window_page_count"] == 5
+    assert budget["current_gold_source_page_ids"] == ["source_doc_p14"]
+    assert budget["answer_hit_source_page_ids"] == ["source_doc_p13"]

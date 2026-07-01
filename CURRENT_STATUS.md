@@ -397,13 +397,18 @@ Phase 5 MP-DocVQA page-index alignment inspection is implemented locally in
 `scripts/inspect_mpdocvqa_page_index_alignment.py` with tests in
 `tests/test_inspect_mpdocvqa_page_index_alignment.py`. The script cross-checks
 OCR/page alignment rows against prepared `qa.jsonl`, final
-`sample_manifest.jsonl`, the materialized `sample_evidence_manifest.jsonl`,
-and the EvidenceBlock SQLite DB. It reports whether `answer_page_idx`,
-`gold_page_ordinal`, final manifest pages, evidence-manifest pages, and
-observed answer-hit pages are mutually consistent or show a stable generic
-offset. It is diagnostic-only: it does not change gold pages, call Qwen, start
-training, create training data, tune per validation row, or claim benchmark
-acceptance.
+`sample_manifest.jsonl`, document window manifests, the materialized
+`sample_evidence_manifest.jsonl`, and the EvidenceBlock SQLite DB. It treats
+the current MP-DocVQA window PDF as the document whose pages are `1..N`; source
+page ids such as `fpbw0217_p17` are retained for traceability, while printed
+page numbers inside the image/OCR text are not used as citation page ids. The
+script only recommends page-mapping repair when `answer_page_idx`,
+`gold_page_ordinal`, final manifest pages, or evidence-manifest pages disagree.
+If answer text appears on an adjacent page while those page fields remain
+consistent, the next step is manual/OCR/text-match review rather than gold-page
+normalization. It is diagnostic-only: it does not change gold pages, call Qwen,
+start training, create training data, tune per validation row, or claim
+benchmark acceptance.
 
 Phase 5 AnswerPolicy IO candidate schema and citation allowlist are
 implemented locally in `docagent/workflow/answer_contract.py`,

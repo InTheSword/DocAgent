@@ -223,9 +223,12 @@ Phase 5 Personal-use DocAgent MVP
 -> MP-DocVQA page-index alignment inspection implemented locally:
    `scripts/inspect_mpdocvqa_page_index_alignment.py` cross-checks OCR/page
    alignment rows against prepared `qa.jsonl`, `sample_manifest.jsonl`, the
-   evidence materialization manifest, and the EvidenceBlock DB to determine
-   whether an observed answer-page offset is a stable manifest/evidence page
-   normalization issue before changing retrieval or training
+   evidence materialization manifest, document window manifests, and the
+   EvidenceBlock DB; it treats MP-DocVQA citations as current input PDF pages
+   1..N, preserves source page ids such as `fpbw0217_p17` only for traceability,
+   and requires manifest/evidence page disagreement before recommending page
+   mapping repair; adjacent-page answer-text hits now lead to manual/OCR review
+   before retrieval or training changes
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
