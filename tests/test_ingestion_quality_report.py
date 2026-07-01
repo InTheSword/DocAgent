@@ -59,3 +59,54 @@ def test_structure_quality_report_summarizes_real_schema_fixture(tmp_path: Path)
     assert "mineru_origin_pdf_sha256_differs_from_source_pdf" in report["warnings"]
     assert report["overall_status"] == "passed_with_warnings"
     json.dumps(report, ensure_ascii=False)
+
+
+def test_structure_quality_report_distinguishes_remote_and_missing_local_resources(tmp_path: Path) -> None:
+    document_dir = tmp_path / "document"
+    mineru_dir = document_dir / "mineru"
+    mineru_dir.mkdir(parents=True)
+    source = document_dir / "original.pdf"
+    source.write_bytes(b"%PDF-1.4\n/Type /Page\n")
+    (mineru_dir / "sample_content_list.json").write_text(
+        json.dumps(
+            [
+                {
+                    "type": "table",
+                    "page_idx": 0,
+                    "table_text": "Budget Estimate $100,000",
+                    "table_image_url": "https://mineru.example/assets/table.png",
+                },
+                {
+                    "type": "image",
+                    "page_idx": 0,
+                    "caption": "Missing local chart",
+                    "image_path": "images/missing-chart.png",
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+    blocks = content_list_to_blocks(
+        doc_id="doc123",
+        content_list_path=mineru_dir / "sample_content_list.json",
+        document_dir=document_dir,
+        resource_root=mineru_dir,
+    )
+    pages = build_page_blocks("doc123", blocks)
+
+    report = build_structure_quality_report(
+        doc_id="doc123",
+        source_pdf=source,
+        mineru_output_dir=mineru_dir,
+        document_dir=document_dir,
+        blocks=blocks,
+        page_blocks=pages,
+    )
+
+    assert blocks[0].metadata["resource_is_remote"] is True
+    assert blocks[0].metadata["resource_exists"] is None
+    assert blocks[1].metadata["resource_exists"] is False
+    assert report["image_reference_count"] == 2
+    assert report["missing_image_reference_count"] == 1
+    assert report["missing_image_reference_block_ids"] == [blocks[1].block_id]
+    assert "missing_image_references" in report["warnings"]

@@ -75,6 +75,39 @@ def test_mineru_content_list_to_blocks_preserves_secondary_text_fields(tmp_path:
     assert "$100,000" in page_text
 
 
+def test_mineru_content_list_to_blocks_preserves_remote_and_table_image_resources(tmp_path: Path) -> None:
+    content = [
+        {
+            "type": "table",
+            "page_idx": 0,
+            "table_text": "Budget Estimate $100,000",
+            "table_body": "<table><tr><td>Budget Estimate</td><td>$100,000</td></tr></table>",
+            "table_image_url": "https://mineru.example/assets/table.png",
+        },
+        {
+            "type": "image",
+            "page_idx": 0,
+            "caption": "Program chart",
+            "image_url": "https://mineru.example/assets/chart.png",
+        },
+    ]
+    path = tmp_path / "sample_content_list.json"
+    path.write_text(json.dumps(content), encoding="utf-8")
+
+    blocks = content_list_to_blocks(doc_id="doc123", content_list_path=path)
+
+    assert blocks[0].block_type == "table"
+    assert blocks[0].image_path == "https://mineru.example/assets/table.png"
+    assert blocks[0].metadata["resource_key"] == "table_image_url"
+    assert blocks[0].metadata["resource_is_remote"] is True
+    assert blocks[0].metadata["resource_exists"] is None
+    assert blocks[1].block_type == "image"
+    assert blocks[1].image_path == "https://mineru.example/assets/chart.png"
+    assert blocks[1].metadata["resource_key"] == "image_url"
+    assert blocks[1].metadata["resource_is_remote"] is True
+    assert blocks[1].metadata["resource_exists"] is None
+
+
 def test_mineru_content_list_to_blocks_preserves_nested_unknown_text_fields(tmp_path: Path) -> None:
     content = [
         {

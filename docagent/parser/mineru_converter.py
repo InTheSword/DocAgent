@@ -28,6 +28,17 @@ TEXTISH_KEYS = (
     "nearby_text",
 )
 NESTED_TEXT_KEYS = ("spans", "lines", "children", "blocks", "items", "cells", "rows")
+RESOURCE_PATH_KEYS = (
+    "image_path",
+    "img_path",
+    "image_url",
+    "img_url",
+    "table_image_path",
+    "table_img_path",
+    "table_image_url",
+    "table_img_url",
+)
+URL_RE = re.compile(r"^https?://", re.IGNORECASE)
 
 
 def _clean_text(value: object) -> str:
@@ -187,9 +198,12 @@ def _item_text(item: dict[str, Any], raw_type: str, block_type: str) -> str:
     return _unique_text_parts(_clean_text(item.get("text")), _clean_text(item.get("content")))
 
 
-def _image_path(item: dict[str, Any]) -> str | None:
-    value = item.get("image_path") or item.get("img_path")
-    return str(value) if value else None
+def _resource_path(item: dict[str, Any]) -> tuple[str | None, str | None]:
+    for key in RESOURCE_PATH_KEYS:
+        value = item.get(key)
+        if value:
+            return str(value), key
+    return None, None
 
 
 def _default_document_dir(content_list_path: Path) -> Path:
@@ -203,13 +217,19 @@ def _relative_posix(path: Path, document_dir: Path) -> str:
         return path.name if path.is_absolute() else path.as_posix()
 
 
-def _resolve_resource_path(raw_path: str | None, root: Path, document_dir: Path) -> tuple[str | None, bool | None]:
+def _is_url(value: str) -> bool:
+    return bool(URL_RE.match(value.strip()))
+
+
+def _resolve_resource_path(raw_path: str | None, root: Path, document_dir: Path) -> tuple[str | None, bool | None, bool]:
     if not raw_path:
-        return None, None
+        return None, None, False
+    if _is_url(raw_path):
+        return raw_path.strip(), None, True
     path = Path(raw_path)
     if not path.is_absolute():
         path = root / path
-    return _relative_posix(path, document_dir), path.is_file()
+    return _relative_posix(path, document_dir), path.is_file(), False
 
 
 def _layout_metadata(content_list_path: Path, document_dir: Path) -> dict[str, Any]:
@@ -248,8 +268,8 @@ def _make_block(
     text = _item_text(item, raw_type, block_type)
     boilerplate = _is_boilerplate(raw_type, text)
     table_html = _table_html(item) if block_type == "table" else None
-    raw_image_path = _image_path(item)
-    resource_path, resource_exists = _resolve_resource_path(raw_image_path, resource_root, document_dir)
+    raw_image_path, raw_resource_key = _resource_path(item)
+    resource_path, resource_exists, resource_is_remote = _resolve_resource_path(raw_image_path, resource_root, document_dir)
     image_path = resource_path if block_type == "image" else None
     if block_type == "table" and raw_image_path:
         image_path = resource_path
@@ -281,7 +301,10 @@ def _make_block(
         metadata["table_body"] = table_html
     if raw_image_path is not None:
         metadata["img_path"] = raw_image_path
-        metadata["resource_exists"] = bool(resource_exists)
+        if raw_resource_key is not None:
+            metadata["resource_key"] = raw_resource_key
+        metadata["resource_exists"] = resource_exists
+        metadata["resource_is_remote"] = resource_is_remote
 
     return EvidenceBlock(
         doc_id=doc_id,

@@ -195,7 +195,7 @@ def build_structure_quality_report(
     missing_image_blocks = [
         block.block_id
         for block in blocks
-        if block.image_path and not block.metadata.get("resource_exists")
+        if block.image_path and block.metadata.get("resource_exists") is False
     ]
     if missing_image_blocks:
         warnings.append("missing_image_references")
@@ -249,6 +249,12 @@ def build_structure_quality_report(
         "nearby_text",
         "image_path",
         "img_path",
+        "image_url",
+        "img_url",
+        "table_image_path",
+        "table_img_path",
+        "table_image_url",
+        "table_img_url",
         "sub_type",
         "text_level",
     }
