@@ -14,7 +14,13 @@ def test_mineru_content_list_to_blocks_handles_text_table_image(tmp_path: Path) 
     content = [
         {"type": "text", "page_idx": 0, "text": "Invoice Date: March 12, 2020", "bbox": [1, 2, 3, 4]},
         {"type": "table", "page_idx": 1, "table_text": "Year Revenue 2020 1280", "table_body": "<table></table>"},
-        {"type": "image", "page_idx": 2, "caption": "Revenue chart", "image_path": "figures/chart.png"},
+        {
+            "type": "image",
+            "page_idx": 2,
+            "caption": "Revenue chart",
+            "nearby_text": ["FY2020 revenue was $100,000"],
+            "image_path": "figures/chart.png",
+        },
         {"type": "equation", "page_idx": 2, "text": "preserved unknown"},
     ]
     path = tmp_path / "sample_content_list.json"
@@ -32,6 +38,8 @@ def test_mineru_content_list_to_blocks_handles_text_table_image(tmp_path: Path) 
     assert blocks[2].metadata["img_path"] == "figures/chart.png"
     assert blocks[2].image_path == "figures/chart.png"
     assert blocks[2].metadata["caption"] == "Revenue chart"
+    assert blocks[2].metadata["nearby_text"] == ["FY2020 revenue was $100,000"]
+    assert "FY2020 revenue was $100,000" in blocks[2].retrieval_text
     assert "normalized_resource_path" not in blocks[2].metadata
     assert "source_content_list" not in blocks[2].metadata
     assert blocks[3].metadata["unknown_raw_type"] is True

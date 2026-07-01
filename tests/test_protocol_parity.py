@@ -167,7 +167,11 @@ def test_context_serializes_text_table_chart_location_and_truncation() -> None:
             text="chart says 9.9",
             image_path="images/chart.png",
             location=EvidenceLocation(page=1, block_id="chart"),
-            metadata={"raw_mineru_type": "chart", "image_caption": "Revenue chart"},
+            metadata={
+                "raw_mineru_type": "chart",
+                "image_caption": "Revenue chart",
+                "nearby_text": ["FY2020 revenue was $100,000"],
+            },
         ),
         EvidenceBlock(
             doc_id="doc1",
@@ -193,6 +197,7 @@ def test_context_serializes_text_table_chart_location_and_truncation() -> None:
     }
     assert chart_item["media"] == {
         "image_caption": "Revenue chart",
+        "nearby_text": "FY2020 revenue was $100,000",
         "image_path": "images/chart.png",
     }
     assert format_evidence_blocks(blocks[:1], max_chars_per_block=20).startswith("[TEXT | block_id=text")
@@ -257,7 +262,7 @@ def test_canonical_output_preserves_table_and_image_resource_fields() -> None:
         image_path="images/chart.png",
         page_id=2,
         location=EvidenceLocation(page=2, block_id="image1"),
-        metadata={"image_caption": "Revenue chart"},
+        metadata={"image_caption": "Revenue chart", "nearby_text": ["FY2020 revenue was $100,000"]},
     )
 
     canonical = canonicalize_output(
@@ -273,10 +278,12 @@ def test_canonical_output_preserves_table_and_image_resource_fields() -> None:
     assert canonical["citations"][0]["table_caption"] == "Budget table"
     assert canonical["citations"][0]["image_path"] == "https://mineru.example/table.png"
     assert canonical["citations"][1]["image_caption"] == "Revenue chart"
+    assert canonical["citations"][1]["nearby_text"] == "FY2020 revenue was $100,000"
     assert canonical["citations"][1]["image_path"] == "images/chart.png"
     assert canonical["evidence_used"][0]["table_caption"] == "Budget table"
     assert canonical["evidence_used"][0]["image_path"] == "https://mineru.example/table.png"
     assert canonical["evidence_used"][1]["image_caption"] == "Revenue chart"
+    assert canonical["evidence_used"][1]["nearby_text"] == "FY2020 revenue was $100,000"
     assert canonical["evidence_used"][1]["image_path"] == "images/chart.png"
 
 

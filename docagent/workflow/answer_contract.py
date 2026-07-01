@@ -106,6 +106,7 @@ def validate_candidate_schema(
 def citation_from_block(block: EvidenceBlock) -> dict[str, Any]:
     table_caption = _metadata_text(block, "table_caption")
     image_caption = _metadata_text(block, "caption", "image_caption", "chart_caption")
+    nearby_text = _metadata_preview(block, "nearby_text")
     return {
         key: value
         for key, value in {
@@ -119,6 +120,7 @@ def citation_from_block(block: EvidenceBlock) -> dict[str, Any]:
             "image_path": block.image_path,
             "table_caption": table_caption,
             "image_caption": image_caption,
+            "nearby_text": nearby_text,
         }.items()
         if value not in {None, ""}
     }
@@ -162,6 +164,7 @@ def _evidence_used_from_block(block: EvidenceBlock) -> dict[str, Any]:
             "text_preview": citation.get("text_preview"),
             "table_caption": citation.get("table_caption"),
             "image_caption": citation.get("image_caption"),
+            "nearby_text": citation.get("nearby_text"),
             "image_path": citation.get("image_path"),
         }.items()
         if value not in {None, ""}
@@ -186,6 +189,17 @@ def _metadata_text(block: EvidenceBlock, *keys: str) -> str:
         seen.add(marker)
         result.append(compact)
     return " ".join(result)
+
+
+def _metadata_preview(block: EvidenceBlock, *keys: str, limit: int = 220) -> str:
+    text = _metadata_text(block, *keys)
+    if len(text) <= limit:
+        return text
+    preview = text[:limit]
+    split_at = max(preview.rfind(" "), preview.rfind(";"), preview.rfind(","))
+    if split_at >= int(limit * 0.5):
+        preview = preview[:split_at]
+    return preview.rstrip(" ,;:-")
 
 
 def _location_fields(item: dict[str, Any]) -> dict[str, Any]:

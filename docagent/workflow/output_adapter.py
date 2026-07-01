@@ -125,7 +125,7 @@ def _normalize_evidence_used(value: Any, cited_blocks: list[EvidenceBlock]) -> l
             merged.setdefault("doc_id", block.doc_id)
             merged.setdefault("page", block.location.page if block.location.page is not None else block.page_id)
             merged.setdefault("block_type", block.block_type)
-            for key in ("text_preview", "table_caption", "image_caption", "image_path"):
+            for key in ("text_preview", "table_caption", "image_caption", "nearby_text", "image_path"):
                 value = citation.get(key)
                 if value not in {None, ""}:
                     merged.setdefault(key, value)

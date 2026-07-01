@@ -169,6 +169,7 @@ def _context_media(block: EvidenceBlock) -> dict[str, Any]:
     payload = {
         "table_caption": _metadata_text(block, "table_caption"),
         "image_caption": _metadata_text(block, "caption", "image_caption", "chart_caption"),
+        "nearby_text": smart_truncate(_metadata_text(block, "nearby_text"), 220),
         "image_path": _safe_prompt_image_path(block.image_path),
     }
     return {key: value for key, value in payload.items() if value not in {None, ""}}
