@@ -344,6 +344,26 @@ failure buckets, preview rows, manifest, and an optional sync bundle. It does
 not call Qwen, start SFT/GRPO, create training records, tune against validation
 rows, or claim benchmark acceptance.
 
+Server artifact-only diagnostic `mpdocvqa_full_workflow_compare_24rows_20260701`
+at commit `ece6221` real-model verified the comparison tool against the two
+existing MP-DocVQA full-workflow chunks. It aggregated 24 rows with
+`cli_success_rate=1.0`, `local_fact_qa_count=23`, Qwen, dense retrieval, and
+reranker use on 23/23 local_fact_qa rows, `retrieved_gold_page_hit_rate=0.5833`,
+`citation_page_hit_rate=0.5833`, `answer_hit_rate=0.4167`, and bucket counts
+`retrieval_gold_page_miss=9`, `answer_generation_or_metric_miss=7`,
+`passed=7`, `task_type_not_local_fact_qa=1`. The recommendation remains
+`inspect_retrieval_query_or_block_granularity_before_training`; this is still
+diagnostic-only and not formal benchmark acceptance.
+
+Phase 5 MP-DocVQA query/block granularity inspection is implemented locally in
+`scripts/inspect_mpdocvqa_query_block_granularity.py` with tests in
+`tests/test_inspect_mpdocvqa_query_block_granularity.py`. The script reads
+existing comparison or full-workflow rows plus the MP-DocVQA EvidenceBlock
+SQLite DB, then separates retrieval misses into evidence DB/mapping, gold-page
+OCR or answer-text availability, query-answer bridge weakness, and
+retriever/block scoring buckets. It does not call Qwen, start SFT/GRPO, create
+training records, tune against validation rows, or claim benchmark acceptance.
+
 Phase 5 AnswerPolicy IO candidate schema and citation allowlist are
 implemented locally in `docagent/workflow/answer_contract.py`,
 `docagent/models/output_parser.py`, `docagent/workflow/output_adapter.py`,

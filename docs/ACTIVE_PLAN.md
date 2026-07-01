@@ -190,8 +190,21 @@ Phase 5 Personal-use DocAgent MVP
    `scripts/compare_mpdocvqa_full_workflow_runs.py` reads existing
    full-workflow diagnostic artifacts, aggregates per-run and cross-run
    CLI/component use, retrieval/citation/answer hit rates, failure buckets,
-   preview rows, manifest, and optional sync bundle; it does not call Qwen,
-   start training, create training data, or tune against validation examples
+   preview rows, manifest, and optional sync bundle; server artifact-only
+   validation `mpdocvqa_full_workflow_compare_24rows_20260701` at commit
+   `ece6221` passed targeted tests and aggregated 24 rows with
+   cli_success_rate 1.0, local_fact_qa_count 23, Qwen/dense/reranker use
+   23/23, retrieved_gold_page_hit_rate 0.5833, citation_page_hit_rate
+   0.5833, answer_hit_rate 0.4167, and bucket_counts
+   retrieval_gold_page_miss:9, answer_generation_or_metric_miss:7, passed:7,
+   task_type_not_local_fact_qa:1; it does not call Qwen, start training,
+   create training data, or tune against validation examples
+-> MP-DocVQA query/block granularity inspection implemented locally:
+   `scripts/inspect_mpdocvqa_query_block_granularity.py` reads existing
+   comparison/full-workflow rows plus the MP-DocVQA EvidenceBlock SQLite DB
+   and separates retrieval misses into evidence mapping, gold-page OCR/text,
+   query-answer bridge, and retriever/block scoring buckets without model
+   calls or validation-derived training data
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -304,7 +317,8 @@ Phase 5 full-workflow real retriever CLI wiring -> real_model_verified
 Phase 5 raw PDF full-model workflow baseline -> real_model_verified
 Phase 5 MP-DocVQA retrieval inspection -> implemented
 Phase 5 MP-DocVQA full-workflow diagnostic runner -> real_model_verified
-Phase 5 MP-DocVQA full-workflow comparison -> implemented
+Phase 5 MP-DocVQA full-workflow comparison -> real_model_verified
+Phase 5 MP-DocVQA query/block granularity inspection -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
