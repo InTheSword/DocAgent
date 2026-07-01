@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from docagent.integrations.mineru_api import build_mineru_output_inventory
 from docagent.storage.db import connect
 from docagent.storage.repositories import DocumentRepository
 from docagent.utils.jsonl import read_jsonl, write_jsonl
@@ -374,6 +375,9 @@ def manifest_stats(mineru_dir: Path) -> dict[str, Any]:
     files = submission.get("files") if isinstance(submission.get("files"), list) else []
     first_file = files[0] if files and isinstance(files[0], dict) else {}
     inventory = payload.get("output_inventory") if isinstance(payload.get("output_inventory"), dict) else {}
+    inventory_source = "manifest" if inventory else "computed_from_files"
+    if not inventory:
+        inventory = build_mineru_output_inventory(mineru_dir)
     category_counts = inventory.get("category_counts") if isinstance(inventory.get("category_counts"), dict) else {}
     return {
         "path": safe_relpath(path),
@@ -385,6 +389,7 @@ def manifest_stats(mineru_dir: Path) -> dict[str, Any]:
         "api_attempt_count": payload.get("api_attempt_count"),
         "retry_error_count": len(payload.get("retry_errors") or []),
         "result_zip_size": payload.get("result_zip_size"),
+        "output_inventory_source": inventory_source,
         "output_file_count": inventory.get("file_count"),
         "output_total_size": inventory.get("total_size"),
         "output_inventory_truncated": inventory.get("truncated"),

@@ -109,6 +109,9 @@ def test_audit_mineru_evidence_artifacts_separates_raw_and_db_text(tmp_path: Pat
     assert result["db_gold_page_answer_hit_rate"] == 0.0
     rows = read_jsonl(tmp_path / "audit" / "audit_run" / "rows.jsonl")
     assert rows[0]["diagnostic_bucket"] == "converted_gold_page_has_answer_but_db_missing"
+    assert rows[0]["mineru_manifest"]["output_inventory_source"] == "computed_from_files"
+    assert rows[0]["mineru_manifest"]["ordinary_content_list_count"] == 1
+    assert rows[0]["mineru_manifest"]["markdown_file_count"] == 1
     assert rows[0]["converted_evidence"]["gold_page_answer_hit"] is True
     assert rows[0]["converted_evidence"]["gold_page_answer_block_ids"] == ["ingested_doc_p002_b0002"]
     assert (tmp_path / "sync" / "audit_run" / "summary.json").is_file()
@@ -226,6 +229,9 @@ def test_audit_mineru_evidence_artifacts_reports_resource_reference_stats(tmp_pa
     assert result["db_resource_stats"]["remote_resource_reference_count"] == 1
     assert result["db_resource_stats"]["local_existing_resource_reference_count"] == 1
     rows = read_jsonl(tmp_path / "audit" / "resource_audit" / "rows.jsonl")
+    assert rows[0]["mineru_manifest"]["output_inventory_source"] == "computed_from_files"
+    assert rows[0]["mineru_manifest"]["ordinary_content_list_count"] == 1
+    assert rows[0]["mineru_manifest"]["image_resource_count"] == 1
     assert rows[0]["ordinary_content_list"]["resource_stats"]["raw_resource_key_counts"] == {
         "image_path": 1,
         "table_image_url": 1,
