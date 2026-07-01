@@ -26,6 +26,16 @@ from scripts.run_final_eval_subset import as_list, normalize_text
 SCRIPT_VERSION = "mineru-evidence-artifact-audit-v1"
 EVALUATION_SCOPE = "mineru_artifact_to_evidence_audit_not_training"
 DEFAULT_OUTPUT_ROOT = ROOT / "outputs" / "final_eval" / "mineru_evidence_artifact_audit"
+RESOURCE_PATH_KEYS = (
+    "image_path",
+    "img_path",
+    "image_url",
+    "img_url",
+    "table_image_path",
+    "table_img_path",
+    "table_image_url",
+    "table_img_url",
+)
 
 
 def repo_path(path: str | Path | None) -> Path | None:
@@ -128,6 +138,58 @@ def item_text(item: dict[str, Any]) -> str:
     return "\n".join(part for key in keys if (part := clean_text(item.get(key)))).strip()
 
 
+def is_remote_resource(value: str) -> bool:
+    return bool(re.match(r"^https?://", str(value or "").strip(), flags=re.IGNORECASE))
+
+
+def raw_resource_stats(items: list[dict[str, Any]]) -> dict[str, Any]:
+    key_counts: Counter[str] = Counter()
+    raw_type_counts: Counter[str] = Counter()
+    remote_count = 0
+    local_count = 0
+    table_resource_count = 0
+    image_resource_count = 0
+    examples: list[dict[str, Any]] = []
+    for item in items:
+        raw_type = str(item.get("type") or item.get("block_type") or "").lower()
+        keys = [key for key in RESOURCE_PATH_KEYS if item.get(key)]
+        if not keys:
+            continue
+        raw_type_counts[raw_type or "unknown"] += 1
+        if raw_type == "table":
+            table_resource_count += 1
+        if raw_type in {"image", "figure", "chart"}:
+            image_resource_count += 1
+        for key in keys:
+            value = str(item.get(key) or "")
+            key_counts[key] += 1
+            if is_remote_resource(value):
+                remote_count += 1
+            else:
+                local_count += 1
+            if len(examples) < 5:
+                examples.append(
+                    {
+                        "page": page_from_item(item),
+                        "raw_type": raw_type,
+                        "key": key,
+                        "is_remote": is_remote_resource(value),
+                        "value_preview": value[:180],
+                    }
+                )
+    return {
+        "raw_resource_item_count": sum(raw_type_counts.values()),
+        "raw_resource_reference_count": sum(key_counts.values()),
+        "raw_remote_resource_reference_count": remote_count,
+        "raw_local_resource_reference_count": local_count,
+        "raw_table_resource_item_count": table_resource_count,
+        "raw_image_resource_item_count": image_resource_count,
+        "raw_resource_key_counts": dict(sorted(key_counts.items())),
+        "raw_resource_type_counts": dict(sorted(raw_type_counts.items())),
+        "raw_resource_examples": examples,
+    }
+
+
 def load_content_items(path: Path) -> list[dict[str, Any]]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8-sig"))
@@ -176,6 +238,57 @@ def content_list_stats(path: Path | None, answers: list[str], gold_pages: set[in
         "any_page_answer_hit": answer_hit(all_text, answers),
         "gold_page_answer_hit_items": gold_hit_items[:5],
         "gold_page_preview": text_preview(gold_text, answers),
+        "resource_stats": raw_resource_stats(items),
+    }
+
+
+def block_resource_stats(blocks: list[Any]) -> dict[str, Any]:
+    key_counts: Counter[str] = Counter()
+    type_counts: Counter[str] = Counter()
+    remote_count = 0
+    local_existing_count = 0
+    local_missing_count = 0
+    unknown_existence_count = 0
+    examples: list[dict[str, Any]] = []
+    for block in blocks:
+        image_path = str(getattr(block, "image_path", "") or "")
+        if not image_path:
+            continue
+        metadata = getattr(block, "metadata", {}) or {}
+        key = str(metadata.get("resource_key") or "image_path")
+        key_counts[key] += 1
+        type_counts[str(getattr(block, "block_type", "") or "unknown")] += 1
+        is_remote = bool(metadata.get("resource_is_remote")) or is_remote_resource(image_path)
+        exists = metadata.get("resource_exists")
+        if is_remote:
+            remote_count += 1
+        elif exists is True:
+            local_existing_count += 1
+        elif exists is False:
+            local_missing_count += 1
+        else:
+            unknown_existence_count += 1
+        if len(examples) < 5:
+            examples.append(
+                {
+                    "block_id": str(getattr(block, "block_id", "") or ""),
+                    "page": getattr(block, "page_id", None),
+                    "block_type": str(getattr(block, "block_type", "") or ""),
+                    "resource_key": key,
+                    "is_remote": is_remote,
+                    "resource_exists": exists,
+                    "image_path_preview": image_path[:180],
+                }
+            )
+    return {
+        "resource_reference_count": sum(key_counts.values()),
+        "remote_resource_reference_count": remote_count,
+        "local_existing_resource_reference_count": local_existing_count,
+        "local_missing_resource_reference_count": local_missing_count,
+        "unknown_resource_existence_count": unknown_existence_count,
+        "resource_key_counts": dict(sorted(key_counts.items())),
+        "resource_block_type_counts": dict(sorted(type_counts.items())),
+        "resource_examples": examples,
     }
 
 
@@ -225,6 +338,7 @@ def converted_evidence_stats(
         "gold_page_answer_block_ids": [block.block_id for block in child_hit_blocks[:5]],
         "gold_page_text_char_count": len(gold_text),
         "gold_page_preview": text_preview(gold_text, answers),
+        "resource_stats": block_resource_stats(blocks),
     }
 
 
@@ -301,6 +415,41 @@ def db_page_stats(
         "gold_page_child_block_count": len(child_blocks),
         "gold_page_child_type_counts": dict(Counter(block.block_type for block in child_blocks)),
         "gold_page_preview": text_preview(gold_text, answers),
+        "resource_stats": block_resource_stats([block for block in blocks if block.block_type != "page"]),
+    }
+
+
+def aggregate_resource_stats(rows: list[dict[str, Any]], section: str) -> dict[str, Any]:
+    key_counts: Counter[str] = Counter()
+    total = 0
+    remote = 0
+    local_existing = 0
+    local_missing = 0
+    unknown = 0
+    raw_item_count = 0
+    for row in rows:
+        stats = ((row.get(section) or {}).get("resource_stats") or {})
+        if section == "ordinary_content_list":
+            total += int(stats.get("raw_resource_reference_count") or 0)
+            remote += int(stats.get("raw_remote_resource_reference_count") or 0)
+            local_existing += int(stats.get("raw_local_resource_reference_count") or 0)
+            raw_item_count += int(stats.get("raw_resource_item_count") or 0)
+            key_counts.update(stats.get("raw_resource_key_counts") or {})
+        else:
+            total += int(stats.get("resource_reference_count") or 0)
+            remote += int(stats.get("remote_resource_reference_count") or 0)
+            local_existing += int(stats.get("local_existing_resource_reference_count") or 0)
+            local_missing += int(stats.get("local_missing_resource_reference_count") or 0)
+            unknown += int(stats.get("unknown_resource_existence_count") or 0)
+            key_counts.update(stats.get("resource_key_counts") or {})
+    return {
+        "resource_item_count": raw_item_count,
+        "resource_reference_count": total,
+        "remote_resource_reference_count": remote,
+        "local_existing_resource_reference_count": local_existing,
+        "local_missing_resource_reference_count": local_missing,
+        "unknown_resource_existence_count": unknown,
+        "resource_key_counts": dict(sorted(key_counts.items())),
     }
 
 
@@ -403,6 +552,9 @@ def summarize(
     missing: list[str],
 ) -> dict[str, Any]:
     buckets = Counter(row.get("diagnostic_bucket") for row in rows)
+    raw_resources = aggregate_resource_stats(rows, "ordinary_content_list")
+    converted_resources = aggregate_resource_stats(rows, "converted_evidence")
+    db_resources = aggregate_resource_stats(rows, "db_evidence")
     return {
         "command": "audit_mineru_evidence_artifacts",
         "status": "failed" if missing else "success",
@@ -438,6 +590,9 @@ def summarize(
             sum(1 for row in rows if row.get("db_evidence", {}).get("gold_page_answer_hit")),
             len(rows),
         ),
+        "raw_resource_stats": raw_resources,
+        "converted_resource_stats": converted_resources,
+        "db_resource_stats": db_resources,
         "used_qwen": False,
         "used_training": False,
         "used_vlm": False,
@@ -466,6 +621,9 @@ def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
         f"- markdown_answer_hit_rate: {summary.get('markdown_answer_hit_rate')}",
         f"- converted_gold_page_answer_hit_rate: {summary.get('converted_gold_page_answer_hit_rate')}",
         f"- db_gold_page_answer_hit_rate: {summary.get('db_gold_page_answer_hit_rate')}",
+        f"- raw_resource_reference_count: {(summary.get('raw_resource_stats') or {}).get('resource_reference_count', 0)}",
+        f"- converted_resource_reference_count: {(summary.get('converted_resource_stats') or {}).get('resource_reference_count', 0)}",
+        f"- db_resource_reference_count: {(summary.get('db_resource_stats') or {}).get('resource_reference_count', 0)}",
         "",
         "## Buckets",
         "",
@@ -581,6 +739,9 @@ def audit_mineru_evidence_artifacts(
         "markdown_answer_hit_rate": summary["markdown_answer_hit_rate"],
         "converted_gold_page_answer_hit_rate": summary["converted_gold_page_answer_hit_rate"],
         "db_gold_page_answer_hit_rate": summary["db_gold_page_answer_hit_rate"],
+        "raw_resource_stats": summary["raw_resource_stats"],
+        "converted_resource_stats": summary["converted_resource_stats"],
+        "db_resource_stats": summary["db_resource_stats"],
         "recommendation": summary["recommendation"],
         "artifact_paths": summary["artifact_paths"],
         "used_training": False,
