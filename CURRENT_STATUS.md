@@ -428,8 +428,16 @@ the EvidenceBlock DB, then emits compact `manual_review.jsonl` and
 `manual_review.md` rows with current-window page numbers, source page ids, PDF
 and image paths, OCR previews, and review buckets. It does not call models,
 change page mappings, create training data, tune retrieval, or claim benchmark
-acceptance. Server validation is pending because the required page-index
-artifact and MP-DocVQA EvidenceBlock DB are server-side.
+acceptance. Server artifact-only validation
+`mpdocvqa_page_alignment_manual_review_24rows_20260701` at commit `47f0997`
+passed targeted tests and produced 9 manual-review rows from the server-side
+page-index artifact and MP-DocVQA EvidenceBlock DB. Bucket counts were
+`manual_compare_gold_and_adjacent_page_images=5`,
+`manual_check_ocr_text_or_answer_alias=2`,
+`manual_check_gold_annotation_or_duplicate_answer=1`, and
+`manual_check_mineru_page_block_materialization=1`. The source page-index
+mapping rates stayed at `1.0`, so the next step remains manual/OCR inspection
+before retrieval or training changes.
 
 Phase 5 AnswerPolicy IO candidate schema and citation allowlist are
 implemented locally in `docagent/workflow/answer_contract.py`,

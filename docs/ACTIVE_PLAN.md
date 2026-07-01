@@ -238,8 +238,13 @@ Phase 5 Personal-use DocAgent MVP
    alignment artifact, prepared document manifests, page image paths, and the
    EvidenceBlock DB to emit compact `manual_review.jsonl`/`manual_review.md`
    rows with current-window page numbers, source page ids, image paths, PDF
-   paths, and OCR previews for human inspection; it does not call models,
-   create training data, change gold pages, or tune retrieval
+   paths, and OCR previews for human inspection; server artifact-only
+   validation `mpdocvqa_page_alignment_manual_review_24rows_20260701` at
+   commit `47f0997` passed targeted tests and produced 9 review rows:
+   5 adjacent-page image comparisons, 2 OCR/answer-alias checks, 1
+   annotation/duplicate-answer check, and 1 MinerU page-block materialization
+   check; it does not call models, create training data, change gold pages,
+   or tune retrieval
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -356,7 +361,7 @@ Phase 5 MP-DocVQA full-workflow comparison -> real_model_verified
 Phase 5 MP-DocVQA query/block granularity inspection -> real_model_verified
 Phase 5 MP-DocVQA OCR/page alignment inspection -> real_model_verified
 Phase 5 MP-DocVQA page-index alignment inspection -> real_model_verified
-Phase 5 MP-DocVQA page-alignment manual review extraction -> implemented
+Phase 5 MP-DocVQA page-alignment manual review extraction -> real_model_verified
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
