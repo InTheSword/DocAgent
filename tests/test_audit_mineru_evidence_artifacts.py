@@ -104,7 +104,10 @@ def test_audit_mineru_evidence_artifacts_separates_raw_and_db_text(tmp_path: Pat
     assert result["manifest_ocr_enabled_or_requested_rate"] == 1.0
     assert result["ordinary_gold_page_answer_hit_rate"] == 1.0
     assert result["markdown_answer_hit_rate"] == 1.0
+    assert result["converted_gold_page_answer_hit_rate"] == 1.0
     assert result["db_gold_page_answer_hit_rate"] == 0.0
     rows = read_jsonl(tmp_path / "audit" / "audit_run" / "rows.jsonl")
-    assert rows[0]["diagnostic_bucket"] == "raw_content_list_gold_page_has_answer_but_db_missing"
+    assert rows[0]["diagnostic_bucket"] == "converted_gold_page_has_answer_but_db_missing"
+    assert rows[0]["converted_evidence"]["gold_page_answer_hit"] is True
+    assert rows[0]["converted_evidence"]["gold_page_answer_block_ids"] == ["ingested_doc_p002_b0002"]
     assert (tmp_path / "sync" / "audit_run" / "summary.json").is_file()

@@ -75,6 +75,30 @@ def test_mineru_content_list_to_blocks_preserves_secondary_text_fields(tmp_path:
     assert "$100,000" in page_text
 
 
+def test_mineru_content_list_to_blocks_preserves_nested_unknown_text_fields(tmp_path: Path) -> None:
+    content = [
+        {
+            "type": "text",
+            "page_idx": 0,
+            "content": {
+                "ocr_result": [
+                    {"label": "Budget Estimate"},
+                    {"raw_value": "$100,000"},
+                ]
+            },
+        }
+    ]
+    path = tmp_path / "sample_content_list.json"
+    path.write_text(json.dumps(content), encoding="utf-8")
+
+    blocks = content_list_to_blocks(doc_id="doc123", content_list_path=path)
+    pages = build_page_blocks("doc123", blocks)
+
+    assert "Budget Estimate" in blocks[0].text
+    assert "$100,000" in blocks[0].text
+    assert "$100,000" in pages[0].text
+
+
 def test_mineru_real_schema_preserves_boilerplate_chart_and_resources(tmp_path: Path) -> None:
     fixture = Path("tests/fixtures/mineru_real_schema")
     work = tmp_path / "mineru"

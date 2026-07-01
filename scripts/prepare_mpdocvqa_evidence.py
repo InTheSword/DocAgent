@@ -127,6 +127,7 @@ def build_cli_command(
     mineru_api_max_attempts: int,
     mineru_api_retry_delay_seconds: float,
     mineru_ocr: bool,
+    rebuild_evidence_blocks: bool,
     python_executable: str,
 ) -> list[str]:
     command = [
@@ -149,6 +150,8 @@ def build_cli_command(
         command.append("--mineru-ocr")
     else:
         command.append("--no-mineru-ocr")
+    if rebuild_evidence_blocks:
+        command.append("--force-parse")
     command.extend(
         [
             "--mineru-api-timeout-seconds",
@@ -442,6 +445,7 @@ def prepare_mpdocvqa_evidence(
     sync_output_root: Path | None = None,
     previous_run_dir: Path | None = None,
     retry_failed_only: bool = False,
+    rebuild_evidence_blocks: bool = False,
 ) -> dict[str, Any]:
     run_id = run_id or now_run_id()
     if not live_api:
@@ -513,6 +517,7 @@ def prepare_mpdocvqa_evidence(
             mineru_api_max_attempts=mineru_api_max_attempts,
             mineru_api_retry_delay_seconds=mineru_api_retry_delay_seconds,
             mineru_ocr=mineru_ocr,
+            rebuild_evidence_blocks=rebuild_evidence_blocks,
             python_executable=python_executable,
         )
         completed = command_runner(command, ROOT, timeout_seconds)
@@ -560,6 +565,7 @@ def prepare_mpdocvqa_evidence(
         summary["previous_run_dir"] = safe_relpath(previous_run_dir)
         summary["retry_failed_only"] = bool(retry_failed_only)
         summary["retried_document_count"] = len(document_results)
+    summary["rebuild_evidence_blocks"] = bool(rebuild_evidence_blocks)
     summary["db_path"] = safe_relpath(db_path)
     summary["document_root"] = safe_relpath(document_root)
     summary["cli_artifact_dir"] = safe_relpath(cli_output_dir)
@@ -614,6 +620,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sync-output-dir")
     parser.add_argument("--previous-run-dir")
     parser.add_argument("--retry-failed-only", action="store_true")
+    parser.add_argument(
+        "--rebuild-evidence-blocks",
+        action="store_true",
+        help="Pass --force-parse to docagent_cli so cached MinerU output is reconverted into EvidenceBlocks.",
+    )
     return parser
 
 
@@ -640,6 +651,7 @@ def main(argv: list[str] | None = None) -> int:
             sync_output_root=repo_path(args.sync_output_dir),
             previous_run_dir=repo_path(args.previous_run_dir),
             retry_failed_only=bool(args.retry_failed_only),
+            rebuild_evidence_blocks=bool(args.rebuild_evidence_blocks),
         )
     except Exception as exc:
         result = {

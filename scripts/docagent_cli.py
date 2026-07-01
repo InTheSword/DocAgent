@@ -501,6 +501,7 @@ def _ingest_file(
     mineru_api_poll_interval_seconds: float,
     mineru_api_max_attempts: int,
     mineru_api_retry_delay_seconds: float,
+    force_parse: bool = False,
 ) -> tuple[str | None, dict[str, Any] | None, dict[str, Any]]:
     parser_backend, parser_error = _parser_backend_for_file(
         file_path,
@@ -549,7 +550,7 @@ def _ingest_file(
             return None, api_error, {"status": "failed", "error": api_error}
     service = DocumentIngestionService(document_root=document_root, repository=repository)
     try:
-        ingestion_result = service.ingest(file_path=file_path, parser_backend=parser_backend)
+        ingestion_result = service.ingest(file_path=file_path, parser_backend=parser_backend, force_parse=force_parse)
     except ValueError as exc:
         message = str(exc)
         error_type = "unsupported_file_type" if "unsupported document type" in message else "file_ingestion_failed"
@@ -1616,7 +1617,11 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
         doc_id = str(args.doc_id or "").strip()
 
         if file_path is not None:
-            resolved_doc_id, file_warnings, _document = _resolve_file_doc_id(repository=repository, file_path=file_path)
+            resolved_doc_id, file_warnings, _document = (
+                (None, [], None)
+                if bool(args.force_parse)
+                else _resolve_file_doc_id(repository=repository, file_path=file_path)
+            )
             warnings.extend(file_warnings)
             if resolved_doc_id:
                 doc_id = resolved_doc_id
@@ -1643,6 +1648,7 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
                     mineru_api_poll_interval_seconds=float(args.mineru_api_poll_interval_seconds),
                     mineru_api_max_attempts=int(args.mineru_api_max_attempts),
                     mineru_api_retry_delay_seconds=float(args.mineru_api_retry_delay_seconds),
+                    force_parse=bool(args.force_parse),
                 )
                 if ingestion_error is not None:
                     source["ingestion_status"] = "failed"
@@ -1927,6 +1933,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mineru-api-poll-interval-seconds", type=float, default=5.0)
     parser.add_argument("--mineru-api-max-attempts", type=int, default=3)
     parser.add_argument("--mineru-api-retry-delay-seconds", type=float, default=10.0)
+    parser.add_argument(
+        "--force-parse",
+        action="store_true",
+        help="Rebuild EvidenceBlocks from parser output even when this file was ingested before.",
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--list-documents", action="store_true")
     parser.add_argument("--limit", type=int, default=20)

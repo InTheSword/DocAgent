@@ -19,6 +19,7 @@ if str(ROOT) not in sys.path:
 from docagent.storage.db import connect
 from docagent.storage.repositories import DocumentRepository
 from docagent.utils.jsonl import read_jsonl, write_jsonl
+from docagent.parser.mineru_converter import build_page_blocks, content_list_to_blocks
 from scripts.run_final_eval_subset import as_list, normalize_text
 
 
@@ -112,6 +113,8 @@ def clean_text(value: object) -> str:
         return ""
     if isinstance(value, list):
         return compact(" ".join(clean_text(item) for item in value))
+    if isinstance(value, dict):
+        return compact(" ".join(clean_text(item) for item in value.values()))
     return compact(re.sub(r"<[^>]+>", " ", str(value)))
 
 
@@ -159,6 +162,55 @@ def content_list_stats(path: Path | None, answers: list[str], gold_pages: set[in
         "all_text_char_count": len(all_text),
         "gold_page_answer_hit": answer_hit(gold_text, answers),
         "any_page_answer_hit": answer_hit(all_text, answers),
+        "gold_page_preview": text_preview(gold_text, answers),
+    }
+
+
+def converted_evidence_stats(
+    *,
+    path: Path | None,
+    ingested_doc_id: str,
+    mineru_dir: Path | None,
+    answers: list[str],
+    gold_pages: set[int],
+) -> dict[str, Any]:
+    if path is None or not path.is_file() or mineru_dir is None or not ingested_doc_id:
+        return {"available": False, "block_count": 0}
+    try:
+        blocks = content_list_to_blocks(
+            doc_id=ingested_doc_id,
+            content_list_path=path,
+            document_dir=mineru_dir.parent,
+            resource_root=mineru_dir,
+        )
+        page_blocks = build_page_blocks(ingested_doc_id, blocks)
+    except Exception as exc:
+        return {
+            "available": False,
+            "block_count": 0,
+            "error": {"type": type(exc).__name__, "message": compact(str(exc))[:240]},
+        }
+    gold_text = "\n".join(
+        block.retrieval_text
+        for block in page_blocks
+        if block.page_id is not None and int(block.page_id) in gold_pages
+    )
+    gold_child_blocks = [
+        block
+        for block in blocks
+        if block.page_id is not None and int(block.page_id) in gold_pages
+    ]
+    child_hit_blocks = [block for block in gold_child_blocks if answer_hit(block.retrieval_text, answers)]
+    return {
+        "available": True,
+        "block_count": len(blocks),
+        "page_block_count": len(page_blocks),
+        "gold_page_child_block_count": len(gold_child_blocks),
+        "gold_page_child_type_counts": dict(Counter(block.block_type for block in gold_child_blocks)),
+        "gold_page_answer_hit": answer_hit(gold_text, answers),
+        "gold_page_child_answer_hit_count": len(child_hit_blocks),
+        "gold_page_answer_block_ids": [block.block_id for block in child_hit_blocks[:5]],
+        "gold_page_text_char_count": len(gold_text),
         "gold_page_preview": text_preview(gold_text, answers),
     }
 
@@ -247,7 +299,12 @@ def diagnostic_bucket(row: dict[str, Any]) -> str:
         return "mineru_ocr_disabled_or_uncertain"
     ordinary = row["ordinary_content_list"]
     full_md = row["full_md"]
+    converted = row.get("converted_evidence", {})
     db = row["db_evidence"]
+    if ordinary.get("gold_page_answer_hit") and not converted.get("gold_page_answer_hit"):
+        return "raw_content_list_gold_page_has_answer_but_converter_missing"
+    if converted.get("gold_page_answer_hit") and not db.get("gold_page_answer_hit"):
+        return "converted_gold_page_has_answer_but_db_missing"
     if ordinary.get("gold_page_answer_hit") and not db.get("gold_page_answer_hit"):
         return "raw_content_list_gold_page_has_answer_but_db_missing"
     if full_md.get("answer_hit") and not ordinary.get("any_page_answer_hit"):
@@ -288,7 +345,8 @@ def audit_row(
     gold_pages = {int(page) for page in sample.get("gold_pages") or [] if str(page).isdigit()}
     mineru_dir = document_root / ingested_doc_id / "mineru" if document_root is not None and ingested_doc_id else None
     mineru_dir_exists = bool(mineru_dir and mineru_dir.is_dir())
-    ordinary = content_list_stats(find_content_list(mineru_dir) if mineru_dir_exists else None, answers, gold_pages)
+    ordinary_path = find_content_list(mineru_dir) if mineru_dir_exists else None
+    ordinary = content_list_stats(ordinary_path, answers, gold_pages)
     v2 = content_list_stats(find_content_list(mineru_dir, v2=True) if mineru_dir_exists else None, answers, gold_pages)
     row = {
         "sample_id": str(sample.get("sample_id") or ""),
@@ -303,6 +361,13 @@ def audit_row(
         "mineru_manifest": manifest_stats(mineru_dir) if mineru_dir_exists else {"exists": False},
         "ordinary_content_list": ordinary,
         "content_list_v2": v2,
+        "converted_evidence": converted_evidence_stats(
+            path=ordinary_path,
+            ingested_doc_id=ingested_doc_id,
+            mineru_dir=mineru_dir,
+            answers=answers,
+            gold_pages=gold_pages,
+        ),
         "full_md": full_markdown_stats(mineru_dir, answers) if mineru_dir_exists else {"exists": False},
         "db_evidence": db_page_stats(
             repository=repository,
@@ -352,6 +417,10 @@ def summarize(
             len(rows),
         ),
         "markdown_answer_hit_rate": rate(sum(1 for row in rows if row.get("full_md", {}).get("answer_hit")), len(rows)),
+        "converted_gold_page_answer_hit_rate": rate(
+            sum(1 for row in rows if row.get("converted_evidence", {}).get("gold_page_answer_hit")),
+            len(rows),
+        ),
         "db_gold_page_answer_hit_rate": rate(
             sum(1 for row in rows if row.get("db_evidence", {}).get("gold_page_answer_hit")),
             len(rows),
@@ -382,6 +451,7 @@ def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
         f"- manifest_ocr_enabled_or_requested_rate: {summary.get('manifest_ocr_enabled_or_requested_rate')}",
         f"- ordinary_gold_page_answer_hit_rate: {summary.get('ordinary_gold_page_answer_hit_rate')}",
         f"- markdown_answer_hit_rate: {summary.get('markdown_answer_hit_rate')}",
+        f"- converted_gold_page_answer_hit_rate: {summary.get('converted_gold_page_answer_hit_rate')}",
         f"- db_gold_page_answer_hit_rate: {summary.get('db_gold_page_answer_hit_rate')}",
         "",
         "## Buckets",
@@ -496,6 +566,7 @@ def audit_mineru_evidence_artifacts(
         "manifest_ocr_enabled_or_requested_rate": summary["manifest_ocr_enabled_or_requested_rate"],
         "ordinary_gold_page_answer_hit_rate": summary["ordinary_gold_page_answer_hit_rate"],
         "markdown_answer_hit_rate": summary["markdown_answer_hit_rate"],
+        "converted_gold_page_answer_hit_rate": summary["converted_gold_page_answer_hit_rate"],
         "db_gold_page_answer_hit_rate": summary["db_gold_page_answer_hit_rate"],
         "recommendation": summary["recommendation"],
         "artifact_paths": summary["artifact_paths"],

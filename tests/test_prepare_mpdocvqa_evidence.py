@@ -397,3 +397,76 @@ def test_prepare_mpdocvqa_evidence_can_disable_mineru_ocr(tmp_path: Path) -> Non
     assert "--no-mineru-ocr" in seen_commands[0]
     assert "--mineru-ocr" not in seen_commands[0]
     assert summary["used_online_mineru_ocr"] is False
+
+
+def test_prepare_mpdocvqa_evidence_can_request_evidence_rebuild(tmp_path: Path) -> None:
+    subset_root = _write_subset(tmp_path)
+    seen_commands: list[list[str]] = []
+
+    def fake_runner(command: list[str], _cwd: Path, _timeout_seconds: int) -> CommandResult:
+        seen_commands.append(command)
+        db_path = Path(command[command.index("--db-path") + 1])
+        document_root = Path(command[command.index("--document-root") + 1])
+        conn = connect(db_path)
+        try:
+            repository = DocumentRepository(conn)
+            repository.upsert_document(
+                DocumentRecord(
+                    doc_id="ingested_doc",
+                    sha256="d" * 64,
+                    original_name="document.pdf",
+                    mime_type="application/pdf",
+                    file_size=10,
+                    file_path=str(document_root / "ingested_doc" / "source" / "original.pdf"),
+                    document_dir=str(document_root / "ingested_doc"),
+                    page_count=2,
+                    parser_backend="mineru_api",
+                    parse_status="parsed",
+                    index_status="not_started",
+                )
+            )
+            repository.save_evidence_blocks(
+                [
+                    EvidenceBlock(
+                        doc_id="ingested_doc",
+                        block_id="ingested_doc_p002_page",
+                        block_type="page",
+                        text="Budget Estimate $100,000",
+                        page_id=2,
+                        location=EvidenceLocation(page=2, block_id="ingested_doc_p002_page"),
+                    )
+                ]
+            )
+        finally:
+            conn.close()
+        return CommandResult(
+            0,
+            json.dumps(
+                {
+                    "status": "success",
+                    "doc_id": "ingested_doc",
+                    "source": {
+                        "was_ingested": True,
+                        "reused_existing": False,
+                        "parser": "mineru_api",
+                        "parser_mode": "parse_existing",
+                        "used_mineru_api": True,
+                        "mineru_api": {"api_status": "cached_existing_output"},
+                        "ingestion": {"parse_status": "parsed", "page_count": 2, "block_count": 1},
+                    },
+                }
+            ),
+        )
+
+    summary = prepare_mpdocvqa_evidence(
+        subset_root=subset_root,
+        output_root=tmp_path / "evidence",
+        run_id="rebuild",
+        live_api=True,
+        rebuild_evidence_blocks=True,
+        command_runner=fake_runner,
+    )
+
+    assert summary["status"] == "success"
+    assert summary["rebuild_evidence_blocks"] is True
+    assert "--force-parse" in seen_commands[0]

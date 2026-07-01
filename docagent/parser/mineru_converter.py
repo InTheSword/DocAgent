@@ -38,6 +38,8 @@ def _clean_text(value: object) -> str:
         parts = [_clean_text(value[key]) for key in TEXTISH_KEYS if key in value]
         if not any(parts):
             parts = [_clean_text(value[key]) for key in NESTED_TEXT_KEYS if key in value]
+        if not any(parts):
+            parts = [_clean_text(item) for item in value.values()]
         return " ".join(part for part in parts if part).strip()
     return re.sub(r"\s+", " ", str(value or "")).strip()
 
