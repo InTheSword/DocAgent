@@ -167,6 +167,24 @@ def review_bucket(row: dict[str, Any]) -> str:
     return "manual_review_unclassified"
 
 
+def actionability_bucket(row: dict[str, Any]) -> str:
+    page_bucket = str(row.get("page_index_bucket") or "")
+    answer_page_retrieved = bool(row.get("retrieved_answer_page_hit"))
+    answer_page_selected = bool(row.get("selected_answer_page_hit"))
+    answer_page_cited = bool(row.get("citation_answer_page_hit"))
+    if page_bucket in {"answer_on_gold_minus_one_page", "answer_on_gold_plus_one_page", "answer_elsewhere_in_document"}:
+        if answer_page_retrieved and answer_page_selected and answer_page_cited:
+            return "gold_page_alignment_review_not_retrieval_defect"
+        if answer_page_retrieved:
+            return "context_or_citation_selection_review"
+        return "retrieval_or_duplicate_answer_review"
+    if page_bucket == "answer_not_found_in_document_text":
+        return "ocr_or_answer_alias_review"
+    if page_bucket == "gold_page_without_retrievable_blocks":
+        return "evidence_block_materialization_review"
+    return "manual_review_unclassified"
+
+
 def review_pages(row: dict[str, Any], document_manifest: dict[str, Any]) -> list[tuple[int, str]]:
     page_count = None
     try:
@@ -229,11 +247,20 @@ def extract_review_row(
         "answers": answers,
         "page_index_bucket": str(row.get("page_index_bucket") or ""),
         "review_bucket": review_bucket(row),
+        "actionability_bucket": actionability_bucket(row),
         "document_pdf": document_pdf_path(subset_root, document_manifest),
         "document_window_page_count": row.get("document_window_page_count"),
         "document_window_ordered_page_ids": row.get("document_window_ordered_page_ids") or [],
         "alignment_gold_pages": page_ordinals(row.get("alignment_gold_pages") or []),
         "answer_hit_pages": page_ordinals(row.get("answer_hit_pages") or []),
+        "retrieved_pages": page_ordinals(row.get("retrieved_pages") or []),
+        "selected_pages": page_ordinals(row.get("selected_pages") or []),
+        "citation_pages": page_ordinals(row.get("citation_pages") or []),
+        "workflow_answer_page_hits": {
+            "retrieved_answer_page_hit": bool(row.get("retrieved_answer_page_hit")),
+            "selected_answer_page_hit": bool(row.get("selected_answer_page_hit")),
+            "citation_answer_page_hit": bool(row.get("citation_answer_page_hit")),
+        },
         "current_gold_source_page_ids": row.get("current_gold_source_page_ids") or [],
         "answer_hit_source_page_ids": row.get("answer_hit_source_page_ids") or [],
         "qa_answer_page_idx": row.get("qa_answer_page_idx"),
@@ -326,6 +353,7 @@ def extract_mpdocvqa_page_alignment_review(
         for row in review_source_rows
     ]
     bucket_counts = Counter(row["review_bucket"] for row in review_rows)
+    actionability_counts = Counter(row["actionability_bucket"] for row in review_rows)
     page_index_bucket_counts = Counter(row["page_index_bucket"] for row in review_rows)
     source_run_id = str(source_summary.get("run_id") or source_result.get("run_id") or page_index_run_dir.name)
     summary = {
@@ -345,6 +373,7 @@ def extract_mpdocvqa_page_alignment_review(
         "source_inspected_count": len(source_rows),
         "review_row_count": len(review_rows),
         "review_bucket_counts": dict(sorted(bucket_counts.items())),
+        "actionability_bucket_counts": dict(sorted(actionability_counts.items())),
         "page_index_bucket_counts": dict(sorted(page_index_bucket_counts.items())),
         "source_page_index_mapping_rates": {
             "qa_gold_page_ordinal_consistent_with_answer_page_idx_rate": source_summary.get(
@@ -410,6 +439,7 @@ def write_outputs(
         "quality_status": summary["quality_status"],
         "review_row_count": summary.get("review_row_count", 0),
         "review_bucket_counts": summary.get("review_bucket_counts", {}),
+        "actionability_bucket_counts": summary.get("actionability_bucket_counts", {}),
         "page_index_bucket_counts": summary.get("page_index_bucket_counts", {}),
         "source_page_index_mapping_rates": summary.get("source_page_index_mapping_rates", {}),
         "recommendation": summary.get("recommendation", {}),
@@ -453,6 +483,10 @@ def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
         "",
         *[f"- {key}: {value}" for key, value in sorted((summary.get("review_bucket_counts") or {}).items())],
         "",
+        "## Actionability Buckets",
+        "",
+        *[f"- {key}: {value}" for key, value in sorted((summary.get("actionability_bucket_counts") or {}).items())],
+        "",
         "## Page-Index Buckets",
         "",
         *[f"- {key}: {value}" for key, value in sorted((summary.get("page_index_bucket_counts") or {}).items())],
@@ -481,12 +515,15 @@ def write_manual_review_markdown(path: Path, rows: list[dict[str, Any]]) -> None
                 f"## {row.get('sample_id')}",
                 "",
                 f"- bucket: `{row.get('review_bucket')}` / `{row.get('page_index_bucket')}`",
+                f"- actionability: `{row.get('actionability_bucket')}`",
                 f"- doc_id: `{row.get('doc_id')}`",
                 f"- question: {row.get('question')}",
                 f"- answers: {row.get('answers')}",
                 f"- document_pdf: `{(row.get('document_pdf') or {}).get('path')}`",
                 f"- gold_pages: {row.get('alignment_gold_pages')} -> {row.get('current_gold_source_page_ids')}",
                 f"- answer_hit_pages: {row.get('answer_hit_pages')} -> {row.get('answer_hit_source_page_ids')}",
+                f"- retrieved/selected/cited pages: {row.get('retrieved_pages')} / {row.get('selected_pages')} / {row.get('citation_pages')}",
+                f"- answer-page hits: {row.get('workflow_answer_page_hits')}",
                 "",
                 "Pages:",
             ]

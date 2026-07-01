@@ -115,6 +115,12 @@ def write_page_index_run(tmp_path: Path) -> Path:
                 "page_index_bucket": "answer_on_gold_minus_one_page",
                 "alignment_gold_pages": [3],
                 "answer_hit_pages": [2],
+                "retrieved_pages": [2],
+                "selected_pages": [2],
+                "citation_pages": [2],
+                "retrieved_answer_page_hit": True,
+                "selected_answer_page_hit": True,
+                "citation_answer_page_hit": True,
                 "current_gold_source_page_ids": ["source_doc_p13"],
                 "answer_hit_source_page_ids": ["source_doc_p12"],
                 "qa_answer_page_idx": 2,
@@ -142,6 +148,9 @@ def write_page_index_run(tmp_path: Path) -> Path:
                 "page_index_bucket": "answer_not_found_in_document_text",
                 "alignment_gold_pages": [4],
                 "answer_hit_pages": [],
+                "retrieved_pages": [1],
+                "selected_pages": [1],
+                "citation_pages": [1],
                 "current_gold_source_page_ids": ["source_doc_p14"],
                 "answer_hit_source_page_ids": [],
                 "document_window_page_count": 4,
@@ -184,6 +193,10 @@ def test_extract_mpdocvqa_page_alignment_review_writes_manual_rows(tmp_path: Pat
         "manual_check_ocr_text_or_answer_alias": 1,
         "manual_compare_gold_and_adjacent_page_images": 1,
     }
+    assert result["actionability_bucket_counts"] == {
+        "gold_page_alignment_review_not_retrieval_defect": 1,
+        "ocr_or_answer_alias_review": 1,
+    }
     assert result["source_page_index_mapping_rates"] == {
         "qa_gold_page_ordinal_consistent_with_answer_page_idx_rate": 1.0,
         "manifest_consistent_with_qa_gold_page_rate": 1.0,
@@ -197,6 +210,13 @@ def test_extract_mpdocvqa_page_alignment_review_writes_manual_rows(tmp_path: Pat
     budget = rows[0]
     assert budget["document_pdf"]["exists"] is True
     assert budget["review_bucket"] == "manual_compare_gold_and_adjacent_page_images"
+    assert budget["actionability_bucket"] == "gold_page_alignment_review_not_retrieval_defect"
+    assert budget["workflow_answer_page_hits"] == {
+        "retrieved_answer_page_hit": True,
+        "selected_answer_page_hit": True,
+        "citation_answer_page_hit": True,
+    }
+    assert budget["retrieved_pages"] == [2]
     assert any(page["page"] == 2 and page["page_file_exists"] for page in budget["page_reviews"])
     assert any("$100,000" in page["ocr_text_preview"] for page in budget["page_reviews"])
     assert rows[1]["review_bucket"] == "manual_check_ocr_text_or_answer_alias"

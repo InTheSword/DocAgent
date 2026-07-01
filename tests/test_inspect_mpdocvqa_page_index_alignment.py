@@ -173,6 +173,12 @@ def write_alignment_run(tmp_path: Path) -> Path:
                 "alignment_bucket": "answer_on_gold_minus_one_page",
                 "gold_pages": [3],
                 "answer_hit_pages": [2],
+                "retrieved_pages": [2],
+                "selected_pages": [2],
+                "citation_pages": [2],
+                "retrieved_answer_page_hit": True,
+                "selected_answer_page_hit": True,
+                "citation_answer_page_hit": True,
             },
             {
                 "sample_id": "q_award",
@@ -243,3 +249,7 @@ def test_inspect_mpdocvqa_page_index_alignment_detects_generic_shift(tmp_path: P
     assert budget["document_window_page_count"] == 5
     assert budget["current_gold_source_page_ids"] == ["source_doc_p14"]
     assert budget["answer_hit_source_page_ids"] == ["source_doc_p13"]
+    assert budget["retrieved_pages"] == [2]
+    assert budget["retrieved_answer_page_hit"] is True
+    assert budget["selected_answer_page_hit"] is True
+    assert budget["citation_answer_page_hit"] is True
