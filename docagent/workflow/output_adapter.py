@@ -121,10 +121,14 @@ def _normalize_evidence_used(value: Any, cited_blocks: list[EvidenceBlock]) -> l
         merged = dict(item)
         if block_id:
             block = allowed[block_id]
+            citation = citation_from_block(block)
             merged.setdefault("doc_id", block.doc_id)
             merged.setdefault("page", block.location.page if block.location.page is not None else block.page_id)
             merged.setdefault("block_type", block.block_type)
-            merged.setdefault("text_preview", citation_from_block(block).get("text_preview") or "")
+            for key in ("text_preview", "table_caption", "image_caption", "image_path"):
+                value = citation.get(key)
+                if value not in {None, ""}:
+                    merged.setdefault(key, value)
         normalized.append({key: value for key, value in merged.items() if value not in {None, ""}})
     return normalized
 

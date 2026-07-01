@@ -31,6 +31,7 @@ def test_mineru_content_list_to_blocks_handles_text_table_image(tmp_path: Path) 
     assert blocks[1].table_html == "<table></table>"
     assert blocks[2].metadata["img_path"] == "figures/chart.png"
     assert blocks[2].image_path == "figures/chart.png"
+    assert blocks[2].metadata["caption"] == "Revenue chart"
     assert "normalized_resource_path" not in blocks[2].metadata
     assert "source_content_list" not in blocks[2].metadata
     assert blocks[3].metadata["unknown_raw_type"] is True

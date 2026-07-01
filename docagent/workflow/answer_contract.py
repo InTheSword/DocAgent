@@ -104,6 +104,8 @@ def validate_candidate_schema(
 
 
 def citation_from_block(block: EvidenceBlock) -> dict[str, Any]:
+    table_caption = _metadata_text(block, "table_caption")
+    image_caption = _metadata_text(block, "caption", "image_caption", "chart_caption")
     return {
         key: value
         for key, value in {
@@ -115,26 +117,15 @@ def citation_from_block(block: EvidenceBlock) -> dict[str, Any]:
             "table_id": block.location.table_id,
             "image_id": block.location.image_id,
             "image_path": block.image_path,
+            "table_caption": table_caption,
+            "image_caption": image_caption,
         }.items()
         if value not in {None, ""}
     }
 
 
 def evidence_used_from_blocks(blocks: list[EvidenceBlock]) -> list[dict[str, Any]]:
-    return [
-        {
-            key: value
-            for key, value in {
-                "doc_id": block.doc_id,
-                "page": block.location.page if block.location.page is not None else block.page_id,
-                "block_id": block.block_id,
-                "block_type": block.block_type,
-                "text_preview": _preview(block),
-            }.items()
-            if value not in {None, ""}
-        }
-        for block in blocks
-    ]
+    return [_evidence_used_from_block(block) for block in blocks]
 
 
 def filtered_citation_blocks(
@@ -157,6 +148,44 @@ def filtered_citation_blocks(
 def _preview(block: EvidenceBlock, limit: int = 220) -> str:
     text = " ".join(block.retrieval_text.split())
     return text[:limit]
+
+
+def _evidence_used_from_block(block: EvidenceBlock) -> dict[str, Any]:
+    citation = citation_from_block(block)
+    return {
+        key: value
+        for key, value in {
+            "doc_id": citation.get("doc_id"),
+            "page": citation.get("page"),
+            "block_id": citation.get("block_id"),
+            "block_type": citation.get("block_type"),
+            "text_preview": citation.get("text_preview"),
+            "table_caption": citation.get("table_caption"),
+            "image_caption": citation.get("image_caption"),
+            "image_path": citation.get("image_path"),
+        }.items()
+        if value not in {None, ""}
+    }
+
+
+def _metadata_text(block: EvidenceBlock, *keys: str) -> str:
+    parts: list[str] = []
+    for key in keys:
+        value = block.metadata.get(key)
+        if isinstance(value, list):
+            parts.extend(str(item).strip() for item in value if str(item or "").strip())
+        elif value not in {None, ""}:
+            parts.append(str(value).strip())
+    result: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        compact = " ".join(part.split())
+        marker = compact.casefold()
+        if not compact or marker in seen:
+            continue
+        seen.add(marker)
+        result.append(compact)
+    return " ".join(result)
 
 
 def _location_fields(item: dict[str, Any]) -> dict[str, Any]:

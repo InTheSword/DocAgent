@@ -294,7 +294,7 @@ def _make_block(
         metadata["mineru_page_idx"] = mineru_page_idx
     if "text_level" in item:
         metadata["text_level"] = item["text_level"]
-    for key in ("table_caption", "table_footnote", "chart_caption", "chart_footnote", "sub_type"):
+    for key in ("table_caption", "table_footnote", "caption", "image_caption", "chart_caption", "chart_footnote", "sub_type"):
         if key in item:
             metadata[key] = item[key]
     if table_html is not None:

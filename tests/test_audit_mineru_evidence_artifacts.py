@@ -215,11 +215,14 @@ def test_audit_mineru_evidence_artifacts_reports_resource_reference_stats(tmp_pa
 
     assert result["status"] == "success"
     assert result["raw_resource_stats"]["resource_reference_count"] == 2
+    assert result["raw_resource_stats"]["resource_item_count"] == 2
     assert result["raw_resource_stats"]["remote_resource_reference_count"] == 1
     assert result["converted_resource_stats"]["resource_reference_count"] == 2
+    assert result["converted_resource_stats"]["resource_item_count"] == 2
     assert result["converted_resource_stats"]["remote_resource_reference_count"] == 1
     assert result["converted_resource_stats"]["local_existing_resource_reference_count"] == 1
     assert result["db_resource_stats"]["resource_reference_count"] == 2
+    assert result["db_resource_stats"]["resource_item_count"] == 2
     assert result["db_resource_stats"]["remote_resource_reference_count"] == 1
     assert result["db_resource_stats"]["local_existing_resource_reference_count"] == 1
     rows = read_jsonl(tmp_path / "audit" / "resource_audit" / "rows.jsonl")

@@ -171,6 +171,49 @@ def test_canonical_output_adapter_filters_candidate_citations_to_allowlist() -> 
     assert canonical["citation_validation"]["invalid_block_ids"] == ["missing"]
 
 
+def test_canonical_output_preserves_table_and_image_resource_fields() -> None:
+    table = EvidenceBlock(
+        doc_id="doc1",
+        block_id="table1",
+        block_type="table",
+        text="Budget Estimate $100,000",
+        table_html="<table><tr><td>Budget Estimate</td><td>$100,000</td></tr></table>",
+        image_path="https://mineru.example/table.png",
+        page_id=1,
+        location=EvidenceLocation(page=1, block_id="table1"),
+        metadata={"table_caption": ["Budget table"]},
+    )
+    image = EvidenceBlock(
+        doc_id="doc1",
+        block_id="image1",
+        block_type="image",
+        text="Revenue chart caption",
+        image_path="images/chart.png",
+        page_id=2,
+        location=EvidenceLocation(page=2, block_id="image1"),
+        metadata={"image_caption": "Revenue chart"},
+    )
+
+    canonical = canonicalize_output(
+        {
+            "answer": "Budget Estimate is $100,000.",
+            "reasoning_summary": "The table and chart evidence identify the budget estimate.",
+            "citation_block_ids": ["table1", "image1"],
+            "evidence_used": [{"block_id": "table1"}, {"block_id": "image1"}],
+        },
+        [table, image],
+    )
+
+    assert canonical["citations"][0]["table_caption"] == "Budget table"
+    assert canonical["citations"][0]["image_path"] == "https://mineru.example/table.png"
+    assert canonical["citations"][1]["image_caption"] == "Revenue chart"
+    assert canonical["citations"][1]["image_path"] == "images/chart.png"
+    assert canonical["evidence_used"][0]["table_caption"] == "Budget table"
+    assert canonical["evidence_used"][0]["image_path"] == "https://mineru.example/table.png"
+    assert canonical["evidence_used"][1]["image_caption"] == "Revenue chart"
+    assert canonical["evidence_used"][1]["image_path"] == "images/chart.png"
+
+
 def test_workflow_trace_records_unified_protocol(tmp_path: Path) -> None:
     state = run_qa_workflow(
         qid="q1",

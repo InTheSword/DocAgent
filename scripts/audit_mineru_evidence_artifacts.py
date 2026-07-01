@@ -281,6 +281,7 @@ def block_resource_stats(blocks: list[Any]) -> dict[str, Any]:
                 }
             )
     return {
+        "resource_item_count": sum(type_counts.values()),
         "resource_reference_count": sum(key_counts.values()),
         "remote_resource_reference_count": remote_count,
         "local_existing_resource_reference_count": local_existing_count,
@@ -441,6 +442,7 @@ def aggregate_resource_stats(rows: list[dict[str, Any]], section: str) -> dict[s
             local_existing += int(stats.get("local_existing_resource_reference_count") or 0)
             local_missing += int(stats.get("local_missing_resource_reference_count") or 0)
             unknown += int(stats.get("unknown_resource_existence_count") or 0)
+            raw_item_count += int(stats.get("resource_item_count") or 0)
             key_counts.update(stats.get("resource_key_counts") or {})
     return {
         "resource_item_count": raw_item_count,
