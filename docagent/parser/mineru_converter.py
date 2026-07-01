@@ -14,11 +14,31 @@ TABLE_TYPES = {"table"}
 IMAGE_TYPES = {"image", "figure", "chart"}
 BOILERPLATE_TYPES = {"header", "footer", "page_number"}
 KNOWN_RAW_TYPES = TEXT_TYPES | TABLE_TYPES | IMAGE_TYPES | BOILERPLATE_TYPES
+TEXTISH_KEYS = (
+    "text",
+    "content",
+    "value",
+    "table_text",
+    "table_caption",
+    "table_footnote",
+    "caption",
+    "image_caption",
+    "chart_caption",
+    "chart_footnote",
+    "nearby_text",
+)
+NESTED_TEXT_KEYS = ("spans", "lines", "children", "blocks", "items", "cells", "rows")
 
 
 def _clean_text(value: object) -> str:
     if isinstance(value, list):
-        return " ".join(_clean_text(item) for item in value if _clean_text(item)).strip()
+        parts = [_clean_text(item) for item in value]
+        return " ".join(part for part in parts if part).strip()
+    if isinstance(value, dict):
+        parts = [_clean_text(value[key]) for key in TEXTISH_KEYS if key in value]
+        if not any(parts):
+            parts = [_clean_text(value[key]) for key in NESTED_TEXT_KEYS if key in value]
+        return " ".join(part for part in parts if part).strip()
     return re.sub(r"\s+", " ", str(value or "")).strip()
 
 
@@ -85,31 +105,52 @@ def _caption_text(item: dict[str, Any], *keys: str) -> str:
     parts: list[str] = []
     for key in keys:
         parts.extend(_clean_text(value) for value in _as_list(item.get(key)))
-    return " ".join(part for part in parts if part).strip()
+    return _unique_text_parts(*parts)
+
+
+def _unique_text_parts(*parts: str) -> str:
+    seen: set[str] = set()
+    result: list[str] = []
+    for part in parts:
+        cleaned = _clean_text(part)
+        if not cleaned:
+            continue
+        key = cleaned.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(cleaned)
+    return "\n".join(result).strip()
 
 
 def _item_text(item: dict[str, Any], raw_type: str, block_type: str) -> str:
     if block_type == "table":
         caption = _caption_text(item, "table_caption")
         footnote = _caption_text(item, "table_footnote")
-        body_text = _clean_text(item.get("table_text") or item.get("text") or item.get("content"))
-        if not body_text:
-            body_text = _strip_html(_table_html(item))
-        return "\n".join(part for part in (caption, body_text, footnote) if part).strip()
+        body_text = _unique_text_parts(
+            _clean_text(item.get("table_text")),
+            _clean_text(item.get("text")),
+            _clean_text(item.get("content")),
+            _strip_html(_table_html(item)),
+        )
+        return _unique_text_parts(caption, body_text, footnote)
     if raw_type == "chart":
         caption = _caption_text(item, "chart_caption")
         footnote = _caption_text(item, "chart_footnote")
-        content = _clean_text(item.get("content") or item.get("text"))
-        return "\n".join(part for part in (caption, content, footnote) if part).strip()
-    if block_type == "image":
-        return _clean_text(
-            item.get("caption")
-            or item.get("image_caption")
-            or item.get("nearby_text")
-            or item.get("text")
-            or item.get("content")
+        content = _unique_text_parts(
+            _clean_text(item.get("nearby_text")),
+            _clean_text(item.get("text")),
+            _clean_text(item.get("content")),
         )
-    return _clean_text(item.get("text") or item.get("content"))
+        return _unique_text_parts(caption, content, footnote)
+    if block_type == "image":
+        return _unique_text_parts(
+            _caption_text(item, "caption", "image_caption"),
+            _clean_text(item.get("nearby_text")),
+            _clean_text(item.get("text")),
+            _clean_text(item.get("content")),
+        )
+    return _unique_text_parts(_clean_text(item.get("text")), _clean_text(item.get("content")))
 
 
 def _image_path(item: dict[str, Any]) -> str | None:
