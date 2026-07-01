@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -22,6 +23,41 @@ VALID_BLOCK_TYPES = {
     "visual_summary",
     "page",
 }
+
+RETRIEVAL_METADATA_TEXT_KEYS = (
+    "table_caption",
+    "table_footnote",
+    "caption",
+    "image_caption",
+    "chart_caption",
+    "chart_footnote",
+    "nearby_text",
+)
+
+
+def _clean_retrieval_value(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, list):
+        return " ".join(part for item in value if (part := _clean_retrieval_value(item))).strip()
+    if isinstance(value, dict):
+        return " ".join(part for item in value.values() if (part := _clean_retrieval_value(item))).strip()
+    return re.sub(r"\s+", " ", str(value)).strip()
+
+
+def _unique_retrieval_parts(parts: list[Any]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        text = _clean_retrieval_value(part)
+        if not text:
+            continue
+        key = text.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(text)
+    return result
 
 
 @dataclass
@@ -83,11 +119,13 @@ class EvidenceBlock:
     def retrieval_text(self) -> str:
         if self.metadata.get("exclude_from_retrieval"):
             return ""
-        parts = [self.text or "", self.table_html or "", self.visual_summary or ""]
+        parts: list[Any] = []
         section = self.metadata.get("section_title")
         if section:
-            parts.insert(0, str(section))
-        return "\n".join(part for part in parts if part).strip()
+            parts.append(section)
+        parts.extend(self.metadata.get(key) for key in RETRIEVAL_METADATA_TEXT_KEYS)
+        parts.extend([self.text or "", self.table_html or "", self.visual_summary or ""])
+        return "\n".join(_unique_retrieval_parts(parts)).strip()
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "EvidenceBlock":

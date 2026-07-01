@@ -113,6 +113,40 @@ def test_context_hash_is_stable_and_order_sensitive() -> None:
     assert first["selected_block_ids"] == ["b1", "b2"]
 
 
+def test_retrieval_text_uses_metadata_captions_without_resource_paths() -> None:
+    image = EvidenceBlock(
+        doc_id="doc1",
+        block_id="image_caption_only",
+        block_type="image",
+        image_path="https://mineru.example/signed/chart.png",
+        location=EvidenceLocation(page=1, block_id="image_caption_only"),
+        metadata={"image_caption": "Revenue chart", "nearby_text": ["FY2020 revenue was $100,000"]},
+    )
+    table = EvidenceBlock(
+        doc_id="doc1",
+        block_id="table_caption_only",
+        block_type="table",
+        table_html="<table><tr><td>Budget Estimate</td><td>$100,000</td></tr></table>",
+        location=EvidenceLocation(page=1, block_id="table_caption_only"),
+        metadata={"table_caption": ["Budget Estimate table"], "table_footnote": "USD"},
+    )
+    boilerplate = EvidenceBlock(
+        doc_id="doc1",
+        block_id="footer_image",
+        block_type="image",
+        image_path="images/footer.png",
+        location=EvidenceLocation(page=1, block_id="footer_image"),
+        metadata={"caption": "Footer logo", "exclude_from_retrieval": True},
+    )
+
+    assert "Revenue chart" in image.retrieval_text
+    assert "FY2020 revenue was $100,000" in image.retrieval_text
+    assert "mineru.example" not in image.retrieval_text
+    assert "Budget Estimate table" in table.retrieval_text
+    assert "$100,000" in table.retrieval_text
+    assert boilerplate.retrieval_text == ""
+
+
 def test_context_serializes_text_table_chart_location_and_truncation() -> None:
     blocks = [
         _block("text", "alpha " * 20),
