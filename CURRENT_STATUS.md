@@ -1,6 +1,6 @@
 # Current Status
 
-Updated: 2026-06-30
+Updated: 2026-07-01
 
 ## Phase 4D-C Accepted / Phase 5 Active
 
@@ -382,6 +382,28 @@ document pages for answer text. It separates likely page-index offset,
 gold-page mapping mismatch, missing retrievable page blocks, and answer text
 not found in OCR. It does not call Qwen, start SFT/GRPO, create training
 records, tune against validation rows, or claim benchmark acceptance.
+
+Server artifact-only diagnostic `mpdocvqa_ocr_page_alignment_24rows_20260701`
+at commit `634a7ef` real-model verified the OCR/page alignment tool against
+the 24-row workflow comparison lineage and MP-DocVQA EvidenceBlock DB. It
+inspected 9 retrieval misses and found `answer_on_gold_minus_one_page=5`,
+`answer_elsewhere_in_document=1`, `answer_not_found_in_document_text=2`, and
+`gold_page_without_retrievable_blocks=1`. The answer was found somewhere in
+the document for 6/9 inspected rows and on an adjacent page for 5/9 rows. The
+next diagnostic is page-index alignment before retrieval scoring, query
+rewriting, model prompting, or training changes.
+
+Phase 5 MP-DocVQA page-index alignment inspection is implemented locally in
+`scripts/inspect_mpdocvqa_page_index_alignment.py` with tests in
+`tests/test_inspect_mpdocvqa_page_index_alignment.py`. The script cross-checks
+OCR/page alignment rows against prepared `qa.jsonl`, final
+`sample_manifest.jsonl`, the materialized `sample_evidence_manifest.jsonl`,
+and the EvidenceBlock SQLite DB. It reports whether `answer_page_idx`,
+`gold_page_ordinal`, final manifest pages, evidence-manifest pages, and
+observed answer-hit pages are mutually consistent or show a stable generic
+offset. It is diagnostic-only: it does not change gold pages, call Qwen, start
+training, create training data, tune per validation row, or claim benchmark
+acceptance.
 
 Phase 5 AnswerPolicy IO candidate schema and citation allowlist are
 implemented locally in `docagent/workflow/answer_contract.py`,

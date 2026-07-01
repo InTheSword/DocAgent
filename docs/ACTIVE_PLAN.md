@@ -209,12 +209,23 @@ Phase 5 Personal-use DocAgent MVP
    passed targeted tests and found 9 retrieval misses, with 8
    gold_page_answer_text_not_found and 1 gold_page_without_retrievable_blocks,
    so the next diagnostic is OCR/page alignment before retrieval changes
--> MP-DocVQA OCR/page alignment inspection implemented locally:
+-> MP-DocVQA OCR/page alignment inspection real-model verified:
    `scripts/inspect_mpdocvqa_ocr_page_alignment.py` reads the query/block
    inspection rows plus the MP-DocVQA EvidenceBlock SQLite DB and checks
    exact gold pages, gold page +/-1, retrieved pages, and all document pages
-   for answer text; it is artifact-only and does not call models, train, or
-   tune against validation examples
+   for answer text; server artifact-only validation
+   `mpdocvqa_ocr_page_alignment_24rows_20260701` at commit `634a7ef`
+   inspected 9 retrieval misses and found 5 answers on gold_page-1, 1
+   elsewhere in the document, 2 not found in document text, and 1 gold page
+   without retrievable blocks; this points to page-index alignment before
+   retrieval changes and does not call models, train, or tune against
+   validation examples
+-> MP-DocVQA page-index alignment inspection implemented locally:
+   `scripts/inspect_mpdocvqa_page_index_alignment.py` cross-checks OCR/page
+   alignment rows against prepared `qa.jsonl`, `sample_manifest.jsonl`, the
+   evidence materialization manifest, and the EvidenceBlock DB to determine
+   whether an observed answer-page offset is a stable manifest/evidence page
+   normalization issue before changing retrieval or training
 -> continue to stop before VLM, local_fact_qa answer-quality fixes,
    training, full GRPO E2E, MP-DocVQA/TAT-QA benchmark evaluation,
    and final Qwen answer-quality acceptance
@@ -329,7 +340,8 @@ Phase 5 MP-DocVQA retrieval inspection -> implemented
 Phase 5 MP-DocVQA full-workflow diagnostic runner -> real_model_verified
 Phase 5 MP-DocVQA full-workflow comparison -> real_model_verified
 Phase 5 MP-DocVQA query/block granularity inspection -> real_model_verified
-Phase 5 MP-DocVQA OCR/page alignment inspection -> implemented
+Phase 5 MP-DocVQA OCR/page alignment inspection -> real_model_verified
+Phase 5 MP-DocVQA page-index alignment inspection -> implemented
 Phase 5F full CLI acceptance -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
