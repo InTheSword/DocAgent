@@ -64,6 +64,11 @@ Phase 5 Personal-use DocAgent MVP
    `validation_subset_used_for_training=false`; real final answer-quality
    benchmark execution remains not_started until a server model run is
    requested and reviewed
+-> Phase 5I-B final-answer-quality artifact inspector implemented locally:
+   `scripts/inspect_phase5i_answer_quality_artifacts.py` validates manifest
+   hashes, required output presence, safety flags, metrics/report consistency,
+   and empty `training_candidates_raw.jsonl` without calling models or
+   promoting validation rows to training data
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real
@@ -1967,7 +1972,8 @@ Phase 4D-B1.3 server sanity accepted
   `failure_analysis.md`, `acceptance_report.json`,
   `training_candidates_raw.jsonl`, and `manifest.json`, with
   validation-subset training disabled and formal benchmark acceptance still
-  false
+  false; `scripts/inspect_phase5i_answer_quality_artifacts.py` validates the
+  artifact contract without rerunning models or creating training data
 + Phase 5I-B Final Answer Quality Benchmark execution not_started
 + Phase 5E Document Summary MVP implemented with local targeted and Phase 5
   regression tests passing

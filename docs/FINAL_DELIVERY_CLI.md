@@ -273,6 +273,19 @@ server-required. The acceptance report keeps `formal_benchmark_acceptance=false`
 and `validation_subset_used_for_training=false`; it is a small-scenario
 answer-quality review contract, not leaderboard acceptance or training.
 
+Inspect a Phase 5I-B answer-quality artifact directory:
+
+```powershell
+python scripts\inspect_phase5i_answer_quality_artifacts.py `
+  --run-dir outputs\benchmark\phase5i_answer_quality\<run_id> `
+  --run-id phase5ib_answer_quality_review
+```
+
+This read-only check validates `manifest.json` hashes, required artifact
+presence, safety flags, metrics/report consistency, and that
+`training_candidates_raw.jsonl` is empty. It does not call models, create
+training data, or claim formal benchmark acceptance.
+
 Materialize MP-DocVQA final-subset PDFs into MinerU-backed evidence:
 
 ```powershell

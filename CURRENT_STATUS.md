@@ -218,8 +218,12 @@ Phase 5I-B final-answer-quality artifact contract is implemented locally in
 hashes, in addition to the historical Phase 5I files.
 The artifact contract keeps `formal_benchmark_acceptance=false`,
 `validation_subset_used_for_training=false`, and an empty raw training-candidate
-export by default, so validation rows are not promoted to training data. Real
-server execution of the final answer-quality benchmark remains `not_started`.
+export by default, so validation rows are not promoted to training data.
+`scripts/inspect_phase5i_answer_quality_artifacts.py` is implemented locally as
+a read-only artifact inspector for manifest hashes, required files, safety
+flags, metrics/report consistency, and the empty training-candidate export.
+Real server execution of the final answer-quality benchmark remains
+`not_started`.
 
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in
