@@ -39,3 +39,24 @@ def test_dense_index_missing_fails_with_clear_error(tmp_path) -> None:
         assert "index_metadata.json" in str(exc)
     else:
         raise AssertionError("expected FileNotFoundError")
+
+
+def test_dense_index_query_dimension_mismatch_fails_before_backend_search() -> None:
+    blocks = [_block("b1", "invoice date")]
+    index = DenseIndex(
+        blocks=blocks,
+        embeddings=np.asarray([[1.0, 0.0]], dtype=np.float32),
+        model_id="mock-bge",
+        backend="numpy",
+    )
+
+    try:
+        index.search(np.asarray([[1.0, 0.0, 0.0]], dtype=np.float32), top_k=1)
+    except ValueError as exc:
+        message = str(exc)
+        assert "dense query embedding dimension mismatch" in message
+        assert "query_dim=3" in message
+        assert "index_dim=2" in message
+        assert "mock-bge" in message
+    else:
+        raise AssertionError("expected ValueError")

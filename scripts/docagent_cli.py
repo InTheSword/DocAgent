@@ -911,6 +911,54 @@ def _safe_model_id(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("_") or "model"
 
 
+def _read_dense_index_metadata(path: Path) -> dict[str, Any]:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _dense_index_metadata_matches(metadata_path: Path, model_id: str) -> tuple[bool, dict[str, Any]]:
+    metadata = _read_dense_index_metadata(metadata_path)
+    return str(metadata.get("model_id") or "") == model_id, metadata
+
+
+def _build_dense_index_for_blocks(
+    *,
+    repository: DocumentRepository,
+    doc_id: str,
+    index_dir: Path,
+    blocks: list[Any],
+    dense_encoder: Any,
+) -> tuple[DenseIndex, dict[str, Any]]:
+    embeddings = dense_encoder.encode_documents([block.retrieval_text for block in blocks])
+    dense_index = DenseIndex.build(blocks=blocks, embeddings=embeddings, model_id=dense_encoder.model_id)
+    metadata = dense_index.save(index_dir)
+    model_index_metadata = index_dir / f"index_metadata_{_safe_model_id(dense_encoder.model_id)}.json"
+    model_index_metadata.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+    repository_metadata_save_error: dict[str, str] | None = None
+    try:
+        repository.save_index_metadata(
+            doc_id=doc_id,
+            index_type="dense",
+            model_id=str(metadata.get("model_id") or ""),
+            artifact_path=str(index_dir),
+            metadata=metadata,
+        )
+    except Exception as exc:
+        repository_metadata_save_error = {
+            "type": type(exc).__name__,
+            "message": str(exc),
+        }
+    dense_metadata: dict[str, Any] = {
+        "index_built": True,
+        "index_metadata_path": str(model_index_metadata),
+    }
+    if repository_metadata_save_error is not None:
+        dense_metadata["repository_metadata_save_error"] = repository_metadata_save_error
+    return dense_index, dense_metadata
+
+
 def _build_indexed_retriever(
     *,
     repository: DocumentRepository,
@@ -944,43 +992,66 @@ def _build_indexed_retriever(
                 )
             )
         index_dir = document_root / doc_id
-        index_metadata = index_dir / f"index_metadata_{_safe_model_id(dense_encoder.model_id)}.json"
+        model_index_metadata = index_dir / f"index_metadata_{_safe_model_id(dense_encoder.model_id)}.json"
+        index_metadata = model_index_metadata
         legacy_index_metadata = index_dir / "index_metadata.json"
         if not index_metadata.exists() and legacy_index_metadata.exists() and dense_backend == "bge":
-            index_metadata = legacy_index_metadata
-        if not index_metadata.exists():
+            legacy_matches, legacy_metadata = _dense_index_metadata_matches(
+                legacy_index_metadata,
+                dense_encoder.model_id,
+            )
+            if legacy_matches:
+                index_metadata = legacy_index_metadata
+                dense_metadata["legacy_index_reused"] = True
+            else:
+                dense_metadata.update(
+                    {
+                        "legacy_index_reused": False,
+                        "stale_legacy_index_metadata_path": str(legacy_index_metadata),
+                        "stale_legacy_index_model_id": str(legacy_metadata.get("model_id") or ""),
+                    }
+                )
+        if not index_metadata.exists() or (
+            index_metadata == legacy_index_metadata and dense_metadata.get("legacy_index_reused") is False
+        ):
             if not build_dense_index_if_missing:
                 raise RuntimeError(
                     f"dense index is missing for doc_id={doc_id}: {index_metadata}. "
                     "Pass --build-dense-index-if-missing for a smoke run, or ingest/build the index first."
                 )
-            embeddings = dense_encoder.encode_documents([block.retrieval_text for block in blocks])
-            dense_index = DenseIndex.build(blocks=blocks, embeddings=embeddings, model_id=dense_encoder.model_id)
-            metadata = dense_index.save(index_dir)
-            model_index_metadata = index_dir / f"index_metadata_{_safe_model_id(dense_encoder.model_id)}.json"
-            model_index_metadata.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
-            repository_metadata_save_error: dict[str, str] | None = None
-            try:
-                repository.save_index_metadata(
-                    doc_id=doc_id,
-                    index_type="dense",
-                    model_id=str(metadata.get("model_id") or ""),
-                    artifact_path=str(index_dir),
-                    metadata=metadata,
-                )
-            except Exception as exc:
-                repository_metadata_save_error = {
-                    "type": type(exc).__name__,
-                    "message": str(exc),
-                }
-            dense_metadata["index_built"] = True
-            dense_metadata["index_metadata_path"] = str(model_index_metadata)
-            if repository_metadata_save_error is not None:
-                dense_metadata["repository_metadata_save_error"] = repository_metadata_save_error
+            dense_index, built_metadata = _build_dense_index_for_blocks(
+                repository=repository,
+                doc_id=doc_id,
+                index_dir=index_dir,
+                blocks=blocks,
+                dense_encoder=dense_encoder,
+            )
+            dense_metadata.update(built_metadata)
         else:
             dense_index = DenseIndex.load(index_dir=index_dir, blocks=blocks, metadata_path=index_metadata)
-            dense_metadata["index_built"] = False
-            dense_metadata["index_metadata_path"] = str(index_metadata)
+            if dense_index.model_id != dense_encoder.model_id:
+                if not build_dense_index_if_missing:
+                    raise RuntimeError(
+                        "dense index model_id does not match requested encoder: "
+                        f"index_model_id={dense_index.model_id}, requested_model_id={dense_encoder.model_id}"
+                    )
+                dense_metadata.update(
+                    {
+                        "stale_index_metadata_path": str(index_metadata),
+                        "stale_index_model_id": dense_index.model_id,
+                    }
+                )
+                dense_index, built_metadata = _build_dense_index_for_blocks(
+                    repository=repository,
+                    doc_id=doc_id,
+                    index_dir=index_dir,
+                    blocks=blocks,
+                    dense_encoder=dense_encoder,
+                )
+                dense_metadata.update(built_metadata)
+            else:
+                dense_metadata["index_built"] = False
+                dense_metadata["index_metadata_path"] = str(index_metadata)
         dense_metadata.update(
             {
                 "backend": dense_backend,

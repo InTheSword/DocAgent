@@ -73,6 +73,13 @@ class DenseIndex:
         query = np.asarray(query_embedding, dtype=np.float32)
         if query.ndim == 2:
             query = query[0]
+        index_dim = int(self.embeddings.shape[1]) if self.embeddings.ndim == 2 else 0
+        query_dim = int(query.shape[0]) if query.ndim == 1 else 0
+        if query_dim != index_dim:
+            raise ValueError(
+                "dense query embedding dimension mismatch: "
+                f"query_dim={query_dim}, index_dim={index_dim}, model_id={self.model_id}"
+            )
         query = _normalize(query.reshape(1, -1))[0]
         if self._faiss_index is not None:
             scores, indices = self._faiss_index.search(query.reshape(1, -1), min(top_k, len(self.blocks)))

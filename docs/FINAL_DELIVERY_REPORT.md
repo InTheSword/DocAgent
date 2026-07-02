@@ -83,6 +83,11 @@ classified those internal failures as `AssertionError`. This remains an
 execution-chain diagnostic blocker, not formal answer-quality benchmark
 acceptance; Phase 5I-B artifacts now preserve compact traceback tails for
 targeted follow-up.
+Traceback probe `phase5ib_answer_quality_selected_context_traceback_20260702`
+localized the blocker to a dense-index/query dimension mismatch inside FAISS.
+The local repair prevents stale legacy dense-index metadata from being reused
+with a different encoder and surfaces dimension mismatches before backend
+search.
 
 ## Known Boundaries
 

@@ -6,8 +6,11 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
+
 from docagent.models.base import HeuristicAnswerPolicy
 from docagent.ingestion.document_registry import DocumentRecord
+from docagent.retrieval.dense_index import DenseIndex
 from docagent.schemas import EvidenceBlock, EvidenceLocation
 from docagent.storage.db import connect
 from docagent.storage.repositories import DocumentRepository, TraceRepository
@@ -332,6 +335,72 @@ def test_hybrid_rerank_retriever_metadata_save_failure_is_non_blocking(tmp_path:
     assert metadata["dense"]["repository_metadata_save_error"]["type"] == "RuntimeError"
     assert metadata["uses_dense"] is True
     assert metadata["uses_reranker"] is True
+    assert result.candidates
+
+
+def test_bge_retriever_rebuilds_stale_legacy_dense_index(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    db_path = _repository_with_document(tmp_path)
+    conn = connect(db_path)
+    repository = DocumentRepository(conn)
+    blocks = repository.load_evidence_blocks("doc1")
+    index_dir = tmp_path / "documents" / "doc1"
+    stale_embeddings = np.zeros((len(blocks), 2), dtype=np.float32)
+    stale_embeddings[:, 0] = 1.0
+    DenseIndex(
+        blocks=blocks,
+        embeddings=stale_embeddings,
+        model_id="stale-model",
+        backend="numpy",
+    ).save(index_dir)
+
+    class FakeDenseEncoder:
+        model_id = "/models/current-bge"
+
+        def __init__(self, _config):
+            pass
+
+        def encode_documents(self, texts):
+            array = np.zeros((len(texts), 3), dtype=np.float32)
+            for index in range(len(texts)):
+                array[index, index % 3] = 1.0
+            return array
+
+        def encode_queries(self, texts):
+            array = np.zeros((len(texts), 3), dtype=np.float32)
+            array[:, 0] = 1.0
+            return array
+
+    monkeypatch.setattr(docagent_cli, "DenseEncoder", FakeDenseEncoder)
+
+    try:
+        retriever, metadata = docagent_cli._build_indexed_retriever(
+            repository=repository,
+            doc_id="doc1",
+            document_root=tmp_path / "documents",
+            mode="hybrid_rerank",
+            dense_backend="bge",
+            dense_model_path="/models/current-bge",
+            dense_device="cpu",
+            dense_fp16=False,
+            build_dense_index_if_missing=True,
+            reranker_backend="keyword",
+            reranker_model_path="",
+            reranker_device="cpu",
+            reranker_fp16=False,
+            query_plan=None,
+        )
+        result = retriever.retrieve(doc_id="doc1", question="What is the invoice date?", top_k=2)
+    finally:
+        conn.close()
+
+    model_metadata = index_dir / f"index_metadata_{docagent_cli._safe_model_id('/models/current-bge')}.json"
+    assert metadata["dense"]["index_built"] is True
+    assert metadata["dense"]["legacy_index_reused"] is False
+    assert metadata["dense"]["stale_legacy_index_model_id"] == "stale-model"
+    assert model_metadata.is_file()
     assert result.candidates
 
 

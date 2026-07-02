@@ -88,9 +88,16 @@ Phase 5 Personal-use DocAgent MVP
    `03928e3` classified the internal workflow cause as `AssertionError` for
    the seven failed rows; the local error contract now also preserves a compact
    traceback tail in Phase 5I-B case reports so the next server diagnostic can
-   locate the assertion without broad log collection; accepted final
-   answer-quality benchmark status remains not_started until the execution
-   assertion is resolved and reviewed
+   locate the assertion without broad log collection; server rerun
+   `phase5ib_answer_quality_selected_context_traceback_20260702` at commit
+   `9bc8a16` located the assertion in FAISS search
+   (`assert d == self.d`), caused by stale legacy dense-index metadata being
+   reused with a different current dense encoder; the local CLI now refuses
+   mismatched legacy dense-index metadata and rebuilds when
+   `--build-dense-index-if-missing` is enabled, while `DenseIndex.search`
+   reports dimension mismatches before backend search; accepted final
+   answer-quality benchmark status remains not_started until this execution
+   assertion repair is server-validated
 -> Phase 5I-B document-context inventory implemented locally:
    `scripts/inspect_phase5i_document_contexts.py` reads candidate SQLite
    `db_path` / `doc_id` pairs, checks persisted retrievable EvidenceBlocks,

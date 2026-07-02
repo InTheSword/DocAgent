@@ -260,6 +260,17 @@ training/benchmark issue. The local error artifact contract now includes a
 compact `error.traceback_tail` in `local_fact_qa` and Phase 5I-B case reports
 so the next server diagnostic can identify the exact assertion frame without
 syncing full logs.
+Server rerun `phase5ib_answer_quality_selected_context_traceback_20260702`
+at commit `9bc8a16` localized that assertion to FAISS search
+(`assert d == self.d`) through
+`hybrid_retriever -> dense_index.search`, indicating a dense query/index
+dimension mismatch. The local CLI now treats legacy dense-index metadata as
+reusable only when its `model_id` matches the requested dense encoder; stale
+legacy metadata is recorded and rebuilt when `--build-dense-index-if-missing`
+is enabled. `DenseIndex.search` now also raises a clear dimension-mismatch
+error before reaching FAISS. This is a generic artifact/index compatibility
+repair and still requires a server rerun before treating the selected-context
+Phase 5I-B probe as execution-stable.
 `scripts/inspect_phase5i_document_contexts.py` is implemented locally as a
 read-only selector for the next server probe. It inventories candidate
 SQLite `db_path` / `doc_id` pairs, checks persisted retrievable EvidenceBlocks,
