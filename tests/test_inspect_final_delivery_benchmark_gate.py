@@ -162,6 +162,41 @@ def test_inspect_final_delivery_benchmark_gate_flags_incomplete_component_use(tm
     assert result["next_action"] == "inspect_full_workflow_component_usage_before_benchmark"
 
 
+def test_inspect_final_delivery_benchmark_gate_uses_non_local_fact_bucket_for_component_expected_count(tmp_path: Path) -> None:
+    run_dir, sync_dir = _make_gate_run(tmp_path)
+    summary_path = run_dir / "summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    for step in summary["steps"]:
+        if step["name"] == "mpdocvqa_full_workflow":
+            step["metrics"].pop("local_fact_qa_count")
+            step["metrics"].update(
+                {
+                    "evaluated_count": 24,
+                    "used_qwen_answer_policy_count": 23,
+                    "used_dense_retrieval_count": 23,
+                    "used_reranker_count": 23,
+                    "used_llm_query_rewriter_count": 23,
+                    "bucket_counts": {
+                        "passed": 9,
+                        "answer_generation_or_metric_miss": 5,
+                        "retrieval_gold_page_miss": 9,
+                        "task_type_not_local_fact_qa": 1,
+                    },
+                }
+            )
+    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    _refresh_local_manifest_hash(run_dir, summary_path)
+
+    result = inspect_gate(run_dir, sync_bundle_dir=sync_dir)
+
+    component_usage = result["metric_review"]["mpdocvqa_full_workflow"]["component_usage"]
+    assert result["status"] == "success"
+    assert component_usage["expected_component_count"] == 23
+    assert component_usage["expected_component_count_source"] == "evaluated_count_minus_task_type_not_local_fact_qa"
+    assert component_usage["incomplete_components"] == []
+    assert result["next_action"] == "review_answer_quality_metrics_before_formal_benchmark_or_training"
+
+
 def test_inspect_final_delivery_benchmark_gate_flags_missing_component_metrics(tmp_path: Path) -> None:
     run_dir, sync_dir = _make_gate_run(tmp_path)
     summary_path = run_dir / "summary.json"

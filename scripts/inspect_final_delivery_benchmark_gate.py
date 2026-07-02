@@ -178,7 +178,17 @@ def _metric_number(metrics: dict[str, Any], key: str) -> float | None:
 def _component_usage_review(mpdocvqa_metrics: dict[str, Any]) -> dict[str, Any]:
     local_fact_count = _metric_number(mpdocvqa_metrics, "local_fact_qa_count")
     evaluated_count = _metric_number(mpdocvqa_metrics, "evaluated_count")
-    expected_count = local_fact_count if local_fact_count is not None else evaluated_count
+    bucket_counts = mpdocvqa_metrics.get("bucket_counts") if isinstance(mpdocvqa_metrics.get("bucket_counts"), dict) else {}
+    non_local_fact_count = _metric_number(bucket_counts, "task_type_not_local_fact_qa")
+    if local_fact_count is not None:
+        expected_count = local_fact_count
+        expected_count_source = "local_fact_qa_count"
+    elif evaluated_count is not None and non_local_fact_count is not None:
+        expected_count = max(0.0, evaluated_count - non_local_fact_count)
+        expected_count_source = "evaluated_count_minus_task_type_not_local_fact_qa"
+    else:
+        expected_count = evaluated_count
+        expected_count_source = "evaluated_count"
     component_keys = {
         "qwen_answer_policy": "used_qwen_answer_policy_count",
         "dense_retrieval": "used_dense_retrieval_count",
@@ -198,6 +208,7 @@ def _component_usage_review(mpdocvqa_metrics: dict[str, Any]) -> dict[str, Any]:
     cli_success_rate = _metric_number(mpdocvqa_metrics, "cli_success_rate")
     return {
         "expected_component_count": expected_count,
+        "expected_component_count_source": expected_count_source,
         "component_counts": component_counts,
         "missing_component_metrics": missing,
         "incomplete_components": incomplete,
