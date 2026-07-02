@@ -938,6 +938,10 @@ def _is_abstention(payload: dict[str, Any] | None) -> bool:
 
 
 def _stage_for_reason(reason: str) -> str:
+    if reason.startswith("cli_error:retriever_initialization_failed") or "retriever_initialization_failed" in reason:
+        return "retrieval"
+    if reason.startswith("cli_error:") or reason.startswith("cli_status_"):
+        return "cli_execution"
     if reason.startswith("task_type") or reason.startswith("router") or "task_type" in reason:
         return "router"
     if "query" in reason or "llm" in reason:
@@ -1066,6 +1070,9 @@ def _evaluate_case(
             reasons.append("forbidden_answer_keyword_present")
     else:
         if payload is not None and payload.get("status") != "success":
+            error_type = str(error.get("type") or "")
+            if error_type:
+                reasons.append(f"cli_error:{error_type}")
             reasons.append(f"cli_status_{payload.get('status') or 'unknown'}")
         if case.expected_task_type == "local_fact_qa":
             if not query_planner.get("enabled"):
@@ -1187,6 +1194,7 @@ def _evaluate_case(
         "answer_preview": answer,
         "citations": citations,
         "citation_pages": _citation_pages(citations),
+        "retriever": (payload or {}).get("retriever") or {},
         "expected_page": case.expected_page,
         "expected_evidence_keywords": case.expected_evidence_keywords,
         "required_evidence_keywords": required_evidence_keywords,
@@ -1529,12 +1537,51 @@ def _prediction_row(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _compact_error(error: Any) -> dict[str, Any]:
+    if not isinstance(error, dict):
+        return {}
+    compact = {
+        "type": str(error.get("type") or ""),
+        "message": str(error.get("message") or "")[:500],
+    }
+    cause = error.get("cause")
+    if isinstance(cause, dict):
+        compact["cause"] = {
+            "type": str(cause.get("type") or ""),
+            "message": str(cause.get("message") or "")[:500],
+        }
+    return {key: value for key, value in compact.items() if _has_compact_value(value)}
+
+
+def _compact_retriever(retriever: Any) -> dict[str, Any]:
+    if not isinstance(retriever, dict):
+        return {}
+    compact = {
+        "mode": str(retriever.get("mode") or ""),
+        "requested_mode": str(retriever.get("requested_mode") or ""),
+        "uses_dense": retriever.get("uses_dense"),
+        "uses_reranker": retriever.get("uses_reranker"),
+        "initialization_status": str(retriever.get("initialization_status") or ""),
+    }
+    initialization_error = retriever.get("initialization_error")
+    if isinstance(initialization_error, dict):
+        compact["initialization_error"] = _compact_error(initialization_error)
+    return {key: value for key, value in compact.items() if _has_compact_value(value)}
+
+
+def _has_compact_value(value: Any) -> bool:
+    return value is not None and value != "" and value != {}
+
+
 def _case_report_row(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "case_id": row.get("case_id"),
         "pass_fail": row.get("pass_fail"),
         "failure_stage": row.get("failure_stage") or "",
         "failure_reasons": row.get("failure_reasons") or [],
+        "status": row.get("status") or "",
+        "returncode": row.get("returncode"),
+        "error": _compact_error(row.get("error")),
         "manual_review_required": bool(row.get("manual_review_required")),
         "manual_review_reason": row.get("manual_review_reason") or "",
         "evaluation_scope": row.get("evaluation_scope"),
@@ -1546,7 +1593,14 @@ def _case_report_row(row: dict[str, Any]) -> dict[str, Any]:
         "location_valid": row.get("citation_page_hit"),
         "used_llm_query_rewriter": row.get("used_llm_query_rewriter"),
         "used_qwen_answer_policy": row.get("used_qwen_answer_policy"),
+        "retrieved_evidence_count": row.get("retrieved_evidence_count"),
+        "retrieval_candidate_count": row.get("retrieval_candidate_count"),
+        "citation_count": row.get("citation_count"),
+        "retriever": _compact_retriever(row.get("retriever")),
         "trace_run_id": row.get("trace_run_id") or "",
+        "artifact_dir": row.get("artifact_dir") or "",
+        "stdout_preview": row.get("stdout_preview") or "",
+        "stderr_preview": row.get("stderr_preview") or "",
     }
 
 
@@ -1606,12 +1660,22 @@ def _write_failure_analysis(path: Path, summary: dict[str, Any], results: list[d
     if failed_rows:
         lines.extend(["", "## Failed Cases", ""])
         for row in failed_rows[:20]:
+            compact_error = _compact_error(row.get("error"))
+            compact_retriever = _compact_retriever(row.get("retriever"))
             lines.extend(
                 [
                     f"### {row.get('case_id')}",
                     "",
                     f"- failure_stage: `{row.get('failure_stage') or ''}`",
                     f"- failure_reasons: `{json.dumps(row.get('failure_reasons') or [], ensure_ascii=False)}`",
+                    f"- status: `{row.get('status') or ''}`",
+                    f"- returncode: `{row.get('returncode')}`",
+                    f"- error: `{json.dumps(compact_error, ensure_ascii=False)}`",
+                    f"- retriever: `{json.dumps(compact_retriever, ensure_ascii=False)}`",
+                    f"- retrieved_evidence_count: `{row.get('retrieved_evidence_count')}`",
+                    f"- retrieval_candidate_count: `{row.get('retrieval_candidate_count')}`",
+                    f"- citation_count: `{row.get('citation_count')}`",
+                    f"- trace_run_id: `{row.get('trace_run_id') or ''}`",
                     f"- answer_correct: `{_answer_correctness(row)}`",
                     f"- format_valid: `{bool(row.get('json_valid'))}`",
                     f"- citation_page_hit: `{row.get('citation_page_hit')}`",

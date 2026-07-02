@@ -4,6 +4,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 from docagent.models.base import HeuristicAnswerPolicy
 from docagent.ingestion.document_registry import DocumentRecord
@@ -124,7 +125,33 @@ def test_list_documents_outputs_json_with_doc_id_and_page_count(tmp_path: Path) 
     assert payload["mode"] == "list_documents"
     assert payload["documents"][0]["doc_id"] == "doc1"
     assert payload["documents"][0]["page_count"] == 2
-    json.dumps(payload)
+
+
+def test_retriever_initialization_failure_does_not_mark_qwen_used(monkeypatch, tmp_path: Path) -> None:
+    def fail_build_indexed_retriever(**_kwargs):
+        raise RuntimeError("dense index build failed")
+
+    monkeypatch.setattr(docagent_cli, "_build_indexed_retriever", fail_build_indexed_retriever)
+
+    payload = docagent_cli._run_local_fact_qa(
+        repository=object(),
+        trace_repository=None,
+        db_path=tmp_path / "docagent.db",
+        document_root=tmp_path,
+        doc_id="doc1",
+        question="What financial year is mentioned?",
+        router_plan={"task_type": "local_fact_qa"},
+        dry_run=False,
+        run_id="run1",
+        retriever_mode="hybrid_rerank",
+        answer_policy=SimpleNamespace(mode="base"),
+    )
+
+    assert payload["status"] == "error"
+    assert payload["error"]["type"] == "retriever_initialization_failed"
+    assert payload["answer_policy_mode"] == "base"
+    assert payload["used_qwen_answer_policy"] is False
+    assert payload["used_external_answer_api"] is False
 
 
 def test_doc_id_document_statistics_routes_to_deterministic_tools(tmp_path: Path) -> None:

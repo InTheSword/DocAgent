@@ -542,6 +542,116 @@ def test_full_model_path_passes_cli_flags_and_records_model_path_fields(tmp_path
     assert result["trace_run_id"] == "qa-run-1"
 
 
+def test_phase5ib_failure_artifacts_include_cli_error_and_retriever_metadata(tmp_path: Path) -> None:
+    cases_path = tmp_path / "cases.jsonl"
+    router_env = tmp_path / "router.env"
+    router_env.write_text(
+        "\n".join(
+            [
+                "DOCAGENT_ROUTER_LLM_API_KEY=fake-secret-key",
+                "DOCAGENT_ROUTER_LLM_BASE_URL=https://example.test/compatible-mode/v1",
+                "DOCAGENT_ROUTER_LLM_MODEL=fake-router-model",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    _write_jsonl(
+        cases_path,
+        [
+            {
+                "case_id": "retriever_error_case",
+                "user_request": "What financial year is mentioned?",
+                "request_form": "interrogative",
+                "expected_task_type": "local_fact_qa",
+                "expected_answer_type": "extractive",
+                "answerable": True,
+                "unsupported_ok": False,
+                "expected_page": 24,
+                "expected_evidence_keywords": [],
+                "expected_answer_keywords": [],
+                "forbidden_answer_keywords": [],
+            }
+        ],
+    )
+
+    def fake_runner(command: list[str], _cwd: Path, _timeout_seconds: int) -> CommandResult:
+        output_dir = Path(command[command.index("--output-dir") + 1])
+        return CommandResult(
+            0,
+            _payload(
+                output_dir=output_dir,
+                case_name="retriever_error",
+                status="error",
+                task_type="local_fact_qa",
+                query_planner={
+                    "enabled": True,
+                    "mode": "hybrid",
+                    "llm_status": "used",
+                    "final_queries": ["financial year"],
+                    "query_sources": {"llm": ["financial year"]},
+                },
+                error={
+                    "type": "retriever_initialization_failed",
+                    "message": "dense index unavailable",
+                    "cause": {"type": "RuntimeError", "message": "index build failed"},
+                },
+                extra={
+                    "full_model_path": True,
+                    "query_planner_execution": {
+                        "query_planner_mode": "hybrid",
+                        "llm_query_rewriter_status": "used",
+                        "used_llm_query_rewriter": True,
+                    },
+                    "used_llm_query_rewriter": True,
+                    "llm_query_rewriter_status": "used",
+                    "answer_policy_mode": "base",
+                    "used_qwen_answer_policy": False,
+                    "retrieval_candidate_count": 0,
+                    "citation_count": 0,
+                    "retriever": {
+                        "mode": "hybrid_rerank",
+                        "requested_mode": "hybrid_rerank",
+                        "uses_dense": True,
+                        "uses_reranker": True,
+                        "initialization_status": "failed",
+                        "initialization_error": {"type": "RuntimeError", "message": "index build failed"},
+                    },
+                },
+            ),
+        )
+
+    db_path = _write_minimal_document_context(tmp_path, doc_id="doc1")
+    summary = run_phase5i_benchmark(
+        db_path=db_path,
+        doc_id="doc1",
+        router_llm_env_file=router_env,
+        output_root=tmp_path / "benchmark",
+        cases_jsonl=cases_path,
+        command_runner=fake_runner,
+        run_id="phase5i_retriever_error_artifacts",
+        full_model_path=True,
+        require_llm_planning_config=True,
+        answer_policy="base",
+        evaluate_final_answer=True,
+    )
+
+    run_dir = Path(summary["artifact_dir"])
+    result = json.loads((run_dir / "phase5i_results.jsonl").read_text(encoding="utf-8").strip())
+    case_report = json.loads((run_dir / "case_reports.jsonl").read_text(encoding="utf-8").strip())
+    failure_analysis = (run_dir / "failure_analysis.md").read_text(encoding="utf-8")
+
+    assert result["failure_stage"] == "retrieval"
+    assert "cli_error:retriever_initialization_failed" in result["failure_reasons"]
+    assert result["used_qwen_answer_policy"] is False
+    assert summary["used_qwen_answer_policy_count"] == 0
+    assert case_report["error"]["type"] == "retriever_initialization_failed"
+    assert case_report["error"]["cause"]["type"] == "RuntimeError"
+    assert case_report["retriever"]["initialization_status"] == "failed"
+    assert case_report["retrieval_candidate_count"] == 0
+    assert "retriever_initialization_failed" in failure_analysis
+    assert "index build failed" in failure_analysis
+
+
 def test_full_model_path_blocks_before_cli_when_document_context_missing(tmp_path: Path) -> None:
     cases_path = tmp_path / "cases.jsonl"
     router_env = tmp_path / "router.env"

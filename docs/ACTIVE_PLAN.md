@@ -73,8 +73,14 @@ Phase 5 Personal-use DocAgent MVP
    server guard validation `phase5ib_answer_quality_context_block_20260702`
    at commit `d980841` confirmed the missing-context path returns
    `benchmark_status=blocked`, keeps `used_qwen_answer_policy=false`, and
-   passes artifact review; real final answer-quality benchmark execution
-   remains not_started until a server model run is requested and reviewed
+   passes artifact review; the selected-context server probe
+   `phase5ib_answer_quality_selected_context_20260702` ran with Qwen but
+   surfaced metadata-level CLI/evidence failures, and the returned compact
+   artifacts were insufficient for direct attribution; the local artifact
+   contract now preserves compact CLI status/error/retriever diagnostics and
+   avoids counting pre-AnswerPolicy retriever setup failures as Qwen use;
+   accepted final answer-quality benchmark status remains not_started until a
+   rerun is reviewed
 -> Phase 5I-B document-context inventory implemented locally:
    `scripts/inspect_phase5i_document_contexts.py` reads candidate SQLite
    `db_path` / `doc_id` pairs, checks persisted retrievable EvidenceBlocks,

@@ -1118,6 +1118,10 @@ def _run_local_fact_qa(
                 "initialization_status": "failed",
                 "initialization_error": retriever_error,
             }
+            answer_policy_payload = _answer_policy_metadata(answer_policy)
+            # The policy is configured, but it has not run if retriever setup fails.
+            answer_policy_payload["used_qwen_answer_policy"] = False
+            answer_policy_payload["used_external_answer_api"] = False
             payload = {
                 "status": "error",
                 "answer": "",
@@ -1135,7 +1139,7 @@ def _run_local_fact_qa(
                 "retriever_mode": retriever_mode,
                 "warnings": list(dict.fromkeys(query_planner_warnings + ["retriever_initialization_failed"])),
                 "error": {"type": "retriever_initialization_failed", "message": str(exc), "cause": retriever_error},
-                **_answer_policy_metadata(answer_policy),
+                **answer_policy_payload,
             }
             if query_planner_payload:
                 payload["query_planner"] = query_planner_payload

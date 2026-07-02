@@ -41,7 +41,7 @@ multi-document QA is not a required delivery claim.
 | TAT-QA / MP-DocVQA subset preparation | implemented | Reproducible validation-subset artifacts are prepared locally; they are not training data |
 | Local diagnostics and readiness checks | implemented | Diagnostic subset runners and `scripts/check_final_delivery_readiness.py` write compact artifacts and check citation/evidence fields |
 | Final delivery benchmark gate | accepted | Server run `final_delivery_benchmark_gate_server_20260702_componentmetrics` completed readiness, real-Qwen AnswerPolicy baseline, and MP-DocVQA full-workflow diagnostic steps successfully; `final_delivery_gate_metric_review_componentcountfix_20260702` verified manifest/safety flags and complete component-use metrics for 23 local_fact_qa workflow rows; `formal_benchmark_acceptance=false` |
-| Final answer quality artifact contract | implemented | `scripts/run_phase5i_answer_quality_benchmark.py` writes `metrics.json`, `predictions.jsonl`, `case_reports.jsonl`, `failure_analysis.md`, `acceptance_report.json`, `training_candidates_raw.jsonl`, and `manifest.json`; it forwards retriever/dense/reranker settings into `docagent_cli.py` and blocks model-backed runs before CLI/Qwen execution when the requested `db_path` + `doc_id` has no retrievable persisted EvidenceBlocks; server guard run `phase5ib_answer_quality_context_block_20260702` verified that missing context returns blocked artifacts without Qwen; server inventory `phase5ib_context_inventory_server_20260702` found 57 ready candidate contexts and selected `outputs/docagent.db` / `c1fc1c5e040ec894` for the next small probe; `scripts/inspect_phase5i_answer_quality_artifacts.py` reviews the artifact contract while keeping validation rows out of training |
+| Final answer quality artifact contract | implemented | `scripts/run_phase5i_answer_quality_benchmark.py` writes `metrics.json`, `predictions.jsonl`, `case_reports.jsonl`, `failure_analysis.md`, `acceptance_report.json`, `training_candidates_raw.jsonl`, and `manifest.json`; it forwards retriever/dense/reranker settings into `docagent_cli.py` and blocks model-backed runs before CLI/Qwen execution when the requested `db_path` + `doc_id` has no retrievable persisted EvidenceBlocks; server guard run `phase5ib_answer_quality_context_block_20260702` verified that missing context returns blocked artifacts without Qwen; server inventory `phase5ib_context_inventory_server_20260702` found 57 ready candidate contexts and selected `outputs/docagent.db` / `c1fc1c5e040ec894`; after `phase5ib_answer_quality_selected_context_20260702` exposed metadata-level CLI/evidence failures, the local contract now preserves compact CLI error/retriever diagnostics and avoids counting pre-AnswerPolicy retriever setup failures as Qwen use |
 | Final answer quality benchmark | not_started | No accepted MP-DocVQA/TAT-QA final answer benchmark yet |
 | New SFT/GRPO training | not_started | Candidate builders/gates exist, but no current final training run is claimed |
 | Pixel-level VLM reasoning | not_started | Image support is OCR/caption/nearby-text/resource metadata only |
@@ -70,6 +70,10 @@ confirms that invalid Phase 5I-B document context is blocked before CLI/Qwen
 execution; it is not answer-quality evidence.
 Context inventory `phase5ib_context_inventory_server_20260702` identifies an
 eligible Phase 5I-B probe context; it is not answer-quality evidence.
+Selected-context probe `phase5ib_answer_quality_selected_context_20260702`
+ran with Qwen but is diagnostic-only; it exposed metadata-level CLI/evidence
+failures and prompted artifact-contract instrumentation, not benchmark
+acceptance.
 
 ## Known Boundaries
 

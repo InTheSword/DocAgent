@@ -230,6 +230,17 @@ being misread as final answer-quality failures. Server guard validation
 this behavior with `benchmark_status=blocked`, `blocker=db_path_not_found`,
 `used_qwen_answer_policy=false`, targeted tests passing, and artifact review
 success.
+After context inventory, server probe
+`phase5ib_answer_quality_selected_context_20260702` ran against
+`outputs/docagent.db` / `c1fc1c5e040ec894` with Qwen enabled, but 7/8 cases
+failed at metadata level with `cli_status_error` and
+`retrieved_evidence_empty`. The uploaded compact artifacts did not include
+enough CLI error or retriever initialization detail to classify the exact
+server failure. The local artifact contract now writes compact CLI
+status/error, retriever initialization metadata, retrieval/citation counts,
+artifact directory, and stdout/stderr previews into `case_reports.jsonl` and
+`failure_analysis.md`; `scripts/docagent_cli.py` also no longer marks Qwen as
+used when retrieval setup fails before AnswerPolicy execution.
 `scripts/inspect_phase5i_document_contexts.py` is implemented locally as a
 read-only selector for the next server probe. It inventories candidate
 SQLite `db_path` / `doc_id` pairs, checks persisted retrievable EvidenceBlocks,
@@ -249,8 +260,9 @@ export by default, so validation rows are not promoted to training data.
 `scripts/inspect_phase5i_answer_quality_artifacts.py` is implemented locally as
 a read-only artifact inspector for manifest hashes, required files, safety
 flags, metrics/report consistency, and the empty training-candidate export.
-Real server execution of the final answer-quality benchmark remains
-`not_started`.
+Accepted final answer-quality benchmark status remains `not_started`; the next
+server run is a diagnostic rerun to verify the artifact/attribution contract,
+not a formal benchmark acceptance.
 
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in
