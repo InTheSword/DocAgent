@@ -256,6 +256,23 @@ itself writes `result.json`, `summary.json`, `summary.md`, and `manifest.json`.
 
 Run the Phase 5I-B small-scenario final-answer-quality artifact contract:
 
+Before running a model-backed answer-quality probe, inspect candidate document
+contexts without calling models:
+
+```powershell
+python scripts\inspect_phase5i_document_contexts.py `
+  --run-id phase5ib_context_inventory `
+  --db-path outputs\docagent.db `
+  --max-documents 20 `
+  --sync-output-dir outputs\sync
+```
+
+This read-only inventory checks whether candidate `db_path` / `doc_id` pairs
+have persisted retrievable EvidenceBlocks and whether the configured Phase
+5I-B cases have basic page/keyword context support. It writes compact result,
+summary, row, preview, manifest, and optional sync artifacts. It does not call
+`docagent_cli.py`, MinerU, Qwen, BGE-M3, reranker, VLM, or training.
+
 ```powershell
 python scripts\run_phase5i_answer_quality_benchmark.py `
   --run-id phase5ib_answer_quality_probe `

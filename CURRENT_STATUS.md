@@ -230,6 +230,13 @@ being misread as final answer-quality failures. Server guard validation
 this behavior with `benchmark_status=blocked`, `blocker=db_path_not_found`,
 `used_qwen_answer_policy=false`, targeted tests passing, and artifact review
 success.
+`scripts/inspect_phase5i_document_contexts.py` is implemented locally as a
+read-only selector for the next server probe. It inventories candidate
+SQLite `db_path` / `doc_id` pairs, checks persisted retrievable EvidenceBlocks,
+summarizes default or supplied Phase 5I-B case page/keyword context readiness,
+and writes compact result, summary, row, preview, manifest, and optional sync
+artifacts without calling `docagent_cli.py`, Qwen, BGE-M3, reranker, MinerU,
+VLM, or training.
 The artifact contract keeps `formal_benchmark_acceptance=false`,
 `validation_subset_used_for_training=false`, and an empty raw training-candidate
 export by default, so validation rows are not promoted to training data.
