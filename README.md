@@ -95,7 +95,9 @@ commits.
 - AnswerPolicy candidate output schema and citation allowlist filtering;
 - local TAT-QA / MP-DocVQA validation-subset preparation;
 - MP-DocVQA evidence materialization runner for MinerU API-produced evidence maps;
-- local diagnostic reporting with `summary.json` and `summary.md`.
+- local diagnostic reporting with `summary.json` and `summary.md`;
+- local final-delivery readiness check for CLI options, output contract fields,
+  documentation boundaries, and deprecated PM handoff cleanup.
 
 ## Not Accepted Yet
 

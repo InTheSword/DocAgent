@@ -47,6 +47,8 @@ Implemented local capabilities:
   sync bundles
 - diagnostic SFT candidate data builder from real-Qwen baseline failures
 - single-command AnswerPolicy training-gate orchestration for server runs
+- local final-delivery readiness check for required files, CLI options, output
+  fields, documentation boundaries, and deprecated PM handoff cleanup
 
 Not included in the current local delivery:
 
@@ -204,6 +206,17 @@ python scripts\run_final_raw_pdf_smoke.py `
 
 This smoke validates parser-to-CLI execution and artifact/citation contracts.
 It is not a final answer-quality benchmark.
+
+Run the local final-delivery readiness check:
+
+```powershell
+python scripts\check_final_delivery_readiness.py --run-id local_readiness
+```
+
+This check does not call MinerU, Qwen, BGE-M3, reranker, datasets, or training.
+It verifies the local delivery pack contract: required files, user-facing CLI
+options, required output fields, documentation boundaries, and removal of the
+deprecated PM handoff document.
 
 Materialize MP-DocVQA final-subset PDFs into MinerU-backed evidence:
 
