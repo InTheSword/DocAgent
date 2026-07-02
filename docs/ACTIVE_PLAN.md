@@ -79,8 +79,12 @@ Phase 5 Personal-use DocAgent MVP
    artifacts were insufficient for direct attribution; the local artifact
    contract now preserves compact CLI status/error/retriever diagnostics and
    avoids counting pre-AnswerPolicy retriever setup failures as Qwen use;
-   accepted final answer-quality benchmark status remains not_started until a
-   rerun is reviewed
+   server rerun `phase5ib_answer_quality_selected_context_artifactfix_20260702`
+   at commit `6e4085b` confirmed BGE/reranker initialization succeeds and
+   failures are now `workflow_failed` inside the QA workflow; the local error
+   contract now preserves workflow exception class names even when exception
+   messages are empty; accepted final answer-quality benchmark status remains
+   not_started until a cause-type rerun is reviewed
 -> Phase 5I-B document-context inventory implemented locally:
    `scripts/inspect_phase5i_document_contexts.py` reads candidate SQLite
    `db_path` / `doc_id` pairs, checks persisted retrievable EvidenceBlocks,

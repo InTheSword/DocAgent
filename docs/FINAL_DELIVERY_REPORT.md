@@ -74,6 +74,10 @@ Selected-context probe `phase5ib_answer_quality_selected_context_20260702`
 ran with Qwen but is diagnostic-only; it exposed metadata-level CLI/evidence
 failures and prompted artifact-contract instrumentation, not benchmark
 acceptance.
+Follow-up probe `phase5ib_answer_quality_selected_context_artifactfix_20260702`
+confirmed the real retriever stack initializes successfully and narrowed the
+remaining failures to internal `workflow_failed` exceptions; the local contract
+now preserves workflow exception class names for the next diagnostic rerun.
 
 ## Known Boundaries
 

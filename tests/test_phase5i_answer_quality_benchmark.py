@@ -592,6 +592,7 @@ def test_phase5ib_failure_artifacts_include_cli_error_and_retriever_metadata(tmp
                 },
                 error={
                     "type": "retriever_initialization_failed",
+                    "cause_type": "RuntimeError",
                     "message": "dense index unavailable",
                     "cause": {"type": "RuntimeError", "message": "index build failed"},
                 },
@@ -645,6 +646,7 @@ def test_phase5ib_failure_artifacts_include_cli_error_and_retriever_metadata(tmp
     assert result["used_qwen_answer_policy"] is False
     assert summary["used_qwen_answer_policy_count"] == 0
     assert case_report["error"]["type"] == "retriever_initialization_failed"
+    assert case_report["error"]["cause_type"] == "RuntimeError"
     assert case_report["error"]["cause"]["type"] == "RuntimeError"
     assert case_report["retriever"]["initialization_status"] == "failed"
     assert case_report["retrieval_candidate_count"] == 0

@@ -278,6 +278,27 @@ def test_no_evidence_blocks_returns_structured_error(tmp_path: Path) -> None:
     assert result["error"]["type"] == "no_evidence_blocks"
 
 
+def test_workflow_failure_reports_exception_type_even_without_message(tmp_path: Path) -> None:
+    repository = _repository_with_document(tmp_path)
+
+    class EmptyWorkflowError(Exception):
+        pass
+
+    def failing_workflow(**_kwargs):
+        raise EmptyWorkflowError()
+
+    result = local_fact_qa(
+        {"doc_id": "doc1", "question": "What is the invoice date?"},
+        document_repository=repository,
+        workflow_runner=failing_workflow,
+    )
+
+    assert result["status"] == "error"
+    assert result["error"]["type"] == "workflow_failed"
+    assert result["error"]["message"] == "EmptyWorkflowError"
+    assert result["error"]["cause_type"] == "EmptyWorkflowError"
+
+
 def test_wrapper_does_not_call_external_api_or_vlm_in_dry_run(tmp_path: Path) -> None:
     repository = _repository_with_document(tmp_path)
 

@@ -241,6 +241,16 @@ status/error, retriever initialization metadata, retrieval/citation counts,
 artifact directory, and stdout/stderr previews into `case_reports.jsonl` and
 `failure_analysis.md`; `scripts/docagent_cli.py` also no longer marks Qwen as
 used when retrieval setup fails before AnswerPolicy execution.
+Server rerun `phase5ib_answer_quality_selected_context_artifactfix_20260702`
+at commit `6e4085b` validated that the selected context still runs with Qwen
+and the real retriever stack, but the seven local_fact_qa failures now classify
+as `cli_execution` with `cli_error:workflow_failed`; retriever initialization
+is `success` for all failed rows, so this is no longer a retriever setup or
+missing-context failure. The remaining blocker is the internal workflow
+exception cause. The local error contract now preserves workflow exception
+class names through `error.cause_type` even when `str(exc)` is empty, so the
+next server rerun can classify the exact workflow failure without broad log
+inspection.
 `scripts/inspect_phase5i_document_contexts.py` is implemented locally as a
 read-only selector for the next server probe. It inventories candidate
 SQLite `db_path` / `doc_id` pairs, checks persisted retrievable EvidenceBlocks,

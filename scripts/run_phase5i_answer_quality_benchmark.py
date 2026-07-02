@@ -1542,6 +1542,7 @@ def _compact_error(error: Any) -> dict[str, Any]:
         return {}
     compact = {
         "type": str(error.get("type") or ""),
+        "cause_type": str(error.get("cause_type") or ""),
         "message": str(error.get("message") or "")[:500],
     }
     cause = error.get("cause")

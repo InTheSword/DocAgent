@@ -76,13 +76,15 @@ def local_fact_qa(
             rank_aware_context=bool(options.get("rank_aware_context", False)),
         )
     except Exception as exc:
+        cause_type = type(exc).__name__
         return _error(
             doc_id,
             question,
             "workflow_failed",
-            str(exc),
+            str(exc) or cause_type,
             trace_path=trace_path,
             warnings=warnings,
+            cause_type=cause_type,
         )
 
     return _success(
@@ -150,7 +152,11 @@ def _error(
     *,
     trace_path: str = "",
     warnings: list[str] | None = None,
+    cause_type: str = "",
 ) -> dict[str, Any]:
+    error = {"type": error_type, "message": message}
+    if cause_type:
+        error["cause_type"] = cause_type
     return {
         "tool_name": "local_fact_qa",
         "status": "error",
@@ -169,7 +175,7 @@ def _error(
         "router_plan_summary": {},
         "workflow_status": "not_started",
         "final_answer": {},
-        "error": {"type": error_type, "message": message},
+        "error": error,
     }
 
 
