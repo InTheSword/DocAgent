@@ -53,6 +53,10 @@ def test_phase5i_parser_exposes_run_id_for_documented_cli() -> None:
     args = build_parser().parse_args(["--run-id", "phase5ib_probe", "--no-full-model-path"])
 
     assert args.run_id == "phase5ib_probe"
+    assert args.retriever_mode == "hybrid_rerank"
+    assert args.dense_backend == "bge"
+    assert args.reranker_backend == "cross_encoder"
+    assert args.build_dense_index_if_missing is True
 
 
 def test_phase5i_runner_scores_fake_cli_outputs_and_writes_artifacts(tmp_path: Path) -> None:
@@ -445,6 +449,15 @@ def test_full_model_path_passes_cli_flags_and_records_model_path_fields(tmp_path
         run_id="phase5i_full_model_path",
         full_model_path=True,
         require_llm_planning_config=True,
+        retriever_mode="hybrid_rerank",
+        dense_backend="bge",
+        dense_model_path="/models/bge-m3",
+        dense_device="cuda:0",
+        dense_fp16=True,
+        reranker_backend="cross_encoder",
+        reranker_model_path="/models/reranker",
+        reranker_device="cpu",
+        reranker_fp16=True,
         answer_policy="base",
         base_model_path="/models/qwen",
     )
@@ -452,9 +465,22 @@ def test_full_model_path_passes_cli_flags_and_records_model_path_fields(tmp_path
     assert captured_commands
     command = captured_commands[0]
     assert "--full-model-path" in command
+    assert command[command.index("--retriever-mode") + 1] == "hybrid_rerank"
+    assert command[command.index("--dense-backend") + 1] == "bge"
+    assert command[command.index("--dense-model-path") + 1] == "/models/bge-m3"
+    assert command[command.index("--dense-device") + 1] == "cuda:0"
+    assert "--dense-fp16" in command
+    assert "--build-dense-index-if-missing" in command
+    assert command[command.index("--reranker-backend") + 1] == "cross_encoder"
+    assert command[command.index("--reranker-model-path") + 1] == "/models/reranker"
+    assert command[command.index("--reranker-device") + 1] == "cpu"
+    assert "--reranker-fp16" in command
     assert command[command.index("--answer-policy") + 1] == "base"
     assert command[command.index("--base-model-path") + 1] == "/models/qwen"
     assert summary["full_model_path"] is True
+    assert summary["retriever_mode"] == "hybrid_rerank"
+    assert summary["dense_backend"] == "bge"
+    assert summary["reranker_backend"] == "cross_encoder"
     assert summary["passed_count"] == 1
     assert summary["used_llm_query_rewriter_count"] == 1
     assert summary["used_qwen_answer_policy_count"] == 1

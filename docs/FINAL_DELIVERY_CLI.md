@@ -261,6 +261,14 @@ python scripts\run_phase5i_answer_quality_benchmark.py `
   --run-id phase5ib_answer_quality_probe `
   --evaluate-final-answer `
   --full-model-path `
+  --retriever-mode hybrid_rerank `
+  --dense-backend bge `
+  --dense-model-path /root/autodl-tmp/models/bge-m3 `
+  --dense-device cuda:0 `
+  --build-dense-index-if-missing `
+  --reranker-backend cross_encoder `
+  --reranker-model-path /root/autodl-tmp/models/bge-reranker-v2-m3 `
+  --reranker-device cpu `
   --answer-policy base
 ```
 

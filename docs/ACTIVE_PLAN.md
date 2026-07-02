@@ -64,9 +64,11 @@ Phase 5 Personal-use DocAgent MVP
    `training_candidates_raw.jsonl`, plus `manifest.json` with artifact sizes
    and hashes, while preserving
    `formal_benchmark_acceptance=false` and
-   `validation_subset_used_for_training=false`; real final answer-quality
-   benchmark execution remains not_started until a server model run is
-   requested and reviewed
+   `validation_subset_used_for_training=false`; the runner forwards
+   retriever/dense/reranker configuration into `docagent_cli.py` so server
+   probes can explicitly exercise `hybrid_rerank` with BGE-M3 and the
+   cross-encoder reranker; real final answer-quality benchmark execution
+   remains not_started until a server model run is requested and reviewed
 -> Phase 5I-B final-answer-quality artifact inspector implemented locally:
    `scripts/inspect_phase5i_answer_quality_artifacts.py` validates manifest
    hashes, required output presence, safety flags, metrics/report consistency,

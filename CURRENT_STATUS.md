@@ -217,7 +217,10 @@ Phase 5I-B final-answer-quality artifact contract is implemented locally in
 `metrics.json`, `predictions.jsonl`, `case_reports.jsonl`,
 `failure_analysis.md`, `acceptance_report.json`, and
 `training_candidates_raw.jsonl`, plus `manifest.json` with artifact sizes and
-hashes, in addition to the historical Phase 5I files.
+hashes, in addition to the historical Phase 5I files. It also forwards
+retriever/dense/reranker configuration into `docagent_cli.py`, allowing server
+answer-quality probes to explicitly exercise `hybrid_rerank` with BGE-M3 and
+the cross-encoder reranker instead of relying on the CLI default retriever.
 The artifact contract keeps `formal_benchmark_acceptance=false`,
 `validation_subset_used_for_training=false`, and an empty raw training-candidate
 export by default, so validation rows are not promoted to training data.

@@ -22,9 +22,11 @@ DEFAULT_DOC_ID = "c1fc1c5e040ec894"
 DEFAULT_OUTPUT_ROOT = ROOT / "outputs" / "benchmark" / "phase5i_answer_quality"
 DEFAULT_CLI_PATH = ROOT / "scripts" / "docagent_cli.py"
 DEFAULT_QWEN_BASE_MODEL_PATH = "/root/autodl-tmp/models/Qwen3-1.7B"
+DEFAULT_BGE_MODEL_PATH = "/root/autodl-tmp/models/bge-m3"
+DEFAULT_RERANKER_MODEL_PATH = "/root/autodl-tmp/models/bge-reranker-v2-m3"
 EVALUATION_SCOPE = "pre_llm_evidence_readiness"
 FINAL_ANSWER_EVALUATION_SCOPE = "final_answer_quality_small_scenario"
-SCRIPT_VERSION = "phase5i-answer-quality-benchmark-v2"
+SCRIPT_VERSION = "phase5i-answer-quality-benchmark-v3"
 
 UNSUPPORTED_ERROR_TYPES = {
     "document_summary_not_implemented",
@@ -695,6 +697,16 @@ def _build_cli_command(
     dry_run: bool,
     python_executable: str,
     full_model_path: bool,
+    retriever_mode: str,
+    dense_backend: str,
+    dense_model_path: str,
+    dense_device: str,
+    dense_fp16: bool,
+    build_dense_index_if_missing: bool,
+    reranker_backend: str,
+    reranker_model_path: str,
+    reranker_device: str,
+    reranker_fp16: bool,
     answer_policy: str,
     base_model_path: str,
     adapter_path: str | None,
@@ -717,6 +729,20 @@ def _build_cli_command(
         "--enable-query-planning",
         "--query-planner-mode",
         "hybrid",
+        "--retriever-mode",
+        retriever_mode,
+        "--dense-backend",
+        dense_backend,
+        "--dense-model-path",
+        dense_model_path,
+        "--dense-device",
+        dense_device,
+        "--reranker-backend",
+        reranker_backend,
+        "--reranker-model-path",
+        reranker_model_path,
+        "--reranker-device",
+        reranker_device,
         "--output-dir",
         str(cli_output_dir),
         "--answer-policy",
@@ -736,6 +762,12 @@ def _build_cli_command(
         command.extend(["--adapter-path", adapter_path])
     if full_model_path:
         command.append("--full-model-path")
+    if dense_fp16:
+        command.append("--dense-fp16")
+    if build_dense_index_if_missing:
+        command.append("--build-dense-index-if-missing")
+    if reranker_fp16:
+        command.append("--reranker-fp16")
     if dry_run:
         command.append("--dry-run")
     return command
@@ -1200,6 +1232,16 @@ def run_case(
     command_runner: CommandRunner,
     evaluate_final_answer: bool,
     full_model_path: bool,
+    retriever_mode: str,
+    dense_backend: str,
+    dense_model_path: str,
+    dense_device: str,
+    dense_fp16: bool,
+    build_dense_index_if_missing: bool,
+    reranker_backend: str,
+    reranker_model_path: str,
+    reranker_device: str,
+    reranker_fp16: bool,
     answer_policy: str,
     base_model_path: str,
     adapter_path: str | None,
@@ -1218,6 +1260,16 @@ def run_case(
         dry_run=dry_run,
         python_executable=python_executable,
         full_model_path=full_model_path,
+        retriever_mode=retriever_mode,
+        dense_backend=dense_backend,
+        dense_model_path=dense_model_path,
+        dense_device=dense_device,
+        dense_fp16=dense_fp16,
+        build_dense_index_if_missing=build_dense_index_if_missing,
+        reranker_backend=reranker_backend,
+        reranker_model_path=reranker_model_path,
+        reranker_device=reranker_device,
+        reranker_fp16=reranker_fp16,
         answer_policy=answer_policy,
         base_model_path=base_model_path,
         adapter_path=adapter_path,
@@ -1259,6 +1311,16 @@ def build_summary(
     dry_run: bool,
     evaluate_final_answer: bool,
     full_model_path: bool,
+    retriever_mode: str,
+    dense_backend: str,
+    dense_model_path: str,
+    dense_device: str,
+    dense_fp16: bool,
+    build_dense_index_if_missing: bool,
+    reranker_backend: str,
+    reranker_model_path: str,
+    reranker_device: str,
+    reranker_fp16: bool,
     answer_policy: str,
 ) -> dict[str, Any]:
     pass_fail_counts = Counter(str(row.get("pass_fail") or "") for row in results)
@@ -1296,6 +1358,16 @@ def build_summary(
         "answer_quality_evaluation_scope": FINAL_ANSWER_EVALUATION_SCOPE if evaluate_final_answer else "not_evaluated",
         "run_id": run_id,
         "artifact_dir": str(artifact_dir),
+        "retriever_mode": retriever_mode,
+        "dense_backend": dense_backend,
+        "dense_model_path": dense_model_path,
+        "dense_device": dense_device,
+        "dense_fp16": bool(dense_fp16),
+        "build_dense_index_if_missing": bool(build_dense_index_if_missing),
+        "reranker_backend": reranker_backend,
+        "reranker_model_path": reranker_model_path,
+        "reranker_device": reranker_device,
+        "reranker_fp16": bool(reranker_fp16),
         "case_count": len(cases),
         "passed_count": pass_fail_counts.get("passed", 0),
         "failed_count": pass_fail_counts.get("failed", 0),
@@ -1673,6 +1745,16 @@ def run_phase5i_benchmark(
     evaluate_final_answer: bool = False,
     full_model_path: bool = False,
     require_llm_planning_config: bool = False,
+    retriever_mode: str = "hybrid_rerank",
+    dense_backend: str = "bge",
+    dense_model_path: str = DEFAULT_BGE_MODEL_PATH,
+    dense_device: str = "cuda:0",
+    dense_fp16: bool = False,
+    build_dense_index_if_missing: bool = True,
+    reranker_backend: str = "cross_encoder",
+    reranker_model_path: str = DEFAULT_RERANKER_MODEL_PATH,
+    reranker_device: str = "cpu",
+    reranker_fp16: bool = False,
     answer_policy: str = "heuristic",
     base_model_path: str = DEFAULT_QWEN_BASE_MODEL_PATH,
     adapter_path: str | None = None,
@@ -1761,6 +1843,16 @@ def run_phase5i_benchmark(
             command_runner=command_runner,
             evaluate_final_answer=evaluate_final_answer,
             full_model_path=full_model_path,
+            retriever_mode=retriever_mode,
+            dense_backend=dense_backend,
+            dense_model_path=dense_model_path,
+            dense_device=dense_device,
+            dense_fp16=dense_fp16,
+            build_dense_index_if_missing=build_dense_index_if_missing,
+            reranker_backend=reranker_backend,
+            reranker_model_path=reranker_model_path,
+            reranker_device=reranker_device,
+            reranker_fp16=reranker_fp16,
             answer_policy=answer_policy,
             base_model_path=base_model_path,
             adapter_path=adapter_path,
@@ -1779,6 +1871,16 @@ def run_phase5i_benchmark(
         dry_run=dry_run,
         evaluate_final_answer=evaluate_final_answer,
         full_model_path=full_model_path,
+        retriever_mode=retriever_mode,
+        dense_backend=dense_backend,
+        dense_model_path=dense_model_path,
+        dense_device=dense_device,
+        dense_fp16=dense_fp16,
+        build_dense_index_if_missing=build_dense_index_if_missing,
+        reranker_backend=reranker_backend,
+        reranker_model_path=reranker_model_path,
+        reranker_device=reranker_device,
+        reranker_fp16=reranker_fp16,
         answer_policy=answer_policy,
     )
     preview = {
@@ -1845,6 +1947,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--full-model-path", dest="full_model_path", action="store_true", default=True)
     parser.add_argument("--no-full-model-path", dest="full_model_path", action="store_false")
     parser.add_argument("--require-llm-planning-config", action="store_true")
+    parser.add_argument("--retriever-mode", choices=["bm25", "dense", "hybrid", "hybrid_rerank"], default="hybrid_rerank")
+    parser.add_argument("--dense-backend", choices=["bge", "hash"], default="bge")
+    parser.add_argument("--dense-model-path", default=DEFAULT_BGE_MODEL_PATH)
+    parser.add_argument("--dense-device", default="cuda:0")
+    parser.add_argument("--dense-fp16", action="store_true")
+    parser.add_argument("--build-dense-index-if-missing", dest="build_dense_index_if_missing", action="store_true", default=True)
+    parser.add_argument("--no-build-dense-index-if-missing", dest="build_dense_index_if_missing", action="store_false")
+    parser.add_argument("--reranker-backend", choices=["cross_encoder", "keyword"], default="cross_encoder")
+    parser.add_argument("--reranker-model-path", default=DEFAULT_RERANKER_MODEL_PATH)
+    parser.add_argument("--reranker-device", default="cpu")
+    parser.add_argument("--reranker-fp16", action="store_true")
     parser.add_argument("--answer-policy", choices=["heuristic", "base", "sft", "grpo"], default="base")
     parser.add_argument("--base-model-path", default=DEFAULT_QWEN_BASE_MODEL_PATH)
     parser.add_argument("--adapter-path")
@@ -1872,6 +1985,16 @@ def main(argv: list[str] | None = None) -> int:
         evaluate_final_answer=bool(args.evaluate_final_answer),
         full_model_path=bool(args.full_model_path),
         require_llm_planning_config=bool(args.require_llm_planning_config or args.full_model_path),
+        retriever_mode=str(args.retriever_mode),
+        dense_backend=str(args.dense_backend),
+        dense_model_path=str(args.dense_model_path),
+        dense_device=str(args.dense_device),
+        dense_fp16=bool(args.dense_fp16),
+        build_dense_index_if_missing=bool(args.build_dense_index_if_missing),
+        reranker_backend=str(args.reranker_backend),
+        reranker_model_path=str(args.reranker_model_path),
+        reranker_device=str(args.reranker_device),
+        reranker_fp16=bool(args.reranker_fp16),
         answer_policy=str(args.answer_policy),
         base_model_path=str(args.base_model_path),
         adapter_path=str(args.adapter_path) if args.adapter_path else None,
