@@ -54,6 +54,15 @@ Phase 5 Personal-use DocAgent MVP
    `validation_subset_used_for_training=false`, and passed the local/sync
    manifest inspector review; this accepts the diagnostic gate execution,
    not final answer-quality benchmark status
+-> Phase 5I-B final-answer-quality artifact contract implemented locally:
+   `scripts/run_phase5i_answer_quality_benchmark.py` now writes
+   `metrics.json`, `predictions.jsonl`, `case_reports.jsonl`,
+   `failure_analysis.md`, `acceptance_report.json`, and
+   `training_candidates_raw.jsonl` while preserving
+   `formal_benchmark_acceptance=false` and
+   `validation_subset_used_for_training=false`; real final answer-quality
+   benchmark execution remains not_started until a server model run is
+   requested and reviewed
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real
@@ -342,7 +351,8 @@ Phase 5I old-semantics server benchmark -> benchmark_evaluated
 Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner -> accepted
 Phase 5I-A corrected-semantics server benchmark -> accepted
 Phase 5I-B Full Model-enhanced QA Path -> accepted
-Phase 5I-B Final Answer Quality Benchmark -> not_started
+Phase 5I-B Final Answer Quality Benchmark artifact contract -> implemented
+Phase 5I-B Final Answer Quality Benchmark execution -> not_started
 Phase 5E Document Summary MVP -> implemented
 Phase 5E-A Document Summary Acceptance Pack -> implemented
 Phase 5 structured_extraction deterministic CLI -> implemented
@@ -1950,7 +1960,13 @@ Phase 4D-B1.3 server sanity accepted
   evidence_readiness_status = baseline_has_failures
 + Phase 5I-B Full Model-enhanced QA Path accepted after server full-path smoke
   and Router LLM trigger probe
-+ Phase 5I-B Final Answer Quality Benchmark not_started
++ Phase 5I-B Final Answer Quality Benchmark artifact contract implemented:
+  `scripts/run_phase5i_answer_quality_benchmark.py` writes
+  `metrics.json`, `predictions.jsonl`, `case_reports.jsonl`,
+  `failure_analysis.md`, `acceptance_report.json`, and
+  `training_candidates_raw.jsonl`, with validation-subset training disabled
+  and formal benchmark acceptance still false
++ Phase 5I-B Final Answer Quality Benchmark execution not_started
 + Phase 5E Document Summary MVP implemented with local targeted and Phase 5
   regression tests passing
 + Phase 5F full CLI acceptance accepted after AutoDL server smoke with

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scripts.run_phase5i_answer_quality_benchmark import CommandResult, run_phase5i_benchmark
+from scripts.run_phase5i_answer_quality_benchmark import CommandResult, build_parser, run_phase5i_benchmark
 
 
 def _write_jsonl(path: Path, rows: list[dict]) -> None:
@@ -46,6 +46,12 @@ def _payload(
         payload,
         ensure_ascii=False,
     )
+
+
+def test_phase5i_parser_exposes_run_id_for_documented_cli() -> None:
+    args = build_parser().parse_args(["--run-id", "phase5ib_probe", "--no-full-model-path"])
+
+    assert args.run_id == "phase5ib_probe"
 
 
 def test_phase5i_runner_scores_fake_cli_outputs_and_writes_artifacts(tmp_path: Path) -> None:
@@ -168,6 +174,15 @@ def test_phase5i_runner_scores_fake_cli_outputs_and_writes_artifacts(tmp_path: P
     assert (run_dir / "phase5i_summary.json").is_file()
     assert (run_dir / "preview.json").is_file()
     assert (run_dir / "manual_review.md").is_file()
+    assert (run_dir / "metrics.json").is_file()
+    assert (run_dir / "predictions.jsonl").is_file()
+    assert (run_dir / "case_reports.jsonl").is_file()
+    assert (run_dir / "failure_analysis.md").is_file()
+    assert (run_dir / "acceptance_report.json").is_file()
+    assert (run_dir / "training_candidates_raw.jsonl").is_file()
+    acceptance = json.loads((run_dir / "acceptance_report.json").read_text(encoding="utf-8"))
+    assert acceptance["formal_benchmark_acceptance"] is False
+    assert acceptance["validation_subset_used_for_training"] is False
 
 
 def test_answer_keyword_missing_does_not_fail_evidence_readiness_by_default(tmp_path: Path) -> None:
@@ -289,14 +304,39 @@ def test_evaluate_final_answer_flag_makes_answer_keyword_missing_hard_fail(tmp_p
     )
 
     result = json.loads((Path(summary["artifact_dir"]) / "phase5i_results.jsonl").read_text(encoding="utf-8").strip())
+    assert summary["evaluation_scope"] == "final_answer_quality_small_scenario"
     assert summary["final_answer_generation_enabled"] is True
     assert summary["final_answer_quality_evaluated"] is True
+    assert summary["answer_quality_evaluation_scope"] == "final_answer_quality_small_scenario"
+    assert summary["formal_benchmark_acceptance"] is False
+    assert summary["validation_subset_used_for_training"] is False
     assert summary["evidence_readiness_status"] == "baseline_has_failures"
     assert result["answer_keyword_evaluated"] is True
+    assert result["evaluation_scope"] == "final_answer_quality_small_scenario"
     assert result["answer_keyword_hit"] is False
     assert result["pass_fail"] == "failed"
     assert "answer_keyword_missing" in result["failure_reasons"]
     assert result["failure_stage"] == "downstream_answer_not_evaluated"
+    run_dir = Path(summary["artifact_dir"])
+    metrics = json.loads((run_dir / "metrics.json").read_text(encoding="utf-8"))
+    predictions = [
+        json.loads(line)
+        for line in (run_dir / "predictions.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    case_reports = [
+        json.loads(line)
+        for line in (run_dir / "case_reports.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert metrics["final_answer_quality_evaluated"] is True
+    assert metrics["answer_correct_count"] == 0
+    assert predictions[0]["answer_correct"] is False
+    assert isinstance(predictions[0]["format_valid"], bool)
+    assert "citation_valid" in predictions[0]
+    assert "location_valid" in predictions[0]
+    assert case_reports[0]["failure_stage"] == "downstream_answer_not_evaluated"
+    assert (run_dir / "training_candidates_raw.jsonl").read_text(encoding="utf-8") == ""
 
 
 def test_full_model_path_passes_cli_flags_and_records_model_path_fields(tmp_path: Path) -> None:

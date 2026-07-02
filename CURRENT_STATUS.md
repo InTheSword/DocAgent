@@ -210,6 +210,16 @@ all completed successfully; `used_qwen=true`, `used_training=false`,
 and wrote review artifacts. This is diagnostic-gate acceptance only, not final
 answer-quality benchmark acceptance.
 
+Phase 5I-B final-answer-quality artifact contract is implemented locally in
+`scripts/run_phase5i_answer_quality_benchmark.py`. The runner now writes
+`metrics.json`, `predictions.jsonl`, `case_reports.jsonl`,
+`failure_analysis.md`, `acceptance_report.json`, and
+`training_candidates_raw.jsonl` in addition to the historical Phase 5I files.
+The artifact contract keeps `formal_benchmark_acceptance=false`,
+`validation_subset_used_for_training=false`, and an empty raw training-candidate
+export by default, so validation rows are not promoted to training data. Real
+server execution of the final answer-quality benchmark remains `not_started`.
+
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in
 `tests/test_run_final_raw_pdf_smoke.py`. The runner executes
@@ -1234,7 +1244,8 @@ Phase 5I old-semantics server benchmark -> benchmark_evaluated
 Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner -> accepted
 Phase 5I-A corrected-semantics server benchmark -> accepted
 Phase 5I-B Full Model-enhanced QA Path -> accepted
-Phase 5I-B Final Answer Quality Benchmark -> not_started
+Phase 5I-B Final Answer Quality Benchmark artifact contract -> implemented
+Phase 5I-B Final Answer Quality Benchmark execution -> not_started
 Phase 5E Document Summary MVP -> implemented
 Phase 5E-A Document Summary Acceptance Pack -> implemented
 Phase 5 structured_extraction deterministic CLI -> implemented

@@ -22,6 +22,7 @@ DEFAULT_OUTPUT_ROOT = ROOT / "outputs" / "benchmark" / "phase5i_answer_quality"
 DEFAULT_CLI_PATH = ROOT / "scripts" / "docagent_cli.py"
 DEFAULT_QWEN_BASE_MODEL_PATH = "/root/autodl-tmp/models/Qwen3-1.7B"
 EVALUATION_SCOPE = "pre_llm_evidence_readiness"
+FINAL_ANSWER_EVALUATION_SCOPE = "final_answer_quality_small_scenario"
 
 UNSUPPORTED_ERROR_TYPES = {
     "document_summary_not_implemented",
@@ -1056,7 +1057,7 @@ def _evaluate_case(
     failure_stage = _stage_for_reason(reasons[0]) if reasons else ""
 
     return {
-        "evaluation_scope": EVALUATION_SCOPE,
+        "evaluation_scope": _evaluation_scope(evaluate_final_answer),
         "full_model_path": bool((payload or {}).get("full_model_path", False)),
         "actual_task_type": actual_task_type,
         "cli_task_type": cli_task_type,
@@ -1199,6 +1200,10 @@ def _count_true(rows: list[dict[str, Any]], key: str) -> int:
     return sum(1 for row in rows if row.get(key) is True)
 
 
+def _evaluation_scope(evaluate_final_answer: bool) -> str:
+    return FINAL_ANSWER_EVALUATION_SCOPE if evaluate_final_answer else EVALUATION_SCOPE
+
+
 def build_summary(
     *,
     run_id: str,
@@ -1233,13 +1238,16 @@ def build_summary(
     summary = {
         "command": "phase5i_answer_quality_benchmark",
         "status": "success",
-        "evaluation_scope": EVALUATION_SCOPE,
+        "evaluation_scope": _evaluation_scope(evaluate_final_answer),
         "full_model_path": bool(full_model_path),
         "final_answer_generation_enabled": bool(evaluate_final_answer),
         "final_answer_quality_evaluated": bool(evaluate_final_answer),
         "evidence_readiness_status": "passed" if pass_fail_counts.get("failed", 0) == 0 else "baseline_has_failures",
         "quality_status": "passed" if pass_fail_counts.get("failed", 0) == 0 else "baseline_has_failures",
-        "quality_status_semantics": "pre_llm_evidence_readiness_not_final_answer_quality",
+        "quality_status_semantics": "small_scenario_final_answer_quality_not_formal_benchmark"
+        if evaluate_final_answer
+        else "pre_llm_evidence_readiness_not_final_answer_quality",
+        "answer_quality_evaluation_scope": FINAL_ANSWER_EVALUATION_SCOPE if evaluate_final_answer else "not_evaluated",
         "run_id": run_id,
         "artifact_dir": str(artifact_dir),
         "case_count": len(cases),
@@ -1293,9 +1301,13 @@ def build_summary(
         "used_llm_query_rewriter": any(bool(row.get("used_llm_query_rewriter")) for row in results),
         "used_qwen_answer_policy": any(bool(row.get("used_qwen_answer_policy")) for row in results),
         "used_external_answer_api": any(bool(row.get("used_external_answer_api")) for row in results),
+        "used_model_answer_generation": any(bool(row.get("used_qwen_answer_policy")) or bool(row.get("used_external_answer_api")) for row in results),
         "used_vlm": False,
         "used_training": False,
         "used_full_e2e": False,
+        "formal_benchmark_acceptance": False,
+        "validation_subset_used_for_training": False,
+        "training_candidate_record_count": 0,
     }
     summary["cases_path"] = str(artifact_dir / "phase5i_cases.jsonl")
     summary["results_path"] = str(artifact_dir / "phase5i_results.jsonl")
@@ -1311,7 +1323,8 @@ def _used_external_api_row(row: dict[str, Any]) -> bool:
     return str(row.get("llm_status") or "") in {"used", "api_error", "invalid_output", "echoed_payload"}
 
 
-def _write_manual_review(path: Path, results: list[dict[str, Any]]) -> None:
+def _write_manual_review(path: Path, results: list[dict[str, Any]], *, summary: dict[str, Any] | None = None) -> None:
+    summary = summary or {}
     review_rows = [
         row
         for row in results
@@ -1320,9 +1333,9 @@ def _write_manual_review(path: Path, results: list[dict[str, Any]]) -> None:
     lines = [
         "# Phase 5I Manual Review",
         "",
-        f"- evaluation_scope: `{EVALUATION_SCOPE}`",
-        "- final_answer_generation_enabled: `false` by default",
-        "- final_answer_quality_evaluated: `false` by default",
+        f"- evaluation_scope: `{summary.get('evaluation_scope') or EVALUATION_SCOPE}`",
+        f"- final_answer_generation_enabled: `{str(summary.get('final_answer_generation_enabled', False)).lower()}`",
+        f"- final_answer_quality_evaluated: `{str(summary.get('final_answer_quality_evaluated', False)).lower()}`",
         "",
         "This file lists evidence readiness, citation metadata, router, unsupported-boundary, and downstream-review cases.",
         "",
@@ -1361,6 +1374,180 @@ def _write_manual_review(path: Path, results: list[dict[str, Any]]) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _answer_correctness(row: dict[str, Any]) -> bool | None:
+    if not row.get("final_answer_quality_evaluated"):
+        return None
+    expected_answer_type = str(row.get("expected_answer_type") or "")
+    if expected_answer_type in {"extractive", "numeric"}:
+        return bool(row.get("answer_keyword_hit"))
+    if expected_answer_type == "abstain":
+        return bool(row.get("abstention_pass"))
+    if expected_answer_type == "unsupported" or row.get("unsupported_ok"):
+        return bool(row.get("unsupported_boundary_pass"))
+    return None
+
+
+def _prediction_row(row: dict[str, Any]) -> dict[str, Any]:
+    answer_correct = _answer_correctness(row)
+    return {
+        "case_id": row.get("case_id"),
+        "user_request": row.get("user_request"),
+        "expected_task_type": row.get("expected_task_type"),
+        "actual_task_type": row.get("actual_task_type"),
+        "expected_answer_type": row.get("expected_answer_type"),
+        "prediction_answer": row.get("answer_preview") or "",
+        "answer_correct": answer_correct,
+        "answer_keyword_hit": row.get("answer_keyword_hit"),
+        "format_valid": bool(row.get("json_valid")),
+        "citation_valid": None if row.get("expected_answer_type") in {"unsupported", "abstain"} else bool(row.get("citation_count")),
+        "location_valid": row.get("citation_page_hit"),
+        "citation_page_hit": row.get("citation_page_hit"),
+        "citations": row.get("citations") or [],
+        "evidence_ready": row.get("evidence_ready"),
+        "final_answer_quality_evaluated": row.get("final_answer_quality_evaluated"),
+        "pass_fail": row.get("pass_fail"),
+        "failure_stage": row.get("failure_stage") or "",
+        "failure_reasons": row.get("failure_reasons") or [],
+    }
+
+
+def _case_report_row(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "case_id": row.get("case_id"),
+        "pass_fail": row.get("pass_fail"),
+        "failure_stage": row.get("failure_stage") or "",
+        "failure_reasons": row.get("failure_reasons") or [],
+        "manual_review_required": bool(row.get("manual_review_required")),
+        "manual_review_reason": row.get("manual_review_reason") or "",
+        "evaluation_scope": row.get("evaluation_scope"),
+        "downstream_task_type": row.get("downstream_task_type"),
+        "evidence_packaging_status": row.get("evidence_packaging_status") or "",
+        "answer_correct": _answer_correctness(row),
+        "format_valid": bool(row.get("json_valid")),
+        "citation_valid": None if row.get("expected_answer_type") in {"unsupported", "abstain"} else bool(row.get("citation_count")),
+        "location_valid": row.get("citation_page_hit"),
+        "used_llm_query_rewriter": row.get("used_llm_query_rewriter"),
+        "used_qwen_answer_policy": row.get("used_qwen_answer_policy"),
+        "trace_run_id": row.get("trace_run_id") or "",
+    }
+
+
+def _metrics_payload(summary: dict[str, Any], results: list[dict[str, Any]]) -> dict[str, Any]:
+    evaluated_rows = [row for row in results if row.get("final_answer_quality_evaluated")]
+    answer_correct_count = sum(1 for row in evaluated_rows if _answer_correctness(row) is True)
+    format_valid_count = sum(1 for row in results if row.get("json_valid"))
+    citation_valid_rows = [row for row in results if row.get("expected_answer_type") not in {"unsupported", "abstain"}]
+    citation_valid_count = sum(1 for row in citation_valid_rows if row.get("citation_count"))
+    location_rows = [row for row in results if row.get("citation_page_hit") is not None]
+    location_valid_count = sum(1 for row in location_rows if row.get("citation_page_hit") is True)
+    return {
+        "run_id": summary.get("run_id"),
+        "evaluation_scope": summary.get("evaluation_scope"),
+        "quality_status": summary.get("quality_status"),
+        "quality_status_semantics": summary.get("quality_status_semantics"),
+        "case_count": summary.get("case_count", 0),
+        "passed_count": summary.get("passed_count", 0),
+        "failed_count": summary.get("failed_count", 0),
+        "final_answer_quality_evaluated": summary.get("final_answer_quality_evaluated"),
+        "final_answer_evaluated_count": len(evaluated_rows),
+        "answer_correct_count": answer_correct_count,
+        "answer_correct_rate": round(answer_correct_count / len(evaluated_rows), 4) if evaluated_rows else None,
+        "format_valid_count": format_valid_count,
+        "format_valid_rate": round(format_valid_count / len(results), 4) if results else None,
+        "citation_valid_count": citation_valid_count,
+        "citation_valid_rate": round(citation_valid_count / len(citation_valid_rows), 4) if citation_valid_rows else None,
+        "location_valid_count": location_valid_count,
+        "location_valid_rate": round(location_valid_count / len(location_rows), 4) if location_rows else None,
+        "failure_stage_distribution": summary.get("failure_stage_distribution", {}),
+        "failure_reason_distribution": summary.get("failure_reason_distribution", {}),
+        "used_qwen_answer_policy_count": summary.get("used_qwen_answer_policy_count", 0),
+        "used_llm_query_rewriter_count": summary.get("used_llm_query_rewriter_count", 0),
+        "used_training": summary.get("used_training", False),
+        "used_vlm": summary.get("used_vlm", False),
+    }
+
+
+def _write_failure_analysis(path: Path, summary: dict[str, Any], results: list[dict[str, Any]]) -> None:
+    failed_rows = [row for row in results if row.get("pass_fail") == "failed"]
+    lines = [
+        "# Phase 5I-B Failure Analysis",
+        "",
+        f"- run_id: `{summary.get('run_id')}`",
+        f"- evaluation_scope: `{summary.get('evaluation_scope')}`",
+        f"- final_answer_quality_evaluated: `{str(summary.get('final_answer_quality_evaluated')).lower()}`",
+        f"- failed_count: `{len(failed_rows)}`",
+        "",
+        "## Failure Stage Distribution",
+        "",
+    ]
+    for key, value in sorted((summary.get("failure_stage_distribution") or {}).items()):
+        lines.append(f"- {key}: `{value}`")
+    lines.extend(["", "## Failure Reason Distribution", ""])
+    for key, value in sorted((summary.get("failure_reason_distribution") or {}).items()):
+        lines.append(f"- {key}: `{value}`")
+    if failed_rows:
+        lines.extend(["", "## Failed Cases", ""])
+        for row in failed_rows[:20]:
+            lines.extend(
+                [
+                    f"### {row.get('case_id')}",
+                    "",
+                    f"- failure_stage: `{row.get('failure_stage') or ''}`",
+                    f"- failure_reasons: `{json.dumps(row.get('failure_reasons') or [], ensure_ascii=False)}`",
+                    f"- answer_correct: `{_answer_correctness(row)}`",
+                    f"- format_valid: `{bool(row.get('json_valid'))}`",
+                    f"- citation_page_hit: `{row.get('citation_page_hit')}`",
+                    "",
+                ]
+            )
+    else:
+        lines.extend(["", "No failed cases were recorded."])
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _acceptance_report(summary: dict[str, Any], metrics: dict[str, Any], formal_paths: dict[str, Path]) -> dict[str, Any]:
+    return {
+        "command": "phase5i_answer_quality_benchmark_acceptance_report",
+        "status": "success",
+        "run_id": summary.get("run_id"),
+        "evaluation_scope": summary.get("evaluation_scope"),
+        "benchmark_status": "small_scenario_baseline",
+        "formal_benchmark_acceptance": False,
+        "validation_subset_used_for_training": False,
+        "final_answer_quality_evaluated": summary.get("final_answer_quality_evaluated"),
+        "used_training": summary.get("used_training", False),
+        "used_vlm": summary.get("used_vlm", False),
+        "quality_status": summary.get("quality_status"),
+        "metrics": metrics,
+        "artifact_paths": {name: str(path) for name, path in formal_paths.items()},
+        "acceptance_note": (
+            "This artifact contract supports Phase 5I-B small-scenario answer-quality review. "
+            "It is not a leaderboard result, not a training run, and not formal benchmark acceptance."
+        ),
+    }
+
+
+def _write_phase5ib_artifacts(artifact_dir: Path, summary: dict[str, Any], results: list[dict[str, Any]]) -> dict[str, Path]:
+    paths = {
+        "metrics": artifact_dir / "metrics.json",
+        "predictions": artifact_dir / "predictions.jsonl",
+        "case_reports": artifact_dir / "case_reports.jsonl",
+        "failure_analysis": artifact_dir / "failure_analysis.md",
+        "acceptance_report": artifact_dir / "acceptance_report.json",
+        "training_candidates_raw": artifact_dir / "training_candidates_raw.jsonl",
+    }
+    metrics = _metrics_payload(summary, results)
+    _write_json(paths["metrics"], metrics)
+    _write_jsonl(paths["predictions"], [_prediction_row(row) for row in results])
+    _write_jsonl(paths["case_reports"], [_case_report_row(row) for row in results])
+    _write_failure_analysis(paths["failure_analysis"], summary, results)
+    # Validation rows are diagnostic only; this file exists to satisfy the artifact
+    # contract without turning validation data into training data.
+    _write_jsonl(paths["training_candidates_raw"], [])
+    _write_json(paths["acceptance_report"], _acceptance_report(summary, metrics, paths))
+    return paths
+
+
 def _llm_planning_config_status(router_llm_env_file: Path) -> dict[str, Any]:
     from docagent.router.llm_client import load_router_llm_config
 
@@ -1391,6 +1578,9 @@ def _blocked_summary(
         "full_model_path": bool(full_model_path),
         "quality_status": "blocked",
         "quality_status_semantics": "full_model_path_requires_llm_planning_config",
+        "answer_quality_evaluation_scope": "blocked",
+        "final_answer_generation_enabled": False,
+        "final_answer_quality_evaluated": False,
         "run_id": run_id,
         "artifact_dir": str(artifact_dir),
         "case_count": len(cases),
@@ -1408,9 +1598,13 @@ def _blocked_summary(
         "used_llm_query_rewriter": False,
         "used_qwen_answer_policy": False,
         "used_external_answer_api": False,
+        "used_model_answer_generation": False,
         "used_vlm": False,
         "used_training": False,
         "used_full_e2e": False,
+        "formal_benchmark_acceptance": False,
+        "validation_subset_used_for_training": False,
+        "training_candidate_record_count": 0,
     }
     summary["cases_path"] = str(artifact_dir / "phase5i_cases.jsonl")
     summary["results_path"] = str(artifact_dir / "phase5i_results.jsonl")
@@ -1475,21 +1669,33 @@ def run_phase5i_benchmark(
             manual_review_path = artifact_dir / "manual_review.md"
             _write_jsonl(cases_path, [case.to_dict() for case in cases])
             _write_jsonl(results_path, [])
-            _write_json(summary_path, summary)
             _write_json(preview_path, preview)
             manual_review_path.write_text(
                 "# Phase 5I Manual Review\n\nFull model path is blocked by missing Router/Rewriter LLM config.\n",
                 encoding="utf-8",
             )
+            formal_paths = _write_phase5ib_artifacts(artifact_dir, summary, [])
+            artifact_paths = [
+                str(cases_path),
+                str(results_path),
+                str(summary_path),
+                str(preview_path),
+                str(manual_review_path),
+                *[str(path) for path in formal_paths.values()],
+            ]
+            summary.update(
+                {
+                    "phase5ib_artifact_paths": {name: str(path) for name, path in formal_paths.items()},
+                    "artifact_paths": artifact_paths,
+                }
+            )
+            preview["summary"] = summary
+            _write_json(summary_path, summary)
+            _write_json(preview_path, preview)
+            _write_json(formal_paths["acceptance_report"], _acceptance_report(summary, _metrics_payload(summary, []), formal_paths))
             return {
                 **summary,
-                "artifact_paths": [
-                    str(cases_path),
-                    str(results_path),
-                    str(summary_path),
-                    str(preview_path),
-                    str(manual_review_path),
-                ],
+                "artifact_paths": artifact_paths,
             }
 
     results = [
@@ -1539,24 +1745,37 @@ def run_phase5i_benchmark(
     manual_review_path = artifact_dir / "manual_review.md"
     _write_jsonl(cases_path, [case.to_dict() for case in cases])
     _write_jsonl(results_path, results)
+    _write_json(preview_path, preview)
+    _write_manual_review(manual_review_path, results, summary=summary)
+    formal_paths = _write_phase5ib_artifacts(artifact_dir, summary, results)
+    artifact_paths = [
+        str(cases_path),
+        str(results_path),
+        str(summary_path),
+        str(preview_path),
+        str(manual_review_path),
+        *[str(path) for path in formal_paths.values()],
+    ]
+    summary.update(
+        {
+            "phase5ib_artifact_paths": {name: str(path) for name, path in formal_paths.items()},
+            "artifact_paths": artifact_paths,
+        }
+    )
+    preview["summary"] = summary
     _write_json(summary_path, summary)
     _write_json(preview_path, preview)
-    _write_manual_review(manual_review_path, results)
+    _write_json(formal_paths["acceptance_report"], _acceptance_report(summary, _metrics_payload(summary, results), formal_paths))
 
     return {
         **summary,
-        "artifact_paths": [
-            str(cases_path),
-            str(results_path),
-            str(summary_path),
-            str(preview_path),
-            str(manual_review_path),
-        ],
+        "artifact_paths": artifact_paths,
     }
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run Phase 5I evidence readiness or full model-enhanced QA path validation.")
+    parser.add_argument("--run-id")
     parser.add_argument("--db-path", default=str(DEFAULT_DB_PATH))
     parser.add_argument("--doc-id", default=DEFAULT_DOC_ID)
     parser.add_argument("--router-llm-env-file", default=".secrets/router_llm.env")
@@ -1610,6 +1829,7 @@ def main(argv: list[str] | None = None) -> int:
         max_new_tokens=int(args.max_new_tokens),
         python_executable=str(args.python_executable),
         timeout_seconds=int(args.timeout_seconds),
+        run_id=str(args.run_id) if args.run_id else None,
     )
     print(json.dumps(summary, ensure_ascii=False, indent=2, default=_json_default))
     return 0

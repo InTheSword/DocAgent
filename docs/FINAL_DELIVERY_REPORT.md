@@ -41,6 +41,7 @@ multi-document QA is not a required delivery claim.
 | TAT-QA / MP-DocVQA subset preparation | implemented | Reproducible validation-subset artifacts are prepared locally; they are not training data |
 | Local diagnostics and readiness checks | implemented | Diagnostic subset runners and `scripts/check_final_delivery_readiness.py` write compact artifacts and check citation/evidence fields |
 | Final delivery benchmark gate | accepted | Server run `final_delivery_benchmark_gate_server_20260702_rerankerfix` completed readiness, real-Qwen AnswerPolicy baseline, and MP-DocVQA full-workflow diagnostic steps successfully; inspector review passed; `formal_benchmark_acceptance=false` |
+| Final answer quality artifact contract | implemented | `scripts/run_phase5i_answer_quality_benchmark.py` writes `metrics.json`, `predictions.jsonl`, `case_reports.jsonl`, `failure_analysis.md`, `acceptance_report.json`, and `training_candidates_raw.jsonl` while keeping validation rows out of training |
 | Final answer quality benchmark | not_started | No accepted MP-DocVQA/TAT-QA final answer benchmark yet |
 | New SFT/GRPO training | not_started | Candidate builders/gates exist, but no current final training run is claimed |
 | Pixel-level VLM reasoning | not_started | Image support is OCR/caption/nearby-text/resource metadata only |
@@ -86,5 +87,8 @@ Near-term work should stay on reusable system behavior:
 2. Keep the full workflow sanity path green after meaningful changes.
 3. Review accepted final-delivery gate artifacts before promoting any result
    to formal final answer-quality benchmark work.
-4. Start SFT/GRPO only if future benchmark evidence shows reusable AnswerPolicy failures
+4. Use the Phase 5I-B artifact contract for the next small-scenario
+   answer-quality server run, while keeping `formal_benchmark_acceptance=false`
+   until the run is reviewed.
+5. Start SFT/GRPO only if future benchmark evidence shows reusable AnswerPolicy failures
    that prompt/tool/contract repair cannot address.

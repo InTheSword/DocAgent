@@ -254,6 +254,24 @@ signals, and verifies that benchmark/training safety flags remain false. It
 does not call MinerU, Qwen, BGE-M3, reranker, datasets, or training. The review
 itself writes `result.json`, `summary.json`, `summary.md`, and `manifest.json`.
 
+Run the Phase 5I-B small-scenario final-answer-quality artifact contract:
+
+```powershell
+python scripts\run_phase5i_answer_quality_benchmark.py `
+  --run-id phase5ib_answer_quality_probe `
+  --evaluate-final-answer `
+  --full-model-path `
+  --answer-policy base
+```
+
+This runner writes both the historical Phase 5I files and the Phase 5I-B
+contract files: `metrics.json`, `predictions.jsonl`, `case_reports.jsonl`,
+`failure_analysis.md`, `acceptance_report.json`, and
+`training_candidates_raw.jsonl`. Real Qwen/BGE/reranker execution is
+server-required. The acceptance report keeps `formal_benchmark_acceptance=false`
+and `validation_subset_used_for_training=false`; it is a small-scenario
+answer-quality review contract, not leaderboard acceptance or training.
+
 Materialize MP-DocVQA final-subset PDFs into MinerU-backed evidence:
 
 ```powershell
