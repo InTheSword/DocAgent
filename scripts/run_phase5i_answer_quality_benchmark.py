@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -23,6 +24,7 @@ DEFAULT_CLI_PATH = ROOT / "scripts" / "docagent_cli.py"
 DEFAULT_QWEN_BASE_MODEL_PATH = "/root/autodl-tmp/models/Qwen3-1.7B"
 EVALUATION_SCOPE = "pre_llm_evidence_readiness"
 FINAL_ANSWER_EVALUATION_SCOPE = "final_answer_quality_small_scenario"
+SCRIPT_VERSION = "phase5i-answer-quality-benchmark-v2"
 
 UNSUPPORTED_ERROR_TYPES = {
     "document_summary_not_implemented",
@@ -605,6 +607,50 @@ def _write_jsonl(path: Path, rows: Iterable[dict[str, Any]]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         for row in rows:
             handle.write(json.dumps(row, ensure_ascii=False, default=_json_default) + "\n")
+
+
+def _safe_relpath(path: Path) -> str:
+    try:
+        return path.resolve().relative_to(ROOT.resolve()).as_posix()
+    except ValueError:
+        return path.resolve().as_posix()
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _write_manifest(path: Path, *, summary: dict[str, Any], artifact_paths: list[Path]) -> None:
+    files = []
+    for artifact_path in artifact_paths:
+        if artifact_path == path or not artifact_path.is_file():
+            continue
+        files.append(
+            {
+                "path": _safe_relpath(artifact_path),
+                "byte_size": artifact_path.stat().st_size,
+                "sha256": _sha256_file(artifact_path),
+            }
+        )
+    _write_json(
+        path,
+        {
+            "run_id": summary.get("run_id"),
+            "script_version": SCRIPT_VERSION,
+            "evaluation_scope": summary.get("evaluation_scope"),
+            "quality_status": summary.get("quality_status"),
+            "final_answer_quality_evaluated": summary.get("final_answer_quality_evaluated"),
+            "formal_benchmark_acceptance": summary.get("formal_benchmark_acceptance"),
+            "validation_subset_used_for_training": summary.get("validation_subset_used_for_training"),
+            "used_training": summary.get("used_training"),
+            "used_vlm": summary.get("used_vlm"),
+            "files": files,
+        },
+    )
 
 
 def _read_cases_jsonl(path: Path) -> list[GoldenCase]:
@@ -1667,6 +1713,7 @@ def run_phase5i_benchmark(
             summary_path = artifact_dir / "phase5i_summary.json"
             preview_path = artifact_dir / "preview.json"
             manual_review_path = artifact_dir / "manual_review.md"
+            manifest_path = artifact_dir / "manifest.json"
             _write_jsonl(cases_path, [case.to_dict() for case in cases])
             _write_jsonl(results_path, [])
             _write_json(preview_path, preview)
@@ -1682,6 +1729,7 @@ def run_phase5i_benchmark(
                 str(preview_path),
                 str(manual_review_path),
                 *[str(path) for path in formal_paths.values()],
+                str(manifest_path),
             ]
             summary.update(
                 {
@@ -1693,6 +1741,7 @@ def run_phase5i_benchmark(
             _write_json(summary_path, summary)
             _write_json(preview_path, preview)
             _write_json(formal_paths["acceptance_report"], _acceptance_report(summary, _metrics_payload(summary, []), formal_paths))
+            _write_manifest(manifest_path, summary=summary, artifact_paths=[Path(path) for path in artifact_paths])
             return {
                 **summary,
                 "artifact_paths": artifact_paths,
@@ -1743,6 +1792,7 @@ def run_phase5i_benchmark(
     summary_path = artifact_dir / "phase5i_summary.json"
     preview_path = artifact_dir / "preview.json"
     manual_review_path = artifact_dir / "manual_review.md"
+    manifest_path = artifact_dir / "manifest.json"
     _write_jsonl(cases_path, [case.to_dict() for case in cases])
     _write_jsonl(results_path, results)
     _write_json(preview_path, preview)
@@ -1755,6 +1805,7 @@ def run_phase5i_benchmark(
         str(preview_path),
         str(manual_review_path),
         *[str(path) for path in formal_paths.values()],
+        str(manifest_path),
     ]
     summary.update(
         {
@@ -1766,6 +1817,7 @@ def run_phase5i_benchmark(
     _write_json(summary_path, summary)
     _write_json(preview_path, preview)
     _write_json(formal_paths["acceptance_report"], _acceptance_report(summary, _metrics_payload(summary, results), formal_paths))
+    _write_manifest(manifest_path, summary=summary, artifact_paths=[Path(path) for path in artifact_paths])
 
     return {
         **summary,

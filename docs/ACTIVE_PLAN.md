@@ -58,7 +58,8 @@ Phase 5 Personal-use DocAgent MVP
    `scripts/run_phase5i_answer_quality_benchmark.py` now writes
    `metrics.json`, `predictions.jsonl`, `case_reports.jsonl`,
    `failure_analysis.md`, `acceptance_report.json`, and
-   `training_candidates_raw.jsonl` while preserving
+   `training_candidates_raw.jsonl`, plus `manifest.json` with artifact sizes
+   and hashes, while preserving
    `formal_benchmark_acceptance=false` and
    `validation_subset_used_for_training=false`; real final answer-quality
    benchmark execution remains not_started until a server model run is
@@ -1963,9 +1964,10 @@ Phase 4D-B1.3 server sanity accepted
 + Phase 5I-B Final Answer Quality Benchmark artifact contract implemented:
   `scripts/run_phase5i_answer_quality_benchmark.py` writes
   `metrics.json`, `predictions.jsonl`, `case_reports.jsonl`,
-  `failure_analysis.md`, `acceptance_report.json`, and
-  `training_candidates_raw.jsonl`, with validation-subset training disabled
-  and formal benchmark acceptance still false
+  `failure_analysis.md`, `acceptance_report.json`,
+  `training_candidates_raw.jsonl`, and `manifest.json`, with
+  validation-subset training disabled and formal benchmark acceptance still
+  false
 + Phase 5I-B Final Answer Quality Benchmark execution not_started
 + Phase 5E Document Summary MVP implemented with local targeted and Phase 5
   regression tests passing

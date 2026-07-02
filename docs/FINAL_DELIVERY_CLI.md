@@ -267,7 +267,8 @@ python scripts\run_phase5i_answer_quality_benchmark.py `
 This runner writes both the historical Phase 5I files and the Phase 5I-B
 contract files: `metrics.json`, `predictions.jsonl`, `case_reports.jsonl`,
 `failure_analysis.md`, `acceptance_report.json`, and
-`training_candidates_raw.jsonl`. Real Qwen/BGE/reranker execution is
+`training_candidates_raw.jsonl`, plus `manifest.json` with file sizes and
+hashes for artifact review. Real Qwen/BGE/reranker execution is
 server-required. The acceptance report keeps `formal_benchmark_acceptance=false`
 and `validation_subset_used_for_training=false`; it is a small-scenario
 answer-quality review contract, not leaderboard acceptance or training.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -180,9 +181,20 @@ def test_phase5i_runner_scores_fake_cli_outputs_and_writes_artifacts(tmp_path: P
     assert (run_dir / "failure_analysis.md").is_file()
     assert (run_dir / "acceptance_report.json").is_file()
     assert (run_dir / "training_candidates_raw.jsonl").is_file()
+    assert (run_dir / "manifest.json").is_file()
     acceptance = json.loads((run_dir / "acceptance_report.json").read_text(encoding="utf-8"))
     assert acceptance["formal_benchmark_acceptance"] is False
     assert acceptance["validation_subset_used_for_training"] is False
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["run_id"] == "phase5i_test"
+    assert manifest["formal_benchmark_acceptance"] is False
+    assert manifest["validation_subset_used_for_training"] is False
+    manifest_files = {Path(item["path"]).name: item for item in manifest["files"]}
+    assert "manifest.json" not in manifest_files
+    for name in ("phase5i_summary.json", "metrics.json", "acceptance_report.json", "training_candidates_raw.jsonl"):
+        artifact = run_dir / name
+        assert name in manifest_files
+        assert manifest_files[name]["sha256"] == hashlib.sha256(artifact.read_bytes()).hexdigest()
 
 
 def test_answer_keyword_missing_does_not_fail_evidence_readiness_by_default(tmp_path: Path) -> None:
