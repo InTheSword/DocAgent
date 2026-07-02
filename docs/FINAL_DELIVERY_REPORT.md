@@ -40,7 +40,7 @@ multi-document QA is not a required delivery claim.
 | MP-DocVQA evidence materialization | accepted | 10/10 selected documents and 55/55 samples were materialized as evidence-ready after MinerU API retry hardening |
 | TAT-QA / MP-DocVQA subset preparation | implemented | Reproducible validation-subset artifacts are prepared locally; they are not training data |
 | Local diagnostics and readiness checks | implemented | Diagnostic subset runners and `scripts/check_final_delivery_readiness.py` write compact artifacts and check citation/evidence fields |
-| Final delivery benchmark gate | implemented | `scripts/run_final_delivery_benchmark_gate.py` safely orchestrates readiness, AnswerPolicy baseline, and MP-DocVQA full-workflow diagnostics; `scripts/inspect_final_delivery_benchmark_gate.py` verifies local/sync manifest hashes and safety flags; it keeps `formal_benchmark_acceptance=false` |
+| Final delivery benchmark gate | accepted | Server run `final_delivery_benchmark_gate_server_20260702_rerankerfix` completed readiness, real-Qwen AnswerPolicy baseline, and MP-DocVQA full-workflow diagnostic steps successfully; inspector review passed; `formal_benchmark_acceptance=false` |
 | Final answer quality benchmark | not_started | No accepted MP-DocVQA/TAT-QA final answer benchmark yet |
 | New SFT/GRPO training | not_started | Candidate builders/gates exist, but no current final training run is claimed |
 | Pixel-level VLM reasoning | not_started | Image support is OCR/caption/nearby-text/resource metadata only |
@@ -56,9 +56,12 @@ Accepted or real-component evidence currently includes:
 - `final_full_workflow_hybrid_rerank_smoke_rowalign_20260630`
 - `final_raw_pdf_full_workflow_api_hybrid_qwen_fresh_20260630_172350`
 - `final_delivery_chain_sanity_after_scope_rules_20260702`
+- `final_delivery_benchmark_gate_server_20260702_rerankerfix`
 
 These runs validate execution-chain continuity and artifact contracts. They do
 not by themselves promote answer correctness to `benchmark_evaluated`.
+The final delivery benchmark gate is accepted as a diagnostic orchestration
+gate only; it is not a formal answer-quality benchmark claim.
 
 ## Known Boundaries
 
@@ -81,7 +84,7 @@ Near-term work should stay on reusable system behavior:
 1. Preserve and test the MinerU output -> EvidenceBlock -> retrieval -> citation
    path after parser/evidence changes.
 2. Keep the full workflow sanity path green after meaningful changes.
-3. Run the final delivery benchmark gate on the server before deciding whether
-   to promote any result to formal final answer-quality benchmark work.
-4. Start SFT/GRPO only if the benchmark shows reusable AnswerPolicy failures
+3. Review accepted final-delivery gate artifacts before promoting any result
+   to formal final answer-quality benchmark work.
+4. Start SFT/GRPO only if future benchmark evidence shows reusable AnswerPolicy failures
    that prompt/tool/contract repair cannot address.

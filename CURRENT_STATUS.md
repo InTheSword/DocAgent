@@ -201,6 +201,15 @@ and both local and sync manifests hash the final written artifact contents.
 read-only artifact reviewer for that gate; it verifies manifest hashes, step
 statuses, and benchmark/training safety flags without rerunning models.
 
+Server diagnostic `final_delivery_benchmark_gate_server_20260702_rerankerfix`
+at commit `c60d1f9` accepted the final-delivery benchmark gate execution:
+readiness, AnswerPolicy baseline, and MP-DocVQA full-workflow diagnostic steps
+all completed successfully; `used_qwen=true`, `used_training=false`,
+`formal_benchmark_acceptance=false`, and
+`validation_subset_used_for_training=false`; the inspector review also passed
+and wrote review artifacts. This is diagnostic-gate acceptance only, not final
+answer-quality benchmark acceptance.
+
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in
 `tests/test_run_final_raw_pdf_smoke.py`. The runner executes
@@ -1232,7 +1241,7 @@ Phase 5 structured_extraction deterministic CLI -> implemented
 Phase 5F full CLI acceptance -> accepted
 Phase 5 final delivery report -> implemented
 Phase 5 final delivery readiness check -> implemented
-Phase 5 final delivery benchmark gate -> implemented
+Phase 5 final delivery benchmark gate -> accepted
 CDC -> not_started
 MVP CLI / trace integration -> accepted
 Demo/closure -> not_started

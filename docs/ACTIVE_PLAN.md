@@ -46,6 +46,14 @@ Phase 5 Personal-use DocAgent MVP
    readiness, AnswerPolicy baseline, and MP-DocVQA full-workflow diagnostic
    orchestration; it keeps formal_benchmark_acceptance false and does not
    start training
+-> final-delivery benchmark gate server diagnostic accepted: server run
+   `final_delivery_benchmark_gate_server_20260702_rerankerfix` at commit
+   `c60d1f9` completed readiness, real-Qwen AnswerPolicy baseline, and
+   MP-DocVQA full-workflow diagnostic steps successfully, used Qwen, kept
+   `used_training=false`, `formal_benchmark_acceptance=false`, and
+   `validation_subset_used_for_training=false`, and passed the local/sync
+   manifest inspector review; this accepts the diagnostic gate execution,
+   not final answer-quality benchmark status
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real
@@ -346,7 +354,7 @@ Phase 5 final evaluation local subset diagnostic runner -> implemented
 Phase 5 final delivery CLI guide -> implemented
 Phase 5 final delivery report -> implemented
 Phase 5 final delivery readiness check -> implemented
-Phase 5 final delivery benchmark gate -> implemented
+Phase 5 final delivery benchmark gate -> accepted
 Phase 5 AnswerPolicy IO candidate schema / citation allowlist -> implemented
 Phase 5 AnswerPolicy prompt v2 candidate citation contract -> implemented
 Phase 5 final AnswerPolicy baseline runner -> implemented
