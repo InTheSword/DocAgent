@@ -1,6 +1,6 @@
 # DocAgent Final Delivery CLI Guide
 
-Updated: 2026-06-30
+Updated: 2026-07-02
 
 This guide describes the current local, CLI-only delivery surface for the
 Phase 5 personal-use DocAgent MVP. It is the practical entry point for running
@@ -26,6 +26,9 @@ Implemented local capabilities:
 - text file ingestion through `TextParserBackend`
 - existing MinerU output ingestion through `--parser mineru_existing`
 - MinerU API ingestion through `--parser mineru_api --live-api`
+- MinerU output preservation for ordinary `*_content_list.json`,
+  `*_content_list_v2.json` fallback, Markdown/resource inventory metadata,
+  table HTML, table/image resource paths, captions, and nearby OCR text
 - deterministic document statistics and page lookup
 - deterministic extractive `document_summary`
 - deterministic persisted-evidence `structured_extraction`
