@@ -187,19 +187,23 @@ def _component_usage_review(mpdocvqa_metrics: dict[str, Any]) -> dict[str, Any]:
     }
     component_counts: dict[str, Any] = {}
     incomplete: list[str] = []
+    missing: list[str] = []
     for label, metric_key in component_keys.items():
         count = _metric_number(mpdocvqa_metrics, metric_key)
         component_counts[label] = count
+        if count is None:
+            missing.append(label)
         if expected_count is not None and count is not None and count < expected_count:
             incomplete.append(label)
     cli_success_rate = _metric_number(mpdocvqa_metrics, "cli_success_rate")
     return {
         "expected_component_count": expected_count,
         "component_counts": component_counts,
+        "missing_component_metrics": missing,
         "incomplete_components": incomplete,
         "cli_success_rate": cli_success_rate,
         "cli_success_complete": cli_success_rate is None or cli_success_rate >= 1.0,
-        "full_component_metrics_present": all(value is not None for value in component_counts.values()),
+        "full_component_metrics_present": not missing,
     }
 
 
@@ -215,8 +219,12 @@ def _metric_review(summary: dict[str, Any], failures: list[str]) -> dict[str, An
     for name in ("answer_policy_baseline", "mpdocvqa_full_workflow"):
         if name in {str(step.get("name") or "") for step in summary.get("steps", []) if isinstance(step, dict)} and not step_metrics.get(name):
             metric_gaps.append(name)
+    if mpdocvqa_metrics and component_review["missing_component_metrics"]:
+        metric_gaps.append("mpdocvqa_full_workflow_component_usage")
     if failures:
         next_action = "fix_gate_artifact_contract_or_rerun_gate"
+    elif component_review["missing_component_metrics"]:
+        next_action = "rerun_gate_with_component_metric_contract_before_benchmark"
     elif component_review["incomplete_components"] or not component_review["cli_success_complete"]:
         next_action = "inspect_full_workflow_component_usage_before_benchmark"
     elif metric_gaps:
