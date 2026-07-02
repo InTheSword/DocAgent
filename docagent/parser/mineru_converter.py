@@ -500,14 +500,26 @@ def content_list_to_blocks(
 
 def find_content_list(output_dir: str | Path) -> Path:
     root = Path(output_dir)
-    candidates = [
+    ordinary_candidates = [
         path
         for path in sorted(root.rglob("*content_list.json"))
         if not path.name.endswith("_content_list_v2.json") and path.name != "content_list_v2.json"
     ]
-    if not candidates:
-        raise FileNotFoundError(f"no ordinary MinerU *_content_list.json found under {root}")
-    if len(candidates) > 1:
-        names = ", ".join(str(path) for path in candidates)
+    if len(ordinary_candidates) > 1:
+        names = ", ".join(str(path) for path in ordinary_candidates)
         raise ValueError(f"multiple ordinary MinerU content-list files found under {root}: {names}")
-    return candidates[0]
+
+    if ordinary_candidates:
+        return ordinary_candidates[0]
+
+    v2_candidates = [
+        path
+        for path in sorted(root.rglob("*content_list_v2.json"))
+        if path.name.endswith("_content_list_v2.json") or path.name == "content_list_v2.json"
+    ]
+    if not v2_candidates:
+        raise FileNotFoundError(f"no MinerU content-list file found under {root}")
+    if len(v2_candidates) > 1:
+        names = ", ".join(str(path) for path in v2_candidates)
+        raise ValueError(f"multiple MinerU content-list v2 files found under {root}: {names}")
+    return v2_candidates[0]

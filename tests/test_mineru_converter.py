@@ -195,12 +195,34 @@ def test_mineru_real_schema_preserves_boilerplate_chart_and_resources(tmp_path: 
     assert blocks[-1].metadata["previous_block_id"] == blocks[-2].block_id
 
 
-def test_find_content_list_rejects_missing_or_multiple_ordinary_lists(tmp_path: Path) -> None:
-    (tmp_path / "only_content_list_v2.json").write_text("[]", encoding="utf-8")
-    with pytest.raises(FileNotFoundError, match="ordinary MinerU"):
+def test_find_content_list_accepts_v2_when_ordinary_list_is_absent(tmp_path: Path) -> None:
+    v2 = tmp_path / "only_content_list_v2.json"
+    v2.write_text("[]", encoding="utf-8")
+
+    assert find_content_list(tmp_path) == v2
+
+
+def test_find_content_list_prefers_ordinary_list_over_v2(tmp_path: Path) -> None:
+    v2 = tmp_path / "only_content_list_v2.json"
+    ordinary = tmp_path / "sample_content_list.json"
+    v2.write_text("[]", encoding="utf-8")
+    ordinary.write_text("[]", encoding="utf-8")
+
+    assert find_content_list(tmp_path) == ordinary
+
+
+def test_find_content_list_rejects_missing_or_multiple_lists(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError, match="content-list"):
         find_content_list(tmp_path)
 
     (tmp_path / "a_content_list.json").write_text("[]", encoding="utf-8")
     (tmp_path / "b_content_list.json").write_text("[]", encoding="utf-8")
     with pytest.raises(ValueError, match="multiple ordinary"):
+        find_content_list(tmp_path)
+
+    for path in tmp_path.glob("*content_list.json"):
+        path.unlink()
+    (tmp_path / "a_content_list_v2.json").write_text("[]", encoding="utf-8")
+    (tmp_path / "b_content_list_v2.json").write_text("[]", encoding="utf-8")
+    with pytest.raises(ValueError, match="multiple MinerU content-list v2"):
         find_content_list(tmp_path)
