@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 
-from scripts.run_final_delivery_benchmark_gate import CommandResult, build_parser, run_final_delivery_benchmark_gate
+from scripts.run_final_delivery_benchmark_gate import CommandResult, ROOT, build_parser, run_final_delivery_benchmark_gate, sha256_file
 
 
 def _touch_inputs(tmp_path: Path) -> dict[str, Path]:
@@ -64,6 +64,23 @@ def _args(tmp_path: Path, paths: dict[str, Path], *extra: str):
     )
 
 
+def _resolve_artifact_path(path_text: str) -> Path:
+    path = Path(path_text)
+    return path if path.is_absolute() else ROOT / path
+
+
+def _assert_manifest_hashes(manifest_path: Path) -> None:
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    file_names = {Path(file["path"]).name for file in manifest["files"]}
+    assert "manifest.json" not in file_names
+    assert {"result.json", "summary.json", "summary.md", "steps.jsonl", "preview.json"} <= file_names
+    for file in manifest["files"]:
+        artifact_path = _resolve_artifact_path(file["path"])
+        assert artifact_path.is_file()
+        assert file["byte_size"] == artifact_path.stat().st_size
+        assert file["sha256"] == sha256_file(artifact_path)
+
+
 def test_final_delivery_benchmark_gate_orchestrates_safe_steps(tmp_path: Path) -> None:
     paths = _touch_inputs(tmp_path)
     args = _args(tmp_path, paths)
@@ -113,7 +130,11 @@ def test_final_delivery_benchmark_gate_orchestrates_safe_steps(tmp_path: Path) -
     assert (run_dir / "result.json").is_file()
     assert (run_dir / "summary.json").is_file()
     assert (run_dir / "steps.jsonl").is_file()
-    assert (tmp_path / "sync" / "gate_test" / "summary.json").is_file()
+    _assert_manifest_hashes(run_dir / "manifest.json")
+    sync_dir = tmp_path / "sync" / "gate_test"
+    sync_summary = json.loads((sync_dir / "summary.json").read_text(encoding="utf-8"))
+    assert any(path.endswith("manifest.json") for path in sync_summary["sync_artifact_paths"])
+    _assert_manifest_hashes(sync_dir / "manifest.json")
 
 
 def test_final_delivery_benchmark_gate_blocks_missing_qwen_model_before_steps(tmp_path: Path) -> None:

@@ -348,10 +348,13 @@ def _sync_bundle(sync_root: Path, run_id: str, artifact_paths: list[Path]) -> tu
     sync_dir.mkdir(parents=True, exist_ok=True)
     copied: list[Path] = []
     for source in artifact_paths:
-        if source.is_file() and source.name in {"result.json", "summary.json", "summary.md", "preview.json", "steps.jsonl", "manifest.json"}:
+        if source.is_file() and source.name in {"result.json", "summary.json", "summary.md", "preview.json", "steps.jsonl"}:
             target = sync_dir / source.name
             shutil.copy2(source, target)
             copied.append(target)
+    manifest_path = sync_dir / "manifest.json"
+    _manifest(manifest_path, run_id=run_id, artifact_paths=copied)
+    copied.append(manifest_path)
     return safe_relpath(sync_dir), [safe_relpath(path) for path in copied]
 
 
@@ -423,6 +426,8 @@ def run_final_delivery_benchmark_gate(
         "preview": artifact_dir / "preview.json",
         "manifest": artifact_dir / "manifest.json",
     }
+    artifact_paths = [safe_relpath(path) for path in paths.values()]
+    summary["artifact_paths"] = artifact_paths
     result = {
         "command": summary["command"],
         "status": summary["status"],
@@ -435,31 +440,28 @@ def run_final_delivery_benchmark_gate(
         "preflight_status": preflight_result["status"],
         "step_statuses": {step["name"]: step["status"] for step in steps},
         "next_action": summary["next_action"],
-        "artifact_paths": [safe_relpath(path) for path in paths.values()],
+        "artifact_paths": artifact_paths,
     }
+    if args.sync_output_dir:
+        sync_root = repo_path(args.sync_output_dir) or Path(args.sync_output_dir)
+        sync_dir = sync_root / run_id
+        sync_artifact_paths = [
+            safe_relpath(sync_dir / path.name)
+            for path in paths.values()
+            if path.name in {"result.json", "summary.json", "summary.md", "preview.json", "steps.jsonl", "manifest.json"}
+        ]
+        summary["sync_bundle_path"] = safe_relpath(sync_dir)
+        result["sync_bundle_path"] = safe_relpath(sync_dir)
+        summary["sync_artifact_paths"] = sync_artifact_paths
+        result["sync_artifact_paths"] = sync_artifact_paths
     write_json(paths["summary"], summary)
     write_json(paths["result"], result)
     paths["summary_md"].write_text(_summary_markdown(summary), encoding="utf-8")
     write_jsonl(paths["steps"], steps)
     write_json(paths["preview"], {"run_id": run_id, "preflight": preflight_result, "steps": [{k: v for k, v in step.items() if k not in {"stdout_tail", "stderr_tail", "command"}} for step in steps]})
-    _manifest(paths["manifest"], run_id=run_id, artifact_paths=list(paths.values()))
-    summary["artifact_paths"] = [safe_relpath(path) for path in paths.values()]
-    result["artifact_paths"] = summary["artifact_paths"]
+    _manifest(paths["manifest"], run_id=run_id, artifact_paths=[path for key, path in paths.items() if key != "manifest"])
     if args.sync_output_dir:
-        sync_root = repo_path(args.sync_output_dir) or Path(args.sync_output_dir)
-        sync_dir = safe_relpath(sync_root / run_id)
-        summary["sync_bundle_path"] = sync_dir
-        result["sync_bundle_path"] = sync_dir
-        write_json(paths["summary"], summary)
-        write_json(paths["result"], result)
-        _, sync_paths = _sync_bundle(sync_root, run_id, list(paths.values()))
-        summary["sync_artifact_paths"] = sync_paths
-        result["sync_artifact_paths"] = sync_paths
-        write_json(paths["summary"], summary)
-        write_json(paths["result"], result)
-        sync_path = sync_root / run_id
-        shutil.copy2(paths["summary"], sync_path / paths["summary"].name)
-        shutil.copy2(paths["result"], sync_path / paths["result"].name)
+        _sync_bundle(sync_root, run_id, list(paths.values()))
     return result
 
 
