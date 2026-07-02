@@ -301,6 +301,20 @@ Accepted final answer-quality benchmark status remains `not_started`; further
 small-scenario answer/citation failures should not be chased unless they expose
 a reusable workflow, evidence, citation, or artifact-contract defect.
 
+AnswerPolicy training-pack preprocessing is implemented locally in
+`scripts/build_answer_policy_training_pack.py` with tests in
+`tests/test_build_answer_policy_training_pack.py`. The script takes train-split
+`DocAgentSample` JSONL input and builds audited SFT and GRPO training-format
+artifacts: `sft_train.jsonl`, `grpo_train.jsonl`, `sft_audit.json`,
+`grpo_audit.json`, `preview.json`, `summary.json`, `summary.md`, and
+`manifest.json` with artifact sizes and hashes. It blocks non-train sample
+splits and validation-like input paths such as `final_eval` by default, while
+preserving `used_training=false`, `training_started=false`,
+`validation_subset_used_for_training=false`, and
+`formal_benchmark_acceptance=false`. This is preprocessing only; it does not
+start SFT/GRPO, call Qwen, load checkpoints, or promote diagnostic validation
+subsets to training data.
+
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in
 `tests/test_run_final_raw_pdf_smoke.py`. The runner executes

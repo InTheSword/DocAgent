@@ -49,6 +49,8 @@ Implemented local capabilities:
 - diagnostic AnswerPolicy baseline review gate for full artifacts or compact
   sync bundles
 - diagnostic SFT candidate data builder from real-Qwen baseline failures
+- audited AnswerPolicy SFT/GRPO training-pack preprocessing from train-split
+  `DocAgentSample` JSONL input
 - single-command AnswerPolicy training-gate orchestration for server runs
 - local final-delivery readiness check for required files, CLI options, output
   fields, citation/evidence location fields, documentation boundaries, and
@@ -414,6 +416,20 @@ The builder reconstructs prompt-v2 records for failed TAT-QA AnswerPolicy rows
 using prepared local subset samples and compact tool results. It blocks
 heuristic/fake non-Qwen baselines and writes candidate data only; it does not
 start training.
+
+Build an audited train-split AnswerPolicy training-format pack:
+
+```powershell
+python scripts\build_answer_policy_training_pack.py `
+  --input data\benchmark\my_training_samples.jsonl `
+  --output-root outputs\training_prep\answer_policy_training_pack `
+  --run-id answer_policy_training_pack_candidate
+```
+
+This writes `sft_train.jsonl`, `grpo_train.jsonl`, audit files, preview,
+summary, and a hash manifest. By default it blocks non-train sample splits and
+validation-like input paths such as `final_eval`; it does not start SFT/GRPO,
+call Qwen, or promote validation subsets to training data.
 
 Enable optional query planning:
 

@@ -120,6 +120,13 @@ Phase 5 Personal-use DocAgent MVP
    hashes, required output presence, safety flags, metrics/report consistency,
    and empty `training_candidates_raw.jsonl` without calling models or
    promoting validation rows to training data
+-> AnswerPolicy training-pack preprocessing implemented locally:
+   `scripts/build_answer_policy_training_pack.py` builds audited SFT and GRPO
+   training-format artifacts from train-split `DocAgentSample` JSONL input,
+   writes `sft_train.jsonl`, `grpo_train.jsonl`, audits, preview, summary, and
+   manifest with hashes, and blocks non-train splits or validation-like input
+   paths by default; it does not start SFT/GRPO, call Qwen, use validation
+   subsets for training, or claim benchmark acceptance
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real
