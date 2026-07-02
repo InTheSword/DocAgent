@@ -194,7 +194,9 @@ and the MP-DocVQA full-workflow diagnostic runner, then writes compact
 `result.json`, `summary.json`, `summary.md`, `steps.jsonl`, `preview.json`, and
 `manifest.json` artifacts with an optional sync bundle. It is a server-required
 diagnostic gate only: it does not train, does not use validation subsets as
-training data, and keeps `formal_benchmark_acceptance=false`.
+training data, and keeps `formal_benchmark_acceptance=false`. Commit `834d1f0`
+stabilized the gate artifact contract so local manifests exclude self-hashes
+and both local and sync manifests hash the final written artifact contents.
 
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in

@@ -55,7 +55,8 @@ Implemented local capabilities:
   deprecated PM handoff cleanup
 - final delivery benchmark gate in `scripts/run_final_delivery_benchmark_gate.py`
   for server-side readiness, AnswerPolicy baseline, and MP-DocVQA full-workflow
-  diagnostics without claiming formal benchmark acceptance
+  diagnostics with hash-checked local/sync manifests and without claiming
+  formal benchmark acceptance
 
 Not included in the current local delivery:
 

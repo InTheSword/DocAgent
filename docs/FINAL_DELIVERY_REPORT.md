@@ -40,7 +40,7 @@ multi-document QA is not a required delivery claim.
 | MP-DocVQA evidence materialization | accepted | 10/10 selected documents and 55/55 samples were materialized as evidence-ready after MinerU API retry hardening |
 | TAT-QA / MP-DocVQA subset preparation | implemented | Reproducible validation-subset artifacts are prepared locally; they are not training data |
 | Local diagnostics and readiness checks | implemented | Diagnostic subset runners and `scripts/check_final_delivery_readiness.py` write compact artifacts and check citation/evidence fields |
-| Final delivery benchmark gate | implemented | `scripts/run_final_delivery_benchmark_gate.py` safely orchestrates readiness, AnswerPolicy baseline, and MP-DocVQA full-workflow diagnostics; it keeps `formal_benchmark_acceptance=false` |
+| Final delivery benchmark gate | implemented | `scripts/run_final_delivery_benchmark_gate.py` safely orchestrates readiness, AnswerPolicy baseline, and MP-DocVQA full-workflow diagnostics; local and sync manifests hash final artifact contents; it keeps `formal_benchmark_acceptance=false` |
 | Final answer quality benchmark | not_started | No accepted MP-DocVQA/TAT-QA final answer benchmark yet |
 | New SFT/GRPO training | not_started | Candidate builders/gates exist, but no current final training run is claimed |
 | Pixel-level VLM reasoning | not_started | Image support is OCR/caption/nearby-text/resource metadata only |
