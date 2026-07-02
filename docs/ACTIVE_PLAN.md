@@ -36,6 +36,10 @@ Phase 5 Personal-use DocAgent MVP
    MP-DocVQA val shards 1-2
 -> final-evaluation local subset diagnostic runner implemented locally
 -> final-delivery CLI guide implemented locally
+-> final-delivery readiness check implemented locally for required files, CLI
+   options, output contract fields, documentation boundaries, and deprecated
+   PM handoff cleanup; it does not call MinerU, Qwen, BGE-M3, reranker,
+   datasets, or training
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real
@@ -334,6 +338,7 @@ Phase 5 simple_calculation deterministic CLI -> implemented
 Phase 5 final evaluation subset preparation -> implemented
 Phase 5 final evaluation local subset diagnostic runner -> implemented
 Phase 5 final delivery CLI guide -> implemented
+Phase 5 final delivery readiness check -> implemented
 Phase 5 AnswerPolicy IO candidate schema / citation allowlist -> implemented
 Phase 5 AnswerPolicy prompt v2 candidate citation contract -> implemented
 Phase 5 final AnswerPolicy baseline runner -> implemented
@@ -1578,9 +1583,13 @@ Final-delivery CLI guide:
 resource_boundary = local_only
 guide = docs/FINAL_DELIVERY_CLI.md
 readme_entry = README.md
+readiness_check = scripts/check_final_delivery_readiness.py
 pm_handoff_docs = deprecated_not_updated
 dataset_policy_update = docs/DATASETS.md
 status = implemented
+readiness_check_status = implemented
+readiness_check_scope = required files, CLI options, output fields,
+  documentation boundaries, deprecated PM handoff cleanup
 benchmark_evaluation_status = not_started
 used_external_api = false
 used_vlm = false
@@ -1971,6 +1980,11 @@ Phase 4D-B1.3 server sanity accepted
   benchmark-evaluated
 + Final delivery CLI guide implemented locally in `docs/FINAL_DELIVERY_CLI.md`
   and linked from `README.md`; status remains documentation/packaging only
++ Final delivery readiness check implemented locally in
+  `scripts/check_final_delivery_readiness.py`; it checks required files, CLI
+  options, required output fields, documentation boundaries, and deprecated PM
+  handoff cleanup without calling MinerU, Qwen, BGE-M3, reranker, datasets, or
+  training
 + AnswerPolicy IO candidate schema, shared prompt v2 candidate-citation
   contract, SFT/GRPO record compatibility, and reward/eval schema
   compatibility implemented locally; final subset AnswerPolicy baseline runner

@@ -1,6 +1,6 @@
 # Current Status
 
-Updated: 2026-07-01
+Updated: 2026-07-02
 
 ## Phase 4D-C Accepted / Phase 5 Active
 
@@ -166,6 +166,17 @@ commands, diagnostic artifacts, image/table boundaries, and status rules. This
 is documentation and packaging only: it does not change model behavior, run
 online MinerU OCR, run Qwen, use VLM, start training, or promote local subset
 diagnostics to `benchmark_evaluated`.
+
+Phase 5 final delivery readiness check is implemented locally in
+`scripts/check_final_delivery_readiness.py` with tests in
+`tests/test_check_final_delivery_readiness.py`. The check verifies required
+delivery files, user-facing CLI options, required output fields, documentation
+boundary snippets, and removal of the deprecated PM handoff document. It writes
+`result.json`, `summary.json`, and `manifest.json` under
+`outputs/final_delivery_readiness/<run_id>/` when used directly. It is a local
+packaging/contract guard only: it does not call MinerU, Qwen, BGE-M3, reranker,
+datasets, VLM, or training, and it does not claim final answer-quality or
+formal benchmark acceptance.
 
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in
@@ -1196,6 +1207,7 @@ Phase 5E Document Summary MVP -> implemented
 Phase 5E-A Document Summary Acceptance Pack -> implemented
 Phase 5 structured_extraction deterministic CLI -> implemented
 Phase 5F full CLI acceptance -> accepted
+Phase 5 final delivery readiness check -> implemented
 CDC -> not_started
 MVP CLI / trace integration -> accepted
 Demo/closure -> not_started
