@@ -265,6 +265,17 @@ citation, and passed all execution-chain checks. This is `real_model_verified`
 execution evidence only; it does not evaluate final answer correctness or mark
 MP-DocVQA/TAT-QA benchmark acceptance.
 
+Post-scope-rule full-chain sanity rerun
+`final_delivery_chain_sanity_after_scope_rules_20260702` at commit `e3b5c43`
+confirmed the same delivery path still works after the MinerU evidence metadata
+and delivery-focused scope-rule updates. It used the existing MP-DocVQA
+EvidenceBlock DB, real LLM Router fallback, LLM Query Rewriter, Qwen base
+AnswerPolicy, BGE-M3 dense retrieval, and bge-reranker-v2-m3 on 4 rows:
+`cli_success_rate=1.0`, Qwen/dense/reranker/query-rewriter use `4/4`,
+`retrieved_gold_page_hit_rate=1.0`, `citation_page_hit_rate=1.0`, and
+`answer_hit_rate=0.75`. This is a compact execution-chain regression only, not
+formal benchmark or answer-quality acceptance.
+
 Phase 5 raw PDF full-model workflow baseline is real-model verified after
 fresh server run
 `final_raw_pdf_full_workflow_api_hybrid_qwen_fresh_20260630_172350` at commit

@@ -150,6 +150,14 @@ Phase 5 Personal-use DocAgent MVP
    `retrieve_evidence -> build_evidence_context -> generate_answer ->
    check_format -> check_location -> answer_repair -> finalize`; this is
    execution-chain evidence, not final answer-quality benchmark evidence
+-> post-scope-rule full-chain sanity rerun
+   `final_delivery_chain_sanity_after_scope_rules_20260702` at commit
+   `e3b5c43` used existing MP-DocVQA EvidenceBlocks plus real LLM Router,
+   LLM Query Rewriter, Qwen base AnswerPolicy, BGE-M3 dense retrieval, and
+   bge-reranker-v2-m3 on 4 rows with cli_success_rate 1.0 and all four rows
+   exercising Qwen/dense/reranker/query-rewriter; this preserves the current
+   delivery-chain baseline after evidence metadata and scope-rule updates,
+   without claiming benchmark acceptance
 -> raw PDF full-model workflow baseline real-model verified: fresh server run
    `final_raw_pdf_full_workflow_api_hybrid_qwen_fresh_20260630_172350` at
    commit `8a61600` started from `--file` raw PDF input with a fresh DB,
