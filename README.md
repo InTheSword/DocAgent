@@ -111,6 +111,8 @@ commits.
 - final-delivery benchmark gate orchestration for readiness, AnswerPolicy
   baseline, and MP-DocVQA full-workflow diagnostics; it is diagnostic-only and
   does not claim benchmark acceptance.
+- read-only final-delivery benchmark gate artifact inspection for local/sync
+  manifest hashes, step statuses, and benchmark/training safety flags.
 
 ## Not Accepted Yet
 

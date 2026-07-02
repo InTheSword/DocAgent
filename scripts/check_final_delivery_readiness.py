@@ -33,6 +33,7 @@ REQUIRED_FILES = (
     "scripts/prepare_mpdocvqa_evidence.py",
     "scripts/run_mpdocvqa_full_workflow_diagnostic.py",
     "scripts/run_final_delivery_benchmark_gate.py",
+    "scripts/inspect_final_delivery_benchmark_gate.py",
 )
 REMOVED_FILES = ("docs/PROJECT_HANDOFF_PM.md",)
 REQUIRED_OUTPUT_FIELDS = (

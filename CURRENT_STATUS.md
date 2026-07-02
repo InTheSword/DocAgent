@@ -197,6 +197,9 @@ diagnostic gate only: it does not train, does not use validation subsets as
 training data, and keeps `formal_benchmark_acceptance=false`. Commit `834d1f0`
 stabilized the gate artifact contract so local manifests exclude self-hashes
 and both local and sync manifests hash the final written artifact contents.
+`scripts/inspect_final_delivery_benchmark_gate.py` is implemented locally as a
+read-only artifact reviewer for that gate; it verifies manifest hashes, step
+statuses, and benchmark/training safety flags without rerunning models.
 
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in

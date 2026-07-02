@@ -239,6 +239,19 @@ baseline runner, and the MP-DocVQA full-workflow diagnostic runner. It writes
 compact artifacts and sync bundles, keeps `formal_benchmark_acceptance=false`,
 and does not start SFT/GRPO training.
 
+Inspect a completed final-delivery benchmark gate artifact directory:
+
+```powershell
+python scripts\inspect_final_delivery_benchmark_gate.py `
+  --run-dir outputs\final_eval\final_delivery_benchmark_gate\<run_id> `
+  --sync-bundle-dir outputs\sync\<run_id> `
+  --run-id final_delivery_benchmark_gate_review
+```
+
+This read-only check validates local and sync manifest hashes, summarizes step
+statuses, and verifies that benchmark/training safety flags remain false. It
+does not call MinerU, Qwen, BGE-M3, reranker, datasets, or training.
+
 Materialize MP-DocVQA final-subset PDFs into MinerU-backed evidence:
 
 ```powershell
