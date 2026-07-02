@@ -168,6 +168,9 @@ Every command group must:
 - check required files/packages first;
 - write long output under `outputs/logs/`;
 - provide at most one command group per interaction;
+- when compact terminal JSON is not enough for likely triage, explicitly list
+  the exact result files, sync-bundle files, previews, or log-tail files the
+  user should return or upload with the command result;
 - preserve the interactive terminal. A pasted command group must not
   deliberately close, replace, or terminate the user's shell or terminal session
   when any inner command fails.
@@ -214,6 +217,12 @@ Failure:
 ```
 
 Do not request full logs, prompts, EvidenceBlocks, traces, or generations unless debugging a named field.
+
+Compact terminal JSON is a routing signal, not a complete debugging record. If
+the returned JSON does not contain enough evidence to classify a failure, first
+request the named artifacts already produced by the run, or provide a small
+read-only follow-up command that prints only the missing summary fields. Do not
+begin broad local code changes from under-specified server failures.
 
 ## 10. Git synchronization
 

@@ -126,6 +126,8 @@ Sync bundle rules:
 - prefer derived summaries over raw generations or full EvidenceBlocks;
 - include enough artifact paths and hashes to let a later server rerun locate
   the original full outputs.
+- command instructions should name the specific sync/result files to return
+  whenever those files are expected to be needed for triage.
 
 When a user reports that a server command completed, inspect sync artifacts in
 this order:
@@ -138,6 +140,11 @@ this order:
 
 Do not request full terminal logs unless the sync bundle is missing or
 insufficient for triage.
+
+If the terminal JSON is inconclusive, do not infer the root cause from local
+code alone. Ask for the named sync/result files first, or request a narrow
+read-only inspection command that reports only the missing fields needed to
+classify the failure.
 
 ## Acceptance Mapping
 

@@ -226,6 +226,9 @@ Commands must:
 - check required paths and packages first;
 - write long output to files;
 - request only the minimum result needed.
+- when the expected result is too large or too structured for terminal JSON,
+  name the specific result files or sync-bundle files the user should return
+  or upload for review.
 - preserve the user's interactive terminal session. User-pasted server command
   groups must not deliberately terminate the shell or parent terminal when a
   step fails.
@@ -272,6 +275,12 @@ For new server tasks, prefer a curated sync bundle under
 `summary.json`, `summary.md`, previews, failure samples, and log tails. Do not
 sync raw datasets, full output trees, model weights, databases, complete logs,
 or secrets.
+
+Treat terminal JSON as the first triage layer, not the whole evidence record.
+If the compact JSON is insufficient to determine whether a failure is a code
+defect, command/configuration issue, missing artifact, or non-blocking quality
+issue, request the named sync/result files or propose a small read-only server
+inspection command before doing a deep local code audit.
 
 ## 10. Completion rule
 
