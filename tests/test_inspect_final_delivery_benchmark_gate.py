@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 from scripts.inspect_final_delivery_benchmark_gate import inspect_gate, main, verify_manifest
-from scripts.run_final_delivery_benchmark_gate import CommandResult, build_parser, run_final_delivery_benchmark_gate
+from scripts.run_final_delivery_benchmark_gate import CommandResult, build_parser, run_final_delivery_benchmark_gate, sha256_file
 
 
 def _touch_inputs(tmp_path: Path) -> dict[str, Path]:
@@ -67,12 +67,21 @@ def _args(tmp_path: Path, paths: dict[str, Path]):
 def _fake_runner(command: list[str], _cwd: Path, _timeout: int) -> CommandResult:
     script = Path(command[1]).name
     if script == "check_final_delivery_readiness.py":
-        payload = {"command": "check_final_delivery_readiness", "status": "success", "used_qwen": False}
+        payload = {
+            "command": "check_final_delivery_readiness",
+            "status": "success",
+            "check_count": 5,
+            "passed_check_count": 5,
+            "used_qwen": False,
+        }
     elif script == "run_final_answer_policy_baseline.py":
         payload = {
             "command": "run_final_answer_policy_baseline",
             "status": "success",
             "evaluated_count": 3,
+            "answer_hit_rate": 0.67,
+            "citation_block_hit_rate": 1.0,
+            "format_valid_rate": 1.0,
             "formal_benchmark_acceptance": False,
         }
     else:
@@ -80,6 +89,16 @@ def _fake_runner(command: list[str], _cwd: Path, _timeout: int) -> CommandResult
             "command": "run_mpdocvqa_full_workflow_diagnostic",
             "status": "success",
             "evaluated_count": 2,
+            "local_fact_qa_count": 2,
+            "used_qwen_answer_policy_count": 2,
+            "used_dense_retrieval_count": 2,
+            "used_reranker_count": 2,
+            "used_llm_query_rewriter_count": 2,
+            "cli_success_rate": 1.0,
+            "retrieved_gold_page_hit_rate": 1.0,
+            "citation_page_hit_rate": 1.0,
+            "answer_hit_rate": 0.5,
+            "bucket_counts": {"passed": 1, "answer_generation_or_metric_miss": 1},
             "formal_benchmark_acceptance": False,
         }
     return CommandResult(0, json.dumps(payload), "")
@@ -110,6 +129,33 @@ def test_inspect_final_delivery_benchmark_gate_accepts_valid_artifacts(tmp_path:
     assert result["used_training_reviewed"] is True
     assert result["local_manifest"]["status"] == "success"
     assert result["sync_manifest"]["status"] == "success"
+    assert result["step_metrics"]["answer_policy_baseline"]["answer_hit_rate"] == 0.67
+    assert result["metric_review"]["answer_policy"]["citation_block_hit_rate"] == 1.0
+    assert result["metric_review"]["mpdocvqa_full_workflow"]["component_usage"]["incomplete_components"] == []
+    assert result["next_action"] == "review_answer_quality_metrics_before_formal_benchmark_or_training"
+
+
+def test_inspect_final_delivery_benchmark_gate_flags_incomplete_component_use(tmp_path: Path) -> None:
+    run_dir, sync_dir = _make_gate_run(tmp_path)
+    summary_path = run_dir / "summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    for step in summary["steps"]:
+        if step["name"] == "mpdocvqa_full_workflow":
+            step["metrics"]["used_reranker_count"] = 1
+    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    manifest_path = run_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for item in manifest["files"]:
+        if item["path"].endswith("summary.json"):
+            item["byte_size"] = summary_path.stat().st_size
+            item["sha256"] = sha256_file(summary_path)
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    result = inspect_gate(run_dir, sync_bundle_dir=sync_dir)
+
+    assert result["status"] == "success"
+    assert result["metric_review"]["mpdocvqa_full_workflow"]["component_usage"]["incomplete_components"] == ["reranker"]
+    assert result["next_action"] == "inspect_full_workflow_component_usage_before_benchmark"
 
 
 def test_inspect_final_delivery_benchmark_gate_rejects_stale_hash(tmp_path: Path) -> None:

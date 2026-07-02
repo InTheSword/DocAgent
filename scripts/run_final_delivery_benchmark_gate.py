@@ -297,22 +297,46 @@ def _run_step(
 
 
 def _compact_metrics(payload: dict[str, Any]) -> dict[str, Any]:
-    keys = (
+    scalar_keys = (
         "case_count",
         "evaluated_count",
         "passed_count",
         "failed_count",
         "skipped_count",
+        "document_count",
+        "document_passed_count",
+        "document_failed_count",
+        "sample_count",
+        "sample_evidence_ready_count",
+        "check_count",
+        "passed_check_count",
+        "failed_check_count",
         "pass_rate",
         "answer_hit_rate",
         "citation_block_hit_rate",
         "citation_page_hit_rate",
         "retrieved_gold_page_hit_rate",
+        "selected_gold_page_hit_rate",
         "cli_success_rate",
         "format_valid_rate",
+        "location_valid_rate",
+        "tool_success_rate",
+        "sample_evidence_ready_rate",
+        "answer_text_gold_page_hit_rate",
+        "used_qwen_answer_policy_count",
+        "used_dense_retrieval_count",
+        "used_reranker_count",
+        "used_llm_query_rewriter_count",
+        "local_fact_qa_count",
     )
+    structured_keys = ("bucket_counts", "failure_reason_distribution", "step_statuses")
     metrics = payload.get("metrics") if isinstance(payload.get("metrics"), dict) else payload
-    return {key: metrics.get(key) for key in keys if metrics.get(key) is not None}
+    compact = {key: metrics.get(key) for key in scalar_keys if metrics.get(key) is not None}
+    for key in structured_keys:
+        value = metrics.get(key)
+        if isinstance(value, dict):
+            compact[key] = value
+    return compact
 
 
 def _summary_markdown(summary: dict[str, Any]) -> str:

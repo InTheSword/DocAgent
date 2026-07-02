@@ -55,6 +55,17 @@ def write_summary_markdown(path: Path, result: dict[str, Any]) -> None:
     ]
     for name, status in result.get("step_statuses", {}).items():
         lines.append(f"- {name}: `{status}`")
+    step_metrics = result.get("step_metrics") if isinstance(result.get("step_metrics"), dict) else {}
+    if step_metrics:
+        lines.extend(["", "## Step Metrics", ""])
+        for name, metrics in step_metrics.items():
+            if not isinstance(metrics, dict) or not metrics:
+                continue
+            compact = ", ".join(f"{key}={value}" for key, value in metrics.items() if not isinstance(value, dict))
+            lines.append(f"- {name}: {compact or 'structured metrics only'}")
+            bucket_counts = metrics.get("bucket_counts")
+            if isinstance(bucket_counts, dict) and bucket_counts:
+                lines.append(f"  - bucket_counts: `{json.dumps(bucket_counts, ensure_ascii=False)}`")
     lines.extend(
         [
             "",
@@ -123,6 +134,125 @@ def verify_manifest(manifest_path: Path) -> dict[str, Any]:
     }
 
 
+def _step_metrics(summary: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    metrics_by_step: dict[str, dict[str, Any]] = {}
+    for step in summary.get("steps", []):
+        if not isinstance(step, dict):
+            continue
+        name = str(step.get("name") or "")
+        if not name:
+            continue
+        metrics = step.get("metrics")
+        metrics_by_step[name] = metrics if isinstance(metrics, dict) else {}
+    return metrics_by_step
+
+
+def _step_artifact_refs(summary: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    refs: dict[str, dict[str, Any]] = {}
+    for step in summary.get("steps", []):
+        if not isinstance(step, dict):
+            continue
+        name = str(step.get("name") or "")
+        if not name:
+            continue
+        refs[name] = {
+            "parsed_command": step.get("parsed_command"),
+            "parsed_status": step.get("parsed_status"),
+            "returncode": step.get("returncode"),
+            "parse_error": step.get("parse_error"),
+            "artifact_paths": step.get("artifact_paths") if isinstance(step.get("artifact_paths"), list) else [],
+            "sync_bundle_path": step.get("sync_bundle_path"),
+        }
+    return refs
+
+
+def _metric_number(metrics: dict[str, Any], key: str) -> float | None:
+    value = metrics.get(key)
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _component_usage_review(mpdocvqa_metrics: dict[str, Any]) -> dict[str, Any]:
+    local_fact_count = _metric_number(mpdocvqa_metrics, "local_fact_qa_count")
+    evaluated_count = _metric_number(mpdocvqa_metrics, "evaluated_count")
+    expected_count = local_fact_count if local_fact_count is not None else evaluated_count
+    component_keys = {
+        "qwen_answer_policy": "used_qwen_answer_policy_count",
+        "dense_retrieval": "used_dense_retrieval_count",
+        "reranker": "used_reranker_count",
+        "llm_query_rewriter": "used_llm_query_rewriter_count",
+    }
+    component_counts: dict[str, Any] = {}
+    incomplete: list[str] = []
+    for label, metric_key in component_keys.items():
+        count = _metric_number(mpdocvqa_metrics, metric_key)
+        component_counts[label] = count
+        if expected_count is not None and count is not None and count < expected_count:
+            incomplete.append(label)
+    cli_success_rate = _metric_number(mpdocvqa_metrics, "cli_success_rate")
+    return {
+        "expected_component_count": expected_count,
+        "component_counts": component_counts,
+        "incomplete_components": incomplete,
+        "cli_success_rate": cli_success_rate,
+        "cli_success_complete": cli_success_rate is None or cli_success_rate >= 1.0,
+        "full_component_metrics_present": all(value is not None for value in component_counts.values()),
+    }
+
+
+def _metric_review(summary: dict[str, Any], failures: list[str]) -> dict[str, Any]:
+    step_metrics = _step_metrics(summary)
+    answer_metrics = step_metrics.get("answer_policy_baseline", {})
+    mpdocvqa_metrics = step_metrics.get("mpdocvqa_full_workflow", {})
+    component_review = _component_usage_review(mpdocvqa_metrics)
+    answer_hit_rate = _metric_number(answer_metrics, "answer_hit_rate")
+    mpdocvqa_answer_hit_rate = _metric_number(mpdocvqa_metrics, "answer_hit_rate")
+    mpdocvqa_retrieval_hit_rate = _metric_number(mpdocvqa_metrics, "retrieved_gold_page_hit_rate")
+    metric_gaps: list[str] = []
+    for name in ("answer_policy_baseline", "mpdocvqa_full_workflow"):
+        if name in {str(step.get("name") or "") for step in summary.get("steps", []) if isinstance(step, dict)} and not step_metrics.get(name):
+            metric_gaps.append(name)
+    if failures:
+        next_action = "fix_gate_artifact_contract_or_rerun_gate"
+    elif component_review["incomplete_components"] or not component_review["cli_success_complete"]:
+        next_action = "inspect_full_workflow_component_usage_before_benchmark"
+    elif metric_gaps:
+        next_action = "review_raw_step_artifacts_or_rerun_gate_with_metric_contract"
+    else:
+        next_action = "review_answer_quality_metrics_before_formal_benchmark_or_training"
+    return {
+        "answer_policy": {
+            "evaluated_count": answer_metrics.get("evaluated_count"),
+            "pass_rate": answer_metrics.get("pass_rate"),
+            "answer_hit_rate": answer_hit_rate,
+            "citation_block_hit_rate": answer_metrics.get("citation_block_hit_rate"),
+            "format_valid_rate": answer_metrics.get("format_valid_rate"),
+            "failure_reason_distribution": answer_metrics.get("failure_reason_distribution", {}),
+        },
+        "mpdocvqa_full_workflow": {
+            "evaluated_count": mpdocvqa_metrics.get("evaluated_count"),
+            "cli_success_rate": mpdocvqa_metrics.get("cli_success_rate"),
+            "retrieved_gold_page_hit_rate": mpdocvqa_retrieval_hit_rate,
+            "citation_page_hit_rate": mpdocvqa_metrics.get("citation_page_hit_rate"),
+            "answer_hit_rate": mpdocvqa_answer_hit_rate,
+            "bucket_counts": mpdocvqa_metrics.get("bucket_counts", {}),
+            "component_usage": component_review,
+        },
+        "metric_gaps": metric_gaps,
+        "recommendation": {
+            "next_action": next_action,
+            "do_not_train_yet": True,
+            "reason": (
+                "This review reads final-delivery gate artifacts only. It checks child-step metrics, "
+                "workflow component-use signals, and safety flags before any formal benchmark or training decision."
+            ),
+        },
+    }
+
+
 def write_manifest(path: Path, *, run_id: str, artifact_paths: list[Path]) -> None:
     files = []
     for artifact in artifact_paths:
@@ -177,6 +307,11 @@ def inspect_gate(run_dir: Path, *, sync_bundle_dir: Path | None = None) -> dict[
     if safety_flags["used_training"] is not False:
         failures.append("used_training_not_false")
 
+    step_metrics = _step_metrics(summary)
+    step_artifact_refs = _step_artifact_refs(summary)
+    metric_review = _metric_review(summary, failures)
+    next_action = metric_review["recommendation"]["next_action"] if not failures else "fix_gate_artifact_contract_or_rerun_gate"
+
     return {
         "command": "inspect_final_delivery_benchmark_gate",
         "status": "success" if not failures else "failed",
@@ -185,6 +320,9 @@ def inspect_gate(run_dir: Path, *, sync_bundle_dir: Path | None = None) -> dict[
         "gate_status": summary.get("status"),
         "run_id": summary.get("run_id") or result.get("run_id"),
         "step_statuses": step_statuses,
+        "step_metrics": step_metrics,
+        "step_artifact_refs": step_artifact_refs,
+        "metric_review": metric_review,
         "successful_step_count": summary.get("successful_step_count"),
         "step_count": summary.get("step_count"),
         "used_qwen": summary.get("used_qwen"),
@@ -196,7 +334,7 @@ def inspect_gate(run_dir: Path, *, sync_bundle_dir: Path | None = None) -> dict[
         "sync_manifest": sync_manifest,
         "missing": missing,
         "failures": failures,
-        "next_action": "review_gate_step_outputs_or_update_delivery_status" if not failures else "fix_gate_artifact_contract_or_rerun_gate",
+        "next_action": next_action,
         "used_vlm": summary.get("used_vlm"),
     }
 
