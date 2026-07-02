@@ -115,6 +115,11 @@ Required:
 - prefer the smallest change that enables real-component verification;
 - stop when the active plan says to stop;
 - wait for server output when the next action depends on server state.
+- keep work anchored to the current delivery and functional goal, not to
+  open-ended diagnostics, score chasing, or curiosity-driven local analysis.
+- when an audit or evaluation finds an issue, first decide whether it blocks
+  the deliverable execution chain. If it does not, record the limitation and
+  move back to the next delivery task.
 
 Do not:
 
@@ -125,6 +130,20 @@ Do not:
 - modify SFT/GRPO checkpoints, reward, training split, or Phase 1 AnswerPolicy unless explicitly requested;
 - start TAT-QA, VLM, Demo, or a new training phase while the active milestone is incomplete;
 - mix unrelated refactors or style changes into the milestone commit.
+- keep repeating diagnosis on the same small sample set after the functional
+  cause and delivery impact are understood;
+- make case-specific repairs for one validation row, PDF page, table value,
+  answer string, or question wording just to improve a local metric;
+- use validation subsets as training data or as a source for sample-specific
+  prompt/tool rules.
+
+Generic fixes are allowed only when they improve reusable behavior such as:
+
+- parser output preservation and conversion;
+- EvidenceBlock, retrieval, evidence collection, citation, or artifact
+  contracts;
+- table/calculation behavior expressed as general rules;
+- full workflow continuity from input document to final answer output.
 
 ## 7. Testing policy
 
@@ -207,11 +226,21 @@ Commands must:
 - check required paths and packages first;
 - write long output to files;
 - request only the minimum result needed.
+- preserve the user's interactive terminal session. User-pasted server command
+  groups must not deliberately terminate the shell or parent terminal when a
+  step fails.
 
 For Phase 4B Gate 3 server evaluation, provide Git sync, environment preflight,
 and real evaluation as three short foreground Bash command blocks. Do not use
 `nohup`, `setsid`, background `&`, `tmux`, `kill`, `pkill`, or `exec` in
 user-pasted commands.
+
+Also do not use `set -e`, shell `exit`, `trap ... EXIT`, or inline Python
+`raise SystemExit` / `sys.exit(...)` as outer-wrapper failure propagation in
+commands the user pastes into an interactive server terminal. Capture
+subprocess return codes and exceptions into compact JSON instead. If a called
+script may return non-zero, wrap it so the supervising command still prints a
+structured failure result and leaves the terminal open.
 
 Success response:
 
