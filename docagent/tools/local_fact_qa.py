@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import traceback
 from typing import Any, Callable
 
 from docagent.models.base import AnswerPolicy, HeuristicAnswerPolicy
@@ -85,6 +86,8 @@ def local_fact_qa(
             trace_path=trace_path,
             warnings=warnings,
             cause_type=cause_type,
+            cause=_compact_exception_cause(exc),
+            traceback_tail=_compact_traceback(exc),
         )
 
     return _success(
@@ -153,10 +156,16 @@ def _error(
     trace_path: str = "",
     warnings: list[str] | None = None,
     cause_type: str = "",
+    cause: dict[str, str] | None = None,
+    traceback_tail: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     error = {"type": error_type, "message": message}
     if cause_type:
         error["cause_type"] = cause_type
+    if cause:
+        error["cause"] = cause
+    if traceback_tail:
+        error["traceback_tail"] = traceback_tail
     return {
         "tool_name": "local_fact_qa",
         "status": "error",
@@ -177,6 +186,32 @@ def _error(
         "final_answer": {},
         "error": error,
     }
+
+
+def _compact_exception_cause(exc: Exception) -> dict[str, str] | None:
+    cause = exc.__cause__
+    if cause is None:
+        return None
+    cause_type = type(cause).__name__
+    return {
+        "type": cause_type,
+        "message": (str(cause) or cause_type)[:500],
+    }
+
+
+def _compact_traceback(exc: Exception, *, max_frames: int = 8) -> list[dict[str, Any]]:
+    frames = traceback.extract_tb(exc.__traceback__)[-max_frames:]
+    compact: list[dict[str, Any]] = []
+    for frame in frames:
+        compact.append(
+            {
+                "file": frame.filename,
+                "line": frame.lineno,
+                "function": frame.name,
+                "code": (frame.line or "")[:200],
+            }
+        )
+    return compact
 
 
 def _planned_query(question: str, router_plan: dict[str, Any]) -> str:

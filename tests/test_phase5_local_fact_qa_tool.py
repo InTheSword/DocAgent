@@ -297,6 +297,7 @@ def test_workflow_failure_reports_exception_type_even_without_message(tmp_path: 
     assert result["error"]["type"] == "workflow_failed"
     assert result["error"]["message"] == "EmptyWorkflowError"
     assert result["error"]["cause_type"] == "EmptyWorkflowError"
+    assert any(frame["function"] == "failing_workflow" for frame in result["error"]["traceback_tail"])
 
 
 def test_wrapper_does_not_call_external_api_or_vlm_in_dry_run(tmp_path: Path) -> None:

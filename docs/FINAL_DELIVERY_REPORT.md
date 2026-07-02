@@ -78,6 +78,11 @@ Follow-up probe `phase5ib_answer_quality_selected_context_artifactfix_20260702`
 confirmed the real retriever stack initializes successfully and narrowed the
 remaining failures to internal `workflow_failed` exceptions; the local contract
 now preserves workflow exception class names for the next diagnostic rerun.
+Cause-type probe `phase5ib_answer_quality_selected_context_causetype_20260702`
+classified those internal failures as `AssertionError`. This remains an
+execution-chain diagnostic blocker, not formal answer-quality benchmark
+acceptance; Phase 5I-B artifacts now preserve compact traceback tails for
+targeted follow-up.
 
 ## Known Boundaries
 

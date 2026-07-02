@@ -595,6 +595,14 @@ def test_phase5ib_failure_artifacts_include_cli_error_and_retriever_metadata(tmp
                     "cause_type": "RuntimeError",
                     "message": "dense index unavailable",
                     "cause": {"type": "RuntimeError", "message": "index build failed"},
+                    "traceback_tail": [
+                        {
+                            "file": "/srv/docagent/docagent/retrieval/dense.py",
+                            "line": 42,
+                            "function": "build_index",
+                            "code": "raise RuntimeError('index build failed')",
+                        }
+                    ],
                 },
                 extra={
                     "full_model_path": True,
@@ -648,6 +656,7 @@ def test_phase5ib_failure_artifacts_include_cli_error_and_retriever_metadata(tmp
     assert case_report["error"]["type"] == "retriever_initialization_failed"
     assert case_report["error"]["cause_type"] == "RuntimeError"
     assert case_report["error"]["cause"]["type"] == "RuntimeError"
+    assert case_report["error"]["traceback_tail"][0]["function"] == "build_index"
     assert case_report["retriever"]["initialization_status"] == "failed"
     assert case_report["retrieval_candidate_count"] == 0
     assert "retriever_initialization_failed" in failure_analysis

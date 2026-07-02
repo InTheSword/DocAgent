@@ -83,8 +83,14 @@ Phase 5 Personal-use DocAgent MVP
    at commit `6e4085b` confirmed BGE/reranker initialization succeeds and
    failures are now `workflow_failed` inside the QA workflow; the local error
    contract now preserves workflow exception class names even when exception
-   messages are empty; accepted final answer-quality benchmark status remains
-   not_started until a cause-type rerun is reviewed
+   messages are empty; server rerun
+   `phase5ib_answer_quality_selected_context_causetype_20260702` at commit
+   `03928e3` classified the internal workflow cause as `AssertionError` for
+   the seven failed rows; the local error contract now also preserves a compact
+   traceback tail in Phase 5I-B case reports so the next server diagnostic can
+   locate the assertion without broad log collection; accepted final
+   answer-quality benchmark status remains not_started until the execution
+   assertion is resolved and reviewed
 -> Phase 5I-B document-context inventory implemented locally:
    `scripts/inspect_phase5i_document_contexts.py` reads candidate SQLite
    `db_path` / `doc_id` pairs, checks persisted retrievable EvidenceBlocks,

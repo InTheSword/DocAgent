@@ -251,6 +251,15 @@ exception cause. The local error contract now preserves workflow exception
 class names through `error.cause_type` even when `str(exc)` is empty, so the
 next server rerun can classify the exact workflow failure without broad log
 inspection.
+Server rerun `phase5ib_answer_quality_selected_context_causetype_20260702`
+at commit `03928e3` completed successfully and classified the remaining seven
+workflow failures as `AssertionError`; retriever initialization was still
+`success`. This confirms the blocker is an execution-chain assertion inside
+the QA workflow path, not a missing document context, missing retriever, or
+training/benchmark issue. The local error artifact contract now includes a
+compact `error.traceback_tail` in `local_fact_qa` and Phase 5I-B case reports
+so the next server diagnostic can identify the exact assertion frame without
+syncing full logs.
 `scripts/inspect_phase5i_document_contexts.py` is implemented locally as a
 read-only selector for the next server probe. It inventories candidate
 SQLite `db_path` / `doc_id` pairs, checks persisted retrievable EvidenceBlocks,

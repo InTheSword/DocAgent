@@ -1551,6 +1551,18 @@ def _compact_error(error: Any) -> dict[str, Any]:
             "type": str(cause.get("type") or ""),
             "message": str(cause.get("message") or "")[:500],
         }
+    traceback_tail = error.get("traceback_tail")
+    if isinstance(traceback_tail, list):
+        compact["traceback_tail"] = [
+            {
+                "file": str(frame.get("file") or ""),
+                "line": frame.get("line"),
+                "function": str(frame.get("function") or ""),
+                "code": str(frame.get("code") or "")[:200],
+            }
+            for frame in traceback_tail[-8:]
+            if isinstance(frame, dict)
+        ]
     return {key: value for key, value in compact.items() if _has_compact_value(value)}
 
 
