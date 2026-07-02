@@ -4,6 +4,10 @@ import hashlib
 import json
 from pathlib import Path
 
+from docagent.ingestion.document_registry import DocumentRecord
+from docagent.schemas import EvidenceBlock, EvidenceLocation
+from docagent.storage.db import connect
+from docagent.storage.repositories import DocumentRepository
 from scripts.run_phase5i_answer_quality_benchmark import CommandResult, build_parser, run_phase5i_benchmark
 
 
@@ -47,6 +51,45 @@ def _payload(
         payload,
         ensure_ascii=False,
     )
+
+
+def _write_minimal_document_context(tmp_path: Path, *, doc_id: str = "doc1") -> Path:
+    db_path = tmp_path / "docagent.db"
+    source = tmp_path / "source.txt"
+    source.write_text("unclaimed dividend financial year", encoding="utf-8")
+    conn = connect(db_path)
+    try:
+        repository = DocumentRepository(conn)
+        repository.upsert_document(
+            DocumentRecord(
+                doc_id=doc_id,
+                sha256="0" * 64,
+                original_name="source.txt",
+                mime_type="text/plain",
+                file_size=source.stat().st_size,
+                file_path=str(source),
+                document_dir=str(tmp_path / doc_id),
+                page_count=1,
+                parser_backend="text",
+                parse_status="success",
+                index_status="not_started",
+            )
+        )
+        repository.save_evidence_blocks(
+            [
+                EvidenceBlock(
+                    doc_id=doc_id,
+                    block_id=f"{doc_id}_p001_b0001",
+                    block_type="text",
+                    text="unclaimed dividend financial year",
+                    page_id=1,
+                    location=EvidenceLocation(page=1, block_id=f"{doc_id}_p001_b0001"),
+                )
+            ]
+        )
+    finally:
+        conn.close()
+    return db_path
 
 
 def test_phase5i_parser_exposes_run_id_for_documented_cli() -> None:
@@ -150,8 +193,9 @@ def test_phase5i_runner_scores_fake_cli_outputs_and_writes_artifacts(tmp_path: P
             ),
         )
 
+    db_path = _write_minimal_document_context(tmp_path, doc_id="doc1")
     summary = run_phase5i_benchmark(
-        db_path=tmp_path / "docagent.db",
+        db_path=db_path,
         doc_id="doc1",
         router_llm_env_file=tmp_path / "router.env",
         output_root=tmp_path / "benchmark",
@@ -237,8 +281,9 @@ def test_answer_keyword_missing_does_not_fail_evidence_readiness_by_default(tmp_
             ),
         )
 
+    db_path = _write_minimal_document_context(tmp_path, doc_id="doc1")
     summary = run_phase5i_benchmark(
-        db_path=tmp_path / "docagent.db",
+        db_path=db_path,
         doc_id="doc1",
         router_llm_env_file=tmp_path / "router.env",
         output_root=tmp_path / "benchmark",
@@ -308,8 +353,9 @@ def test_evaluate_final_answer_flag_makes_answer_keyword_missing_hard_fail(tmp_p
             ),
         )
 
+    db_path = _write_minimal_document_context(tmp_path, doc_id="doc1")
     summary = run_phase5i_benchmark(
-        db_path=tmp_path / "docagent.db",
+        db_path=db_path,
         doc_id="doc1",
         router_llm_env_file=tmp_path / "router.env",
         output_root=tmp_path / "benchmark",
@@ -439,8 +485,9 @@ def test_full_model_path_passes_cli_flags_and_records_model_path_fields(tmp_path
             ),
         )
 
+    db_path = _write_minimal_document_context(tmp_path, doc_id="doc1")
     summary = run_phase5i_benchmark(
-        db_path=tmp_path / "docagent.db",
+        db_path=db_path,
         doc_id="doc1",
         router_llm_env_file=router_env,
         output_root=tmp_path / "benchmark",
@@ -493,6 +540,63 @@ def test_full_model_path_passes_cli_flags_and_records_model_path_fields(tmp_path
     assert result["answer_policy_mode"] == "base"
     assert result["used_qwen_answer_policy"] is True
     assert result["trace_run_id"] == "qa-run-1"
+
+
+def test_full_model_path_blocks_before_cli_when_document_context_missing(tmp_path: Path) -> None:
+    cases_path = tmp_path / "cases.jsonl"
+    router_env = tmp_path / "router.env"
+    router_env.write_text(
+        "\n".join(
+            [
+                "DOCAGENT_ROUTER_LLM_API_KEY=fake-secret-key",
+                "DOCAGENT_ROUTER_LLM_BASE_URL=https://example.test/compatible-mode/v1",
+                "DOCAGENT_ROUTER_LLM_MODEL=fake-router-model",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    _write_jsonl(
+        cases_path,
+        [
+            {
+                "case_id": "fact_full_path",
+                "user_request": "What financial year is mentioned?",
+                "request_form": "interrogative",
+                "expected_task_type": "local_fact_qa",
+                "expected_answer_type": "extractive",
+                "answerable": True,
+                "unsupported_ok": False,
+                "expected_page": 24,
+                "expected_evidence_keywords": ["unclaimed"],
+                "expected_answer_keywords": ["financial year"],
+                "forbidden_answer_keywords": [],
+            }
+        ],
+    )
+
+    def fail_runner(_command: list[str], _cwd: Path, _timeout_seconds: int) -> CommandResult:
+        raise AssertionError("Phase 5I-B should block before calling the CLI when document context is missing")
+
+    summary = run_phase5i_benchmark(
+        db_path=tmp_path / "missing.db",
+        doc_id="doc1",
+        router_llm_env_file=router_env,
+        output_root=tmp_path / "benchmark",
+        cases_jsonl=cases_path,
+        command_runner=fail_runner,
+        run_id="phase5i_missing_document_context",
+        full_model_path=True,
+        require_llm_planning_config=True,
+        answer_policy="base",
+    )
+
+    run_dir = Path(summary["artifact_dir"])
+    assert summary["status"] == "blocked"
+    assert summary["blocker"]["type"] == "db_path_not_found"
+    assert summary["quality_status_semantics"] == "model_backed_evaluation_requires_existing_document_evidence"
+    assert summary["used_qwen_answer_policy"] is False
+    assert (run_dir / "phase5i_results.jsonl").read_text(encoding="utf-8") == ""
+    assert (run_dir / "manifest.json").is_file()
 
 
 def test_downstream_flags_for_calculation_summary_and_table_cases(tmp_path: Path) -> None:

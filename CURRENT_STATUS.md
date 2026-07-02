@@ -221,6 +221,11 @@ hashes, in addition to the historical Phase 5I files. It also forwards
 retriever/dense/reranker configuration into `docagent_cli.py`, allowing server
 answer-quality probes to explicitly exercise `hybrid_rerank` with BGE-M3 and
 the cross-encoder reranker instead of relying on the CLI default retriever.
+For model-backed or final-answer-evaluated runs, the runner now preflights the
+requested SQLite `db_path` and `doc_id`; if the document is missing or has no
+retrievable persisted EvidenceBlocks, it writes blocked artifacts and does not
+call `docagent_cli.py` or Qwen. This prevents empty-evidence server probes from
+being misread as final answer-quality failures.
 The artifact contract keeps `formal_benchmark_acceptance=false`,
 `validation_subset_used_for_training=false`, and an empty raw training-candidate
 export by default, so validation rows are not promoted to training data.

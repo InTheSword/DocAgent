@@ -1679,23 +1679,89 @@ def _llm_planning_config_status(router_llm_env_file: Path) -> dict[str, Any]:
     }
 
 
+def _document_context_status(db_path: Path, doc_id: str) -> dict[str, Any]:
+    if not db_path.is_file():
+        return {
+            "ready": False,
+            "blocker_type": "db_path_not_found",
+            "message": f"SQLite database not found: {db_path}",
+            "db_path": str(db_path),
+            "doc_id": doc_id,
+        }
+    if not str(doc_id or "").strip():
+        return {
+            "ready": False,
+            "blocker_type": "doc_id_missing",
+            "message": "A doc_id is required for model-backed Phase 5I-B evaluation.",
+            "db_path": str(db_path),
+            "doc_id": doc_id,
+        }
+    try:
+        from docagent.storage.db import connect
+        from docagent.storage.repositories import DocumentRepository
+
+        conn = connect(db_path)
+        try:
+            repository = DocumentRepository(conn)
+            document = repository.get_document(doc_id)
+            if document is None:
+                return {
+                    "ready": False,
+                    "blocker_type": "document_not_found",
+                    "message": f"Document not found: {doc_id}",
+                    "db_path": str(db_path),
+                    "doc_id": doc_id,
+                }
+            blocks = repository.load_evidence_blocks(doc_id)
+            retrievable_count = sum(1 for block in blocks if block.retrieval_text.strip())
+            return {
+                "ready": retrievable_count > 0,
+                "blocker_type": "" if retrievable_count > 0 else "document_has_no_retrievable_evidence",
+                "message": "" if retrievable_count > 0 else f"Document has no retrievable EvidenceBlocks: {doc_id}",
+                "db_path": str(db_path),
+                "doc_id": doc_id,
+                "document": {
+                    "parse_status": document.get("parse_status"),
+                    "page_count": document.get("page_count"),
+                    "parser_backend": document.get("parser_backend"),
+                },
+                "evidence_block_count": len(blocks),
+                "retrievable_evidence_block_count": retrievable_count,
+            }
+        finally:
+            conn.close()
+    except Exception as exc:
+        return {
+            "ready": False,
+            "blocker_type": "document_context_preflight_error",
+            "message": str(exc),
+            "db_path": str(db_path),
+            "doc_id": doc_id,
+        }
+
+
 def _blocked_summary(
     *,
     run_id: str,
     artifact_dir: Path,
     cases: list[GoldenCase],
     router_llm_env_file: Path,
-    config_status: dict[str, Any],
+    config_status: dict[str, Any] | None = None,
     full_model_path: bool,
     answer_policy: str,
+    blocker_type: str = "llm_planning_config_missing",
+    blocker_message: str = "",
+    quality_status_semantics: str = "full_model_path_requires_llm_planning_config",
+    document_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    message = blocker_message or f"Full model path requires Router/Rewriter LLM config: {router_llm_env_file}"
     summary = {
         "command": "phase5i_answer_quality_benchmark",
         "status": "blocked",
         "evaluation_scope": EVALUATION_SCOPE,
         "full_model_path": bool(full_model_path),
         "quality_status": "blocked",
-        "quality_status_semantics": "full_model_path_requires_llm_planning_config",
+        "quality_status_semantics": quality_status_semantics,
         "answer_quality_evaluation_scope": "blocked",
         "final_answer_generation_enabled": False,
         "final_answer_quality_evaluated": False,
@@ -1706,10 +1772,11 @@ def _blocked_summary(
         "failed_count": 0,
         "blocked_count": len(cases),
         "answer_policy_mode": answer_policy,
-        "llm_planning_config": config_status,
+        "llm_planning_config": config_status or {},
+        "document_context": document_context or {},
         "blocker": {
-            "type": "llm_planning_config_missing",
-            "message": f"Full model path requires Router/Rewriter LLM config: {router_llm_env_file}",
+            "type": blocker_type,
+            "message": message,
         },
         "used_external_api": False,
         "used_llm_router": False,
@@ -1730,6 +1797,48 @@ def _blocked_summary(
     summary["preview_path"] = str(artifact_dir / "preview.json")
     summary["manual_review_path"] = str(artifact_dir / "manual_review.md")
     return summary
+
+
+def _write_blocked_run_artifacts(
+    *,
+    artifact_dir: Path,
+    cases: list[GoldenCase],
+    summary: dict[str, Any],
+    manual_review_message: str,
+) -> dict[str, Any]:
+    preview = {"run_id": summary.get("run_id"), "summary": summary, "results": []}
+    cases_path = artifact_dir / "phase5i_cases.jsonl"
+    results_path = artifact_dir / "phase5i_results.jsonl"
+    summary_path = artifact_dir / "phase5i_summary.json"
+    preview_path = artifact_dir / "preview.json"
+    manual_review_path = artifact_dir / "manual_review.md"
+    manifest_path = artifact_dir / "manifest.json"
+    _write_jsonl(cases_path, [case.to_dict() for case in cases])
+    _write_jsonl(results_path, [])
+    _write_json(preview_path, preview)
+    manual_review_path.write_text("# Phase 5I Manual Review\n\n" + manual_review_message.strip() + "\n", encoding="utf-8")
+    formal_paths = _write_phase5ib_artifacts(artifact_dir, summary, [])
+    artifact_paths = [
+        str(cases_path),
+        str(results_path),
+        str(summary_path),
+        str(preview_path),
+        str(manual_review_path),
+        *[str(path) for path in formal_paths.values()],
+        str(manifest_path),
+    ]
+    summary.update(
+        {
+            "phase5ib_artifact_paths": {name: str(path) for name, path in formal_paths.items()},
+            "artifact_paths": artifact_paths,
+        }
+    )
+    preview["summary"] = summary
+    _write_json(summary_path, summary)
+    _write_json(preview_path, preview)
+    _write_json(formal_paths["acceptance_report"], _acceptance_report(summary, _metrics_payload(summary, []), formal_paths))
+    _write_manifest(manifest_path, summary=summary, artifact_paths=[Path(path) for path in artifact_paths])
+    return {**summary, "artifact_paths": artifact_paths}
 
 
 def run_phase5i_benchmark(
@@ -1789,45 +1898,35 @@ def run_phase5i_benchmark(
                 full_model_path=full_model_path,
                 answer_policy=answer_policy,
             )
-            preview = {"run_id": run_id, "summary": summary, "results": []}
-            cases_path = artifact_dir / "phase5i_cases.jsonl"
-            results_path = artifact_dir / "phase5i_results.jsonl"
-            summary_path = artifact_dir / "phase5i_summary.json"
-            preview_path = artifact_dir / "preview.json"
-            manual_review_path = artifact_dir / "manual_review.md"
-            manifest_path = artifact_dir / "manifest.json"
-            _write_jsonl(cases_path, [case.to_dict() for case in cases])
-            _write_jsonl(results_path, [])
-            _write_json(preview_path, preview)
-            manual_review_path.write_text(
-                "# Phase 5I Manual Review\n\nFull model path is blocked by missing Router/Rewriter LLM config.\n",
-                encoding="utf-8",
+            return _write_blocked_run_artifacts(
+                artifact_dir=artifact_dir,
+                cases=cases,
+                summary=summary,
+                manual_review_message="Full model path is blocked by missing Router/Rewriter LLM config.",
             )
-            formal_paths = _write_phase5ib_artifacts(artifact_dir, summary, [])
-            artifact_paths = [
-                str(cases_path),
-                str(results_path),
-                str(summary_path),
-                str(preview_path),
-                str(manual_review_path),
-                *[str(path) for path in formal_paths.values()],
-                str(manifest_path),
-            ]
-            summary.update(
-                {
-                    "phase5ib_artifact_paths": {name: str(path) for name, path in formal_paths.items()},
-                    "artifact_paths": artifact_paths,
-                }
+
+    if (full_model_path or evaluate_final_answer) and not dry_run:
+        document_context = _document_context_status(db_path, doc_id)
+        if not document_context.get("ready"):
+            summary = _blocked_summary(
+                run_id=run_id,
+                artifact_dir=artifact_dir,
+                cases=cases,
+                router_llm_env_file=router_llm_env_file,
+                config_status=_llm_planning_config_status(router_llm_env_file) if router_llm_env_file else {},
+                full_model_path=full_model_path,
+                answer_policy=answer_policy,
+                blocker_type=str(document_context.get("blocker_type") or "document_context_not_ready"),
+                blocker_message=str(document_context.get("message") or "Document context is not ready."),
+                quality_status_semantics="model_backed_evaluation_requires_existing_document_evidence",
+                document_context=document_context,
             )
-            preview["summary"] = summary
-            _write_json(summary_path, summary)
-            _write_json(preview_path, preview)
-            _write_json(formal_paths["acceptance_report"], _acceptance_report(summary, _metrics_payload(summary, []), formal_paths))
-            _write_manifest(manifest_path, summary=summary, artifact_paths=[Path(path) for path in artifact_paths])
-            return {
-                **summary,
-                "artifact_paths": artifact_paths,
-            }
+            return _write_blocked_run_artifacts(
+                artifact_dir=artifact_dir,
+                cases=cases,
+                summary=summary,
+                manual_review_message=str(document_context.get("message") or "Document context is not ready."),
+            )
 
     results = [
         run_case(

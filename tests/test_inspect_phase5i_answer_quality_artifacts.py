@@ -3,6 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from docagent.ingestion.document_registry import DocumentRecord
+from docagent.schemas import EvidenceBlock, EvidenceLocation
+from docagent.storage.db import connect
+from docagent.storage.repositories import DocumentRepository
 from scripts.inspect_phase5i_answer_quality_artifacts import inspect_phase5i_answer_quality_run, main
 from scripts.run_phase5i_answer_quality_benchmark import CommandResult, run_phase5i_benchmark
 
@@ -32,6 +36,45 @@ def _payload(output_dir: Path) -> str:
     return json.dumps(payload)
 
 
+def _write_minimal_document_context(tmp_path: Path, *, doc_id: str = "doc1") -> Path:
+    db_path = tmp_path / "docagent.db"
+    source = tmp_path / "source.txt"
+    source.write_text("financial year 2019", encoding="utf-8")
+    conn = connect(db_path)
+    try:
+        repository = DocumentRepository(conn)
+        repository.upsert_document(
+            DocumentRecord(
+                doc_id=doc_id,
+                sha256="1" * 64,
+                original_name="source.txt",
+                mime_type="text/plain",
+                file_size=source.stat().st_size,
+                file_path=str(source),
+                document_dir=str(tmp_path / doc_id),
+                page_count=1,
+                parser_backend="text",
+                parse_status="success",
+                index_status="not_started",
+            )
+        )
+        repository.save_evidence_blocks(
+            [
+                EvidenceBlock(
+                    doc_id=doc_id,
+                    block_id=f"{doc_id}_p001_b0001",
+                    block_type="text",
+                    text="financial year 2019",
+                    page_id=1,
+                    location=EvidenceLocation(page=1, block_id=f"{doc_id}_p001_b0001"),
+                )
+            ]
+        )
+    finally:
+        conn.close()
+    return db_path
+
+
 def _make_phase5ib_run(tmp_path: Path) -> Path:
     cases_path = tmp_path / "cases.jsonl"
     _write_jsonl(
@@ -57,8 +100,9 @@ def _make_phase5ib_run(tmp_path: Path) -> Path:
         output_dir = Path(command[command.index("--output-dir") + 1])
         return CommandResult(0, _payload(output_dir), "")
 
+    db_path = _write_minimal_document_context(tmp_path, doc_id="doc1")
     summary = run_phase5i_benchmark(
-        db_path=tmp_path / "docagent.db",
+        db_path=db_path,
         doc_id="doc1",
         router_llm_env_file=tmp_path / "router.env",
         output_root=tmp_path / "benchmark",

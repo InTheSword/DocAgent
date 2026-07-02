@@ -280,6 +280,11 @@ hashes for artifact review. Real Qwen/BGE/reranker execution is
 server-required. The acceptance report keeps `formal_benchmark_acceptance=false`
 and `validation_subset_used_for_training=false`; it is a small-scenario
 answer-quality review contract, not leaderboard acceptance or training.
+For `--full-model-path` or `--evaluate-final-answer`, the specified `--db-path`
+and `--doc-id` must point to a persisted document with retrievable
+EvidenceBlocks. If that document context is missing or empty, the runner writes
+`status=blocked` artifacts and stops before calling `docagent_cli.py`, Qwen, or
+the retrieval models.
 
 Inspect a Phase 5I-B answer-quality artifact directory:
 

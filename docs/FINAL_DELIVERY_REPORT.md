@@ -41,7 +41,7 @@ multi-document QA is not a required delivery claim.
 | TAT-QA / MP-DocVQA subset preparation | implemented | Reproducible validation-subset artifacts are prepared locally; they are not training data |
 | Local diagnostics and readiness checks | implemented | Diagnostic subset runners and `scripts/check_final_delivery_readiness.py` write compact artifacts and check citation/evidence fields |
 | Final delivery benchmark gate | accepted | Server run `final_delivery_benchmark_gate_server_20260702_componentmetrics` completed readiness, real-Qwen AnswerPolicy baseline, and MP-DocVQA full-workflow diagnostic steps successfully; `final_delivery_gate_metric_review_componentcountfix_20260702` verified manifest/safety flags and complete component-use metrics for 23 local_fact_qa workflow rows; `formal_benchmark_acceptance=false` |
-| Final answer quality artifact contract | implemented | `scripts/run_phase5i_answer_quality_benchmark.py` writes `metrics.json`, `predictions.jsonl`, `case_reports.jsonl`, `failure_analysis.md`, `acceptance_report.json`, `training_candidates_raw.jsonl`, and `manifest.json`; it forwards retriever/dense/reranker settings into `docagent_cli.py`; `scripts/inspect_phase5i_answer_quality_artifacts.py` reviews the artifact contract while keeping validation rows out of training |
+| Final answer quality artifact contract | implemented | `scripts/run_phase5i_answer_quality_benchmark.py` writes `metrics.json`, `predictions.jsonl`, `case_reports.jsonl`, `failure_analysis.md`, `acceptance_report.json`, `training_candidates_raw.jsonl`, and `manifest.json`; it forwards retriever/dense/reranker settings into `docagent_cli.py` and blocks model-backed runs before CLI/Qwen execution when the requested `db_path` + `doc_id` has no retrievable persisted EvidenceBlocks; `scripts/inspect_phase5i_answer_quality_artifacts.py` reviews the artifact contract while keeping validation rows out of training |
 | Final answer quality benchmark | not_started | No accepted MP-DocVQA/TAT-QA final answer benchmark yet |
 | New SFT/GRPO training | not_started | Candidate builders/gates exist, but no current final training run is claimed |
 | Pixel-level VLM reasoning | not_started | Image support is OCR/caption/nearby-text/resource metadata only |
@@ -89,7 +89,8 @@ Near-term work should stay on reusable system behavior:
 3. Review accepted final-delivery gate artifacts before promoting any result
    to formal final answer-quality benchmark work.
 4. Use the Phase 5I-B artifact contract for the next small-scenario
-   answer-quality server run, while keeping `formal_benchmark_acceptance=false`
-   until the run is reviewed.
+   answer-quality server run only after confirming the selected `db_path` and
+   `doc_id` contain retrievable EvidenceBlocks, while keeping
+   `formal_benchmark_acceptance=false` until the run is reviewed.
 5. Start SFT/GRPO only if future benchmark evidence shows reusable AnswerPolicy failures
    that prompt/tool/contract repair cannot address.
