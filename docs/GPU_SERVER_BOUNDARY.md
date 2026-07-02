@@ -126,8 +126,9 @@ Sync bundle rules:
 - prefer derived summaries over raw generations or full EvidenceBlocks;
 - include enough artifact paths and hashes to let a later server rerun locate
   the original full outputs.
-- command instructions should name the specific sync/result files to return
-  whenever those files are expected to be needed for triage.
+- command instructions should name specific sync/result files only when those
+  files are expected to be useful for follow-up triage; do not make broad file
+  upload a default requirement for every successful command.
 
 When a user reports that a server command completed, inspect sync artifacts in
 this order:

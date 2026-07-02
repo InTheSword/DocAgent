@@ -226,9 +226,9 @@ Commands must:
 - check required paths and packages first;
 - write long output to files;
 - request only the minimum result needed.
-- when the expected result is too large or too structured for terminal JSON,
-  name the specific result files or sync-bundle files the user should return
-  or upload for review.
+- define a two-layer evidence contract when terminal JSON may be insufficient:
+  compact terminal JSON for status routing, plus named result/sync files for
+  optional follow-up triage.
 - preserve the user's interactive terminal session. User-pasted server command
   groups must not deliberately terminate the shell or parent terminal when a
   step fails.
@@ -277,10 +277,11 @@ sync raw datasets, full output trees, model weights, databases, complete logs,
 or secrets.
 
 Treat terminal JSON as the first triage layer, not the whole evidence record.
-If the compact JSON is insufficient to determine whether a failure is a code
-defect, command/configuration issue, missing artifact, or non-blocking quality
-issue, request the named sync/result files or propose a small read-only server
-inspection command before doing a deep local code audit.
+Do not ask for extra files by default. If the compact JSON is insufficient to
+determine whether a failure is a code defect, command/configuration issue,
+missing artifact, or non-blocking quality issue, request the named sync/result
+files or propose a small read-only server inspection command before doing a
+deep local code audit.
 
 ## 10. Completion rule
 
