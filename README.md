@@ -47,6 +47,9 @@ python scripts\run_final_eval_subset.py `
 See [docs/FINAL_DELIVERY_CLI.md](docs/FINAL_DELIVERY_CLI.md) for the complete
 current CLI contract, storage paths, dataset commands, output fields, and
 limitations.
+See [docs/FINAL_DELIVERY_REPORT.md](docs/FINAL_DELIVERY_REPORT.md) for the
+current delivery status table, accepted evidence boundaries, and remaining
+not_started work.
 
 ## Current Output Contract
 
@@ -114,6 +117,8 @@ commits.
 - [CURRENT_STATUS.md](CURRENT_STATUS.md): current verified capability status.
 - [docs/FINAL_DELIVERY_CLI.md](docs/FINAL_DELIVERY_CLI.md): current CLI
   delivery guide.
+- [docs/FINAL_DELIVERY_REPORT.md](docs/FINAL_DELIVERY_REPORT.md): final
+  delivery status and evidence-boundary report.
 - [docs/DATASETS.md](docs/DATASETS.md): dataset roles, split policy, and
   download constraints.
 - [AGENTS.md](AGENTS.md): repository rules for implementation and validation.

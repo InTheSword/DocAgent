@@ -23,6 +23,7 @@ REQUIRED_FILES = (
     "CURRENT_STATUS.md",
     "docs/ACTIVE_PLAN.md",
     "docs/FINAL_DELIVERY_CLI.md",
+    "docs/FINAL_DELIVERY_REPORT.md",
     "docs/SERVER_SETUP.md",
     "docs/DATASETS.md",
     "scripts/docagent_cli.py",
@@ -162,6 +163,7 @@ def _check_documentation(root: Path) -> CheckResult:
     snippets = {
         "README.md": [
             "docs/FINAL_DELIVERY_CLI.md",
+            "docs/FINAL_DELIVERY_REPORT.md",
             '"answer"',
             '"reasoning_summary"',
             '"evidence_used"',
@@ -179,6 +181,14 @@ def _check_documentation(root: Path) -> CheckResult:
             "no pixel-level VLM interpretation",
             "accepted MP-DocVQA/TAT-QA final answer benchmark",
             "new SFT/GRPO training",
+        ],
+        "docs/FINAL_DELIVERY_REPORT.md": [
+            "Final answer quality benchmark",
+            "not_started",
+            "validation subsets are used for diagnostics only",
+            "used as training data",
+            "real_model_verified",
+            "accepted",
         ],
         "AGENTS.md": [
             "keep work anchored to the current delivery and functional goal",

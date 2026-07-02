@@ -167,6 +167,13 @@ is documentation and packaging only: it does not change model behavior, run
 online MinerU OCR, run Qwen, use VLM, start training, or promote local subset
 diagnostics to `benchmark_evaluated`.
 
+Phase 5 final delivery report is implemented in
+`docs/FINAL_DELIVERY_REPORT.md` and linked from `README.md` and
+`docs/FINAL_DELIVERY_CLI.md`. It summarizes the current accepted,
+real_model_verified, implemented, and not_started delivery boundaries and keeps
+validation subsets, final answer-quality benchmarking, and training status
+separate. This is documentation and packaging only.
+
 Phase 5 final delivery readiness check is implemented locally in
 `scripts/check_final_delivery_readiness.py` with tests in
 `tests/test_check_final_delivery_readiness.py`. The check verifies required
@@ -1207,6 +1214,7 @@ Phase 5E Document Summary MVP -> implemented
 Phase 5E-A Document Summary Acceptance Pack -> implemented
 Phase 5 structured_extraction deterministic CLI -> implemented
 Phase 5F full CLI acceptance -> accepted
+Phase 5 final delivery report -> implemented
 Phase 5 final delivery readiness check -> implemented
 CDC -> not_started
 MVP CLI / trace integration -> accepted

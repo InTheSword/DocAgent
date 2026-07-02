@@ -30,6 +30,7 @@ def test_final_delivery_readiness_reports_documentation_gap(tmp_path: Path) -> N
         "CURRENT_STATUS.md",
         "docs/ACTIVE_PLAN.md",
         "docs/FINAL_DELIVERY_CLI.md",
+        "docs/FINAL_DELIVERY_REPORT.md",
         "docs/SERVER_SETUP.md",
         "docs/DATASETS.md",
         "scripts/docagent_cli.py",

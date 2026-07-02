@@ -36,6 +36,8 @@ Phase 5 Personal-use DocAgent MVP
    MP-DocVQA val shards 1-2
 -> final-evaluation local subset diagnostic runner implemented locally
 -> final-delivery CLI guide implemented locally
+-> final-delivery report implemented locally for accepted, real_model_verified,
+   implemented, and not_started evidence-boundary status
 -> final-delivery readiness check implemented locally for required files, CLI
    options, output contract fields, documentation boundaries, and deprecated
    PM handoff cleanup; it does not call MinerU, Qwen, BGE-M3, reranker,
@@ -338,6 +340,7 @@ Phase 5 simple_calculation deterministic CLI -> implemented
 Phase 5 final evaluation subset preparation -> implemented
 Phase 5 final evaluation local subset diagnostic runner -> implemented
 Phase 5 final delivery CLI guide -> implemented
+Phase 5 final delivery report -> implemented
 Phase 5 final delivery readiness check -> implemented
 Phase 5 AnswerPolicy IO candidate schema / citation allowlist -> implemented
 Phase 5 AnswerPolicy prompt v2 candidate citation contract -> implemented
@@ -1980,6 +1983,10 @@ Phase 4D-B1.3 server sanity accepted
   benchmark-evaluated
 + Final delivery CLI guide implemented locally in `docs/FINAL_DELIVERY_CLI.md`
   and linked from `README.md`; status remains documentation/packaging only
++ Final delivery report implemented locally in
+  `docs/FINAL_DELIVERY_REPORT.md`; it summarizes accepted,
+  real_model_verified, implemented, and not_started delivery boundaries without
+  promoting diagnostic subset results to benchmark acceptance
 + Final delivery readiness check implemented locally in
   `scripts/check_final_delivery_readiness.py`; it checks required files, CLI
   options, required output fields, documentation boundaries, and deprecated PM

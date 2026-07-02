@@ -7,6 +7,9 @@ Phase 5 personal-use DocAgent MVP. It is the practical entry point for running
 the implemented system without UI, cloud storage, VLM, new training, or formal
 benchmark claims.
 
+For the current delivery status table and accepted evidence boundaries, see
+`docs/FINAL_DELIVERY_REPORT.md`.
+
 ## Scope
 
 Current delivery target:
