@@ -167,7 +167,10 @@ Every command group must:
 - contain no unresolved placeholders;
 - check required files/packages first;
 - write long output under `outputs/logs/`;
-- provide at most one command group per interaction.
+- provide at most one command group per interaction;
+- preserve the interactive terminal. A pasted command group must not
+  deliberately close, replace, or terminate the user's shell or terminal session
+  when any inner command fails.
 
 For Phase 4B Gate 3, use three short foreground Bash blocks: Git sync,
 environment/data/model preflight, and the actual evaluation. Do not use
@@ -175,6 +178,13 @@ environment/data/model preflight, and the actual evaluation. Do not use
 commands the user directly pastes into the server terminal. The evaluation block
 should write full stdout/stderr to logs while printing stage messages and a
 compact final JSON in the foreground.
+
+Do not use `set -e`, shell `exit`, `trap ... EXIT`, or inline Python
+`raise SystemExit` / `sys.exit(...)` as outer-wrapper failure propagation in
+commands pasted into an interactive server terminal. Capture return codes and
+exceptions into the compact JSON result instead. If a called script may fail
+with a non-zero status, the wrapper must continue far enough to print the
+failure JSON and leave the terminal open.
 
 If a task targets MinerU, explicitly activate the isolated MinerU environment instead of `docagent`.
 
