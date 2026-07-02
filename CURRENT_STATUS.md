@@ -237,6 +237,12 @@ summarizes default or supplied Phase 5I-B case page/keyword context readiness,
 and writes compact result, summary, row, preview, manifest, and optional sync
 artifacts without calling `docagent_cli.py`, Qwen, BGE-M3, reranker, MinerU,
 VLM, or training.
+Server inventory `phase5ib_context_inventory_server_20260702` at commit
+`f50ce44` succeeded with `ready_document_count=57` and
+`candidate_document_count=57`; the strongest Phase 5I-B default-case context
+was `outputs/docagent.db` / `c1fc1c5e040ec894`, with parsed MinerU evidence,
+5 retrievable blocks, retrievable pages including 24, and 20/26 default cases
+having basic page/keyword context readiness.
 The artifact contract keeps `formal_benchmark_acceptance=false`,
 `validation_subset_used_for_training=false`, and an empty raw training-candidate
 export by default, so validation rows are not promoted to training data.

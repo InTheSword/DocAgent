@@ -81,7 +81,11 @@ Phase 5 Personal-use DocAgent MVP
    summarizes case keyword/page context readiness, and writes compact
    artifacts plus optional sync bundles without calling CLI, Qwen, BGE-M3,
    reranker, MinerU, VLM, or training; this is the next server-side selector
-   before any model-backed answer-quality probe
+   before any model-backed answer-quality probe; server inventory
+   `phase5ib_context_inventory_server_20260702` at commit `f50ce44` found
+   57 ready candidate document contexts and selected
+   `outputs/docagent.db` / `c1fc1c5e040ec894` as the strongest Phase 5I-B
+   default-case context with 20/26 case-context readiness
 -> Phase 5I-B final-answer-quality artifact inspector implemented locally:
    `scripts/inspect_phase5i_answer_quality_artifacts.py` validates manifest
    hashes, required output presence, safety flags, metrics/report consistency,
