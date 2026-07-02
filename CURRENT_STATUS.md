@@ -269,8 +269,15 @@ reusable only when its `model_id` matches the requested dense encoder; stale
 legacy metadata is recorded and rebuilt when `--build-dense-index-if-missing`
 is enabled. `DenseIndex.search` now also raises a clear dimension-mismatch
 error before reaching FAISS. This is a generic artifact/index compatibility
-repair and still requires a server rerun before treating the selected-context
-Phase 5I-B probe as execution-stable.
+repair. Server rerun
+`phase5ib_answer_quality_selected_context_densefix_20260702` at commit
+`f3d26fe` validated the repair with 8/8 CLI statuses successful, no workflow
+errors or traceback causes, and stale `hash-dense-256` legacy metadata rebuilt
+into BGE-M3 model-specific metadata. The selected-context Phase 5I-B execution
+chain is now stable again; the remaining failures are diagnostic
+answer/citation quality issues (`answer_keyword_missing`,
+`citation_page_mismatch`, `downstream_answer_not_evaluated`), not blockers for
+the reusable workflow chain.
 `scripts/inspect_phase5i_document_contexts.py` is implemented locally as a
 read-only selector for the next server probe. It inventories candidate
 SQLite `db_path` / `doc_id` pairs, checks persisted retrievable EvidenceBlocks,
@@ -290,9 +297,9 @@ export by default, so validation rows are not promoted to training data.
 `scripts/inspect_phase5i_answer_quality_artifacts.py` is implemented locally as
 a read-only artifact inspector for manifest hashes, required files, safety
 flags, metrics/report consistency, and the empty training-candidate export.
-Accepted final answer-quality benchmark status remains `not_started`; the next
-server run is a diagnostic rerun to verify the artifact/attribution contract,
-not a formal benchmark acceptance.
+Accepted final answer-quality benchmark status remains `not_started`; further
+small-scenario answer/citation failures should not be chased unless they expose
+a reusable workflow, evidence, citation, or artifact-contract defect.
 
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in

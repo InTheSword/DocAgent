@@ -41,7 +41,7 @@ multi-document QA is not a required delivery claim.
 | TAT-QA / MP-DocVQA subset preparation | implemented | Reproducible validation-subset artifacts are prepared locally; they are not training data |
 | Local diagnostics and readiness checks | implemented | Diagnostic subset runners and `scripts/check_final_delivery_readiness.py` write compact artifacts and check citation/evidence fields |
 | Final delivery benchmark gate | accepted | Server run `final_delivery_benchmark_gate_server_20260702_componentmetrics` completed readiness, real-Qwen AnswerPolicy baseline, and MP-DocVQA full-workflow diagnostic steps successfully; `final_delivery_gate_metric_review_componentcountfix_20260702` verified manifest/safety flags and complete component-use metrics for 23 local_fact_qa workflow rows; `formal_benchmark_acceptance=false` |
-| Final answer quality artifact contract | implemented | `scripts/run_phase5i_answer_quality_benchmark.py` writes `metrics.json`, `predictions.jsonl`, `case_reports.jsonl`, `failure_analysis.md`, `acceptance_report.json`, `training_candidates_raw.jsonl`, and `manifest.json`; it forwards retriever/dense/reranker settings into `docagent_cli.py` and blocks model-backed runs before CLI/Qwen execution when the requested `db_path` + `doc_id` has no retrievable persisted EvidenceBlocks; server guard run `phase5ib_answer_quality_context_block_20260702` verified that missing context returns blocked artifacts without Qwen; server inventory `phase5ib_context_inventory_server_20260702` found 57 ready candidate contexts and selected `outputs/docagent.db` / `c1fc1c5e040ec894`; after `phase5ib_answer_quality_selected_context_20260702` exposed metadata-level CLI/evidence failures, the local contract now preserves compact CLI error/retriever diagnostics and avoids counting pre-AnswerPolicy retriever setup failures as Qwen use |
+| Final answer quality artifact contract | implemented | `scripts/run_phase5i_answer_quality_benchmark.py` writes `metrics.json`, `predictions.jsonl`, `case_reports.jsonl`, `failure_analysis.md`, `acceptance_report.json`, `training_candidates_raw.jsonl`, and `manifest.json`; it forwards retriever/dense/reranker settings into `docagent_cli.py` and blocks model-backed runs before CLI/Qwen execution when the requested `db_path` + `doc_id` has no retrievable persisted EvidenceBlocks; server guard run `phase5ib_answer_quality_context_block_20260702` verified that missing context returns blocked artifacts without Qwen; server inventory `phase5ib_context_inventory_server_20260702` found 57 ready candidate contexts and selected `outputs/docagent.db` / `c1fc1c5e040ec894`; follow-up probes added compact CLI/retriever/error/traceback diagnostics, then `phase5ib_answer_quality_selected_context_densefix_20260702` validated stale dense-index metadata rebuild with 8/8 CLI statuses successful; remaining small-scenario failures are answer/citation quality diagnostics, not execution-chain blockers |
 | Final answer quality benchmark | not_started | No accepted MP-DocVQA/TAT-QA final answer benchmark yet |
 | New SFT/GRPO training | not_started | Candidate builders/gates exist, but no current final training run is claimed |
 | Pixel-level VLM reasoning | not_started | Image support is OCR/caption/nearby-text/resource metadata only |
@@ -60,6 +60,7 @@ Accepted or real-component evidence currently includes:
 - `final_delivery_benchmark_gate_server_20260702_componentmetrics`
 - `final_delivery_gate_metric_review_componentcountfix_20260702`
 - `phase5ib_context_inventory_server_20260702`
+- `phase5ib_answer_quality_selected_context_densefix_20260702`
 
 These runs validate execution-chain continuity and artifact contracts. They do
 not by themselves promote answer correctness to `benchmark_evaluated`.
@@ -87,7 +88,11 @@ Traceback probe `phase5ib_answer_quality_selected_context_traceback_20260702`
 localized the blocker to a dense-index/query dimension mismatch inside FAISS.
 The local repair prevents stale legacy dense-index metadata from being reused
 with a different encoder and surfaces dimension mismatches before backend
-search.
+search. Densefix probe
+`phase5ib_answer_quality_selected_context_densefix_20260702` validated the
+repair: all 8 cases reached successful CLI status, the stale `hash-dense-256`
+legacy index was rebuilt for BGE-M3, and remaining failures are diagnostic
+answer/citation quality misses rather than workflow execution failures.
 
 ## Known Boundaries
 

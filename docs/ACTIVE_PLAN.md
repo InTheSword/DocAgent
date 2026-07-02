@@ -95,9 +95,15 @@ Phase 5 Personal-use DocAgent MVP
    reused with a different current dense encoder; the local CLI now refuses
    mismatched legacy dense-index metadata and rebuilds when
    `--build-dense-index-if-missing` is enabled, while `DenseIndex.search`
-   reports dimension mismatches before backend search; accepted final
-   answer-quality benchmark status remains not_started until this execution
-   assertion repair is server-validated
+   reports dimension mismatches before backend search; server rerun
+   `phase5ib_answer_quality_selected_context_densefix_20260702` at commit
+   `f3d26fe` validated the repair with 8/8 CLI statuses successful, no
+   workflow errors or traceback causes, and stale `hash-dense-256` legacy
+   index metadata rebuilt into BGE-M3 model-specific metadata. Remaining
+   failures are diagnostic answer/citation quality issues
+   (`answer_keyword_missing`, `citation_page_mismatch`,
+   `downstream_answer_not_evaluated`), not execution-chain blockers; accepted
+   final answer-quality benchmark status remains not_started
 -> Phase 5I-B document-context inventory implemented locally:
    `scripts/inspect_phase5i_document_contexts.py` reads candidate SQLite
    `db_path` / `doc_id` pairs, checks persisted retrievable EvidenceBlocks,
