@@ -14,6 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from docagent.schemas import EvidenceBlock, EvidenceLocation
+from docagent.workflow.answer_contract import citation_from_block, evidence_used_from_blocks
 from scripts import docagent_cli
 
 
@@ -159,6 +161,74 @@ def _check_cli_output_contract() -> CheckResult:
     )
 
 
+def _sample_evidence_blocks() -> list[EvidenceBlock]:
+    return [
+        EvidenceBlock(
+            doc_id="doc1",
+            block_id="text1",
+            block_type="text",
+            text="The budget estimate is $100,000.",
+            page_id=1,
+            location=EvidenceLocation(page=1, block_id="text1"),
+        ),
+        EvidenceBlock(
+            doc_id="doc1",
+            block_id="table1",
+            block_type="table",
+            table_html="<table><tr><td>Budget Estimate</td><td>$100,000</td></tr></table>",
+            page_id=2,
+            image_path="mineru/tables/table1.jpg",
+            location=EvidenceLocation(page=2, block_id="table1", table_id="t1"),
+            metadata={"table_caption": ["Budget estimate table"]},
+        ),
+        EvidenceBlock(
+            doc_id="doc1",
+            block_id="image1",
+            block_type="image",
+            visual_summary="Revenue chart.",
+            page_id=3,
+            image_path="mineru/images/image1.jpg",
+            location=EvidenceLocation(page=3, block_id="image1", image_id="i1"),
+            metadata={"image_caption": "Revenue chart", "nearby_text": ["FY2020 revenue was $100,000"]},
+        ),
+    ]
+
+
+def _check_citation_evidence_contract() -> CheckResult:
+    blocks = _sample_evidence_blocks()
+    citations = [citation_from_block(block) for block in blocks]
+    evidence_used = evidence_used_from_blocks(blocks)
+    required_fields = ("doc_id", "page", "block_id", "block_type", "text_preview")
+    failures: list[str] = []
+    for collection_name, records in (("citations", citations), ("evidence_used", evidence_used)):
+        by_id = {str(record.get("block_id") or ""): record for record in records}
+        for block in blocks:
+            record = by_id.get(block.block_id)
+            if record is None:
+                failures.append(f"{collection_name}_missing_block:{block.block_id}")
+                continue
+            for field in required_fields:
+                if record.get(field) in {None, ""}:
+                    failures.append(f"{collection_name}_missing_field:{block.block_id}:{field}")
+            if block.block_type == "table":
+                for field in ("table_caption", "image_path"):
+                    if record.get(field) in {None, ""}:
+                        failures.append(f"{collection_name}_missing_field:{block.block_id}:{field}")
+            if block.block_type == "image":
+                for field in ("image_caption", "nearby_text", "image_path"):
+                    if record.get(field) in {None, ""}:
+                        failures.append(f"{collection_name}_missing_field:{block.block_id}:{field}")
+    return CheckResult(
+        name="citation_evidence_contract",
+        status="passed" if not failures else "failed",
+        failures=failures,
+        details={
+            "sample_block_types": [block.block_type for block in blocks],
+            "required_location_fields": list(required_fields),
+        },
+    )
+
+
 def _check_documentation(root: Path) -> CheckResult:
     snippets = {
         "README.md": [
@@ -228,6 +298,7 @@ def run_readiness_check(*, root: Path = ROOT, output_dir: Path | None = None, ru
         _check_files(root),
         _check_cli_parser(),
         _check_cli_output_contract(),
+        _check_citation_evidence_contract(),
         _check_documentation(root),
     ]
     failures = [failure for check in checks for failure in check.failures]

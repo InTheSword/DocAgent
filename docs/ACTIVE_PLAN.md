@@ -39,9 +39,9 @@ Phase 5 Personal-use DocAgent MVP
 -> final-delivery report implemented locally for accepted, real_model_verified,
    implemented, and not_started evidence-boundary status
 -> final-delivery readiness check implemented locally for required files, CLI
-   options, output contract fields, documentation boundaries, and deprecated
-   PM handoff cleanup; it does not call MinerU, Qwen, BGE-M3, reranker,
-   datasets, or training
+   options, output contract fields, citation/evidence location fields,
+   documentation boundaries, and deprecated PM handoff cleanup; it does not
+   call MinerU, Qwen, BGE-M3, reranker, datasets, or training
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real
@@ -1592,7 +1592,8 @@ dataset_policy_update = docs/DATASETS.md
 status = implemented
 readiness_check_status = implemented
 readiness_check_scope = required files, CLI options, output fields,
-  documentation boundaries, deprecated PM handoff cleanup
+  citation/evidence location fields, documentation boundaries, deprecated PM
+  handoff cleanup
 benchmark_evaluation_status = not_started
 used_external_api = false
 used_vlm = false
@@ -1989,9 +1990,9 @@ Phase 4D-B1.3 server sanity accepted
   promoting diagnostic subset results to benchmark acceptance
 + Final delivery readiness check implemented locally in
   `scripts/check_final_delivery_readiness.py`; it checks required files, CLI
-  options, required output fields, documentation boundaries, and deprecated PM
-  handoff cleanup without calling MinerU, Qwen, BGE-M3, reranker, datasets, or
-  training
+  options, required output fields, citation/evidence location fields,
+  documentation boundaries, and deprecated PM handoff cleanup without calling
+  MinerU, Qwen, BGE-M3, reranker, datasets, or training
 + AnswerPolicy IO candidate schema, shared prompt v2 candidate-citation
   contract, SFT/GRPO record compatibility, and reward/eval schema
   compatibility implemented locally; final subset AnswerPolicy baseline runner

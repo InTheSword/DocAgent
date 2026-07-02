@@ -100,7 +100,8 @@ commits.
 - MP-DocVQA evidence materialization runner for MinerU API-produced evidence maps;
 - local diagnostic reporting with `summary.json` and `summary.md`;
 - local final-delivery readiness check for CLI options, output contract fields,
-  documentation boundaries, and deprecated PM handoff cleanup.
+  citation/evidence location fields, documentation boundaries, and deprecated
+  PM handoff cleanup.
 
 ## Not Accepted Yet
 

@@ -29,7 +29,7 @@ multi-document QA is not a required delivery claim.
 | Area | Status | Evidence boundary |
 |---|---:|---|
 | Unified CLI contract | accepted | Phase 5F full CLI acceptance and server CLI smoke |
-| Final output JSON contract | implemented | Local contract tests cover `answer`, `reasoning_summary`, `evidence_used`, `citations`, `tools_used`, and `trace_path` |
+| Final output JSON contract | implemented | Local contract/readiness tests cover `answer`, `reasoning_summary`, `evidence_used`, `citations`, `tools_used`, `trace_path`, and citation/evidence location fields |
 | Raw PDF parsing | accepted | MinerU API is the final raw PDF parser path; local MinerU CLI is not a delivery target |
 | MinerU API secret-file support | accepted | `.secrets/mineru.env` supports `MINERU_TOKEN` or `API_TOKEN` without committing secrets |
 | MinerU output preservation | implemented | Markdown/resource inventory metadata, content list fallback, table HTML, table/image resource paths, captions, and nearby OCR text are preserved into evidence metadata |
@@ -39,7 +39,7 @@ multi-document QA is not a required delivery claim.
 | Deterministic document tools | implemented | Document statistics, page lookup, document summary, structured extraction, table lookup, and simple calculation are locally tested |
 | MP-DocVQA evidence materialization | accepted | 10/10 selected documents and 55/55 samples were materialized as evidence-ready after MinerU API retry hardening |
 | TAT-QA / MP-DocVQA subset preparation | implemented | Reproducible validation-subset artifacts are prepared locally; they are not training data |
-| Local diagnostics and readiness checks | implemented | Diagnostic subset runners and `scripts/check_final_delivery_readiness.py` write compact artifacts |
+| Local diagnostics and readiness checks | implemented | Diagnostic subset runners and `scripts/check_final_delivery_readiness.py` write compact artifacts and check citation/evidence fields |
 | Final answer quality benchmark | not_started | No accepted MP-DocVQA/TAT-QA final answer benchmark yet |
 | New SFT/GRPO training | not_started | Candidate builders/gates exist, but no current final training run is claimed |
 | Pixel-level VLM reasoning | not_started | Image support is OCR/caption/nearby-text/resource metadata only |

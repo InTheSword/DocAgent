@@ -178,7 +178,8 @@ Phase 5 final delivery readiness check is implemented locally in
 `scripts/check_final_delivery_readiness.py` with tests in
 `tests/test_check_final_delivery_readiness.py`. The check verifies required
 delivery files, user-facing CLI options, required output fields, documentation
-boundary snippets, and removal of the deprecated PM handoff document. It writes
+boundary snippets, citation/evidence location fields for text/table/image
+evidence, and removal of the deprecated PM handoff document. It writes
 `result.json`, `summary.json`, and `manifest.json` under
 `outputs/final_delivery_readiness/<run_id>/` when used directly. It is a local
 packaging/contract guard only: it does not call MinerU, Qwen, BGE-M3, reranker,
