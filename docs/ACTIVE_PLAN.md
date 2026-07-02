@@ -42,6 +42,10 @@ Phase 5 Personal-use DocAgent MVP
    options, output contract fields, citation/evidence location fields,
    documentation boundaries, and deprecated PM handoff cleanup; it does not
    call MinerU, Qwen, BGE-M3, reranker, datasets, or training
+-> final-delivery benchmark gate implemented locally for server-side
+   readiness, AnswerPolicy baseline, and MP-DocVQA full-workflow diagnostic
+   orchestration; it keeps formal_benchmark_acceptance false and does not
+   start training
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real
@@ -342,6 +346,7 @@ Phase 5 final evaluation local subset diagnostic runner -> implemented
 Phase 5 final delivery CLI guide -> implemented
 Phase 5 final delivery report -> implemented
 Phase 5 final delivery readiness check -> implemented
+Phase 5 final delivery benchmark gate -> implemented
 Phase 5 AnswerPolicy IO candidate schema / citation allowlist -> implemented
 Phase 5 AnswerPolicy prompt v2 candidate citation contract -> implemented
 Phase 5 final AnswerPolicy baseline runner -> implemented
@@ -1993,6 +1998,11 @@ Phase 4D-B1.3 server sanity accepted
   options, required output fields, citation/evidence location fields,
   documentation boundaries, and deprecated PM handoff cleanup without calling
   MinerU, Qwen, BGE-M3, reranker, datasets, or training
++ Final delivery benchmark gate implemented locally in
+  `scripts/run_final_delivery_benchmark_gate.py`; it safely orchestrates
+  readiness, final AnswerPolicy baseline, and MP-DocVQA full-workflow
+  diagnostics with compact artifacts, but does not train or claim formal
+  benchmark acceptance
 + AnswerPolicy IO candidate schema, shared prompt v2 candidate-citation
   contract, SFT/GRPO record compatibility, and reward/eval schema
   compatibility implemented locally; final subset AnswerPolicy baseline runner

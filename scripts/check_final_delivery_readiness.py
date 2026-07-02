@@ -32,6 +32,7 @@ REQUIRED_FILES = (
     "scripts/run_final_raw_pdf_smoke.py",
     "scripts/prepare_mpdocvqa_evidence.py",
     "scripts/run_mpdocvqa_full_workflow_diagnostic.py",
+    "scripts/run_final_delivery_benchmark_gate.py",
 )
 REMOVED_FILES = ("docs/PROJECT_HANDOFF_PM.md",)
 REQUIRED_OUTPUT_FIELDS = (
@@ -250,11 +251,13 @@ def _check_documentation(root: Path) -> CheckResult:
             "image metadata",
             "no pixel-level VLM interpretation",
             "accepted MP-DocVQA/TAT-QA final answer benchmark",
+            "run_final_delivery_benchmark_gate.py",
             "new SFT/GRPO training",
         ],
         "docs/FINAL_DELIVERY_REPORT.md": [
             "Final answer quality benchmark",
             "not_started",
+            "final delivery benchmark gate",
             "validation subsets are used for diagnostics only",
             "used as training data",
             "real_model_verified",

@@ -37,6 +37,7 @@ def test_final_delivery_readiness_reports_documentation_gap(tmp_path: Path) -> N
         "scripts/run_final_raw_pdf_smoke.py",
         "scripts/prepare_mpdocvqa_evidence.py",
         "scripts/run_mpdocvqa_full_workflow_diagnostic.py",
+        "scripts/run_final_delivery_benchmark_gate.py",
     ):
         source = ROOT / relative_path
         target = repo / relative_path

@@ -44,6 +44,12 @@ python scripts\run_final_eval_subset.py `
   --output-dir outputs\final_eval\local_subset_diagnostic
 ```
 
+Run the final-delivery benchmark gate on a prepared server:
+
+```powershell
+python scripts\run_final_delivery_benchmark_gate.py --run-id final_delivery_gate_probe
+```
+
 See [docs/FINAL_DELIVERY_CLI.md](docs/FINAL_DELIVERY_CLI.md) for the complete
 current CLI contract, storage paths, dataset commands, output fields, and
 limitations.
@@ -102,6 +108,9 @@ commits.
 - local final-delivery readiness check for CLI options, output contract fields,
   citation/evidence location fields, documentation boundaries, and deprecated
   PM handoff cleanup.
+- final-delivery benchmark gate orchestration for readiness, AnswerPolicy
+  baseline, and MP-DocVQA full-workflow diagnostics; it is diagnostic-only and
+  does not claim benchmark acceptance.
 
 ## Not Accepted Yet
 

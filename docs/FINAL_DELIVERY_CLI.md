@@ -53,6 +53,9 @@ Implemented local capabilities:
 - local final-delivery readiness check for required files, CLI options, output
   fields, citation/evidence location fields, documentation boundaries, and
   deprecated PM handoff cleanup
+- final delivery benchmark gate in `scripts/run_final_delivery_benchmark_gate.py`
+  for server-side readiness, AnswerPolicy baseline, and MP-DocVQA full-workflow
+  diagnostics without claiming formal benchmark acceptance
 
 Not included in the current local delivery:
 
@@ -222,6 +225,18 @@ It verifies the local delivery pack contract: required files, user-facing CLI
 options, required output fields, citation/evidence location fields for
 text/table/image evidence, documentation boundaries, and removal of the
 deprecated PM handoff document.
+
+Run the final-delivery benchmark gate on a prepared server:
+
+```powershell
+python scripts\run_final_delivery_benchmark_gate.py `
+  --run-id final_delivery_benchmark_gate_probe
+```
+
+The gate safely orchestrates the local readiness check, the final AnswerPolicy
+baseline runner, and the MP-DocVQA full-workflow diagnostic runner. It writes
+compact artifacts and sync bundles, keeps `formal_benchmark_acceptance=false`,
+and does not start SFT/GRPO training.
 
 Materialize MP-DocVQA final-subset PDFs into MinerU-backed evidence:
 

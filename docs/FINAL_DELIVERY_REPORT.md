@@ -40,6 +40,7 @@ multi-document QA is not a required delivery claim.
 | MP-DocVQA evidence materialization | accepted | 10/10 selected documents and 55/55 samples were materialized as evidence-ready after MinerU API retry hardening |
 | TAT-QA / MP-DocVQA subset preparation | implemented | Reproducible validation-subset artifacts are prepared locally; they are not training data |
 | Local diagnostics and readiness checks | implemented | Diagnostic subset runners and `scripts/check_final_delivery_readiness.py` write compact artifacts and check citation/evidence fields |
+| Final delivery benchmark gate | implemented | `scripts/run_final_delivery_benchmark_gate.py` safely orchestrates readiness, AnswerPolicy baseline, and MP-DocVQA full-workflow diagnostics; it keeps `formal_benchmark_acceptance=false` |
 | Final answer quality benchmark | not_started | No accepted MP-DocVQA/TAT-QA final answer benchmark yet |
 | New SFT/GRPO training | not_started | Candidate builders/gates exist, but no current final training run is claimed |
 | Pixel-level VLM reasoning | not_started | Image support is OCR/caption/nearby-text/resource metadata only |
@@ -80,7 +81,7 @@ Near-term work should stay on reusable system behavior:
 1. Preserve and test the MinerU output -> EvidenceBlock -> retrieval -> citation
    path after parser/evidence changes.
 2. Keep the full workflow sanity path green after meaningful changes.
-3. Prepare a formal final answer-quality benchmark only after the execution
-   chain is stable and the benchmark scope is explicitly selected.
+3. Run the final delivery benchmark gate on the server before deciding whether
+   to promote any result to formal final answer-quality benchmark work.
 4. Start SFT/GRPO only if the benchmark shows reusable AnswerPolicy failures
    that prompt/tool/contract repair cannot address.

@@ -186,6 +186,16 @@ packaging/contract guard only: it does not call MinerU, Qwen, BGE-M3, reranker,
 datasets, VLM, or training, and it does not claim final answer-quality or
 formal benchmark acceptance.
 
+Phase 5 final delivery benchmark gate is implemented locally in
+`scripts/run_final_delivery_benchmark_gate.py` with tests in
+`tests/test_run_final_delivery_benchmark_gate.py`. The gate safely orchestrates
+the final-delivery readiness check, the final AnswerPolicy baseline runner,
+and the MP-DocVQA full-workflow diagnostic runner, then writes compact
+`result.json`, `summary.json`, `summary.md`, `steps.jsonl`, `preview.json`, and
+`manifest.json` artifacts with an optional sync bundle. It is a server-required
+diagnostic gate only: it does not train, does not use validation subsets as
+training data, and keeps `formal_benchmark_acceptance=false`.
+
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in
 `tests/test_run_final_raw_pdf_smoke.py`. The runner executes
@@ -1217,6 +1227,7 @@ Phase 5 structured_extraction deterministic CLI -> implemented
 Phase 5F full CLI acceptance -> accepted
 Phase 5 final delivery report -> implemented
 Phase 5 final delivery readiness check -> implemented
+Phase 5 final delivery benchmark gate -> implemented
 CDC -> not_started
 MVP CLI / trace integration -> accepted
 Demo/closure -> not_started
