@@ -201,14 +201,16 @@ and both local and sync manifests hash the final written artifact contents.
 read-only artifact reviewer for that gate; it verifies manifest hashes, step
 statuses, and benchmark/training safety flags without rerunning models.
 
-Server diagnostic `final_delivery_benchmark_gate_server_20260702_rerankerfix`
-at commit `c60d1f9` accepted the final-delivery benchmark gate execution:
-readiness, AnswerPolicy baseline, and MP-DocVQA full-workflow diagnostic steps
-all completed successfully; `used_qwen=true`, `used_training=false`,
+Server diagnostic `final_delivery_benchmark_gate_server_20260702_componentmetrics`
+accepted the final-delivery benchmark gate execution: readiness, AnswerPolicy
+baseline, and MP-DocVQA full-workflow diagnostic steps all completed
+successfully; `used_qwen=true`, `used_training=false`,
 `formal_benchmark_acceptance=false`, and
-`validation_subset_used_for_training=false`; the inspector review also passed
-and wrote review artifacts. This is diagnostic-gate acceptance only, not final
-answer-quality benchmark acceptance.
+`validation_subset_used_for_training=false`. Follow-up review
+`final_delivery_gate_metric_review_componentcountfix_20260702` at commit
+`e289163` verified local/sync manifest hashes, safety flags, and complete
+component-use metrics for the 23 `local_fact_qa` workflow rows. This is
+diagnostic-gate acceptance only, not final answer-quality benchmark acceptance.
 
 Phase 5I-B final-answer-quality artifact contract is implemented locally in
 `scripts/run_phase5i_answer_quality_benchmark.py`. The runner now writes

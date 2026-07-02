@@ -47,13 +47,16 @@ Phase 5 Personal-use DocAgent MVP
    orchestration; it keeps formal_benchmark_acceptance false and does not
    start training
 -> final-delivery benchmark gate server diagnostic accepted: server run
-   `final_delivery_benchmark_gate_server_20260702_rerankerfix` at commit
-   `c60d1f9` completed readiness, real-Qwen AnswerPolicy baseline, and
-   MP-DocVQA full-workflow diagnostic steps successfully, used Qwen, kept
-   `used_training=false`, `formal_benchmark_acceptance=false`, and
-   `validation_subset_used_for_training=false`, and passed the local/sync
-   manifest inspector review; this accepts the diagnostic gate execution,
-   not final answer-quality benchmark status
+   `final_delivery_benchmark_gate_server_20260702_componentmetrics` completed
+   readiness, real-Qwen AnswerPolicy baseline, and MP-DocVQA full-workflow
+   diagnostic steps successfully, used Qwen, kept `used_training=false`,
+   `formal_benchmark_acceptance=false`, and
+   `validation_subset_used_for_training=false`; follow-up review
+   `final_delivery_gate_metric_review_componentcountfix_20260702` at commit
+   `e289163` verified local/sync manifests, safety flags, and complete
+   component-use metrics for the 23 local_fact_qa workflow rows; this accepts
+   the diagnostic gate execution and component metric contract, not final
+   answer-quality benchmark status
 -> Phase 5I-B final-answer-quality artifact contract implemented locally:
    `scripts/run_phase5i_answer_quality_benchmark.py` now writes
    `metrics.json`, `predictions.jsonl`, `case_reports.jsonl`,
@@ -2034,7 +2037,11 @@ Phase 4D-B1.3 server sanity accepted
   `scripts/run_final_delivery_benchmark_gate.py`; it safely orchestrates
   readiness, final AnswerPolicy baseline, and MP-DocVQA full-workflow
   diagnostics with compact artifacts, but does not train or claim formal
-  benchmark acceptance
+  benchmark acceptance; server run
+  `final_delivery_benchmark_gate_server_20260702_componentmetrics` plus
+  review `final_delivery_gate_metric_review_componentcountfix_20260702`
+  accepted the diagnostic gate/component-metric contract with safety flags
+  preserved false
 + AnswerPolicy IO candidate schema, shared prompt v2 candidate-citation
   contract, SFT/GRPO record compatibility, and reward/eval schema
   compatibility implemented locally; final subset AnswerPolicy baseline runner
