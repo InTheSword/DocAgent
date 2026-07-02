@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 
-from scripts.inspect_final_delivery_benchmark_gate import inspect_gate
+from scripts.inspect_final_delivery_benchmark_gate import inspect_gate, main, verify_manifest
 from scripts.run_final_delivery_benchmark_gate import CommandResult, build_parser, run_final_delivery_benchmark_gate
 
 
@@ -125,3 +125,31 @@ def test_inspect_final_delivery_benchmark_gate_rejects_stale_hash(tmp_path: Path
     assert "summary_result_status_mismatch" in result["failures"]
     assert "local_manifest_failed" in result["failures"]
     assert any(failure["type"] == "sha256_mismatch" for failure in result["local_manifest"]["failures"])
+
+
+def test_inspect_final_delivery_benchmark_gate_cli_writes_review_artifacts(tmp_path: Path, capsys) -> None:
+    run_dir, sync_dir = _make_gate_run(tmp_path)
+    output_dir = tmp_path / "review"
+
+    main(
+        [
+            "--run-dir",
+            str(run_dir),
+            "--sync-bundle-dir",
+            str(sync_dir),
+            "--run-id",
+            "review_test",
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    captured = json.loads(capsys.readouterr().out)
+    review_dir = output_dir / "review_test"
+    assert captured["status"] == "success"
+    assert (review_dir / "result.json").is_file()
+    assert (review_dir / "summary.json").is_file()
+    assert (review_dir / "summary.md").is_file()
+    assert (review_dir / "manifest.json").is_file()
+    assert "Final Delivery Benchmark Gate Review" in (review_dir / "summary.md").read_text(encoding="utf-8")
+    assert verify_manifest(review_dir / "manifest.json")["status"] == "success"

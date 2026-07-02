@@ -39,6 +39,39 @@ def write_json(path: Path, payload: dict[str, Any] | list[Any]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def write_summary_markdown(path: Path, result: dict[str, Any]) -> None:
+    lines = [
+        "# Final Delivery Benchmark Gate Review",
+        "",
+        f"- status: `{result.get('status')}`",
+        f"- gate_status: `{result.get('gate_status')}`",
+        f"- run_id: `{result.get('run_id')}`",
+        f"- formal_benchmark_acceptance: `{str(result.get('formal_benchmark_acceptance')).lower()}`",
+        f"- validation_subset_used_for_training: `{str(result.get('validation_subset_used_for_training')).lower()}`",
+        f"- used_training: `{str(result.get('used_training')).lower()}`",
+        "",
+        "## Steps",
+        "",
+    ]
+    for name, status in result.get("step_statuses", {}).items():
+        lines.append(f"- {name}: `{status}`")
+    lines.extend(
+        [
+            "",
+            "## Manifest Checks",
+            "",
+            f"- local_manifest: `{(result.get('local_manifest') or {}).get('status')}`",
+            f"- sync_manifest: `{(result.get('sync_manifest') or {}).get('status') if result.get('sync_manifest') is not None else 'not_checked'}`",
+            "",
+            "## Next Action",
+            "",
+            str(result.get("next_action") or ""),
+        ]
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -88,6 +121,21 @@ def verify_manifest(manifest_path: Path) -> dict[str, Any]:
         "failure_count": len(failures),
         "failures": failures,
     }
+
+
+def write_manifest(path: Path, *, run_id: str, artifact_paths: list[Path]) -> None:
+    files = []
+    for artifact in artifact_paths:
+        if artifact.is_file():
+            files.append({"path": safe_relpath(artifact), "byte_size": artifact.stat().st_size, "sha256": sha256_file(artifact)})
+    write_json(
+        path,
+        {
+            "run_id": run_id,
+            "script_version": "final-delivery-benchmark-gate-inspector-v1",
+            "files": files,
+        },
+    )
 
 
 def inspect_gate(run_dir: Path, *, sync_bundle_dir: Path | None = None) -> dict[str, Any]:
@@ -172,11 +220,17 @@ def main(argv: list[str] | None = None) -> None:
     result["artifact_dir"] = safe_relpath(output_dir)
     result_path = output_dir / "result.json"
     summary_path = output_dir / "summary.json"
+    summary_markdown_path = output_dir / "summary.md"
+    manifest_path = output_dir / "manifest.json"
     write_json(result_path, result)
     write_json(summary_path, result)
-    result["artifact_paths"] = [safe_relpath(result_path), safe_relpath(summary_path)]
+    write_summary_markdown(summary_markdown_path, result)
+    write_manifest(manifest_path, run_id=str(result.get("run_id") or run_id), artifact_paths=[result_path, summary_path, summary_markdown_path])
+    result["artifact_paths"] = [safe_relpath(path) for path in [result_path, summary_path, summary_markdown_path, manifest_path]]
     write_json(result_path, result)
     write_json(summary_path, result)
+    write_summary_markdown(summary_markdown_path, result)
+    write_manifest(manifest_path, run_id=str(result.get("run_id") or run_id), artifact_paths=[result_path, summary_path, summary_markdown_path])
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 

@@ -250,7 +250,8 @@ python scripts\inspect_final_delivery_benchmark_gate.py `
 
 This read-only check validates local and sync manifest hashes, summarizes step
 statuses, and verifies that benchmark/training safety flags remain false. It
-does not call MinerU, Qwen, BGE-M3, reranker, datasets, or training.
+does not call MinerU, Qwen, BGE-M3, reranker, datasets, or training. The review
+itself writes `result.json`, `summary.json`, `summary.md`, and `manifest.json`.
 
 Materialize MP-DocVQA final-subset PDFs into MinerU-backed evidence:
 
