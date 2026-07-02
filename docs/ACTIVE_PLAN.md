@@ -69,9 +69,12 @@ Phase 5 Personal-use DocAgent MVP
    probes can explicitly exercise `hybrid_rerank` with BGE-M3 and the
    cross-encoder reranker; model-backed runs now preflight the requested
    `db_path` + `doc_id` and return blocked artifacts before CLI/Qwen execution
-   when the document context has no persisted retrievable EvidenceBlocks; real
-   final answer-quality benchmark execution remains not_started until a server
-   model run is requested and reviewed
+   when the document context has no persisted retrievable EvidenceBlocks;
+   server guard validation `phase5ib_answer_quality_context_block_20260702`
+   at commit `d980841` confirmed the missing-context path returns
+   `benchmark_status=blocked`, keeps `used_qwen_answer_policy=false`, and
+   passes artifact review; real final answer-quality benchmark execution
+   remains not_started until a server model run is requested and reviewed
 -> Phase 5I-B final-answer-quality artifact inspector implemented locally:
    `scripts/inspect_phase5i_answer_quality_artifacts.py` validates manifest
    hashes, required output presence, safety flags, metrics/report consistency,

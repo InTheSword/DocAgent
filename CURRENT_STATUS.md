@@ -225,7 +225,11 @@ For model-backed or final-answer-evaluated runs, the runner now preflights the
 requested SQLite `db_path` and `doc_id`; if the document is missing or has no
 retrievable persisted EvidenceBlocks, it writes blocked artifacts and does not
 call `docagent_cli.py` or Qwen. This prevents empty-evidence server probes from
-being misread as final answer-quality failures.
+being misread as final answer-quality failures. Server guard validation
+`phase5ib_answer_quality_context_block_20260702` at commit `d980841` confirmed
+this behavior with `benchmark_status=blocked`, `blocker=db_path_not_found`,
+`used_qwen_answer_policy=false`, targeted tests passing, and artifact review
+success.
 The artifact contract keeps `formal_benchmark_acceptance=false`,
 `validation_subset_used_for_training=false`, and an empty raw training-candidate
 export by default, so validation rows are not promoted to training data.
