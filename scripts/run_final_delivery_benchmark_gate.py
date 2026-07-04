@@ -202,6 +202,8 @@ def _answer_policy_command(args: argparse.Namespace, run_id: str) -> list[str]:
         str(args.max_prompt_tokens),
         "--max-new-tokens",
         str(args.answer_policy_max_new_tokens),
+        "--answer-output-contract",
+        args.answer_output_contract,
         "--top-k",
         str(args.top_k),
         "--sync-output-dir",

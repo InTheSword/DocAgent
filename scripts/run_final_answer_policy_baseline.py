@@ -93,6 +93,7 @@ def build_answer_policy(
     torch_dtype: str,
     max_prompt_tokens: int | None,
     max_new_tokens: int,
+    answer_output_contract: str,
 ) -> AnswerPolicy:
     if answer_policy == "heuristic":
         return HeuristicAnswerPolicy()
@@ -107,6 +108,7 @@ def build_answer_policy(
             torch_dtype=torch_dtype,
             max_prompt_tokens=max_prompt_tokens,
             max_new_tokens=max_new_tokens,
+            answer_output_contract=answer_output_contract,
         )
     )
 
@@ -597,7 +599,14 @@ def failure_stage(reasons: list[str]) -> str:
     return "other"
 
 
-def summarize(rows: list[dict[str, Any]], *, run_id: str, artifact_dir: Path, answer_policy: str) -> dict[str, Any]:
+def summarize(
+    rows: list[dict[str, Any]],
+    *,
+    run_id: str,
+    artifact_dir: Path,
+    answer_policy: str,
+    answer_output_contract: str,
+) -> dict[str, Any]:
     status_counts = Counter(str(row.get("pass_fail") or "") for row in rows)
     modes = Counter(str(row.get("evaluation_mode") or "") for row in rows)
     tool_statuses = Counter(str(row.get("tool_status") or "") for row in rows if row.get("tool_executed"))
@@ -618,6 +627,7 @@ def summarize(rows: list[dict[str, Any]], *, run_id: str, artifact_dir: Path, an
         "run_id": run_id,
         "artifact_dir": safe_relpath(artifact_dir),
         "answer_policy_mode": answer_policy,
+        "answer_output_contract": answer_output_contract,
         "case_count": len(rows),
         "evaluated_count": evaluated_count,
         "passed_count": status_counts.get("passed", 0),
@@ -674,6 +684,7 @@ def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
         f"- quality_status: `{summary['quality_status']}`",
         f"- resource_boundary: `{summary['resource_boundary']}`",
         f"- answer_policy_mode: `{summary['answer_policy_mode']}`",
+        f"- answer_output_contract: `{summary['answer_output_contract']}`",
         f"- used_qwen: `{str(summary['used_qwen']).lower()}`",
         f"- formal_benchmark_acceptance: `{str(summary['formal_benchmark_acceptance']).lower()}`",
         "",
@@ -732,6 +743,7 @@ def write_manifest(path: Path, *, run_id: str, artifact_dir: Path, summary: dict
         "summary": {
             "status": summary.get("status"),
             "answer_policy_mode": summary.get("answer_policy_mode"),
+            "answer_output_contract": summary.get("answer_output_contract"),
             "used_qwen": summary.get("used_qwen"),
             "evaluated_count": summary.get("evaluated_count"),
         },
@@ -757,6 +769,7 @@ def result_payload(summary: dict[str, Any], artifact_paths: list[Path]) -> dict[
         "quality_status": summary.get("quality_status"),
         "resource_boundary": summary.get("resource_boundary"),
         "answer_policy_mode": summary.get("answer_policy_mode"),
+        "answer_output_contract": summary.get("answer_output_contract"),
         "used_qwen": bool(summary.get("used_qwen", False)),
         "used_vlm": bool(summary.get("used_vlm", False)),
         "used_training": bool(summary.get("used_training", False)),
@@ -825,7 +838,14 @@ def create_sync_bundle(
     return sync_dir, copied
 
 
-def blocked_result(*, run_id: str, artifact_dir: Path, preflight: dict[str, Any], answer_policy: str) -> dict[str, Any]:
+def blocked_result(
+    *,
+    run_id: str,
+    artifact_dir: Path,
+    preflight: dict[str, Any],
+    answer_policy: str,
+    answer_output_contract: str,
+) -> dict[str, Any]:
     artifact_dir.mkdir(parents=True, exist_ok=True)
     summary = {
         "command": "run_final_answer_policy_baseline",
@@ -837,6 +857,7 @@ def blocked_result(*, run_id: str, artifact_dir: Path, preflight: dict[str, Any]
         "run_id": run_id,
         "artifact_dir": safe_relpath(artifact_dir),
         "answer_policy_mode": answer_policy,
+        "answer_output_contract": answer_output_contract,
         "blocker": preflight,
         "used_qwen": False,
         "used_vlm": False,
@@ -901,6 +922,7 @@ def run_final_answer_policy_baseline(
     torch_dtype: str = "bfloat16",
     max_prompt_tokens: int | None = 4096,
     max_new_tokens: int = 1024,
+    answer_output_contract: str = "candidate_citations",
     top_k: int = 5,
     preserve_input_order: bool = False,
     answer_policy: AnswerPolicy | None = None,
@@ -915,7 +937,13 @@ def run_final_answer_policy_baseline(
     if answer_policy is None:
         preflight = preflight_model(answer_policy_mode, base_model_path, adapter_path)
         if preflight["status"] != "success":
-            result = blocked_result(run_id=run_id, artifact_dir=artifact_dir, preflight=preflight, answer_policy=answer_policy_mode)
+            result = blocked_result(
+                run_id=run_id,
+                artifact_dir=artifact_dir,
+                preflight=preflight,
+                answer_policy=answer_policy_mode,
+                answer_output_contract=answer_output_contract,
+            )
             if sync_output_root is not None:
                 sync_dir, sync_paths = create_sync_bundle(
                     sync_root=sync_output_root,
@@ -937,6 +965,7 @@ def run_final_answer_policy_baseline(
             torch_dtype=torch_dtype,
             max_prompt_tokens=max_prompt_tokens,
             max_new_tokens=max_new_tokens,
+            answer_output_contract=answer_output_contract,
         )
 
     manifest_by_id = load_manifest(tatqa_manifest)
@@ -982,7 +1011,17 @@ def run_final_answer_policy_baseline(
             reason = "mpdocvqa_evidence_db_missing"
         rows.extend(row_from_missing_mpdocvqa_evidence(row, reason) for row in mp_rows)
 
-    summary = summarize(rows, run_id=run_id, artifact_dir=artifact_dir, answer_policy=str(getattr(answer_policy, "mode", answer_policy_mode)))
+    policy_contract = str(
+        getattr(getattr(answer_policy, "config", None), "answer_output_contract", answer_output_contract)
+        or answer_output_contract
+    )
+    summary = summarize(
+        rows,
+        run_id=run_id,
+        artifact_dir=artifact_dir,
+        answer_policy=str(getattr(answer_policy, "mode", answer_policy_mode)),
+        answer_output_contract=policy_contract,
+    )
     failures = [row for row in rows if row.get("pass_fail") == "failed"][:50]
     artifact_paths = [
         artifact_dir / "result.json",
@@ -1036,6 +1075,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--torch-dtype", default="bfloat16")
     parser.add_argument("--max-prompt-tokens", type=int, default=4096)
     parser.add_argument("--max-new-tokens", type=int, default=1024)
+    parser.add_argument(
+        "--answer-output-contract",
+        choices=["candidate_citations", "v3_refs"],
+        default="candidate_citations",
+        help="Internal AnswerPolicy output contract; v3_refs maps model-selected E# refs back to citations.",
+    )
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--preserve-input-order", action="store_true")
     parser.add_argument("--sync-output-dir")
@@ -1062,6 +1107,7 @@ def main(argv: list[str] | None = None) -> int:
         torch_dtype=str(args.torch_dtype),
         max_prompt_tokens=args.max_prompt_tokens,
         max_new_tokens=int(args.max_new_tokens),
+        answer_output_contract=str(args.answer_output_contract),
         top_k=int(args.top_k),
         preserve_input_order=bool(args.preserve_input_order),
         sync_output_root=repo_path(args.sync_output_dir),

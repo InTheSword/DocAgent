@@ -10,7 +10,7 @@ from docagent.schemas import DocAgentSample, EvidenceBlock, EvidenceLocation
 from docagent.storage.db import connect
 from docagent.storage.repositories import DocumentRepository
 from docagent.utils.jsonl import read_jsonl, write_jsonl
-from scripts.run_final_answer_policy_baseline import run_final_answer_policy_baseline
+from scripts.run_final_answer_policy_baseline import build_answer_policy, run_final_answer_policy_baseline
 
 
 class CandidatePolicy:
@@ -235,6 +235,7 @@ def test_answer_policy_baseline_writes_diagnostic_artifacts(tmp_path: Path) -> N
 
     assert summary["status"] == "success"
     assert summary["evaluation_scope"] == "final_subset_answer_policy_baseline_not_formal_benchmark"
+    assert summary["answer_output_contract"] == "candidate_citations"
     assert summary["case_count"] == 3
     assert summary["evaluated_count"] == 2
     assert summary["passed_count"] == 2
@@ -288,6 +289,21 @@ def test_answer_policy_baseline_writes_diagnostic_artifacts(tmp_path: Path) -> N
     assert (sync_dir / "manifest.json").is_file()
     assert (sync_dir / "log_tail.txt").is_file()
     assert (sync_dir / "stderr_tail.txt").is_file()
+
+
+def test_answer_policy_baseline_builds_qwen_with_v3_output_contract() -> None:
+    policy = build_answer_policy(
+        answer_policy="sft",
+        base_model_path="/tmp/qwen",
+        adapter_path="/tmp/adapter",
+        device="cuda",
+        torch_dtype="bfloat16",
+        max_prompt_tokens=4096,
+        max_new_tokens=128,
+        answer_output_contract="v3_refs",
+    )
+
+    assert policy.config.answer_output_contract == "v3_refs"
 
 
 def test_answer_policy_baseline_can_evaluate_mpdocvqa_with_evidence_manifest(tmp_path: Path) -> None:

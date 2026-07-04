@@ -139,6 +139,8 @@ def test_final_delivery_benchmark_gate_orchestrates_safe_steps(tmp_path: Path) -
     answer_policy_command = commands[1]
     assert "--max-samples" in answer_policy_command
     assert answer_policy_command[answer_policy_command.index("--max-samples") + 1] == "3"
+    assert answer_policy_command[answer_policy_command.index("--answer-output-contract") + 1] == "v3_refs"
+    assert answer_policy_command[answer_policy_command.index("--adapter-path") + 1] == str(adapter_path)
     workflow_command = commands[2]
     assert workflow_command[workflow_command.index("--dense-backend") + 1] == "hash"
     assert workflow_command[workflow_command.index("--reranker-backend") + 1] == "keyword"
