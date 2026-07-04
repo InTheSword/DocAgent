@@ -235,9 +235,12 @@ Phase 5 Personal-use DocAgent MVP
    records and writes deterministic target/negative reward-component reports
    without calling models or starting training; local smoke
    `answer_policy_v3_reward_calibration_local_smoke_20260704` calibrated 32
-   train-only records, with target_reward_min 1.0, negative_reward_max 0.7,
-   invalid_schema reward 0.0, and `reward_calibration_status=passed`; this
-   prepares best-of-N/DPO/GRPO discussion only and does not approve GRPO
+   train-only records, and server run
+   `answer_policy_v3_reward_calibration_expand20_20260704` calibrated the
+   96-record expanded mixed train pack with target_reward_min 1.0,
+   negative_reward_max 0.7, invalid_schema reward 0.0, and
+   `reward_calibration_status=passed`; this prepares best-of-N/DPO/GRPO
+   discussion only and does not approve GRPO
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real

@@ -461,7 +461,9 @@ credit and explicitly scores insufficient-evidence outputs for a refusal-style
 answer, preventing malformed or fabricated-insufficient outputs from receiving
 full reward. Local smoke
 `answer_policy_v3_reward_calibration_local_smoke_20260704` calibrated 32
-train-only v3 records and produced `target_reward_min=1.0`,
+train-only v3 records. Server run
+`answer_policy_v3_reward_calibration_expand20_20260704` then calibrated the
+96-record expanded mixed train pack, producing `target_reward_min=1.0`,
 `negative_reward_max=0.7`, `invalid_schema_missing_refs.max=0.0`, and
 `reward_calibration_status=passed`, while preserving `used_training=false`,
 `used_qwen=false`, `formal_benchmark_acceptance=false`, and
