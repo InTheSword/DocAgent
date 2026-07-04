@@ -386,12 +386,31 @@ Phase 5 Personal-use DocAgent MVP
    checks (`answer_keyword_missing`, one `citation_page_mismatch`), so this is
    execution-chain integration evidence only, not answer-quality benchmark
    acceptance
+-> AnswerPolicy v3 480-step checkpoint system-level comparison diagnostic
+   completed: server comparison
+   `answer_policy_v3_system_compare_base_vs_adapter480_8cases_20260704_pathfix`
+   read the real workflow artifacts from base run
+   `phase5ib_v3refs_base_compare8_20260704` and adapter run
+   `phase5ib_v3refs_adapter480_compare8_20260704`; both paths used real
+   LLM query rewriting, BGE-M3 retrieval, cross-encoder reranking, Qwen
+   AnswerPolicy, and `answer_output_contract=v3_refs` on the same 8 Phase 5I
+   selected-context cases; base passed 2/8 with answer_correct_rate 0.125,
+   adapter passed 2/8 with answer_correct_rate 0.0, and both kept
+   format_valid_rate/citation_valid_rate 1.0 and location_valid_rate 0.75;
+   there were no improved or regressed pass/fail cases, only 2 unchanged
+   passed and 6 unchanged failed; this means the first v3 adapter is verified
+   as a contract/heldout improvement and real workflow integration checkpoint,
+   but not as a real workflow answer-quality improvement; do not increase
+   steps or start GRPO before inspecting whether unchanged failures are caused
+   by retrieval/context, citation packaging, benchmark keyword expectations,
+   or AnswerPolicy generation with correct evidence available
 -> AnswerPolicy v3 first training report implemented locally:
    `docs/ANSWER_POLICY_V3_FIRST_TRAINING_REPORT.md` summarizes the first
    expanded ms-swift SFT run, including MP-DocVQA 400-window materialization,
    mixed-pack composition, train/heldout split, 480-step LoRA training
-   configuration, base-vs-adapter heldout deltas, and the v3_refs CLI smoke;
-   it records the run as train-only heldout diagnostic evidence, with
+   configuration, base-vs-adapter heldout deltas, the v3_refs CLI smoke, and
+   the 8-case base-vs-adapter real workflow comparison; it records the run as
+   train-only heldout diagnostic evidence plus integration evidence, with
    `formal_benchmark_acceptance=false`, `validation_subset_used_for_training=false`,
    and GRPO still unapproved
 -> AnswerPolicy v3 refs CLI/Qwen integration real-model verified:

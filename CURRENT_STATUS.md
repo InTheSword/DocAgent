@@ -661,12 +661,29 @@ Both rows still failed diagnostic answer/citation checks
 system integration evidence for the trained v3 checkpoint, not final
 answer-quality benchmark acceptance.
 
+AnswerPolicy v3 480-step checkpoint system-level comparison is complete as a
+diagnostic, not as answer-quality acceptance. Server comparison
+`answer_policy_v3_system_compare_base_vs_adapter480_8cases_20260704_pathfix`
+read the real workflow artifacts from base run
+`phase5ib_v3refs_base_compare8_20260704` and adapter run
+`phase5ib_v3refs_adapter480_compare8_20260704`. Both runs used the same 8
+Phase 5I selected-context cases with real LLM query rewriting, BGE-M3
+retrieval, cross-encoder reranking, Qwen AnswerPolicy, and
+`answer_output_contract=v3_refs`. Base passed 2/8 with
+`answer_correct_rate=0.125`; the adapter passed 2/8 with
+`answer_correct_rate=0.0`. Both kept `format_valid_rate=1.0`,
+`citation_valid_rate=1.0`, and `location_valid_rate=0.75`. Case movement was
+0 improved, 0 regressed, 2 unchanged passed, and 6 unchanged failed. This
+confirms real workflow integration but not system-level answer-quality
+improvement, so the next step is failure attribution before more training or
+post-training.
+
 AnswerPolicy v3 first training report is implemented in
 `docs/ANSWER_POLICY_V3_FIRST_TRAINING_REPORT.md`. It summarizes MP-DocVQA
 400-window materialization, mixed-pack composition, 1920/128 train-heldout
 split, 480-step ms-swift LoRA training configuration, base-vs-adapter heldout
-deltas, CLI v3_refs smoke, limitations, and the next decision. It records
-train-only heldout improvement evidence while keeping
+deltas, CLI v3_refs smoke, the 8-case real workflow comparison, limitations,
+and the next decision. It records train-only heldout improvement evidence while keeping
 `formal_benchmark_acceptance=false`, `validation_subset_used_for_training=false`,
 and GRPO unapproved.
 

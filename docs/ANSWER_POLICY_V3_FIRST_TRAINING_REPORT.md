@@ -44,6 +44,13 @@ behavior. It is still diagnostic evidence only. It does not approve GRPO, does
 not use validation/final-eval data for training, and does not establish formal
 final answer-quality benchmark acceptance.
 
+A follow-up real workflow comparison over 8 Phase 5I cases did not show a
+system-level pass-rate gain from the 480-step adapter. The adapter preserved
+format and citation validity, but did not improve the small-scenario final
+answer-quality outcome. This means the first SFT run is validated as a contract
+and train-only heldout improvement, but it is not yet validated as a full
+workflow answer-quality improvement.
+
 ## 2. Data Construction
 
 ### MP-DocVQA Train Materialization
@@ -288,19 +295,92 @@ The smoke confirms that the trained checkpoint can enter the real system path.
 The failures are answer/citation quality diagnostics, not execution-chain
 blockers.
 
-## 6. Limitations
+## 6. System-Level Base vs Adapter Comparison
+
+Run:
+
+```text
+answer_policy_v3_system_compare_base_vs_adapter480_8cases_20260704_pathfix
+```
+
+Artifacts:
+
+```text
+outputs/final_eval/answer_policy_v3_system_compare/answer_policy_v3_system_compare_base_vs_adapter480_8cases_20260704_pathfix/result.json
+outputs/sync/answer_policy_v3_system_compare_base_vs_adapter480_8cases_20260704_pathfix/
+```
+
+The comparison used the same 8 Phase 5I selected-context workflow cases for the
+Qwen3-1.7B base model and the 480-step v3 adapter. Both paths used the real
+workflow stack:
+
+```text
+docagent_cli.py
+-> LLM query rewriting
+-> BGE-M3 retrieval
+-> cross-encoder reranking
+-> Qwen AnswerPolicy
+-> answer_output_contract=v3_refs
+```
+
+Observed:
+
+| Metric | Base | 480-step adapter | Delta |
+|---|---:|---:|---:|
+| Case count | 8 | 8 | 0 |
+| Passed count | 2 | 2 | 0 |
+| Failed count | 6 | 6 | 0 |
+| Answer correct rate | 0.125 | 0.000 | -0.125 |
+| Format valid rate | 1.000 | 1.000 | 0 |
+| Citation valid rate | 1.000 | 1.000 | 0 |
+| Location valid rate | 0.750 | 0.750 | 0 |
+| Qwen AnswerPolicy used | 7 | 7 | 0 |
+| LLM query rewriter used | 7 | 7 | 0 |
+
+Case-level movement:
+
+| Change | Count |
+|---|---:|
+| Improved | 0 |
+| Regressed | 0 |
+| Unchanged passed | 2 |
+| Unchanged failed | 6 |
+
+Failure reasons remained concentrated in:
+
+```text
+answer_keyword_missing
+citation_page_mismatch
+downstream_answer_not_evaluated
+```
+
+Interpretation:
+
+- The v3 adapter can run through the real system path.
+- The v3 adapter improves the train-only heldout contract metrics.
+- The same adapter does not yet improve this small real workflow answer-quality
+  probe.
+- Increasing steps blindly is not justified by this comparison.
+- Before more training, inspect whether remaining failures are caused by
+  retrieval/context selection, benchmark keyword expectations, citation
+  packaging, or AnswerPolicy generation.
+
+## 7. Limitations
 
 1. This was a diagnostic SFT run, not a final production SFT acceptance run.
 2. The heldout set came from the generated train-source pack, not validation or
    final-evaluation data.
 3. The system-chain smoke used only 2 cases and did not show answer-quality
    success in the full workflow.
-4. MP-DocVQA materialization stopped at 400 document windows by design; the
+4. The 8-case base-vs-adapter system comparison also did not show a pass-rate
+   gain, so the current checkpoint should not be treated as a system-quality
+   improvement checkpoint.
+5. MP-DocVQA materialization stopped at 400 document windows by design; the
    remaining train windows are available for later expansion.
-5. No GRPO, DPO, or best-of-N distillation was approved by this run.
-6. Pixel-level VLM image reasoning remains out of scope for this training run.
+6. No GRPO, DPO, or best-of-N distillation was approved by this run.
+7. Pixel-level VLM image reasoning remains out of scope for this training run.
 
-## 7. Decision
+## 8. Decision
 
 This first training run should be treated as a successful AnswerPolicy v3 SFT
 method validation:
@@ -316,9 +396,11 @@ grpo_approved = false
 Recommended next step:
 
 ```text
-Run a controlled adapter-vs-base system-level comparison on a larger small
-set, using the same v3_refs contract and real workflow path, before scaling
-training or starting reward-based post-training.
+Inspect the unchanged failed real workflow rows before scaling training. If the
+failures are primarily retrieval/context/citation packaging or benchmark-keyword
+expectation issues, fix those generic system issues first. If failures are
+confirmed to be AnswerPolicy generation weaknesses with correct evidence
+available, expand train-only data and run a second SFT.
 ```
 
 Do not tune against the two failed CLI smoke cases individually.
