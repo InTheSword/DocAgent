@@ -28,7 +28,8 @@ TRAIN_SPLITS = {"train", "training"}
 
 SYSTEM_PROMPT = (
     "You are DocAgent's final answer policy. Use only the numbered evidence candidates. "
-    "Return exactly one valid JSON object with answer, supporting_refs, support_status, and reasoning_summary."
+    "Return exactly one valid JSON object with answer, supporting_refs, support_status, and reasoning_summary. "
+    "Keep reasoning_summary under 300 characters."
 )
 
 
@@ -169,6 +170,7 @@ def build_prompt(question: str, candidates: list[dict[str, Any]]) -> str:
         "- Use only the numbered evidence candidates.\n"
         "- For supported answers, supporting_refs must contain the evidence refs that directly support the answer.\n"
         "- For insufficient evidence, use support_status=insufficient and supporting_refs=[].\n"
+        "- Keep reasoning_summary under 300 characters.\n"
         "- Do not output page numbers, block ids, document ids, paths, markdown, or hidden reasoning."
     )
 

@@ -103,6 +103,8 @@ def test_build_answer_policy_v3_tatqa_data_writes_schema_artifacts(tmp_path: Pat
     assert set(assistant_target) == {"answer", "supporting_refs", "support_status", "reasoning_summary"}
     assert "citation_block_ids" not in assistant_target
     assert "evidence_used" not in assistant_target
+    assert "under 300 characters" in sft[0]["messages"][0]["content"]
+    assert "under 300 characters" in sft[0]["messages"][1]["content"]
 
     calc_record = next(record for record in aligned if record["bucket"] == "deterministic_tool_supported")
     assert calc_record["target_model_output"]["supporting_refs"] == ["E4"]
