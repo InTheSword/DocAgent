@@ -543,6 +543,46 @@ The command above does not start training. It validates v3 records, writes
 same train-only / no-validation-subset safety flags. Add `--execute` only for a
 controlled server smoke.
 
+Build an audited Stage 2 mixed pack before a short SFT run:
+
+```bash
+python scripts/build_answer_policy_v3_mixed_sft_pack.py \
+  --tatqa-sft outputs/training_prep/answer_policy_v3/answer_policy_v3_tatqa_train80_20260704/sft_train.jsonl \
+  --mpdocvqa-sft outputs/training_prep/answer_policy_v3/answer_policy_v3_mpdocvqa_train_splitfix2_20260704/sft_train.jsonl \
+  --output-root outputs/training_prep/answer_policy_v3_mixed_sft \
+  --run-id answer_policy_v3_mixed_stage2 \
+  --target-records 64 \
+  --mpdocvqa-ratio 0.5 \
+  --tatqa-ratio 0.4 \
+  --insufficient-ratio 0.1 \
+  --sync-output-dir outputs/sync
+```
+
+The mixed pack builder never duplicates records to force ratios. If MP-DocVQA
+or insufficient records are unavailable, it records `shortage_counts` and
+`backfill_counts` in `summary.json` before writing `sft_train.jsonl`.
+
+Run a controlled short ms-swift SFT smoke from the mixed pack:
+
+```bash
+python scripts/run_answer_policy_v3_msswift_sft.py \
+  --sft-input outputs/training_prep/answer_policy_v3_mixed_sft/answer_policy_v3_mixed_stage2/sft_train.jsonl \
+  --output-root outputs/training/answer_policy_v3_msswift_sft \
+  --run-id answer_policy_v3_msswift_stage2_short \
+  --base-model-path /root/autodl-tmp/models/Qwen3-1.7B \
+  --max-records 64 \
+  --max-steps 3 \
+  --max-length 1024 \
+  --gradient-accumulation-steps 4 \
+  --lora-rank 8 \
+  --lora-alpha 16 \
+  --sync-output-dir outputs/sync \
+  --execute
+```
+
+This is still a short training-chain smoke. It does not claim benchmark
+acceptance, final model quality, or GRPO readiness.
+
 Enable optional query planning:
 
 ```powershell

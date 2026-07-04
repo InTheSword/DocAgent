@@ -381,6 +381,24 @@ training. Server execute smoke
 ms-swift training entrypoint and checkpoint contract only; full SFT and any
 model-quality claim remain not_started.
 
+AnswerPolicy v3 Stage 2 mixed-pack short SFT is real-model verified through
+`scripts/build_answer_policy_v3_mixed_sft_pack.py` plus the ms-swift runner.
+Server run `answer_policy_v3_mixed_stage2_20260704` built a 64-record
+train-only mixed pack from the current v3 TAT-QA and MP-DocVQA train sources.
+The target ratio was MP-DocVQA 50%, TAT-QA 40%, insufficient 10%, but the audit
+correctly recorded only 7 available MP-DocVQA records and no insufficient
+records, so the shortage was backfilled from TAT-QA. Server run
+`answer_policy_v3_msswift_stage2_short_20260704` trained Qwen3-1.7B for 3
+ms-swift LoRA steps on the mixed pack. Follow-up diagnostic
+`answer_policy_v3_msswift_stage2_checkpoint_eval_20260704` evaluated 8 records
+with `json_valid_rate=1.0`, `schema_valid_rate=1.0`,
+`support_status_match_rate=1.0`, `supporting_refs_subset_rate=1.0`,
+`positive_ref_hit_rate=0.875`, and `answer_exact_rate=0.5`, while preserving
+`formal_benchmark_acceptance=false` and
+`validation_subset_used_for_training=false`. This verifies mixed-pack
+construction and short SFT execution only; expanded SFT, final answer-quality
+benchmarking, and GRPO remain not_started.
+
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in
 `tests/test_run_final_raw_pdf_smoke.py`. The runner executes

@@ -176,6 +176,20 @@ Phase 5 Personal-use DocAgent MVP
    1.0, positive_ref_hit_rate 1.0, answer_exact_rate 0.5, and kept
    `formal_benchmark_acceptance=false`; this verifies the ms-swift training
    entrypoint and checkpoint contract only, not final model quality
+-> AnswerPolicy v3 Stage 2 mixed-pack short SFT real-model verified:
+   `scripts/build_answer_policy_v3_mixed_sft_pack.py` builds an audited
+   train-only mixed SFT pack with target ratios, shortage/backfill accounting,
+   validation-like path blocking, and compact sync artifacts; server run
+   `answer_policy_v3_mixed_stage2_20260704` selected 64 records from train-only
+   v3 sources, with MP-DocVQA limited to 7 available records and the remaining
+   quota transparently backfilled from TAT-QA; server run
+   `answer_policy_v3_msswift_stage2_short_20260704` trained Qwen3-1.7B for 3
+   ms-swift LoRA steps on that mixed pack; diagnostic
+   `answer_policy_v3_msswift_stage2_checkpoint_eval_20260704` evaluated 8
+   records with json/schema/support-status/supporting-ref legality rates all
+   1.0, positive_ref_hit_rate 0.875, answer_exact_rate 0.5, and kept
+   `formal_benchmark_acceptance=false`; this verifies the mixed-pack and short
+   SFT execution path only, not final model quality
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real
