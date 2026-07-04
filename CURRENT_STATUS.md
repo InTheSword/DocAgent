@@ -692,6 +692,24 @@ evaluated 16 records with `json_valid_rate=1.0`, `schema_valid_rate=1.0`,
 `formal_benchmark_acceptance=false`, and kept
 `validation_subset_used_for_training=false`; it verifies the merged
 rejection-SFT execution chain, not final answer-quality improvement.
+The ms-swift v3 runner now supports an optional `--adapter-path`, passed to
+ms-swift as `--adapters`, so bounded rejection-SFT can continue from an
+existing LoRA adapter instead of starting a new adapter from the base model.
+Server dry-run `answer_policy_v3_rejection_sft_full4096_adapter_dryrun_20260705`
+confirmed the generated command loads the 1024-step full4096 adapter. Server
+run `answer_policy_v3_rejection_sft_full4096_adapter_56steps_20260705` then
+continued from that adapter on 222 train-only rejection-SFT records for
+56 ms-swift update steps, completed in 83.858 seconds, and wrote checkpoint
+`swift_output/v0-20260705-044828/checkpoint-56`; train loss was reported as
+`0.01333`, with `used_training=true`, `formal_benchmark_acceptance=false`, and
+`validation_subset_used_for_training=false`. Same-input 64-record diagnostics
+showed the full4096 adapter at answer-exact 0.875, support-status match
+0.984375, positive-ref hit 0.975, and the continued rejection-SFT adapter at
+answer-exact 0.921875, support-status match 1.0, positive-ref hit 1.0, with
+json/schema/supporting-ref legality and insufficient empty-ref rates all 1.0
+for both. This verifies the intended v3 train-only distillation objective and
+adapter-continuation execution path; it still does not approve DPO/GRPO or
+claim final workflow answer-quality acceptance.
 
 AnswerPolicy v3 train-only heldout diagnostic splitting is implemented locally
 in `scripts/split_answer_policy_v3_sft_records.py`. The splitter validates v3

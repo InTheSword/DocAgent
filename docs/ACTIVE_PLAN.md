@@ -387,8 +387,20 @@ Phase 5 Personal-use DocAgent MVP
    diagnostic `answer_policy_v3_rejection_sft_merged_slices_checkpoint_eval_20260704`
    evaluated 16 rows with json/schema/support-status/supporting-ref/positive-ref
    and answer-exact rates all 1.0, `thinking_rate=0.0`, and safety flags
-   preserved false; this remains execution-chain evidence, not final
-   answer-quality acceptance
+   preserved false; the ms-swift v3 runner now accepts `--adapter-path` and
+   passes it as `--adapters` so rejection-SFT can continue from an existing
+   LoRA adapter; server dry-run
+   `answer_policy_v3_rejection_sft_full4096_adapter_dryrun_20260705`
+   verified the 1024-step full4096 adapter is loaded, and execute run
+   `answer_policy_v3_rejection_sft_full4096_adapter_56steps_20260705`
+   continued from that adapter on 222 train-only rejection-SFT records for
+   56 update steps, producing checkpoint
+   `swift_output/v0-20260705-044828/checkpoint-56`; same-input 64-record
+   diagnostics improved answer-exact 0.875 -> 0.921875, support-status match
+   0.984375 -> 1.0, and positive-ref hit 0.975 -> 1.0 while keeping
+   json/schema/ref legality and insufficient empty-ref rates at 1.0; this
+   verifies train-only v3 distillation and adapter-continuation execution,
+   not final answer-quality acceptance or DPO/GRPO approval
 -> AnswerPolicy v3 train-only heldout diagnostic split implemented locally:
    `scripts/split_answer_policy_v3_sft_records.py` deterministically splits
    validated v3 SFT records into non-overlapping `train_sft.jsonl` and
