@@ -318,6 +318,27 @@ presence, safety flags, metrics/report consistency, and that
 `training_candidates_raw.jsonl` is empty. It does not call models, create
 training data, or claim formal benchmark acceptance.
 
+Compare two Phase 5I-B answer-quality artifact directories, for example base
+versus a candidate adapter, before promoting a checkpoint:
+
+```powershell
+python scripts\compare_phase5i_answer_quality_runs.py `
+  --base-run-dir outputs\benchmark\phase5i_answer_quality\<base_run_id> `
+  --candidate-run-dir outputs\benchmark\phase5i_answer_quality\<candidate_run_id> `
+  --base-label base `
+  --candidate-label adapter480 `
+  --run-id phase5i_answer_quality_compare `
+  --sync-output-dir outputs\sync
+```
+
+This read-only guard compares existing `phase5i_summary.json`, `metrics.json`,
+and `case_reports.jsonl` files, writes case-level movement rows, and keeps
+`used_training=false`, `validation_subset_used_for_training=false`, and
+`formal_benchmark_acceptance=false`. It does not call Qwen, retrieval models,
+or training. A candidate checkpoint should not be promoted from this comparison
+alone; use it as a controlled contract signal before broader clean heldout or
+workflow evaluation.
+
 Materialize MP-DocVQA final-subset PDFs into MinerU-backed evidence:
 
 ```powershell

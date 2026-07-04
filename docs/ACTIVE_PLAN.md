@@ -120,6 +120,17 @@ Phase 5 Personal-use DocAgent MVP
    hashes, required output presence, safety flags, metrics/report consistency,
    and empty `training_candidates_raw.jsonl` without calling models or
    promoting validation rows to training data
+-> Phase 5I-B answer-quality run comparison guard implemented locally:
+   `scripts/compare_phase5i_answer_quality_runs.py` compares two existing
+   Phase 5I answer-quality artifact directories using `phase5i_summary.json`,
+   `metrics.json`, and `case_reports.jsonl`, writes case-level movement rows,
+   and preserves `used_training=false`,
+   `validation_subset_used_for_training=false`, and
+   `formal_benchmark_acceptance=false`; local targeted tests passed, and
+   server run `phase5ib_v3refs_clean6_base_vs_adapter480_compare_script_20260704`
+   reproduced the clean6 base-vs-adapter comparison with base 6/6 versus
+   adapter480 3/6. This is an artifact-only checkpoint-promotion guard; it
+   does not call Qwen or training
 -> AnswerPolicy training-pack preprocessing implemented locally:
    `scripts/build_answer_policy_training_pack.py` builds audited SFT and GRPO
    training-format artifacts from train-split `DocAgentSample` JSONL input,

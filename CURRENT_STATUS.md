@@ -15,6 +15,14 @@ BGE-M3 retrieval, cross-encoder reranking, Qwen AnswerPolicy, and
 integration evidence, but it should not be promoted as the default full-workflow
 AnswerPolicy from this signal.
 
+Phase 5I answer-quality run comparison guard is implemented in
+`scripts/compare_phase5i_answer_quality_runs.py`. It reads existing
+`phase5i_summary.json`, `metrics.json`, and `case_reports.jsonl` artifacts,
+writes case-level movement rows, and keeps training/benchmark safety flags
+false. Local targeted tests passed, and server run
+`phase5ib_v3refs_clean6_base_vs_adapter480_compare_script_20260704` reproduced
+the clean6 base-vs-adapter result without calling Qwen or training.
+
 Phase 4D-C expanded unseen validation is accepted on MP-DocVQA validation
 shards 5-8 using the accepted default `candidate_spans` pipeline. The strict
 accepted set contains 77 document windows, 572 pages, and 218 QA. The main
