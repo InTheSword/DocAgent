@@ -1,6 +1,6 @@
 ﻿# Current Status
 
-Updated: 2026-07-04
+Updated: 2026-07-05
 
 ## Phase 4D-C Accepted / Phase 5 Active
 
@@ -487,6 +487,42 @@ and `validation_subset_used_for_training=false`. This verifies the expanded
 train-data and short training-chain stability only; it does not claim final
 model quality or benchmark acceptance.
 
+AnswerPolicy v3 expanded Stage 2 mixed SFT is real-model verified on the
+larger train-only data pack. Server run
+`mpdocvqa_train_evidence_api_848_resume400_20260705` materialized 848/848
+MP-DocVQA train document windows with live MinerU API/OCR; 3036/3039 QA rows
+were evidence-ready. The run status is `failed` only because three QA rows
+were not evidence-ready; document materialization completed with
+`document_failed_count=0`. From this source,
+`answer_policy_v3_mpdocvqa_supported_848docs_20260705` produced 2156
+high-confidence supported MP-DocVQA v3 SFT records, and
+`answer_policy_v3_mpdocvqa_insufficient_848docs_20260705` produced 2000
+MP-DocVQA insufficient records. Together with TAT-QA train expansion
+(`answer_policy_v3_tatqa_train_full_20260705`, 5000 supported records, and
+`answer_policy_v3_tatqa_insufficient_full_20260705`, 2000 insufficient
+records), the mixed pack
+`answer_policy_v3_mixed_stage2_full4096_20260705` selected 4096 train-only
+records with no shortage/backfill: 2048 MP-DocVQA supported, 1638 TAT-QA
+supported, and 410 insufficient records.
+
+Server run `answer_policy_v3_msswift_stage2_full4096_1024steps_20260705`
+trained Qwen3-1.7B with ms-swift LoRA for 1024 steps on that 4096-record mixed
+pack. Training completed successfully in about 940 seconds and wrote adapter
+checkpoint `swift_output/v0-20260705-033450/checkpoint-1024`. On the same
+64-record v3 contract diagnostic subset, adapter run
+`answer_policy_v3_full4096_adapter1024_checkpoint_eval64_20260705` reached
+`json_valid_rate=1.0`, `schema_valid_rate=1.0`,
+`supporting_refs_subset_rate=1.0`, `support_status_match_rate=0.984375`,
+`positive_ref_hit_rate=0.97619`, `insufficient_ref_empty_rate=1.0`, and
+`answer_exact_rate=0.796875`. The base-only comparison
+`answer_policy_v3_full4096_base_checkpoint_eval64_20260705` reached
+`json_valid_rate=0.96875`, `schema_valid_rate=0.96875`,
+`support_status_match_rate=0.640625`, `positive_ref_hit_rate=0.707317`,
+`insufficient_ref_empty_rate=0.0`, and `answer_exact_rate=0.234375`. This is
+strong evidence that the v3 AnswerPolicy output contract and evidence-ref use
+improved on the intended train-only diagnostic objective; it is not final
+workflow answer-quality benchmark acceptance.
+
 AnswerPolicy v3 reward calibration is implemented locally in
 `scripts/calibrate_answer_policy_v3_rewards.py`, with reusable reward
 components exposed through `docqa_v3_reward_breakdown`. The v3 reward now
@@ -504,6 +540,12 @@ train-only v3 records. Server run
 `validation_subset_used_for_training=false`. This is a reward/readiness report
 for later best-of-N, DPO, or gated GRPO decisions; it does not start GRPO or
 claim model-quality acceptance.
+
+Server run `answer_policy_v3_reward_calibration_full4096_20260705` calibrated
+the 4096-record expanded mixed pack. It kept `target_reward_min=1.0`,
+`negative_reward_max=0.7`, and `reward_calibration_status=passed`, with
+410 insufficient and 3686 supported targets. This keeps best-of-N/DPO design
+open and still does not approve GRPO.
 
 AnswerPolicy v3 rejection-sampling artifacts are implemented locally in
 `scripts/build_answer_policy_v3_rejection_sampling_artifacts.py`. The builder

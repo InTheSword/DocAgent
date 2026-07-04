@@ -243,6 +243,28 @@ Phase 5 Personal-use DocAgent MVP
    `schema_valid_rate=1.0`, and `supporting_refs_subset_rate=1.0`; this
    verifies expanded train-data and short training-chain stability only, not
    final model quality or benchmark acceptance
+-> AnswerPolicy v3 expanded Stage 2 mixed SFT real-model verified:
+   server run `mpdocvqa_train_evidence_api_848_resume400_20260705`
+   materialized 848/848 MP-DocVQA train document windows with live MinerU
+   API/OCR and produced 3036/3039 evidence-ready QA rows; three QA rows were
+   not evidence-ready, so the materialization command status is diagnostic
+   `failed` while `document_failed_count=0`. The resulting train-only v3 data
+   sources produced 2156 MP-DocVQA supported records, 2000 MP-DocVQA
+   insufficient records, 5000 TAT-QA supported records, and 2000 TAT-QA
+   insufficient records. Mixed pack
+   `answer_policy_v3_mixed_stage2_full4096_20260705` selected 4096 records
+   with no shortage/backfill: 2048 MP-DocVQA supported, 1638 TAT-QA
+   supported, and 410 insufficient records. Server run
+   `answer_policy_v3_msswift_stage2_full4096_1024steps_20260705` trained
+   Qwen3-1.7B with ms-swift LoRA for 1024 steps and wrote adapter checkpoint
+   `swift_output/v0-20260705-033450/checkpoint-1024`. On a 64-record v3
+   contract diagnostic subset, the adapter reached json/schema/ref legality
+   rates all 1.0, `support_status_match_rate=0.984375`,
+   `positive_ref_hit_rate=0.97619`, `insufficient_ref_empty_rate=1.0`, and
+   `answer_exact_rate=0.796875`; the base-only comparison had
+   `answer_exact_rate=0.234375` and `insufficient_ref_empty_rate=0.0`. This
+   verifies the intended train-only v3 AnswerPolicy objective, not final
+   workflow answer-quality benchmark acceptance
 -> AnswerPolicy v3 reward calibration implemented locally:
    `docqa_v3_reward` now hard-gates invalid v3 schema outputs and explicitly
    scores insufficient-evidence refusals, while
@@ -256,6 +278,10 @@ Phase 5 Personal-use DocAgent MVP
    negative_reward_max 0.7, invalid_schema reward 0.0, and
    `reward_calibration_status=passed`; this prepares best-of-N/DPO/GRPO
    discussion only and does not approve GRPO
+   Full-pack server run `answer_policy_v3_reward_calibration_full4096_20260705`
+   calibrated the 4096-record expanded mixed pack with
+   `reward_calibration_status=passed`, `target_reward_min=1.0`, and
+   `negative_reward_max=0.7`; this still does not approve GRPO
 -> AnswerPolicy v3 rejection-sampling artifact builder implemented locally:
    `scripts/build_answer_policy_v3_rejection_sampling_artifacts.py` ranks
    train-only v3 candidate generations with the calibrated v3 reward, writes
