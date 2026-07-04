@@ -708,6 +708,7 @@ def _build_cli_command(
     reranker_device: str,
     reranker_fp16: bool,
     answer_policy: str,
+    answer_output_contract: str,
     base_model_path: str,
     adapter_path: str | None,
     device: str,
@@ -747,6 +748,8 @@ def _build_cli_command(
         str(cli_output_dir),
         "--answer-policy",
         answer_policy,
+        "--answer-output-contract",
+        answer_output_contract,
         "--base-model-path",
         base_model_path,
         "--device",
@@ -1251,6 +1254,7 @@ def run_case(
     reranker_device: str,
     reranker_fp16: bool,
     answer_policy: str,
+    answer_output_contract: str,
     base_model_path: str,
     adapter_path: str | None,
     device: str,
@@ -1279,6 +1283,7 @@ def run_case(
         reranker_device=reranker_device,
         reranker_fp16=reranker_fp16,
         answer_policy=answer_policy,
+        answer_output_contract=answer_output_contract,
         base_model_path=base_model_path,
         adapter_path=adapter_path,
         device=device,
@@ -1330,6 +1335,7 @@ def build_summary(
     reranker_device: str,
     reranker_fp16: bool,
     answer_policy: str,
+    answer_output_contract: str,
 ) -> dict[str, Any]:
     pass_fail_counts = Counter(str(row.get("pass_fail") or "") for row in results)
     request_forms = Counter(case.request_form for case in cases)
@@ -1376,6 +1382,7 @@ def build_summary(
         "reranker_model_path": reranker_model_path,
         "reranker_device": reranker_device,
         "reranker_fp16": bool(reranker_fp16),
+        "answer_output_contract": answer_output_contract,
         "case_count": len(cases),
         "passed_count": pass_fail_counts.get("passed", 0),
         "failed_count": pass_fail_counts.get("failed", 0),
@@ -1826,6 +1833,7 @@ def _blocked_summary(
     config_status: dict[str, Any] | None = None,
     full_model_path: bool,
     answer_policy: str,
+    answer_output_contract: str = "candidate_citations",
     blocker_type: str = "llm_planning_config_missing",
     blocker_message: str = "",
     quality_status_semantics: str = "full_model_path_requires_llm_planning_config",
@@ -1849,6 +1857,7 @@ def _blocked_summary(
         "failed_count": 0,
         "blocked_count": len(cases),
         "answer_policy_mode": answer_policy,
+        "answer_output_contract": answer_output_contract,
         "llm_planning_config": config_status or {},
         "document_context": document_context or {},
         "blocker": {
@@ -1942,6 +1951,7 @@ def run_phase5i_benchmark(
     reranker_device: str = "cpu",
     reranker_fp16: bool = False,
     answer_policy: str = "heuristic",
+    answer_output_contract: str = "candidate_citations",
     base_model_path: str = DEFAULT_QWEN_BASE_MODEL_PATH,
     adapter_path: str | None = None,
     device: str = "cuda",
@@ -1974,6 +1984,7 @@ def run_phase5i_benchmark(
                 config_status=config_status,
                 full_model_path=full_model_path,
                 answer_policy=answer_policy,
+                answer_output_contract=answer_output_contract,
             )
             return _write_blocked_run_artifacts(
                 artifact_dir=artifact_dir,
@@ -1993,6 +2004,7 @@ def run_phase5i_benchmark(
                 config_status=_llm_planning_config_status(router_llm_env_file) if router_llm_env_file else {},
                 full_model_path=full_model_path,
                 answer_policy=answer_policy,
+                answer_output_contract=answer_output_contract,
                 blocker_type=str(document_context.get("blocker_type") or "document_context_not_ready"),
                 blocker_message=str(document_context.get("message") or "Document context is not ready."),
                 quality_status_semantics="model_backed_evaluation_requires_existing_document_evidence",
@@ -2030,6 +2042,7 @@ def run_phase5i_benchmark(
             reranker_device=reranker_device,
             reranker_fp16=reranker_fp16,
             answer_policy=answer_policy,
+            answer_output_contract=answer_output_contract,
             base_model_path=base_model_path,
             adapter_path=adapter_path,
             device=device,
@@ -2058,6 +2071,7 @@ def run_phase5i_benchmark(
         reranker_device=reranker_device,
         reranker_fp16=reranker_fp16,
         answer_policy=answer_policy,
+        answer_output_contract=answer_output_contract,
     )
     preview = {
         "run_id": run_id,
@@ -2135,6 +2149,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reranker-device", default="cpu")
     parser.add_argument("--reranker-fp16", action="store_true")
     parser.add_argument("--answer-policy", choices=["heuristic", "base", "sft", "grpo"], default="base")
+    parser.add_argument(
+        "--answer-output-contract",
+        choices=["candidate_citations", "v3_refs"],
+        default="candidate_citations",
+        help="Internal AnswerPolicy output contract passed through to docagent_cli.py.",
+    )
     parser.add_argument("--base-model-path", default=DEFAULT_QWEN_BASE_MODEL_PATH)
     parser.add_argument("--adapter-path")
     parser.add_argument("--device", default="cuda")
@@ -2172,6 +2192,7 @@ def main(argv: list[str] | None = None) -> int:
         reranker_device=str(args.reranker_device),
         reranker_fp16=bool(args.reranker_fp16),
         answer_policy=str(args.answer_policy),
+        answer_output_contract=str(args.answer_output_contract),
         base_model_path=str(args.base_model_path),
         adapter_path=str(args.adapter_path) if args.adapter_path else None,
         device=str(args.device),

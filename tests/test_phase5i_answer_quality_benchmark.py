@@ -506,6 +506,7 @@ def test_full_model_path_passes_cli_flags_and_records_model_path_fields(tmp_path
         reranker_device="cpu",
         reranker_fp16=True,
         answer_policy="base",
+        answer_output_contract="v3_refs",
         base_model_path="/models/qwen",
     )
 
@@ -523,11 +524,13 @@ def test_full_model_path_passes_cli_flags_and_records_model_path_fields(tmp_path
     assert command[command.index("--reranker-device") + 1] == "cpu"
     assert "--reranker-fp16" in command
     assert command[command.index("--answer-policy") + 1] == "base"
+    assert command[command.index("--answer-output-contract") + 1] == "v3_refs"
     assert command[command.index("--base-model-path") + 1] == "/models/qwen"
     assert summary["full_model_path"] is True
     assert summary["retriever_mode"] == "hybrid_rerank"
     assert summary["dense_backend"] == "bge"
     assert summary["reranker_backend"] == "cross_encoder"
+    assert summary["answer_output_contract"] == "v3_refs"
     assert summary["passed_count"] == 1
     assert summary["used_llm_query_rewriter_count"] == 1
     assert summary["used_qwen_answer_policy_count"] == 1
