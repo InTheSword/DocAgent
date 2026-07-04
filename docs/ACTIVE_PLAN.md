@@ -353,6 +353,26 @@ Phase 5 Personal-use DocAgent MVP
    match 0.8125, positive-ref hit 0.5625, answer-exact 0.25, and
    `thinking_rate=0.0`; this verifies separated train/heldout execution
    plumbing only, not final model quality
+-> AnswerPolicy v3 400-document mixed SFT diagnostic real-model verified:
+   server materialization `mpdocvqa_train_evidence_api_400_reuse233_20260704`
+   reused 233 previously completed MP-DocVQA train document windows, parsed
+   167 additional windows with MinerU API/OCR, and reached 400/400 passed
+   documents with 1467/1469 evidence-ready QA samples; converter run
+   `answer_policy_v3_mpdocvqa_train_400docs_20260704` produced 1037
+   high-confidence MP-DocVQA v3 SFT records; mixed pack
+   `answer_policy_v3_mixed_stage2_2048_mp400_20260704` selected 2048
+   train-only records with MP-DocVQA 1024, TAT-QA supported 819, and
+   insufficient 205, and split
+   `answer_policy_v3_mixed_stage2_2048_mp400_split128_20260704` produced
+   1920 train records plus 128 heldout records with zero overlap; ms-swift
+   run `answer_policy_v3_msswift_stage2_1920_steps480_20260704` trained
+   Qwen3-1.7B LoRA for `max_steps=480` optimizer update steps, not epochs,
+   and wrote checkpoint `checkpoint-480`; heldout comparison against
+   base-only eval improved answer-exact 0.3516 -> 0.5938, support-status
+   match 0.8828 -> 0.9844, positive-ref hit 0.6814 -> 0.9138,
+   insufficient empty-ref rate 0.0 -> 0.9167, and JSON/schema validity to
+   1.0/1.0; this is train-only heldout diagnostic evidence, not formal
+   benchmark acceptance or GRPO approval
 -> AnswerPolicy v3 refs CLI/Qwen integration real-model verified:
    `docagent_answer_v3_supporting_refs` is now an optional CLI/Qwen
    AnswerPolicy contract via `--answer-output-contract v3_refs`; the model

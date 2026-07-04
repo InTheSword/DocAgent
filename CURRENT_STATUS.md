@@ -622,6 +622,29 @@ training. Server smoke `answer_policy_v3_heldout_smoke_20260704` at commit
 `thinking_rate=0.0`. This verifies separated train/heldout execution plumbing
 on train-only data; it is not final answer-quality acceptance.
 
+AnswerPolicy v3 400-document mixed SFT diagnostic is real-model verified on
+the server. MP-DocVQA train materialization
+`mpdocvqa_train_evidence_api_400_reuse233_20260704` reused 233 completed
+document windows, parsed 167 additional windows with MinerU API/OCR, and
+reached 400/400 passed documents with 1467/1469 evidence-ready QA samples.
+Converter run `answer_policy_v3_mpdocvqa_train_400docs_20260704` produced
+1037 high-confidence MP-DocVQA v3 SFT records. Mixed pack
+`answer_policy_v3_mixed_stage2_2048_mp400_20260704` selected 2048 train-only
+records with MP-DocVQA 1024, TAT-QA supported 819, and insufficient 205; split
+`answer_policy_v3_mixed_stage2_2048_mp400_split128_20260704` produced
+1920 train records and 128 heldout records with `overlap_count=0`. Server run
+`answer_policy_v3_msswift_stage2_1920_steps480_20260704` trained Qwen3-1.7B
+LoRA through ms-swift for `max_steps=480` optimizer update steps, not epochs,
+and wrote `checkpoint-480`. Heldout comparison between
+`answer_policy_v3_base_only_heldout128_mp400_eval_20260704` and
+`answer_policy_v3_msswift_stage2_1920_steps480_heldout128_eval_20260704`
+improved `answer_exact_rate` 0.3516 -> 0.5938,
+`support_status_match_rate` 0.8828 -> 0.9844, `positive_ref_hit_rate`
+0.6814 -> 0.9138, and insufficient empty-ref behavior 0.0 -> 0.9167 while
+raising JSON/schema validity to 1.0/1.0. This is train-only heldout diagnostic
+evidence that the v3 SFT method can improve the intended contract; it is not
+formal benchmark acceptance, validation-subset training, or GRPO approval.
+
 AnswerPolicy v3 refs CLI/Qwen integration is real-model verified at commit
 `56b7726`. `scripts/docagent_cli.py` now accepts
 `--answer-output-contract v3_refs`; Qwen AnswerPolicy can compile the
