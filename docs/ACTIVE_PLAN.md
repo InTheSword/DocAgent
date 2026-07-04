@@ -286,6 +286,19 @@ Phase 5 Personal-use DocAgent MVP
    validated those 2 records as ms-swift-compatible input without executing
    training, with source_counts mp_docvqa:1 and tatqa:1; preference pairs did
    not meet the reward-margin threshold, and DPO/GRPO remain unapproved
+-> AnswerPolicy v3 rejection-SFT distillation smoke real-model verified:
+   server run `answer_policy_v3_rejection_sft_msswift_execute_smoke_20260704`
+   at commit `0ff5792` trained Qwen3-1.7B for 1 ms-swift LoRA step on the
+   2 train-only `rejection_sft_candidates.jsonl` rows selected by the
+   adapter-backed rejection sampler, with source_counts mp_docvqa:1 and
+   tatqa:1, `used_training=true`, `formal_benchmark_acceptance=false`, and
+   `validation_subset_used_for_training=false`; checkpoint diagnostic
+   `answer_policy_v3_rejection_sft_checkpoint_eval_20260704` evaluated those
+   2 records with json_valid_rate, schema_valid_rate,
+   supporting_refs_subset_rate, support_status_match_rate,
+   positive_ref_hit_rate, and answer_exact_rate all 1.0; this verifies the
+   rejection-SFT distillation execution path only, not final answer-quality
+   improvement
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real

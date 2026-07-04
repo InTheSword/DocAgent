@@ -529,6 +529,21 @@ source counts `mp_docvqa=1` and `tatqa=1`. This verifies the candidate
 generation -> reward selection -> rejection-SFT artifact -> ms-swift input
 path only; it does not claim answer-quality improvement or approve DPO/GRPO.
 
+AnswerPolicy v3 rejection-SFT distillation smoke is real-model verified at the
+execution-contract level. Server run
+`answer_policy_v3_rejection_sft_msswift_execute_smoke_20260704` at commit
+`0ff5792` trained Qwen3-1.7B for 1 ms-swift LoRA step on the 2 train-only
+`rejection_sft_candidates.jsonl` rows selected by the adapter-backed rejection
+sampler. The run completed with `used_training=true`,
+`formal_benchmark_acceptance=false`, and
+`validation_subset_used_for_training=false`. Checkpoint diagnostic
+`answer_policy_v3_rejection_sft_checkpoint_eval_20260704` evaluated those same
+2 records with `json_valid_rate=1.0`, `schema_valid_rate=1.0`,
+`supporting_refs_subset_rate=1.0`, `support_status_match_rate=1.0`,
+`positive_ref_hit_rate=1.0`, and `answer_exact_rate=1.0`. This verifies the
+rejection-SFT distillation execution path only; it does not establish final
+answer-quality improvement.
+
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in
 `tests/test_run_final_raw_pdf_smoke.py`. The runner executes
