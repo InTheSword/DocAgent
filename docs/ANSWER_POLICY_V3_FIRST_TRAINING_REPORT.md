@@ -547,6 +547,31 @@ Interpretation:
   candidate checkpoint, not a default deployment choice.
 - This still does not approve DPO/GRPO or formal benchmark acceptance.
 
+Clean fixed-evidence workflow probes were also rerun for both later
+checkpoints:
+
+```text
+phase5ib_v3refs_clean6_full4096_adapter1024_20260705
+phase5ib_v3refs_clean6_rejection_continue56_20260705
+phase5ib_v3refs_clean6_base_vs_full4096_adapter1024_20260705
+phase5ib_v3refs_clean6_base_vs_rejection_continue56_20260705
+phase5ib_v3refs_clean6_full4096_vs_rejection_continue56_20260705
+```
+
+| Clean6 run | Passed | Format | Citation | Location |
+|---|---:|---:|---:|---:|
+| Base Qwen3-1.7B | 6/6 | 1.0000 | 1.0000 | 1.0000 |
+| 1024-step full4096 adapter | 3/6 | 1.0000 | 1.0000 | 1.0000 |
+| Rejection-continuation adapter | 3/6 | 1.0000 | 1.0000 | 1.0000 |
+
+The default-deployment gate remains blocked for both adapters because each
+regressed three clean cases relative to the base run. The rejection continuation
+matched the 1024-step adapter on this clean workflow signal; it did not improve
+system-level pass count. This does not contradict the train-only heldout gain:
+it reinforces that current SFT improves the intended v3 evidence-output
+contract more reliably than it improves the small clean workflow answer-quality
+guard.
+
 ## 9. Limitations
 
 1. This was a diagnostic SFT run, not a final production SFT acceptance run.

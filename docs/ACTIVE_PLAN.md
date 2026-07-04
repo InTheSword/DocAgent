@@ -412,7 +412,18 @@ Phase 5 Personal-use DocAgent MVP
    and positive-ref hit stayed about 0.9904. This shows no broad v3 contract
    regression and a modest MP-DocVQA-supported gain, but the continued adapter
    remains a candidate checkpoint rather than final workflow answer-quality
-   acceptance, default deployment approval, or DPO/GRPO approval
+   acceptance, default deployment approval, or DPO/GRPO approval; follow-up
+   clean fixed-evidence workflow probes
+   `phase5ib_v3refs_clean6_full4096_adapter1024_20260705` and
+   `phase5ib_v3refs_clean6_rejection_continue56_20260705` both ran the same
+   6 curated Phase 5I clean cases through real query rewriting, BGE-M3
+   retrieval, cross-encoder reranking, Qwen AnswerPolicy, and `v3_refs`.
+   Both adapters passed 3/6 with format/citation/location rates all 1.0.
+   Artifact-only comparisons against the prior base clean6 run
+   `phase5ib_v3refs_clean6_base_contract_probe_20260704` kept the default
+   deployment gate `blocked` because base passed 6/6 and each candidate
+   regressed 3 cases; the rejection continuation matched the 1024-step adapter
+   at 3/6 rather than improving the clean workflow signal
 -> AnswerPolicy v3 train-only heldout diagnostic split implemented locally:
    `scripts/split_answer_policy_v3_sft_records.py` deterministically splits
    validated v3 SFT records into non-overlapping `train_sft.jsonl` and

@@ -726,6 +726,21 @@ contract regression and a modest MP-DocVQA-supported gain, but the TAT-QA
 answer-exact dip means the continued adapter remains a candidate checkpoint,
 not a default deployment choice or DPO/GRPO approval.
 
+Clean fixed-evidence workflow probes then tested both later checkpoints through
+the same 6 curated Phase 5I cases used by the earlier clean6 guard. Server runs
+`phase5ib_v3refs_clean6_full4096_adapter1024_20260705` and
+`phase5ib_v3refs_clean6_rejection_continue56_20260705` both used real LLM
+query rewriting, BGE-M3 retrieval, cross-encoder reranking, Qwen AnswerPolicy,
+and `answer_output_contract=v3_refs`; both passed 3/6, with
+format/citation/location rates all 1.0. Artifact-only comparisons
+`phase5ib_v3refs_clean6_base_vs_full4096_adapter1024_20260705` and
+`phase5ib_v3refs_clean6_base_vs_rejection_continue56_20260705` kept the
+default deployment gate `blocked`: the prior base clean6 run passed 6/6 and
+each adapter regressed 3 cases. Comparison
+`phase5ib_v3refs_clean6_full4096_vs_rejection_continue56_20260705` showed the
+rejection continuation matched the 1024-step adapter at 3/6; it did not improve
+the clean workflow pass signal.
+
 AnswerPolicy v3 train-only heldout diagnostic splitting is implemented locally
 in `scripts/split_answer_policy_v3_sft_records.py`. The splitter validates v3
 SFT records, blocks validation-like input paths by default, writes
