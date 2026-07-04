@@ -396,6 +396,73 @@ def test_prepare_mpdocvqa_evidence_retries_failed_previous_documents(tmp_path: P
     assert {row["sample_id"] for row in rows if row["evidence_ready"]} == {"q_ok", "q_fail"}
 
 
+def test_prepare_mpdocvqa_evidence_reuses_previous_passed_documents(tmp_path: Path) -> None:
+    subset_root = tmp_path / "subset"
+    for doc_id in ("doc_old", "doc_new"):
+        doc_dir = subset_root / "documents" / doc_id
+        doc_dir.mkdir(parents=True)
+        (doc_dir / "document.pdf").write_bytes(b"%PDF-1.4\n")
+    write_jsonl(
+        subset_root / "documents.jsonl",
+        [
+            {"doc_id": "doc_old", "source_doc_id": "source_old", "pdf_path": "documents/doc_old/document.pdf"},
+            {"doc_id": "doc_new", "source_doc_id": "source_new", "pdf_path": "documents/doc_new/document.pdf"},
+        ],
+    )
+    previous_run = tmp_path / "previous"
+    previous_run.mkdir()
+    db_path = tmp_path / "shared" / "docagent.db"
+    document_root = tmp_path / "shared" / "documents"
+    document_root.mkdir(parents=True)
+    write_jsonl(
+        previous_run / "documents.jsonl",
+        [{"doc_id": "doc_old", "ingested_doc_id": "ingested_old", "pass_fail": "passed", "failure_reasons": []}],
+    )
+    (previous_run / "summary.json").write_text(
+        json.dumps({"db_path": str(db_path), "document_root": str(document_root)}),
+        encoding="utf-8",
+    )
+    seen_commands: list[list[str]] = []
+
+    def fake_runner(command: list[str], _cwd: Path, _timeout_seconds: int) -> CommandResult:
+        seen_commands.append(command)
+        assert "doc_new" in command[command.index("--file") + 1]
+        return CommandResult(
+            0,
+            json.dumps(
+                {
+                    "status": "success",
+                    "doc_id": "ingested_new",
+                    "source": {
+                        "parser": "mineru_api",
+                        "parser_mode": "parse_existing",
+                        "used_mineru_api": True,
+                        "mineru_api": {"api_status": "submitted"},
+                        "ingestion": {"parse_status": "parsed", "page_count": 1, "block_count": 0},
+                    },
+                }
+            ),
+        )
+
+    summary = prepare_mpdocvqa_evidence(
+        subset_root=subset_root,
+        output_root=tmp_path / "evidence",
+        run_id="reuse_previous",
+        live_api=True,
+        previous_run_dir=previous_run,
+        reuse_previous_passed=True,
+        command_runner=fake_runner,
+    )
+
+    assert len(seen_commands) == 1
+    assert summary["status"] == "success"
+    assert summary["document_count"] == 2
+    assert summary["document_passed_count"] == 2
+    assert summary["reuse_previous_passed"] is True
+    assert summary["reused_previous_passed_count"] == 1
+    assert summary["retried_document_count"] == 1
+
+
 def test_prepare_mpdocvqa_evidence_can_disable_mineru_ocr(tmp_path: Path) -> None:
     subset_root = _write_subset(tmp_path)
     seen_commands: list[list[str]] = []

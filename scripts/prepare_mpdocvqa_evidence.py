@@ -507,6 +507,7 @@ def prepare_mpdocvqa_evidence(
     sync_output_root: Path | None = None,
     previous_run_dir: Path | None = None,
     retry_failed_only: bool = False,
+    reuse_previous_passed: bool = False,
     rebuild_evidence_blocks: bool = False,
 ) -> dict[str, Any]:
     run_id = run_id or now_run_id()
@@ -544,6 +545,13 @@ def prepare_mpdocvqa_evidence(
             if row.get("pass_fail") != "passed"
         }
         source_documents = [row for row in all_source_documents if str(row.get("doc_id") or "") in failed_doc_ids]
+    elif previous_run_dir is not None and reuse_previous_passed:
+        passed_doc_ids = {
+            str(row.get("doc_id") or "")
+            for row in previous_document_rows
+            if row.get("pass_fail") == "passed"
+        }
+        source_documents = [row for row in source_documents if str(row.get("doc_id") or "") not in passed_doc_ids]
     sample_manifests = load_sample_manifests(subset_root)
     if previous_run_dir is not None:
         selected_doc_ids = {str(row.get("doc_id") or "") for row in previous_document_rows}
@@ -626,6 +634,8 @@ def prepare_mpdocvqa_evidence(
     if previous_run_dir is not None:
         summary["previous_run_dir"] = safe_relpath(previous_run_dir)
         summary["retry_failed_only"] = bool(retry_failed_only)
+        summary["reuse_previous_passed"] = bool(reuse_previous_passed)
+        summary["reused_previous_passed_count"] = sum(1 for row in previous_document_rows if row.get("pass_fail") == "passed")
         summary["retried_document_count"] = len(document_results)
     summary["rebuild_evidence_blocks"] = bool(rebuild_evidence_blocks)
     summary["db_path"] = safe_relpath(db_path)
@@ -682,6 +692,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sync-output-dir")
     parser.add_argument("--previous-run-dir")
     parser.add_argument("--retry-failed-only", action="store_true")
+    parser.add_argument("--reuse-previous-passed", action="store_true")
     parser.add_argument(
         "--rebuild-evidence-blocks",
         action="store_true",
@@ -713,6 +724,7 @@ def main(argv: list[str] | None = None) -> int:
             sync_output_root=repo_path(args.sync_output_dir),
             previous_run_dir=repo_path(args.previous_run_dir),
             retry_failed_only=bool(args.retry_failed_only),
+            reuse_previous_passed=bool(args.reuse_previous_passed),
             rebuild_evidence_blocks=bool(args.rebuild_evidence_blocks),
         )
     except Exception as exc:
