@@ -1,6 +1,6 @@
 # Current Status
 
-Updated: 2026-07-02
+Updated: 2026-07-04
 
 ## Phase 4D-C Accepted / Phase 5 Active
 
@@ -452,6 +452,22 @@ for 3 ms-swift LoRA steps on the expanded pack, and checkpoint diagnostic
 and `validation_subset_used_for_training=false`. This verifies the expanded
 train-data and short training-chain stability only; it does not claim final
 model quality or benchmark acceptance.
+
+AnswerPolicy v3 reward calibration is implemented locally in
+`scripts/calibrate_answer_policy_v3_rewards.py`, with reusable reward
+components exposed through `docqa_v3_reward_breakdown`. The v3 reward now
+requires a valid `ModelOutputV3` schema before granting answer/status/ref
+credit and explicitly scores insufficient-evidence outputs for a refusal-style
+answer, preventing malformed or fabricated-insufficient outputs from receiving
+full reward. Local smoke
+`answer_policy_v3_reward_calibration_local_smoke_20260704` calibrated 32
+train-only v3 records and produced `target_reward_min=1.0`,
+`negative_reward_max=0.7`, `invalid_schema_missing_refs.max=0.0`, and
+`reward_calibration_status=passed`, while preserving `used_training=false`,
+`used_qwen=false`, `formal_benchmark_acceptance=false`, and
+`validation_subset_used_for_training=false`. This is a reward/readiness report
+for later best-of-N, DPO, or gated GRPO decisions; it does not start GRPO or
+claim model-quality acceptance.
 
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in

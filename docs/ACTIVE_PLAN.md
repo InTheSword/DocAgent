@@ -228,6 +228,16 @@ Phase 5 Personal-use DocAgent MVP
    `schema_valid_rate=1.0`, and `supporting_refs_subset_rate=1.0`; this
    verifies expanded train-data and short training-chain stability only, not
    final model quality or benchmark acceptance
+-> AnswerPolicy v3 reward calibration implemented locally:
+   `docqa_v3_reward` now hard-gates invalid v3 schema outputs and explicitly
+   scores insufficient-evidence refusals, while
+   `scripts/calibrate_answer_policy_v3_rewards.py` reads train-only v3 SFT
+   records and writes deterministic target/negative reward-component reports
+   without calling models or starting training; local smoke
+   `answer_policy_v3_reward_calibration_local_smoke_20260704` calibrated 32
+   train-only records, with target_reward_min 1.0, negative_reward_max 0.7,
+   invalid_schema reward 0.0, and `reward_calibration_status=passed`; this
+   prepares best-of-N/DPO/GRPO discussion only and does not approve GRPO
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real
