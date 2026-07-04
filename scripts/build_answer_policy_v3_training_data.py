@@ -15,6 +15,8 @@ sys.path.insert(0, str(ROOT))
 from docagent.eval.answer_metrics import normalize_text, numeric_match
 from docagent.parser.parse_tatqa import convert_tatqa_question
 from docagent.schemas import EvidenceBlock
+from docagent.storage.db import connect
+from docagent.storage.repositories import DocumentRepository
 from docagent.utils.jsonl import write_jsonl
 from docagent.workflow.answer_contract import validate_model_output_v3
 
@@ -108,7 +110,7 @@ def candidate_from_block(ref: str, block: EvidenceBlock, *, max_chars: int) -> d
     page = block.location.page if block.location.page is not None else block.page_id
     return {
         "ref": ref,
-        "kind": "table" if block.block_type == "table" else "text",
+        "kind": candidate_kind(block),
         "display_text": block_display_text(block, max_chars=max_chars),
         "metadata": {
             "source_kind": "evidence_block",
@@ -118,6 +120,19 @@ def candidate_from_block(ref: str, block: EvidenceBlock, *, max_chars: int) -> d
             "block_type": block.block_type,
         },
     }
+
+
+def candidate_kind(block: EvidenceBlock) -> str:
+    if block.block_type == "table":
+        return "table"
+    if block.block_type in {"image", "figure", "visual_summary"}:
+        return "image"
+    if block.block_type == "page":
+        return "markdown"
+    raw_type = str(block.metadata.get("raw_mineru_type") or "").lower()
+    if raw_type in {"ocr", "text", "title"}:
+        return "ocr"
+    return "text"
 
 
 def ref_map_entry(candidate: dict[str, Any]) -> dict[str, Any]:
@@ -156,6 +171,36 @@ def build_prompt(question: str, candidates: list[dict[str, Any]]) -> str:
         "- For insufficient evidence, use support_status=insufficient and supporting_refs=[].\n"
         "- Do not output page numbers, block ids, document ids, paths, markdown, or hidden reasoning."
     )
+
+
+def build_insufficient_record(
+    *,
+    sample_id: str,
+    source: str,
+    question: str,
+    candidates: list[dict[str, Any]],
+    evidence_ref_map: dict[str, dict[str, Any]],
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    target = make_target(
+        "Insufficient evidence.",
+        [],
+        status="insufficient",
+        reason="The provided evidence candidates do not contain enough information to answer.",
+    )
+    return {
+        "sample_id": sample_id,
+        "source": source,
+        "bucket": "insufficient_confirmed",
+        "board_type": "oracle_board",
+        "question": question,
+        "answer": "",
+        "evidence_candidates": candidates,
+        "target_model_output": target,
+        "evidence_ref_map": evidence_ref_map,
+        "alignment": {"method": "confirmed_no_answer_in_candidates", "confidence": "high"},
+        "metadata": metadata,
+    }
 
 
 def make_target(answer: str, refs: list[str], *, status: str, reason: str) -> dict[str, Any]:
@@ -359,6 +404,288 @@ def validation_path_markers(path: Path) -> list[str]:
     return markers
 
 
+def block_page(block: EvidenceBlock) -> int | None:
+    if block.location.page is not None:
+        return int(block.location.page)
+    if block.page_id is not None:
+        return int(block.page_id)
+    return None
+
+
+def mpdocvqa_candidate_blocks(blocks: list[EvidenceBlock], gold_pages: list[int], max_candidates: int) -> list[EvidenceBlock]:
+    gold_page_set = {int(page) for page in gold_pages}
+    child_blocks = [block for block in blocks if block.block_type != "page" and block_page(block) in gold_page_set]
+    page_blocks = [block for block in blocks if block.block_type == "page" and block_page(block) in gold_page_set]
+    other_blocks = [block for block in blocks if block.block_type != "page" and block_page(block) not in gold_page_set]
+    ordered: list[EvidenceBlock] = []
+    seen: set[str] = set()
+    for block in [*child_blocks, *page_blocks, *other_blocks]:
+        if block.block_id in seen:
+            continue
+        text = block.retrieval_text or block.text or block.table_html or block.visual_summary or ""
+        if not text.strip():
+            continue
+        seen.add(block.block_id)
+        ordered.append(block)
+        if len(ordered) >= max_candidates:
+            break
+    return ordered
+
+
+def build_mpdocvqa_record(
+    manifest: dict[str, Any],
+    blocks: list[EvidenceBlock],
+    *,
+    max_candidates: int,
+    max_candidate_chars: int,
+) -> tuple[dict[str, Any] | None, str, dict[str, Any]]:
+    sample_id = str(manifest.get("sample_id") or "")
+    answers = answer_values(manifest.get("answers"))
+    if not answers:
+        return None, "unsupported_or_ambiguous", {"reason": "missing_answer", "sample_id": sample_id}
+    if not manifest.get("evidence_ready"):
+        return None, "alignment_failed", {"reason": "evidence_not_ready", "sample_id": sample_id}
+
+    gold_pages = []
+    for value in manifest.get("gold_pages") or []:
+        try:
+            gold_pages.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    if not gold_pages:
+        return None, "alignment_failed", {"reason": "missing_gold_pages", "sample_id": sample_id}
+
+    candidates = [
+        candidate_from_block(f"E{index}", block, max_chars=max_candidate_chars)
+        for index, block in enumerate(mpdocvqa_candidate_blocks(blocks, gold_pages, max_candidates), start=1)
+    ]
+    evidence_ref_map = {item["ref"]: ref_map_entry(item) for item in candidates}
+    refs: list[str] = []
+    for candidate in candidates:
+        display = str(candidate.get("display_text") or "")
+        if any(text_contains_answer(display, answer) for answer in answers):
+            refs.append(str(candidate["ref"]))
+    refs = list(dict.fromkeys(refs))
+    if not refs:
+        return None, "alignment_failed", {
+            "reason": "answer_not_found_in_candidate_evidence",
+            "sample_id": sample_id,
+            "question": manifest.get("question"),
+            "answers": answers,
+            "gold_pages": gold_pages,
+            "candidate_count": len(candidates),
+        }
+
+    answer = answer_text(answers)
+    target = make_target(
+        answer,
+        refs[:2],
+        status="supported",
+        reason="The selected evidence candidate contains the answer on the answer page.",
+    )
+    return (
+        {
+            "sample_id": sample_id,
+            "source": "mp_docvqa",
+            "bucket": "evidence_extractive_supported",
+            "board_type": "oracle_board",
+            "question": str(manifest.get("question") or ""),
+            "answer": answer,
+            "evidence_candidates": candidates,
+            "target_model_output": target,
+            "evidence_ref_map": evidence_ref_map,
+            "alignment": {
+                "method": "answer_text_match_on_gold_page_candidates",
+                "confidence": "high",
+            },
+            "metadata": {
+                "doc_id": str(manifest.get("ingested_doc_id") or ""),
+                "source_doc_id": str(manifest.get("doc_id") or ""),
+                "split": str(manifest.get("split") or ""),
+                "gold_pages": gold_pages,
+                "source_document": str(manifest.get("source_document") or ""),
+                "expected_tools": manifest.get("expected_tools") or [],
+            },
+        },
+        "evidence_extractive_supported",
+        {},
+    )
+
+
+def build_answer_policy_v3_mpdocvqa_data(
+    *,
+    evidence_manifest: str | Path,
+    db_path: str | Path,
+    output_root: str | Path = DEFAULT_OUTPUT_ROOT,
+    run_id: str = "answer_policy_v3_mpdocvqa_trial",
+    split: str = "train",
+    limit: int = 100,
+    max_candidates: int = 8,
+    max_candidate_chars: int = 900,
+    allow_non_train_source: bool = False,
+) -> dict[str, Any]:
+    manifest_path = repo_path(evidence_manifest)
+    sqlite_path = repo_path(db_path)
+    artifact_dir = repo_path(output_root) / run_id
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    paths = artifact_paths(artifact_dir)
+
+    block_reasons: list[str] = []
+    if not allow_non_train_source:
+        markers = [*validation_path_markers(manifest_path), *validation_path_markers(sqlite_path)]
+        if markers:
+            block_reasons.append(f"validation_like_input_path:{','.join(dict.fromkeys(markers))}")
+    if not manifest_path.is_file():
+        block_reasons.append(f"missing_evidence_manifest:{safe_relpath(manifest_path)}")
+    if not sqlite_path.is_file():
+        block_reasons.append(f"missing_db_path:{safe_relpath(sqlite_path)}")
+    if block_reasons:
+        write_empty_artifacts(paths)
+        summary = _summary(
+            status="blocked",
+            run_id=run_id,
+            artifact_dir=artifact_dir,
+            raw_path=manifest_path,
+            split=split,
+            limit=limit,
+            counts={},
+            block_reasons=block_reasons,
+            aligned=[],
+            rejected_count=0,
+            source="mp_docvqa",
+            db_path=sqlite_path,
+        )
+        _write_summary(paths, summary)
+        return summary
+
+    rows = load_rows(manifest_path)
+    row_splits = sorted({str(row.get("split") or "") for row in rows if row.get("split")})
+    if not allow_non_train_source and any(row_split.lower() not in TRAIN_SPLITS for row_split in row_splits):
+        block_reasons.append(f"non_train_manifest_splits:{','.join(row_splits)}")
+    if block_reasons:
+        write_empty_artifacts(paths)
+        summary = _summary(
+            status="blocked",
+            run_id=run_id,
+            artifact_dir=artifact_dir,
+            raw_path=manifest_path,
+            split=split,
+            limit=limit,
+            counts={},
+            block_reasons=block_reasons,
+            aligned=[],
+            rejected_count=0,
+            source="mp_docvqa",
+            db_path=sqlite_path,
+        )
+        _write_summary(paths, summary)
+        return summary
+
+    conn = connect(sqlite_path)
+    try:
+        repository = DocumentRepository(conn)
+        blocks_by_doc: dict[str, list[EvidenceBlock]] = {}
+        aligned: list[dict[str, Any]] = []
+        alignment_failed: list[dict[str, Any]] = []
+        needs_tool_planning: list[dict[str, Any]] = []
+        unsupported: list[dict[str, Any]] = []
+        counts = Counter()
+        scanned = 0
+        for row in rows:
+            if len(aligned) >= limit:
+                break
+            scanned += 1
+            doc_id = str(row.get("ingested_doc_id") or "")
+            if doc_id not in blocks_by_doc:
+                blocks_by_doc[doc_id] = repository.load_evidence_blocks(doc_id, include_page_blocks=True) if doc_id else []
+            record, bucket, rejected = build_mpdocvqa_record(
+                row,
+                blocks_by_doc.get(doc_id, []),
+                max_candidates=max_candidates,
+                max_candidate_chars=max_candidate_chars,
+            )
+            counts[bucket] += 1
+            if record is not None:
+                aligned.append(record)
+            elif bucket == "alignment_failed":
+                alignment_failed.append(rejected)
+            elif bucket == "needs_tool_planning":
+                needs_tool_planning.append(rejected)
+            else:
+                unsupported.append(rejected)
+    finally:
+        conn.close()
+
+    sft_records = [build_sft_record(record) for record in aligned]
+    write_training_artifacts(paths, aligned, sft_records, alignment_failed, needs_tool_planning, unsupported)
+    summary = _summary(
+        status="success",
+        run_id=run_id,
+        artifact_dir=artifact_dir,
+        raw_path=manifest_path,
+        split=split,
+        limit=limit,
+        counts={**dict(sorted(counts.items())), "raw_question_count_scanned": scanned},
+        block_reasons=[],
+        aligned=aligned,
+        rejected_count=len(alignment_failed) + len(needs_tool_planning) + len(unsupported),
+        source="mp_docvqa",
+        db_path=sqlite_path,
+    )
+    _write_summary(paths, summary)
+    return summary
+
+
+def artifact_paths(artifact_dir: Path) -> dict[str, Path]:
+    return {
+        "aligned": artifact_dir / "aligned_records.jsonl",
+        "sft": artifact_dir / "sft_train.jsonl",
+        "alignment_failed": artifact_dir / "alignment_failed.jsonl",
+        "needs_tool_planning": artifact_dir / "needs_tool_planning.jsonl",
+        "insufficient": artifact_dir / "insufficient_evidence.jsonl",
+        "unsupported": artifact_dir / "unsupported_or_ambiguous.jsonl",
+        "summary": artifact_dir / "summary.json",
+        "summary_md": artifact_dir / "summary.md",
+        "preview": artifact_dir / "preview.json",
+        "manifest": artifact_dir / "manifest.json",
+    }
+
+
+def write_empty_artifacts(paths: dict[str, Path]) -> None:
+    for key in ("aligned", "sft", "alignment_failed", "needs_tool_planning", "insufficient", "unsupported"):
+        write_jsonl(paths[key], [])
+    write_json(paths["preview"], {"aligned": [], "sft": [], "alignment_failed": []})
+
+
+def write_training_artifacts(
+    paths: dict[str, Path],
+    aligned: list[dict[str, Any]],
+    sft_records: list[dict[str, Any]],
+    alignment_failed: list[dict[str, Any]],
+    needs_tool_planning: list[dict[str, Any]],
+    unsupported: list[dict[str, Any]],
+) -> None:
+    write_jsonl(paths["aligned"], aligned)
+    write_jsonl(paths["sft"], sft_records)
+    write_jsonl(paths["alignment_failed"], alignment_failed)
+    write_jsonl(paths["needs_tool_planning"], needs_tool_planning)
+    write_jsonl(paths["insufficient"], [])
+    write_jsonl(paths["unsupported"], unsupported)
+    write_json(paths["preview"], {"aligned": aligned[:3], "sft": sft_records[:2], "alignment_failed": alignment_failed[:3]})
+
+
+def load_rows(path: Path) -> list[dict[str, Any]]:
+    if not path.is_file():
+        return []
+    rows = []
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        if line.strip():
+            item = json.loads(line)
+            if isinstance(item, dict):
+                rows.append(item)
+    return rows
+
+
 def build_answer_policy_v3_tatqa_data(
     *,
     tatqa_raw: str | Path,
@@ -374,18 +701,7 @@ def build_answer_policy_v3_tatqa_data(
     artifact_dir = repo_path(output_root) / run_id
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
-    paths = {
-        "aligned": artifact_dir / "aligned_records.jsonl",
-        "sft": artifact_dir / "sft_train.jsonl",
-        "alignment_failed": artifact_dir / "alignment_failed.jsonl",
-        "needs_tool_planning": artifact_dir / "needs_tool_planning.jsonl",
-        "insufficient": artifact_dir / "insufficient_evidence.jsonl",
-        "unsupported": artifact_dir / "unsupported_or_ambiguous.jsonl",
-        "summary": artifact_dir / "summary.json",
-        "summary_md": artifact_dir / "summary.md",
-        "preview": artifact_dir / "preview.json",
-        "manifest": artifact_dir / "manifest.json",
-    }
+    paths = artifact_paths(artifact_dir)
 
     block_reasons: list[str] = []
     if not allow_non_train_source:
@@ -396,9 +712,7 @@ def build_answer_policy_v3_tatqa_data(
             block_reasons.append(f"validation_like_input_path:{','.join(markers)}")
 
     if block_reasons:
-        for key in ("aligned", "sft", "alignment_failed", "needs_tool_planning", "insufficient", "unsupported"):
-            write_jsonl(paths[key], [])
-        write_json(paths["preview"], {"aligned": [], "sft": [], "alignment_failed": []})
+        write_empty_artifacts(paths)
         summary = _summary(
             status="blocked",
             run_id=run_id,
@@ -456,13 +770,7 @@ def build_answer_policy_v3_tatqa_data(
             break
 
     sft_records = [build_sft_record(record) for record in aligned]
-    write_jsonl(paths["aligned"], aligned)
-    write_jsonl(paths["sft"], sft_records)
-    write_jsonl(paths["alignment_failed"], alignment_failed)
-    write_jsonl(paths["needs_tool_planning"], needs_tool_planning)
-    write_jsonl(paths["insufficient"], [])
-    write_jsonl(paths["unsupported"], unsupported)
-    write_json(paths["preview"], {"aligned": aligned[:3], "sft": sft_records[:2], "alignment_failed": alignment_failed[:3]})
+    write_training_artifacts(paths, aligned, sft_records, alignment_failed, needs_tool_planning, unsupported)
 
     summary = _summary(
         status="success",
@@ -492,15 +800,18 @@ def _summary(
     block_reasons: list[str],
     aligned: list[dict[str, Any]],
     rejected_count: int,
+    source: str = "tatqa",
+    db_path: Path | None = None,
 ) -> dict[str, Any]:
     bucket_counts = Counter(record["bucket"] for record in aligned)
-    return {
+    summary = {
         "command": "build_answer_policy_v3_training_data",
         "status": status,
         "script_version": SCRIPT_VERSION,
         "run_id": run_id,
         "artifact_dir": safe_relpath(artifact_dir),
-        "tatqa_raw": safe_relpath(raw_path),
+        "source": source,
+        "source_path": safe_relpath(raw_path),
         "split": split,
         "limit": limit,
         "aligned_record_count": len(aligned),
@@ -516,6 +827,14 @@ def _summary(
         "formal_benchmark_acceptance": False,
         "validation_subset_used_for_training": False,
     }
+    if source == "tatqa":
+        summary["tatqa_raw"] = safe_relpath(raw_path)
+    if db_path is not None:
+        summary["db_path"] = safe_relpath(db_path)
+    if source == "mp_docvqa":
+        summary["mpdocvqa_evidence_manifest"] = safe_relpath(raw_path)
+        summary["mpdocvqa_db_path"] = safe_relpath(db_path) if db_path is not None else ""
+    return summary
 
 
 def _write_summary(paths: dict[str, Path], summary: dict[str, Any]) -> None:
@@ -570,8 +889,11 @@ def _summary_markdown(summary: dict[str, Any]) -> str:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build small high-confidence AnswerPolicy v3 SFT data from TAT-QA train JSON.")
+    parser = argparse.ArgumentParser(description="Build small high-confidence AnswerPolicy v3 SFT data.")
+    parser.add_argument("--source", choices=["tatqa", "mpdocvqa"], default="tatqa")
     parser.add_argument("--tatqa-raw", default="data/benchmark/tatqa/tatqa_dataset_train.json")
+    parser.add_argument("--mpdocvqa-evidence-manifest")
+    parser.add_argument("--mpdocvqa-db-path")
     parser.add_argument("--output-root", default=str(DEFAULT_OUTPUT_ROOT))
     parser.add_argument("--run-id", default="answer_policy_v3_tatqa_trial")
     parser.add_argument("--split", default="train")
@@ -584,16 +906,40 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
-    result = build_answer_policy_v3_tatqa_data(
-        tatqa_raw=args.tatqa_raw,
-        output_root=args.output_root,
-        run_id=args.run_id,
-        split=args.split,
-        limit=args.limit,
-        max_candidates=args.max_candidates,
-        max_candidate_chars=args.max_candidate_chars,
-        allow_non_train_source=bool(args.allow_non_train_source),
-    )
+    if args.source == "mpdocvqa":
+        if not args.mpdocvqa_evidence_manifest or not args.mpdocvqa_db_path:
+            result = {
+                "command": "build_answer_policy_v3_training_data",
+                "status": "blocked",
+                "block_reasons": ["mpdocvqa_requires_evidence_manifest_and_db_path"],
+                "used_training": False,
+                "training_started": False,
+                "formal_benchmark_acceptance": False,
+                "validation_subset_used_for_training": False,
+            }
+        else:
+            result = build_answer_policy_v3_mpdocvqa_data(
+                evidence_manifest=args.mpdocvqa_evidence_manifest,
+                db_path=args.mpdocvqa_db_path,
+                output_root=args.output_root,
+                run_id=args.run_id,
+                split=args.split,
+                limit=args.limit,
+                max_candidates=args.max_candidates,
+                max_candidate_chars=args.max_candidate_chars,
+                allow_non_train_source=bool(args.allow_non_train_source),
+            )
+    else:
+        result = build_answer_policy_v3_tatqa_data(
+            tatqa_raw=args.tatqa_raw,
+            output_root=args.output_root,
+            run_id=args.run_id,
+            split=args.split,
+            limit=args.limit,
+            max_candidates=args.max_candidates,
+            max_candidate_chars=args.max_candidate_chars,
+            allow_non_train_source=bool(args.allow_non_train_source),
+        )
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
