@@ -484,6 +484,12 @@ Local smoke `answer_policy_v3_rejection_sampling_local_calibration_smoke_2026070
 ran on 32 train-only records with synthetic calibration variants,
 `training_ready_selected_count=0`, `training_ready_preference_pair_count=0`,
 `used_training=false`, `used_qwen=false`, and
+`validation_subset_used_for_training=false`. Server artifact smoke
+`answer_policy_v3_rejection_sampling_expand20_calibration_20260704` at commit
+`bd80fc7` ran on the 96-record expanded mixed train-only pack, produced 470
+synthetic calibration candidates, 96 selected rows, 96 preference pairs, and
+zero training-ready rejection-SFT rows, with `used_training=false`,
+`used_qwen=false`, `formal_benchmark_acceptance=false`, and
 `validation_subset_used_for_training=false`. The next required step is to
 collect real model candidate generations for train-only v3 records before any
 best-of-N distillation, DPO, or GRPO decision.

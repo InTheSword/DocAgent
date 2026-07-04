@@ -251,8 +251,13 @@ Phase 5 Personal-use DocAgent MVP
    `answer_policy_v3_rejection_sampling_local_calibration_smoke_20260704`
    validated artifact shape on 32 train-only records without candidate model
    generations, with all selected/pair rows marked not training-ready because
-   calibration variants are synthetic; next real step is to collect model
-   candidate generations, not to start GRPO
+   calibration variants are synthetic; server artifact smoke
+   `answer_policy_v3_rejection_sampling_expand20_calibration_20260704` at
+   commit `bd80fc7` validated the same contract on the 96-record expanded
+   mixed train-only pack, producing 470 synthetic calibration candidates,
+   96 selected rows, 96 preference pairs, and zero training-ready
+   rejection-SFT rows; next real step is to collect model candidate
+   generations, not to start GRPO
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real
