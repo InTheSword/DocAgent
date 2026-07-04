@@ -520,6 +520,29 @@ This checks JSON/schema validity, `support_status`, legal `supporting_refs`,
 positive evidence-ref hits, and answer exact match on a small smoke set. It
 does not start training or claim final checkpoint quality.
 
+Prepare ms-swift SFT artifacts from the same v3 records:
+
+```bash
+python scripts/run_answer_policy_v3_msswift_sft.py \
+  --sft-input outputs/training_prep/answer_policy_v3/answer_policy_v3_tatqa_train80_20260704/sft_train.jsonl \
+  --sft-input outputs/training_prep/answer_policy_v3/answer_policy_v3_mpdocvqa_train_splitfix2_20260704/sft_train.jsonl \
+  --output-root outputs/training/answer_policy_v3_msswift_sft \
+  --run-id answer_policy_v3_msswift_dry_run \
+  --base-model-path /root/autodl-tmp/models/Qwen3-1.7B \
+  --max-records 16 \
+  --max-steps 1 \
+  --max-length 1024 \
+  --gradient-accumulation-steps 2 \
+  --lora-rank 4 \
+  --lora-alpha 8 \
+  --sync-output-dir outputs/sync
+```
+
+The command above does not start training. It validates v3 records, writes
+`swift_train.jsonl`, records the exact `swift sft` command, and preserves the
+same train-only / no-validation-subset safety flags. Add `--execute` only for a
+controlled server smoke.
+
 Enable optional query planning:
 
 ```powershell
