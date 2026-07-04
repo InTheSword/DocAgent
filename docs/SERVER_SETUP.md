@@ -1,7 +1,7 @@
 # AutoDL Server Setup
 
 > Stable environment facts and local/server execution rules only.  
-> Task scope is defined in `docs/PHASE2_ACTIVE_PLAN.md`.
+> Task scope is defined in `docs/ACTIVE_PLAN.md`.
 
 ## 1. Execution model
 
@@ -10,10 +10,15 @@ local Windows workspace:
   Codex edits code, runs local tests, commits, and pushes
 
 AutoDL server:
-  user pulls code and runs GPU/model/data-dependent commands
+  Codex may run SSH commands directly when the configured server connection is
+  available and the user has authorized direct server work; otherwise the user
+  can still paste the provided command group and return compact JSON/artifacts
 ```
 
-Codex cannot directly inspect or operate AutoDL.
+Direct server operation does not relax the environment-safety rules in this
+document. Server commands still need preflights, compact artifacts, no silent
+large downloads, no unapproved package installation, and no destructive Git or
+filesystem operations.
 
 ## 2. Server paths
 
@@ -87,6 +92,13 @@ Reranker:
 These are expected locations, not proof that the models exist.
 
 Scripts must not silently download missing models.
+
+AnswerPolicy v3 schema-smoke training may use the lightweight in-repo PEFT
+LoRA runner to verify data and output contracts. For expanded or production
+training experiments, prefer `ms-swift` as the training backend because it
+supports LoRA, QLoRA, DoRA, GaLore, and related methods. Before using it on the
+server, run a package/environment preflight first; do not install or replace
+packages in the stable `docagent` environment without explicit approval.
 
 ## 5. MinerU environment policy
 

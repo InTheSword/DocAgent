@@ -499,6 +499,26 @@ python scripts/run_answer_policy_v3_sft_warmup.py \
 This command starts a small PEFT LoRA training smoke. It verifies the v3
 schema and training path only; it does not claim final answer-quality
 improvement, formal benchmark acceptance, GRPO, or validation-subset training.
+The in-repo PEFT runner is a minimal schema-smoke path; use `ms-swift` as the
+preferred backend for later expanded SFT experiments after server package
+preflight and explicit approval for any installation.
+
+Run a tiny checkpoint diagnostic over the warmup adapter:
+
+```bash
+python scripts/eval_answer_policy_v3_sft_checkpoint.py \
+  --sft-input outputs/training/answer_policy_v3_sft_warmup/answer_policy_v3_sft_warmup_smoke_20260704/warmup_train.jsonl \
+  --adapter-path outputs/training/answer_policy_v3_sft_warmup/answer_policy_v3_sft_warmup_smoke_20260704/adapter \
+  --base-model-path /root/autodl-tmp/models/Qwen3-1.7B \
+  --output-root outputs/training_eval/answer_policy_v3_sft_checkpoint \
+  --run-id answer_policy_v3_checkpoint_eval_smoke \
+  --limit 4 \
+  --sync-output-dir outputs/sync
+```
+
+This checks JSON/schema validity, `support_status`, legal `supporting_refs`,
+positive evidence-ref hits, and answer exact match on a small smoke set. It
+does not start training or claim final checkpoint quality.
 
 Enable optional query planning:
 

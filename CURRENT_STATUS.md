@@ -344,6 +344,24 @@ It kept `formal_benchmark_acceptance=false` and
 `validation_subset_used_for_training=false`; it is a schema/training-path smoke,
 not final answer-quality acceptance or GRPO.
 
+AnswerPolicy v3 checkpoint diagnostic is real-model verified through
+`scripts/eval_answer_policy_v3_sft_checkpoint.py` and server run
+`answer_policy_v3_checkpoint_eval_smoke_20260704`. The diagnostic loaded the
+Qwen3-1.7B base model plus the warmup PEFT adapter, evaluated 4 warmup records,
+and produced `json_valid_rate=1.0`, `schema_valid_rate=1.0`,
+`support_status_match_rate=1.0`, `supporting_refs_subset_rate=1.0`,
+`positive_ref_hit_rate=1.0`, and `answer_exact_rate=0.5` with
+`used_training=false`, `formal_benchmark_acceptance=false`, and
+`validation_subset_used_for_training=false`. This verifies checkpoint
+diagnostic plumbing and v3 output-contract stability on a tiny smoke only; it
+does not claim answer-quality improvement.
+
+For expanded AnswerPolicy v3 training, `ms-swift` is the preferred backend
+because it supports LoRA, QLoRA, DoRA, GaLore, and related methods. The current
+PEFT runner remains a minimal schema-smoke path. Before using `ms-swift` on the
+server, run an environment/package preflight and get explicit approval before
+installing or replacing packages in the stable `docagent` environment.
+
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in
 `tests/test_run_final_raw_pdf_smoke.py`. The runner executes

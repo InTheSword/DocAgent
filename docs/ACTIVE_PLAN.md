@@ -142,14 +142,27 @@ Phase 5 Personal-use DocAgent MVP
    SFT/GRPO execution
 -> AnswerPolicy v3 schema warmup SFT smoke real-model verified:
    `scripts/run_answer_policy_v3_sft_warmup.py` merges v3 SFT records,
-   validates the `ModelOutputV3` target, and runs a tiny PEFT LoRA warmup
-   without Swift; server run `answer_policy_v3_sft_warmup_smoke_20260704`
+   validates the `ModelOutputV3` target, and runs a tiny PEFT LoRA schema
+   smoke; server run `answer_policy_v3_sft_warmup_smoke_20260704`
    at commit `e9257fd` built 80 TAT-QA train v3 records, mixed them with
    the 7 MP-DocVQA train v3 records, trained Qwen3-1.7B for 1 step on 16
    selected records, wrote adapter artifacts, and preserved
    `formal_benchmark_acceptance=false` and
    `validation_subset_used_for_training=false`; this verifies the schema
    warmup training path only, not final answer-quality improvement or GRPO
+-> AnswerPolicy v3 checkpoint diagnostic real-model verified:
+   `scripts/eval_answer_policy_v3_sft_checkpoint.py` loads the base model plus
+   a PEFT adapter and checks v3 JSON/schema/ref behavior without starting
+   training; server run `answer_policy_v3_checkpoint_eval_smoke_20260704`
+   evaluated 4 warmup records with json/schema/support-status/ref legality
+   rates all 1.0, positive_ref_hit_rate 1.0, answer_exact_rate 0.5, and
+   `used_training=false`; this accepts checkpoint-diagnostic plumbing only,
+   not model-quality improvement
+-> AnswerPolicy v3 expanded training backend preference recorded:
+   keep the PEFT runner as the minimal schema-smoke path, but prefer
+   `ms-swift` for later full/expanded SFT experiments after an environment
+   preflight and explicit approval for any package installation; GRPO remains
+   gated optional and not part of the current warmup
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real
