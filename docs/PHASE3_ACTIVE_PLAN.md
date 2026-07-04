@@ -87,9 +87,11 @@ Mock outputs must not be reported as real focused-evaluation results.
 
 ## 5. Server Boundary
 
-Codex works locally and does not run real BGE-M3, reranker, SFT, or GRPO
-models. AutoDL must run the real model command after the feature branch is
-pushed.
+Codex may run real BGE-M3, reranker, SFT, or GRPO commands directly on the
+configured AutoDL server over SSH when server work is authorized. User-pasted
+commands are now a fallback path only. Real server runs still require the same
+preflights, compact artifacts, and environment-safety boundaries recorded in
+`docs/SERVER_SETUP.md` and `docs/GPU_SERVER_BOUNDARY.md`.
 
 Required server resources:
 

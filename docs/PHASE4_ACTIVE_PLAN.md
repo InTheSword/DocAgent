@@ -301,7 +301,9 @@ builder --help
 
 Current server boundary:
 
-- run only the staged Gate 4 command blocks supplied by Codex;
+- prefer direct SSH execution by Codex for any renewed Gate 4 server checks;
+- use staged Gate 4 command blocks only as a user-pasted fallback when SSH is
+  unavailable or an interactive user-side step is required;
 - keep Git sync, sample build, ingestion, validate-only, retrieval-only, full
   E2E, and comparison as separate foreground Bash blocks;
 - do not skip validate-only or retrieval-only before full E2E.
@@ -311,7 +313,7 @@ Do not:
 - print or persist `MINERU_TOKEN`;
 - install packages or modify the stable `docagent` environment;
 - use `nohup`, `setsid`, background `&`, `tmux`, `kill`, `pkill`, or `exec` in
-  user-pasted Gate 4 commands;
+  direct SSH wrappers or user-pasted Gate 4 fallback commands;
 - run all 29 shards;
 - create per-gate branches.
 
