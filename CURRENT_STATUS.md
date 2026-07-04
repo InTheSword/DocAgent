@@ -333,6 +333,19 @@ with answer-text gold-page hit rate 0.8, and produced 7
 `used_training=false`, `formal_benchmark_acceptance=false`, and
 `validation_subset_used_for_training=false`.
 
+AnswerPolicy v3 insufficient-evidence data preparation is implemented locally
+in `scripts/build_answer_policy_v3_insufficient_data.py` with tests in
+`tests/test_build_answer_policy_v3_insufficient_data.py`. The builder uses
+train-split TAT-QA questions, samples a different-document decoy evidence board,
+confirms the decoy candidate text does not contain the gold answer string, and
+emits `insufficient_confirmed` v3 records whose target has
+`support_status=insufficient` and empty `supporting_refs`. Local smoke
+`answer_policy_v3_tatqa_insufficient_local_smoke_20260704` produced 32 records
+with `used_training=false`, `formal_benchmark_acceptance=false`, and
+`validation_subset_used_for_training=false`. This fills the current Stage 2
+negative-sample data-prep gap; it does not start SFT/GRPO or claim answer
+quality.
+
 AnswerPolicy v3 schema warmup SFT is real-model verified through
 `scripts/run_answer_policy_v3_sft_warmup.py` and server run
 `answer_policy_v3_sft_warmup_smoke_20260704` at commit `e9257fd`. The run

@@ -140,6 +140,17 @@ Phase 5 Personal-use DocAgent MVP
    documents, materialized 10/10 evidence-ready samples, and produced 7
    high-confidence v3 SFT records; both kept `used_training=false` and no
    SFT/GRPO execution
+-> AnswerPolicy v3 insufficient-evidence data builder implemented locally:
+   `scripts/build_answer_policy_v3_insufficient_data.py` builds train-only
+   TAT-QA `insufficient_confirmed` records by pairing source questions with a
+   different-document decoy evidence board that does not contain the gold
+   answer string, producing v3 `support_status=insufficient` targets with empty
+   `supporting_refs`; local smoke
+   `answer_policy_v3_tatqa_insufficient_local_smoke_20260704` produced 32
+   records and kept `used_training=false`,
+   `validation_subset_used_for_training=false`, and
+   `formal_benchmark_acceptance=false`; this fills the Stage 2 negative-sample
+   data-prep gap but does not start or evaluate training
 -> AnswerPolicy v3 schema warmup SFT smoke real-model verified:
    `scripts/run_answer_policy_v3_sft_warmup.py` merges v3 SFT records,
    validates the `ModelOutputV3` target, and runs a tiny PEFT LoRA schema

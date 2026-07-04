@@ -447,6 +447,22 @@ Temporary `E#` refs are mapped back to internal citation metadata through
 `EvidenceRefMap`; `block_id`, `doc_id`, and file paths are not model-generation
 targets. The command does not start SFT/GRPO or use validation/final-eval data.
 
+Build train-only TAT-QA insufficient-evidence records for Stage 2 mixing:
+
+```powershell
+python scripts\build_answer_policy_v3_insufficient_data.py `
+  --tatqa-raw data\benchmark\tatqa\tatqa_dataset_train.json `
+  --run-id answer_policy_v3_tatqa_insufficient `
+  --limit 100
+```
+
+This writes the same v3 artifact shape, with `insufficient_evidence.jsonl` and
+`sft_train.jsonl` containing `insufficient_confirmed` records. Each record pairs
+a source question with a different-document decoy evidence board whose candidate
+text does not contain the gold answer string, and the assistant target uses
+`support_status=insufficient` with empty `supporting_refs`. It does not call
+Qwen, start SFT/GRPO, or use validation/final-eval data.
+
 For MP-DocVQA train data, first prepare a train-labeled page-window subset,
 materialize evidence with MinerU API, then build v3 records from the evidence
 manifest and SQLite DB:
@@ -549,6 +565,7 @@ Build an audited Stage 2 mixed pack before a short SFT run:
 python scripts/build_answer_policy_v3_mixed_sft_pack.py \
   --tatqa-sft outputs/training_prep/answer_policy_v3/answer_policy_v3_tatqa_train80_20260704/sft_train.jsonl \
   --mpdocvqa-sft outputs/training_prep/answer_policy_v3/answer_policy_v3_mpdocvqa_train_splitfix2_20260704/sft_train.jsonl \
+  --insufficient-sft outputs/training_prep/answer_policy_v3/answer_policy_v3_tatqa_insufficient/sft_train.jsonl \
   --output-root outputs/training_prep/answer_policy_v3_mixed_sft \
   --run-id answer_policy_v3_mixed_stage2 \
   --target-records 64 \
