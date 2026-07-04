@@ -28,6 +28,7 @@ from scripts.run_answer_policy_v3_sft_warmup import (
 
 SCRIPT_VERSION = "answer-policy-v3-rejection-sampling-artifacts-v1"
 DEFAULT_OUTPUT_ROOT = ROOT / "outputs" / "training_prep" / "answer_policy_v3_rejection_sampling"
+TRAINING_READY_CANDIDATE_SOURCES = {"candidate_input", "model_generation"}
 
 
 def repo_path(path: str | Path) -> Path:
@@ -112,10 +113,11 @@ def load_candidate_inputs(paths: list[Path], records_by_id: dict[str, dict[str, 
                     no_prediction_count += 1
                     prediction = {}
                 parsed_count += 1
+                candidate_source = str(item.get("candidate_source") or item.get("source") or "candidate_input")
                 candidates[record_id].append(
                     {
                         "candidate_id": str(item.get("candidate_id") or f"{path.name}:{row_index}:{candidate_index}"),
-                        "candidate_source": "candidate_input",
+                        "candidate_source": candidate_source,
                         "prediction": prediction,
                         "raw_text_preview": raw_text[:500],
                     }
@@ -195,7 +197,7 @@ def readiness_reasons(
     if best is None:
         reasons.append("no_candidates")
         return reasons
-    if best.get("candidate_source") != "candidate_input":
+    if best.get("candidate_source") not in TRAINING_READY_CANDIDATE_SOURCES:
         reasons.append("synthetic_candidate_source")
     if not best.get("schema_ok"):
         reasons.append("chosen_schema_invalid")

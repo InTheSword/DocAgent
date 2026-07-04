@@ -46,7 +46,7 @@ def test_rejection_sampling_artifacts_select_real_candidate(tmp_path: Path) -> N
                 "id": "q1",
                 "candidates": [
                     {"candidate_id": "bad", "prediction": {**target, "answer": "Unsupported answer."}},
-                    {"candidate_id": "good", "prediction": target},
+                    {"candidate_id": "good", "candidate_source": "model_generation", "prediction": target},
                 ],
             }
         ],
@@ -71,6 +71,7 @@ def test_rejection_sampling_artifacts_select_real_candidate(tmp_path: Path) -> N
     assert result["metrics"]["training_ready_selected_count"] == 1
     assert result["metrics"]["training_ready_preference_pair_count"] == 1
     assert selected[0]["chosen_candidate"]["candidate_id"] == "good"
+    assert selected[0]["chosen_candidate"]["candidate_source"] == "model_generation"
     assert selected[0]["training_ready"] is True
     assert pairs[0]["reward_margin"] >= 0.2
     assert pairs[0]["training_ready"] is True
@@ -101,6 +102,39 @@ def test_rejection_sampling_calibration_variants_are_not_training_ready(tmp_path
     assert selected[0]["training_ready"] is False
     assert "synthetic_candidate_source" in selected[0]["not_training_ready_reasons"]
     assert rejection_sft == []
+
+
+def test_rejection_sampling_does_not_train_on_synthetic_candidate_input(tmp_path: Path) -> None:
+    sft_path = tmp_path / "train" / "sft_train.jsonl"
+    candidate_path = tmp_path / "train" / "synthetic_candidates.jsonl"
+    record = _record("q1")
+    target = json.loads(record["messages"][-1]["content"])
+    write_jsonl(sft_path, [record])
+    write_jsonl(
+        candidate_path,
+        [
+            {
+                "id": "q1",
+                "candidates": [
+                    {"candidate_id": "dry", "candidate_source": "synthetic_dry_run", "prediction": target},
+                ],
+            }
+        ],
+    )
+
+    result = build_rejection_sampling_artifacts(
+        sft_inputs=[sft_path],
+        candidate_inputs=[candidate_path],
+        output_root=tmp_path / "out",
+        run_id="synthetic",
+    )
+
+    selected = read_jsonl(tmp_path / "out" / "synthetic" / "selected_candidates.jsonl")
+
+    assert result["status"] == "success"
+    assert result["metrics"]["training_ready_selected_count"] == 0
+    assert selected[0]["chosen_candidate"]["candidate_source"] == "synthetic_dry_run"
+    assert selected[0]["not_training_ready_reasons"] == ["synthetic_candidate_source"]
 
 
 def test_rejection_sampling_blocks_validation_like_input(tmp_path: Path) -> None:
