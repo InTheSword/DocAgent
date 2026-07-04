@@ -61,6 +61,7 @@ def build_swift_command(
     *,
     swift_executable: str,
     model_path: str | Path,
+    adapter_path: str | Path | None,
     dataset_path: Path,
     output_dir: Path,
     max_steps: int,
@@ -73,7 +74,7 @@ def build_swift_command(
     lora_rank: int,
     lora_alpha: int,
 ) -> list[str]:
-    return [
+    command = [
         swift_executable,
         "sft",
         "--model",
@@ -107,6 +108,9 @@ def build_swift_command(
         "--lora_alpha",
         str(lora_alpha),
     ]
+    if adapter_path:
+        command.extend(["--adapters", str(adapter_path)])
+    return command
 
 
 def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
@@ -154,6 +158,7 @@ def run_msswift_sft(
     output_root: str | Path = DEFAULT_OUTPUT_ROOT,
     run_id: str = "answer_policy_v3_msswift_sft",
     base_model_path: str | Path = "/root/autodl-tmp/models/Qwen3-1.7B",
+    adapter_path: str | Path | None = None,
     max_records: int = 64,
     max_steps: int = 3,
     max_length: int = 2048,
@@ -184,6 +189,7 @@ def run_msswift_sft(
     manifest_path = artifact_dir / "manifest.json"
 
     input_paths = [repo_path(path) for path in sft_inputs]
+    adapter = repo_path(adapter_path) if adapter_path else None
     block_reasons: list[str] = []
     for path in input_paths:
         if not path.is_file():
@@ -192,6 +198,11 @@ def run_msswift_sft(
             markers = validation_path_markers(path)
             if markers:
                 block_reasons.append(f"validation_like_input_path:{','.join(markers)}")
+    if adapter is not None:
+        if not adapter.is_dir():
+            block_reasons.append(f"missing_adapter_path:{safe_relpath(adapter)}")
+        elif not (adapter / "adapter_config.json").is_file():
+            block_reasons.append(f"missing_adapter_config:{safe_relpath(adapter)}")
 
     audit: dict[str, Any] = {}
     selected: list[dict[str, Any]] = []
@@ -216,6 +227,7 @@ def run_msswift_sft(
     command = build_swift_command(
         swift_executable=swift_path,
         model_path=base_model_path,
+        adapter_path=adapter,
         dataset_path=swift_train_path,
         output_dir=swift_output_dir,
         max_steps=max_steps,
@@ -265,6 +277,7 @@ def run_msswift_sft(
         "run_id": run_id,
         "artifact_dir": safe_relpath(artifact_dir),
         "base_model_path": str(base_model_path),
+        "adapter_path": safe_relpath(adapter) if adapter is not None else "",
         "sft_inputs": [safe_relpath(path) for path in input_paths],
         "selected_record_count": len(selected),
         "max_records": max_records,
@@ -320,6 +333,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output-root", default=str(DEFAULT_OUTPUT_ROOT))
     parser.add_argument("--run-id", default="answer_policy_v3_msswift_sft")
     parser.add_argument("--base-model-path", default="/root/autodl-tmp/models/Qwen3-1.7B")
+    parser.add_argument(
+        "--adapter-path",
+        help="Optional LoRA adapter checkpoint to load via ms-swift --adapters before continuing SFT.",
+    )
     parser.add_argument("--max-records", type=int, default=64)
     parser.add_argument("--max-steps", type=int, default=3)
     parser.add_argument("--max-length", type=int, default=2048)
@@ -346,6 +363,7 @@ def main(argv: list[str] | None = None) -> None:
             output_root=args.output_root,
             run_id=args.run_id,
             base_model_path=args.base_model_path,
+            adapter_path=args.adapter_path,
             max_records=args.max_records,
             max_steps=args.max_steps,
             max_length=args.max_length,

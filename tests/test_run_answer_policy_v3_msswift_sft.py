@@ -67,6 +67,27 @@ def test_answer_policy_v3_msswift_dry_run_writes_swift_artifacts(tmp_path: Path)
     assert (artifact_dir / "manifest.json").is_file()
 
 
+def test_answer_policy_v3_msswift_dry_run_can_load_existing_adapter(tmp_path: Path) -> None:
+    source_path = tmp_path / "train" / "sft_train.jsonl"
+    adapter_path = tmp_path / "adapter"
+    adapter_path.mkdir()
+    (adapter_path / "adapter_config.json").write_text("{}", encoding="utf-8")
+    write_jsonl(source_path, [_record("ok")])
+
+    result = run_msswift_sft(
+        sft_inputs=[source_path],
+        output_root=tmp_path / "out",
+        run_id="adapter",
+        adapter_path=adapter_path,
+    )
+
+    command = json.loads((tmp_path / "out" / "adapter" / "swift_command.json").read_text(encoding="utf-8"))["command"]
+    assert result["status"] == "success"
+    assert result["adapter_path"] == adapter_path.as_posix()
+    assert "--adapters" in command
+    assert str(adapter_path) in command
+
+
 def test_answer_policy_v3_msswift_blocks_validation_like_inputs(tmp_path: Path) -> None:
     source_path = tmp_path / "final_eval" / "sft_train.jsonl"
     write_jsonl(source_path, [_record("bad")])
@@ -81,6 +102,22 @@ def test_answer_policy_v3_msswift_blocks_validation_like_inputs(tmp_path: Path) 
     assert result["selected_record_count"] == 0
     assert result["block_reasons"] == ["validation_like_input_path:final_eval"]
     assert read_jsonl(tmp_path / "out" / "blocked" / "swift_train.jsonl") == []
+
+
+def test_answer_policy_v3_msswift_blocks_missing_adapter(tmp_path: Path) -> None:
+    source_path = tmp_path / "train" / "sft_train.jsonl"
+    write_jsonl(source_path, [_record("ok")])
+
+    result = run_msswift_sft(
+        sft_inputs=[source_path],
+        output_root=tmp_path / "out",
+        run_id="missing_adapter",
+        adapter_path=tmp_path / "missing_adapter",
+    )
+
+    assert result["status"] == "blocked"
+    assert result["selected_record_count"] == 0
+    assert result["block_reasons"] == [f"missing_adapter_path:{(tmp_path / 'missing_adapter').as_posix()}"]
 
 
 def test_answer_policy_v3_msswift_execute_blocks_when_executable_missing(tmp_path: Path) -> None:
