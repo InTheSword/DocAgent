@@ -133,20 +133,20 @@ def evaluate_with_model(
     *,
     records: list[dict[str, Any]],
     base_model_path: Path,
-    adapter_path: Path,
+    adapter_path: Path | None,
     max_new_tokens: int,
     device: str,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     import torch
-    from peft import PeftModel
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     if not (base_model_path / "config.json").is_file():
         return [], {"status": "blocked", "blocker": "missing_base_model_config"}
-    if not (adapter_path / "adapter_config.json").is_file():
-        return [], {"status": "blocked", "blocker": "missing_adapter_config"}
-    if not any((adapter_path / name).is_file() for name in ("adapter_model.safetensors", "adapter_model.bin")):
-        return [], {"status": "blocked", "blocker": "missing_adapter_weights"}
+    if adapter_path is not None:
+        if not (adapter_path / "adapter_config.json").is_file():
+            return [], {"status": "blocked", "blocker": "missing_adapter_config"}
+        if not any((adapter_path / name).is_file() for name in ("adapter_model.safetensors", "adapter_model.bin")):
+            return [], {"status": "blocked", "blocker": "missing_adapter_weights"}
     if device == "cuda" and not torch.cuda.is_available():
         return [], {"status": "blocked", "blocker": "cuda_unavailable"}
 
@@ -160,7 +160,14 @@ def evaluate_with_model(
         local_files_only=True,
         trust_remote_code=True,
     )
-    model = PeftModel.from_pretrained(base, str(adapter_path), is_trainable=False)
+    if adapter_path is not None:
+        from peft import PeftModel
+
+        model = PeftModel.from_pretrained(base, str(adapter_path), is_trainable=False)
+        model_mode = "peft_adapter"
+    else:
+        model = base
+        model_mode = "base_only"
     if device == "cuda":
         model = model.to("cuda")
     elif device not in {"auto", "none"}:
@@ -192,7 +199,7 @@ def evaluate_with_model(
                     "metrics": score_prediction(record, prediction, raw_text),
                 }
             )
-    return rows, {"status": "success", "duration_seconds": round(time.time() - started, 3)}
+    return rows, {"status": "success", "duration_seconds": round(time.time() - started, 3), "model_mode": model_mode}
 
 
 def artifact_entry(path: Path) -> dict[str, Any]:
@@ -231,7 +238,7 @@ def sync_bundle(artifact_dir: Path, sync_output_dir: Path, run_id: str, paths: l
 def run_eval(
     *,
     sft_input: str | Path,
-    adapter_path: str | Path,
+    adapter_path: str | Path | None = None,
     base_model_path: str | Path = "/root/autodl-tmp/models/Qwen3-1.7B",
     output_root: str | Path = DEFAULT_OUTPUT_ROOT,
     run_id: str = "answer_policy_v3_checkpoint_eval",
@@ -245,7 +252,7 @@ def run_eval(
     artifact_dir = repo_path(output_root) / run_id
     artifact_dir.mkdir(parents=True, exist_ok=True)
     input_path = repo_path(sft_input)
-    adapter = repo_path(adapter_path)
+    adapter = repo_path(adapter_path) if adapter_path else None
     base_model = Path(base_model_path)
     rows_path = artifact_dir / "rows.jsonl"
     result_path = artifact_dir / "result.json"
@@ -257,7 +264,7 @@ def run_eval(
     block_reasons: list[str] = []
     if not input_path.is_file():
         block_reasons.append(f"missing_sft_input:{safe_relpath(input_path)}")
-    if not adapter.is_dir():
+    if adapter is not None and not adapter.is_dir():
         block_reasons.append(f"missing_adapter_path:{safe_relpath(adapter)}")
     if not allow_validation_like_input:
         markers = validation_path_markers(input_path)
@@ -296,7 +303,8 @@ def run_eval(
         "run_id": run_id,
         "artifact_dir": safe_relpath(artifact_dir),
         "sft_input": safe_relpath(input_path),
-        "adapter_path": safe_relpath(adapter),
+        "adapter_path": safe_relpath(adapter) if adapter is not None else "",
+        "model_mode": generation.get("model_mode") or ("base_only" if adapter is None else "peft_adapter"),
         "base_model_path": str(base_model_path),
         "limit": limit,
         "dry_run": dry_run,
@@ -341,7 +349,7 @@ def run_eval(
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate a small AnswerPolicy v3 SFT checkpoint diagnostic.")
     parser.add_argument("--sft-input", required=True)
-    parser.add_argument("--adapter-path", required=True)
+    parser.add_argument("--adapter-path")
     parser.add_argument("--base-model-path", default="/root/autodl-tmp/models/Qwen3-1.7B")
     parser.add_argument("--output-root", default=str(DEFAULT_OUTPUT_ROOT))
     parser.add_argument("--run-id", default="answer_policy_v3_checkpoint_eval")

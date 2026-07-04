@@ -75,6 +75,23 @@ def test_eval_answer_policy_v3_checkpoint_dry_run_writes_artifacts(tmp_path: Pat
     assert read_jsonl(artifact_dir / "rows.jsonl") == []
 
 
+def test_eval_answer_policy_v3_checkpoint_dry_run_allows_base_only(tmp_path: Path) -> None:
+    sft_path = tmp_path / "train" / "sft_train.jsonl"
+    write_jsonl(sft_path, [_record()])
+
+    result = run_eval(
+        sft_input=sft_path,
+        output_root=tmp_path / "out",
+        run_id="base_only",
+        dry_run=True,
+    )
+
+    assert result["status"] == "success"
+    assert result["adapter_path"] == ""
+    assert result["model_mode"] == "base_only"
+    assert result["used_qwen"] is False
+
+
 def test_eval_answer_policy_v3_checkpoint_blocks_validation_like_input(tmp_path: Path) -> None:
     sft_path = tmp_path / "final_eval" / "sft_train.jsonl"
     adapter_path = tmp_path / "adapter"
