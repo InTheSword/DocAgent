@@ -83,7 +83,23 @@ def _assert_manifest_hashes(manifest_path: Path) -> None:
 
 def test_final_delivery_benchmark_gate_orchestrates_safe_steps(tmp_path: Path) -> None:
     paths = _touch_inputs(tmp_path)
-    args = _args(tmp_path, paths)
+    qwen_path = tmp_path / "models" / "qwen"
+    qwen_path.mkdir(parents=True)
+    (qwen_path / "config.json").write_text("{}", encoding="utf-8")
+    adapter_path = tmp_path / "adapters" / "promptfix"
+    adapter_path.mkdir(parents=True)
+    args = _args(
+        tmp_path,
+        paths,
+        "--answer-policy",
+        "sft",
+        "--base-model-path",
+        str(qwen_path),
+        "--adapter-path",
+        str(adapter_path),
+        "--answer-output-contract",
+        "v3_refs",
+    )
     commands: list[list[str]] = []
 
     def fake_runner(command: list[str], _cwd: Path, _timeout: int) -> CommandResult:
@@ -126,6 +142,9 @@ def test_final_delivery_benchmark_gate_orchestrates_safe_steps(tmp_path: Path) -
     workflow_command = commands[2]
     assert workflow_command[workflow_command.index("--dense-backend") + 1] == "hash"
     assert workflow_command[workflow_command.index("--reranker-backend") + 1] == "keyword"
+    assert workflow_command[workflow_command.index("--answer-policy") + 1] == "sft"
+    assert workflow_command[workflow_command.index("--answer-output-contract") + 1] == "v3_refs"
+    assert workflow_command[workflow_command.index("--adapter-path") + 1] == str(adapter_path)
     run_dir = tmp_path / "gate" / "gate_test"
     assert (run_dir / "result.json").is_file()
     assert (run_dir / "summary.json").is_file()

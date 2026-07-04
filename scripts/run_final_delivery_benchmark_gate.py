@@ -251,6 +251,8 @@ def _mpdocvqa_workflow_command(args: argparse.Namespace, run_id: str) -> list[st
         args.reranker_device,
         "--answer-policy",
         args.answer_policy,
+        "--answer-output-contract",
+        args.answer_output_contract,
         "--base-model-path",
         args.base_model_path,
         "--device",
@@ -268,6 +270,8 @@ def _mpdocvqa_workflow_command(args: argparse.Namespace, run_id: str) -> list[st
         command.append("--reranker-fp16")
     if args.sample_ids:
         command.extend(["--sample-ids", args.sample_ids])
+    if args.adapter_path:
+        command.extend(["--adapter-path", args.adapter_path])
     return command
 
 
@@ -522,6 +526,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reranker-device", default="cpu")
     parser.add_argument("--reranker-fp16", action="store_true")
     parser.add_argument("--answer-policy", choices=["heuristic", "base", "sft", "grpo"], default="base")
+    parser.add_argument(
+        "--answer-output-contract",
+        choices=["candidate_citations", "v3_refs"],
+        default="candidate_citations",
+        help="Internal AnswerPolicy output contract passed through to the MP-DocVQA workflow diagnostic.",
+    )
     parser.add_argument("--base-model-path", default=DEFAULT_QWEN_BASE_MODEL_PATH)
     parser.add_argument("--adapter-path")
     parser.add_argument("--device", default="cuda")

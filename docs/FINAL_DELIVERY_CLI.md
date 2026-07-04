@@ -241,6 +241,21 @@ baseline runner, and the MP-DocVQA full-workflow diagnostic runner. It writes
 compact artifacts and sync bundles, keeps `formal_benchmark_acceptance=false`,
 and does not start SFT/GRPO training.
 
+To exercise a candidate AnswerPolicy adapter in the MP-DocVQA workflow step,
+pass the same model policy options used by `docagent_cli.py`:
+
+```powershell
+python scripts\run_final_delivery_benchmark_gate.py `
+  --run-id final_delivery_benchmark_gate_sft_v3_refs_probe `
+  --answer-policy sft `
+  --adapter-path outputs\training\answer_policy_v3_msswift_sft\<run_id>\swift_output\<checkpoint_dir> `
+  --answer-output-contract v3_refs
+```
+
+This only changes the diagnostic workflow invocation. It does not make the
+adapter the default checkpoint, and it does not promote the result to formal
+benchmark acceptance.
+
 Inspect a completed final-delivery benchmark gate artifact directory:
 
 ```powershell

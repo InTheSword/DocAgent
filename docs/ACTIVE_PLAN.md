@@ -502,6 +502,17 @@ Phase 5 Personal-use DocAgent MVP
    regressions. This supports the training objective improvement on a reusable
    fixed-evidence table/calculation slice, but still does not override the
    clean6 deployment guard
+-> Final-delivery gate adapter/v3 workflow parameter passthrough implemented
+   locally:
+   `scripts/run_mpdocvqa_full_workflow_diagnostic.py` now forwards
+   `--answer-output-contract` and optional `--adapter-path` to
+   `scripts/docagent_cli.py`, and records those settings in its summary.
+   `scripts/run_final_delivery_benchmark_gate.py` now exposes
+   `--answer-output-contract` and forwards both it and `--adapter-path` to the
+   MP-DocVQA full-workflow diagnostic step. Defaults remain unchanged
+   (`candidate_citations` and no adapter), so this enables explicit candidate
+   checkpoint workflow probes without promoting any adapter as the default
+   AnswerPolicy
 -> AnswerPolicy v3 train-only heldout diagnostic split implemented locally:
    `scripts/split_answer_policy_v3_sft_records.py` deterministically splits
    validated v3 SFT records into non-overlapping `train_sft.jsonl` and

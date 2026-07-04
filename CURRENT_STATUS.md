@@ -16,6 +16,14 @@ fixed-evidence rows, with answer-exact improving from 0.5234 to 0.7891. This
 is evidence that the v3 AnswerPolicy objective improved; it does not promote
 the adapter as the default full-workflow checkpoint.
 
+The final-delivery benchmark gate now has a complete candidate-checkpoint
+parameter path for MP-DocVQA workflow diagnostics: it can forward explicit
+`--answer-policy sft`, `--adapter-path`, and `--answer-output-contract v3_refs`
+through `run_mpdocvqa_full_workflow_diagnostic.py` into `docagent_cli.py`.
+Defaults remain unchanged. This fixes execution-chain plumbing for future
+candidate adapter probes; it is not itself a model-quality or deployment
+acceptance.
+
 AnswerPolicy v3 clean fixed-evidence comparison is real-model verified as a
 diagnostic contract probe, not as formal benchmark acceptance. Server run
 `phase5ib_v3refs_clean6_base_vs_adapter480_contract_compare_20260704` compared

@@ -292,6 +292,8 @@ def build_cli_command(
         str(args.reranker_device),
         "--answer-policy",
         str(args.answer_policy),
+        "--answer-output-contract",
+        str(args.answer_output_contract),
         "--base-model-path",
         str(args.base_model_path),
         "--device",
@@ -307,6 +309,8 @@ def build_cli_command(
         command.append("--dense-fp16")
     if args.reranker_fp16:
         command.append("--reranker-fp16")
+    if args.adapter_path:
+        command.extend(["--adapter-path", str(args.adapter_path)])
     return command
 
 
@@ -518,6 +522,8 @@ def summarize(
         "bucket_counts": dict(sorted(bucket_counts.items())),
         "retriever_mode": str(args.retriever_mode),
         "answer_policy": str(args.answer_policy),
+        "answer_output_contract": str(args.answer_output_contract),
+        "adapter_path": str(args.adapter_path or ""),
         "used_training": False,
         "used_vlm": False,
         "formal_benchmark_acceptance": False,
@@ -703,7 +709,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reranker-device", default="cpu")
     parser.add_argument("--reranker-fp16", action="store_true")
     parser.add_argument("--answer-policy", choices=["heuristic", "base", "sft", "grpo"], default="base")
+    parser.add_argument(
+        "--answer-output-contract",
+        choices=["candidate_citations", "v3_refs"],
+        default="candidate_citations",
+        help="Internal AnswerPolicy output contract passed through to docagent_cli.py.",
+    )
     parser.add_argument("--base-model-path", default=DEFAULT_QWEN_BASE_MODEL_PATH)
+    parser.add_argument("--adapter-path")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--torch-dtype", default="bfloat16")
     parser.add_argument("--max-prompt-tokens", type=int, default=4096)

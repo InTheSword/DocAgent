@@ -106,6 +106,10 @@ def test_run_mpdocvqa_full_workflow_diagnostic_uses_cli_full_path(tmp_path: Path
             ".secrets/router_llm.env",
             "--base-model-path",
             "/models/qwen",
+            "--answer-output-contract",
+            "v3_refs",
+            "--adapter-path",
+            "/adapters/promptfix",
             "--dense-model-path",
             "/models/bge",
             "--reranker-model-path",
@@ -140,8 +144,12 @@ def test_run_mpdocvqa_full_workflow_diagnostic_uses_cli_full_path(tmp_path: Path
     assert "--full-model-path" in first_command
     assert first_command[first_command.index("--retriever-mode") + 1] == "hybrid_rerank"
     assert first_command[first_command.index("--answer-policy") + 1] == "base"
+    assert first_command[first_command.index("--answer-output-contract") + 1] == "v3_refs"
+    assert first_command[first_command.index("--adapter-path") + 1] == "/adapters/promptfix"
     assert first_command[first_command.index("--db-path") + 1] == str(db_path)
     assert first_command[first_command.index("--doc-id") + 1] == "ingested_doc"
+    assert result["answer_output_contract"] == "v3_refs"
+    assert result["adapter_path"] == "/adapters/promptfix"
 
     rows = read_jsonl(tmp_path / "out" / "mp_full" / "results.jsonl")
     assert [row["bucket"] for row in rows] == ["passed", "retrieval_gold_page_miss"]
