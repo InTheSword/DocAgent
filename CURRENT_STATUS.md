@@ -490,9 +490,26 @@ ran on 32 train-only records with synthetic calibration variants,
 synthetic calibration candidates, 96 selected rows, 96 preference pairs, and
 zero training-ready rejection-SFT rows, with `used_training=false`,
 `used_qwen=false`, `formal_benchmark_acceptance=false`, and
-`validation_subset_used_for_training=false`. The next required step is to
-collect real model candidate generations for train-only v3 records before any
-best-of-N distillation, DPO, or GRPO decision.
+`validation_subset_used_for_training=false`.
+
+AnswerPolicy v3 real-model candidate generation is implemented locally in
+`scripts/generate_answer_policy_v3_candidates.py`. The script reads train-only
+v3 SFT records, blocks validation-like paths, optionally loads a PEFT adapter,
+generates multiple `model_generation` candidates per prompt, validates v3
+JSON/schema locally, and writes `candidates.jsonl`, preview, summary, and
+manifest artifacts without starting training. Local dry-run
+`answer_policy_v3_candidate_generation_local_dryrun_20260704` produced 16
+synthetic candidates from 8 records and confirmed, via
+`answer_policy_v3_rejection_sampling_local_dryrun_candidates_20260704`, that
+synthetic candidates remain non-training-ready in the rejection builder.
+Server Qwen smoke `answer_policy_v3_candidate_generation_qwen_smoke_20260704`
+at commit `e01ebf4` generated 8 real Qwen candidates from 4 train-only records
+with `raw_json_ok_rate=1.0`, `schema_ok_rate=1.0`, `used_qwen=true`,
+`used_training=false`, and `validation_subset_used_for_training=false`.
+Follow-up ranking `answer_policy_v3_rejection_sampling_qwen_smoke_20260704`
+consumed the `model_generation` candidates successfully; no selected/pair rows
+passed the reward thresholds in this tiny base-model smoke, so no
+rejection-SFT rows were emitted and GRPO remains unapproved.
 
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in

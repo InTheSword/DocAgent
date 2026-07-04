@@ -256,8 +256,23 @@ Phase 5 Personal-use DocAgent MVP
    commit `bd80fc7` validated the same contract on the 96-record expanded
    mixed train-only pack, producing 470 synthetic calibration candidates,
    96 selected rows, 96 preference pairs, and zero training-ready
-   rejection-SFT rows; next real step is to collect model candidate
-   generations, not to start GRPO
+   rejection-SFT rows
+-> AnswerPolicy v3 real-model candidate generation implemented locally:
+   `scripts/generate_answer_policy_v3_candidates.py` loads train-only v3 SFT
+   prompts, optionally loads a PEFT adapter, generates multiple
+   `model_generation` candidates per record, validates v3 JSON/schema locally,
+   and writes `candidates.jsonl`, preview, summary, and manifest artifacts
+   without starting training; local dry-run smoke
+   `answer_policy_v3_candidate_generation_local_dryrun_20260704` validated
+   synthetic artifact shape and confirmed synthetic candidates cannot become
+   training-ready through the rejection builder; server Qwen smoke
+   `answer_policy_v3_candidate_generation_qwen_smoke_20260704` at commit
+   `e01ebf4` generated 8 real Qwen candidates from 4 train-only records with
+   raw_json_ok_rate 1.0 and schema_ok_rate 1.0, and follow-up ranking
+   `answer_policy_v3_rejection_sampling_qwen_smoke_20260704` consumed those
+   `model_generation` candidates successfully; no selected/pair rows passed
+   reward thresholds in this tiny base-model smoke, so no rejection-SFT rows
+   were emitted and GRPO remains unapproved
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real
