@@ -130,10 +130,10 @@ Sync bundle rules:
   files are expected to be useful for follow-up triage; do not make broad file
   upload a default requirement for every successful command.
 
-When a server command completes, inspect sync artifacts in this order. If Codex
-ran the command over SSH, read these files directly from the server; if SSH is
-unavailable and the user ran the fallback command, ask only for the specific
-files needed:
+When a server command completes, inspect sync artifacts in this order. Codex
+should read these files directly from the server over SSH. Ask the user for
+files only when SSH is unavailable and a fallback command was run outside
+Codex:
 
 1. `outputs/sync/<run_id>/result.json`
 2. `outputs/sync/<run_id>/manifest.json`
@@ -145,10 +145,10 @@ Do not request full terminal logs unless the sync bundle is missing or
 insufficient for triage.
 
 If the terminal JSON is inconclusive, do not infer the root cause from local
-code alone. With SSH access, inspect the named sync/result files directly or run
-a narrow read-only inspection command that reports only the missing fields
-needed to classify the failure. Without SSH access, ask for the named
-sync/result files or the compact inspection output.
+code alone. Inspect the named sync/result files directly over SSH or run a
+narrow read-only inspection command that reports only the missing fields needed
+to classify the failure. Without SSH access, ask for the named sync/result
+files or the compact inspection output.
 
 ## Acceptance Mapping
 

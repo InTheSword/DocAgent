@@ -241,6 +241,18 @@ Phase 5 Personal-use DocAgent MVP
    negative_reward_max 0.7, invalid_schema reward 0.0, and
    `reward_calibration_status=passed`; this prepares best-of-N/DPO/GRPO
    discussion only and does not approve GRPO
+-> AnswerPolicy v3 rejection-sampling artifact builder implemented locally:
+   `scripts/build_answer_policy_v3_rejection_sampling_artifacts.py` ranks
+   train-only v3 candidate generations with the calibrated v3 reward, writes
+   `ranked_candidates.jsonl`, `selected_candidates.jsonl`,
+   `preference_pairs.jsonl`, `rejection_sft_candidates.jsonl`, preview,
+   summary, and manifest artifacts, and blocks validation-like inputs by
+   default; local calibration-variant smoke
+   `answer_policy_v3_rejection_sampling_local_calibration_smoke_20260704`
+   validated artifact shape on 32 train-only records without candidate model
+   generations, with all selected/pair rows marked not training-ready because
+   calibration variants are synthetic; next real step is to collect model
+   candidate generations, not to start GRPO
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real

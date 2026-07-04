@@ -190,11 +190,12 @@ Fix only issues that block the active milestone.
 
 ## 8. Server boundary
 
-Codex may operate both the local workspace and the configured AutoDL server.
-When the server connection is available and direct server work is authorized,
-run the required server-side checks over SSH instead of asking the user to
-manually paste commands or shuttle result files. Direct SSH access does not
-remove the need for path, package, model, dataset, and GPU preflights.
+Codex operates both the local workspace and the configured AutoDL server.
+For server-required work, use direct SSH execution by default instead of asking
+the user to paste commands or shuttle result files. Manual command blocks are
+only a fallback when SSH is unavailable, explicitly requested, or a genuinely
+interactive user-side action is required. Direct SSH access does not remove the
+need for path, package, model, dataset, and GPU preflights.
 
 Before running or proposing server commands, read:
 
@@ -221,11 +222,10 @@ This is not, by itself, an environment error.
 
 ## 9. Server command and result protocol
 
-Use direct SSH as the default server execution path when available. Provide a
-user-pasted command group only when SSH is unavailable, the user explicitly
-requests a pasted command, or the task requires user-side interactive handling.
-In either mode, keep the server action focused and report compact structured
-results.
+Use direct SSH as the default server execution path. Provide a user-pasted
+command group only as an exception: SSH unavailable, explicit user request, or
+required user-side interactive handling. In either mode, keep the server action
+focused and report compact structured results.
 
 Commands must:
 
@@ -234,6 +234,8 @@ Commands must:
 - check required paths and packages first;
 - write long output to files;
 - request only the minimum result needed.
+- source `/etc/network_turbo` before server-side Git network operations when
+  available;
 - define a two-layer evidence contract when terminal JSON may be insufficient:
   compact terminal JSON for status routing, plus named result/sync files for
   optional follow-up triage.

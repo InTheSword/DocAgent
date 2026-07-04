@@ -10,18 +10,16 @@ local Windows workspace:
   Codex edits code, runs local tests, commits, and pushes
 
 AutoDL server:
-  Codex runs SSH commands directly when the configured server connection is
-  available and direct server work is authorized. User-pasted command groups are
-  a fallback only when SSH is unavailable, explicitly requested, or an
-  interactive user-side step is required.
+  Codex runs server work directly over SSH by default. User-pasted command
+  groups are a fallback only when SSH is unavailable, explicitly requested, or
+  an interactive user-side step is required.
 ```
 
 Direct server operation does not relax the environment-safety rules in this
 document. Server commands still need preflights, compact artifacts, no silent
 large downloads, no unapproved package installation, and no destructive Git or
-filesystem operations. When Codex runs the command directly, Codex should read
-the relevant sync/result artifacts over SSH and summarize them instead of
-asking the user to transfer files manually.
+filesystem operations. Codex should read relevant sync/result artifacts over SSH
+and summarize them instead of asking the user to transfer files manually.
 
 ## 2. Server paths
 
@@ -183,7 +181,8 @@ Every server action must:
 - contain no unresolved placeholders;
 - check required files/packages first;
 - write long output under `outputs/logs/`;
-- provide at most one command group per interaction;
+- when a fallback command is needed, provide at most one command group per
+  interaction;
 - define the expected evidence contract: compact terminal JSON for status
   routing, and only when useful, exact result files, sync-bundle files,
   previews, or log-tail files for optional follow-up triage;
@@ -191,11 +190,11 @@ Every server action must:
   fallback. A pasted command group must not deliberately close, replace, or
   terminate the user's shell or terminal session when any inner command fails.
 
-When direct SSH is available, Codex should execute the server action itself and
-then inspect the compact artifacts needed for the next decision. For user-pasted
-fallback commands, use short foreground Bash blocks. For Phase 4B Gate 3, split
-fallback commands into Git sync, environment/data/model preflight, and the
-actual evaluation. Do not use `nohup`, `setsid`, background `&`, `tmux`, `kill`,
+Codex should execute the server action itself over SSH and then inspect the
+compact artifacts needed for the next decision. For user-pasted fallback
+commands, use short foreground Bash blocks. For Phase 4B Gate 3, split fallback
+commands into Git sync, environment/data/model preflight, and the actual
+evaluation. Do not use `nohup`, `setsid`, background `&`, `tmux`, `kill`,
 `pkill`, or `exec` in commands the user directly pastes into the server
 terminal. The evaluation block should write full stdout/stderr to logs while
 printing stage messages and a compact final JSON in the foreground.
@@ -237,13 +236,13 @@ Failure:
 Do not request full logs, prompts, EvidenceBlocks, traces, or generations unless debugging a named field.
 
 Compact terminal JSON is a routing signal, not always a complete debugging
-record. Do not require extra files for every successful command. If the
-returned JSON does not contain enough evidence to classify a failure and direct
-SSH is available, inspect the named artifacts already produced by the run or run
-a small read-only follow-up inspection that prints only the missing summary
-fields. If SSH is unavailable, request only those named artifacts or the compact
-inspection output. Do not begin broad local code changes from under-specified
-server failures.
+record. Do not require extra files for every successful command. If the returned
+JSON or summary does not contain enough evidence to classify a failure, inspect
+the named artifacts already produced by the run over SSH or run a small
+read-only follow-up inspection that prints only the missing summary fields. If
+SSH is unavailable, request only those named artifacts or the compact inspection
+output. Do not begin broad local code changes from under-specified server
+failures.
 
 ## 10. Git synchronization
 

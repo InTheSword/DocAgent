@@ -471,6 +471,23 @@ train-only v3 records. Server run
 for later best-of-N, DPO, or gated GRPO decisions; it does not start GRPO or
 claim model-quality acceptance.
 
+AnswerPolicy v3 rejection-sampling artifacts are implemented locally in
+`scripts/build_answer_policy_v3_rejection_sampling_artifacts.py`. The builder
+reads train-only v3 SFT records plus optional candidate-generation JSONL,
+ranks candidates with the calibrated v3 reward, and writes
+`ranked_candidates.jsonl`, `selected_candidates.jsonl`,
+`preference_pairs.jsonl`, `rejection_sft_candidates.jsonl`, `preview.json`,
+`summary.json`, `summary.md`, and `manifest.json`. It blocks validation-like
+paths by default and marks synthetic calibration variants as not training-ready
+so artifact-shape smokes cannot be mistaken for real rejection-sampling data.
+Local smoke `answer_policy_v3_rejection_sampling_local_calibration_smoke_20260704`
+ran on 32 train-only records with synthetic calibration variants,
+`training_ready_selected_count=0`, `training_ready_preference_pair_count=0`,
+`used_training=false`, `used_qwen=false`, and
+`validation_subset_used_for_training=false`. The next required step is to
+collect real model candidate generations for train-only v3 records before any
+best-of-N distillation, DPO, or GRPO decision.
+
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in
 `tests/test_run_final_raw_pdf_smoke.py`. The runner executes
