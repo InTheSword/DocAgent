@@ -539,6 +539,19 @@ selected the best candidate for all 24 records but only 2 rows met the
 training-ready rejection-SFT threshold; 22 selected rows were below the chosen
 reward threshold and all 24 preference pairs stayed below the reward-margin
 threshold. No additional training was started from this run.
+To avoid repeatedly sampling the same prefix, `--offset` support was added to
+`scripts/generate_answer_policy_v3_candidates.py` and
+`scripts/build_answer_policy_v3_rejection_sampling_artifacts.py`, with local
+targeted tests covering offset slicing. Server run
+`answer_policy_v3_candidate_generation_expand20_adapter_offset24x3_20260704`
+at commit `e069da0` used offset 24 / limit 24 over the train-only expanded
+mixed pack, generated 72 adapter-backed candidates, and produced
+`raw_json_ok_rate=0.9028`, `schema_ok_rate=0.9028`, with 7 `no_json`
+candidates. Ranking run
+`answer_policy_v3_rejection_sampling_expand20_adapter_offset24x3_20260704`
+selected 11 training-ready rejection-SFT rows, with 13 selected rows below the
+chosen reward threshold, 2 chosen schema invalid rows, and zero training-ready
+preference pairs.
 
 AnswerPolicy v3 rejection-SFT distillation smoke is real-model verified at the
 execution-contract level. Server run
@@ -554,6 +567,19 @@ sampler. The run completed with `used_training=true`,
 `positive_ref_hit_rate=1.0`, and `answer_exact_rate=1.0`. This verifies the
 rejection-SFT distillation execution path only; it does not establish final
 answer-quality improvement.
+Follow-up server run
+`answer_policy_v3_rejection_sft_adapter_offset24x3_short_20260704` at commit
+`e069da0` trained Qwen3-1.7B for 2 ms-swift LoRA steps on 8 of the 11
+train-only offset-slice rejection-SFT rows selected above, with source counts
+`mp_docvqa=7` and `tatqa=4` in the input audit. Checkpoint diagnostic
+`answer_policy_v3_rejection_sft_adapter_offset24x3_checkpoint_eval_20260704`
+evaluated 8 rows with `json_valid_rate=1.0`, `schema_valid_rate=1.0`,
+`answer_exact_rate=1.0`, `support_status_match_rate=1.0`,
+`supporting_refs_subset_rate=1.0`, `positive_ref_hit_rate=1.0`, and
+`thinking_rate=0.0`, while keeping `used_training=false`,
+`formal_benchmark_acceptance=false`, and
+`validation_subset_used_for_training=false` for the evaluation. This remains a
+train-only execution-chain smoke, not a final answer-quality claim.
 
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in

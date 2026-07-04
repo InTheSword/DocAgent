@@ -293,7 +293,16 @@ Phase 5 Personal-use DocAgent MVP
    `answer_policy_v3_rejection_sampling_expand20_adapter24x3_20260704`
    again produced only 2 training-ready rejection-SFT rows, with 22 selected
    rows below the chosen-reward threshold and zero training-ready preference
-   pairs; no additional training was started, and DPO/GRPO remain unapproved
+   pairs; no additional training was started, and DPO/GRPO remain unapproved;
+   `--offset` support was then added to the candidate-generation and
+   rejection-ranking scripts so follow-up train-only slices do not repeatedly
+   sample the same prefix; server run
+   `answer_policy_v3_candidate_generation_expand20_adapter_offset24x3_20260704`
+   at commit `e069da0` generated 72 candidates from train records 24-47
+   with raw_json_ok_rate/schema_ok_rate 0.9028, and ranking
+   `answer_policy_v3_rejection_sampling_expand20_adapter_offset24x3_20260704`
+   selected 11 training-ready rejection-SFT rows and zero training-ready
+   preference pairs
 -> AnswerPolicy v3 rejection-SFT distillation smoke real-model verified:
    server run `answer_policy_v3_rejection_sft_msswift_execute_smoke_20260704`
    at commit `0ff5792` trained Qwen3-1.7B for 1 ms-swift LoRA step on the
@@ -306,7 +315,15 @@ Phase 5 Personal-use DocAgent MVP
    supporting_refs_subset_rate, support_status_match_rate,
    positive_ref_hit_rate, and answer_exact_rate all 1.0; this verifies the
    rejection-SFT distillation execution path only, not final answer-quality
-   improvement
+   improvement; follow-up server run
+   `answer_policy_v3_rejection_sft_adapter_offset24x3_short_20260704` at
+   commit `e069da0` trained for 2 ms-swift LoRA steps on 8 of the 11
+   train-only offset-slice rejection-SFT rows, and checkpoint diagnostic
+   `answer_policy_v3_rejection_sft_adapter_offset24x3_checkpoint_eval_20260704`
+   evaluated 8 rows with json/schema/support-status/supporting-ref/positive-ref
+   and answer-exact rates all 1.0, while keeping
+   `formal_benchmark_acceptance=false` and
+   `validation_subset_used_for_training=false`
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real
