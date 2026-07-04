@@ -12,6 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from docagent.parser.parse_tatqa import convert_tatqa_question
+from docagent.storage.db import connect
+from docagent.storage.repositories import DocumentRepository
 from docagent.utils.jsonl import write_jsonl
 from scripts.build_answer_policy_v3_training_data import (
     DEFAULT_OUTPUT_ROOT,
@@ -23,7 +25,9 @@ from scripts.build_answer_policy_v3_training_data import (
     build_insufficient_record,
     build_sft_record,
     candidate_from_block,
+    load_rows,
     load_json_list,
+    mpdocvqa_candidate_blocks,
     ref_map_entry,
     repo_path,
     safe_relpath,
@@ -65,6 +69,36 @@ def _candidate_board(
     }
 
 
+def _mpdocvqa_candidate_board(
+    row: dict[str, Any],
+    blocks: list[Any],
+    *,
+    max_candidates: int,
+    max_candidate_chars: int,
+) -> dict[str, Any] | None:
+    gold_pages: list[int] = []
+    for value in row.get("gold_pages") or []:
+        try:
+            gold_pages.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    candidates = [
+        candidate_from_block(f"E{index}", block, max_chars=max_candidate_chars)
+        for index, block in enumerate(mpdocvqa_candidate_blocks(blocks, gold_pages, max_candidates), start=1)
+    ]
+    if not candidates:
+        return None
+    return {
+        "sample_id": str(row.get("sample_id") or ""),
+        "doc_id": str(row.get("doc_id") or ""),
+        "ingested_doc_id": str(row.get("ingested_doc_id") or ""),
+        "source_document": str(row.get("source_document") or ""),
+        "gold_pages": gold_pages,
+        "candidates": candidates,
+        "evidence_ref_map": {item["ref"]: ref_map_entry(item) for item in candidates},
+    }
+
+
 def _board_lacks_answers(board: dict[str, Any], answers: list[str]) -> bool:
     text = "\n".join(str(item.get("display_text") or "") for item in board.get("candidates") or [])
     return not any(text_contains_answer(text, answer) for answer in answers)
@@ -88,12 +122,35 @@ def _find_decoy_board(
     return None
 
 
+def _find_mpdocvqa_decoy_board(
+    boards: list[dict[str, Any]],
+    *,
+    source_doc_id: str,
+    source_ingested_doc_id: str,
+    answers: list[str],
+    start_index: int,
+) -> dict[str, Any] | None:
+    if not boards:
+        return None
+    for offset in range(len(boards)):
+        board = boards[(start_index + offset) % len(boards)]
+        if str(board.get("doc_id") or "") == source_doc_id:
+            continue
+        if str(board.get("ingested_doc_id") or "") == source_ingested_doc_id:
+            continue
+        if _board_lacks_answers(board, answers):
+            return board
+    return None
+
+
 def _summary_markdown(summary: dict[str, Any]) -> str:
+    source_label = "TAT-QA" if summary.get("source") == "tatqa" else "MP-DocVQA"
     lines = [
         "# AnswerPolicy v3 Insufficient Evidence Data",
         "",
         f"- status: `{summary['status']}`",
         f"- run_id: `{summary['run_id']}`",
+        f"- source: `{summary.get('source', '')}`",
         f"- insufficient_record_count: `{summary['insufficient_record_count']}`",
         f"- sft_record_count: `{summary['sft_record_count']}`",
         f"- used_training: `{str(summary['used_training']).lower()}`",
@@ -108,7 +165,7 @@ def _summary_markdown(summary: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
-            "Records are generated only from train-split TAT-QA source questions and decoy evidence boards whose candidate text does not contain the gold answer string.",
+            f"Records are generated only from train-split {source_label} source questions and decoy evidence boards whose candidate text does not contain the gold answer string.",
             "This is data preparation only. It does not call Qwen, run SFT/GRPO, use VLM, or claim benchmark acceptance.",
         ]
     )
@@ -209,6 +266,7 @@ def build_tatqa_insufficient_data(
             records=[],
             scan_counts={},
             rejected_count=0,
+            source="tatqa",
         )
         return _write_artifacts(
             paths,
@@ -299,6 +357,211 @@ def build_tatqa_insufficient_data(
         records=records,
         scan_counts={**dict(sorted(counts.items())), "raw_question_count_scanned": raw_question_count, "candidate_board_count": len(boards)},
         rejected_count=len(alignment_failed) + len(unsupported),
+        source="tatqa",
+    )
+    return _write_artifacts(
+        paths,
+        records=records,
+        sft_records=sft_records,
+        alignment_failed=alignment_failed,
+        unsupported=unsupported,
+        summary=summary,
+        sync_output_dir=repo_path(sync_output_dir) if sync_output_dir else None,
+    )
+
+
+def build_mpdocvqa_insufficient_data(
+    *,
+    evidence_manifest: str | Path,
+    db_path: str | Path,
+    output_root: str | Path = DEFAULT_OUTPUT_ROOT,
+    run_id: str = "answer_policy_v3_mpdocvqa_insufficient",
+    split: str = "train",
+    limit: int = 100,
+    max_candidates: int = 8,
+    max_candidate_chars: int = 900,
+    allow_non_train_source: bool = False,
+    sync_output_dir: str | Path | None = None,
+) -> dict[str, Any]:
+    manifest_path = repo_path(evidence_manifest)
+    sqlite_path = repo_path(db_path)
+    artifact_dir = repo_path(output_root) / run_id
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    paths = artifact_paths(artifact_dir)
+
+    block_reasons: list[str] = []
+    if not allow_non_train_source:
+        if split.lower() not in TRAIN_SPLITS:
+            block_reasons.append(f"non_train_split:{split}")
+        markers = [*validation_path_markers(manifest_path), *validation_path_markers(sqlite_path)]
+        if markers:
+            block_reasons.append(f"validation_like_input_path:{','.join(dict.fromkeys(markers))}")
+    if not manifest_path.is_file():
+        block_reasons.append(f"missing_evidence_manifest:{safe_relpath(manifest_path)}")
+    if not sqlite_path.is_file():
+        block_reasons.append(f"missing_db_path:{safe_relpath(sqlite_path)}")
+    if block_reasons:
+        write_empty_artifacts(paths)
+        summary = _base_summary(
+            status="blocked",
+            run_id=run_id,
+            artifact_dir=artifact_dir,
+            raw_path=manifest_path,
+            split=split,
+            limit=limit,
+            block_reasons=block_reasons,
+            records=[],
+            scan_counts={},
+            rejected_count=0,
+            source="mp_docvqa",
+            db_path=sqlite_path,
+        )
+        return _write_artifacts(
+            paths,
+            records=[],
+            sft_records=[],
+            alignment_failed=[],
+            unsupported=[],
+            summary=summary,
+            sync_output_dir=repo_path(sync_output_dir) if sync_output_dir else None,
+        )
+
+    rows = load_rows(manifest_path)
+    row_splits = sorted({str(row.get("split") or "") for row in rows if row.get("split")})
+    if not allow_non_train_source and any(row_split.lower() not in TRAIN_SPLITS for row_split in row_splits):
+        block_reasons.append(f"non_train_manifest_splits:{','.join(row_splits)}")
+    if block_reasons:
+        write_empty_artifacts(paths)
+        summary = _base_summary(
+            status="blocked",
+            run_id=run_id,
+            artifact_dir=artifact_dir,
+            raw_path=manifest_path,
+            split=split,
+            limit=limit,
+            block_reasons=block_reasons,
+            records=[],
+            scan_counts={"manifest_row_count": len(rows)},
+            rejected_count=0,
+            source="mp_docvqa",
+            db_path=sqlite_path,
+        )
+        return _write_artifacts(
+            paths,
+            records=[],
+            sft_records=[],
+            alignment_failed=[],
+            unsupported=[],
+            summary=summary,
+            sync_output_dir=repo_path(sync_output_dir) if sync_output_dir else None,
+        )
+
+    records: list[dict[str, Any]] = []
+    alignment_failed: list[dict[str, Any]] = []
+    unsupported: list[dict[str, Any]] = []
+    counts = Counter()
+    blocks_by_doc: dict[str, list[Any]] = {}
+    boards: list[dict[str, Any]] = []
+
+    conn = connect(sqlite_path)
+    try:
+        repository = DocumentRepository(conn)
+        for row in rows:
+            if not row.get("evidence_ready"):
+                continue
+            doc_id = str(row.get("ingested_doc_id") or "")
+            if not doc_id:
+                continue
+            if doc_id not in blocks_by_doc:
+                blocks_by_doc[doc_id] = repository.load_evidence_blocks(doc_id, include_page_blocks=True)
+            board = _mpdocvqa_candidate_board(
+                row,
+                blocks_by_doc.get(doc_id, []),
+                max_candidates=max_candidates,
+                max_candidate_chars=max_candidate_chars,
+            )
+            if board is not None:
+                boards.append(board)
+
+        for row_index, row in enumerate(rows):
+            if len(records) >= limit:
+                break
+            sample_id = str(row.get("sample_id") or "")
+            answers = answer_values(row.get("answers"))
+            if not answers:
+                counts["unsupported_or_ambiguous"] += 1
+                unsupported.append({"reason": "missing_answer", "sample_id": sample_id})
+                continue
+            if not row.get("evidence_ready"):
+                counts["alignment_failed"] += 1
+                alignment_failed.append({"reason": "evidence_not_ready", "sample_id": sample_id})
+                continue
+            source_doc_id = str(row.get("doc_id") or "")
+            source_ingested_doc_id = str(row.get("ingested_doc_id") or "")
+            if not source_doc_id or not source_ingested_doc_id:
+                counts["alignment_failed"] += 1
+                alignment_failed.append({"reason": "missing_source_doc_id", "sample_id": sample_id})
+                continue
+            decoy = _find_mpdocvqa_decoy_board(
+                boards,
+                source_doc_id=source_doc_id,
+                source_ingested_doc_id=source_ingested_doc_id,
+                answers=answers,
+                start_index=row_index + 1,
+            )
+            if decoy is None:
+                counts["alignment_failed"] += 1
+                alignment_failed.append(
+                    {
+                        "sample_id": sample_id,
+                        "source": "mp_docvqa",
+                        "question": row.get("question"),
+                        "answers": answers,
+                        "reason": "no_decoy_board_without_gold_answer",
+                    }
+                )
+                continue
+            metadata = {
+                "source_sample_id": sample_id,
+                "source_doc_id": source_doc_id,
+                "source_ingested_doc_id": source_ingested_doc_id,
+                "source_document": str(row.get("source_document") or ""),
+                "decoy_sample_id": str(decoy.get("sample_id") or ""),
+                "decoy_doc_id": str(decoy.get("doc_id") or ""),
+                "decoy_ingested_doc_id": str(decoy.get("ingested_doc_id") or ""),
+                "decoy_source_document": str(decoy.get("source_document") or ""),
+                "decoy_gold_pages": decoy.get("gold_pages") or [],
+                "split": str(row.get("split") or split),
+                "gold_pages": row.get("gold_pages") or [],
+                "negative_sampling": "different_window_no_gold_answer_text_match",
+            }
+            record = build_insufficient_record(
+                sample_id=f"{sample_id}__insufficient",
+                source="mp_docvqa",
+                question=str(row.get("question") or ""),
+                candidates=list(decoy["candidates"]),
+                evidence_ref_map=dict(decoy["evidence_ref_map"]),
+                metadata=metadata,
+            )
+            records.append(record)
+            counts["insufficient_confirmed"] += 1
+    finally:
+        conn.close()
+
+    sft_records = [build_sft_record(record) for record in records]
+    summary = _base_summary(
+        status="success",
+        run_id=run_id,
+        artifact_dir=artifact_dir,
+        raw_path=manifest_path,
+        split=split,
+        limit=limit,
+        block_reasons=[],
+        records=records,
+        scan_counts={**dict(sorted(counts.items())), "manifest_row_count": len(rows), "candidate_board_count": len(boards)},
+        rejected_count=len(alignment_failed) + len(unsupported),
+        source="mp_docvqa",
+        db_path=sqlite_path,
     )
     return _write_artifacts(
         paths,
@@ -323,17 +586,18 @@ def _base_summary(
     records: list[dict[str, Any]],
     scan_counts: dict[str, int],
     rejected_count: int,
+    source: str,
+    db_path: Path | None = None,
 ) -> dict[str, Any]:
     bucket_counts = Counter(record["bucket"] for record in records)
-    return {
+    summary = {
         "command": "build_answer_policy_v3_insufficient_data",
         "status": status,
         "script_version": SCRIPT_VERSION,
         "run_id": run_id,
         "artifact_dir": safe_relpath(artifact_dir),
-        "source": "tatqa",
+        "source": source,
         "source_path": safe_relpath(raw_path),
-        "tatqa_raw": safe_relpath(raw_path),
         "split": split,
         "limit": limit,
         "insufficient_record_count": len(records),
@@ -350,12 +614,20 @@ def _base_summary(
         "formal_benchmark_acceptance": False,
         "validation_subset_used_for_training": False,
     }
+    if source == "tatqa":
+        summary["tatqa_raw"] = safe_relpath(raw_path)
+    if source == "mp_docvqa":
+        summary["mpdocvqa_evidence_manifest"] = safe_relpath(raw_path)
+        summary["mpdocvqa_db_path"] = safe_relpath(db_path) if db_path is not None else ""
+    return summary
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build high-confidence AnswerPolicy v3 insufficient-evidence SFT data.")
-    parser.add_argument("--source", choices=["tatqa"], default="tatqa")
+    parser.add_argument("--source", choices=["tatqa", "mpdocvqa"], default="tatqa")
     parser.add_argument("--tatqa-raw", default="data/benchmark/tatqa/tatqa_dataset_train.json")
+    parser.add_argument("--mpdocvqa-evidence-manifest")
+    parser.add_argument("--mpdocvqa-db-path")
     parser.add_argument("--output-root", default=str(DEFAULT_OUTPUT_ROOT))
     parser.add_argument("--run-id", default="answer_policy_v3_tatqa_insufficient")
     parser.add_argument("--split", default="train")
@@ -369,17 +641,42 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
-    result = build_tatqa_insufficient_data(
-        tatqa_raw=args.tatqa_raw,
-        output_root=args.output_root,
-        run_id=args.run_id,
-        split=args.split,
-        limit=args.limit,
-        max_candidates=args.max_candidates,
-        max_candidate_chars=args.max_candidate_chars,
-        allow_non_train_source=bool(args.allow_non_train_source),
-        sync_output_dir=args.sync_output_dir,
-    )
+    if args.source == "mpdocvqa":
+        if not args.mpdocvqa_evidence_manifest or not args.mpdocvqa_db_path:
+            result = {
+                "command": "build_answer_policy_v3_insufficient_data",
+                "status": "blocked",
+                "block_reasons": ["mpdocvqa_requires_evidence_manifest_and_db_path"],
+                "used_training": False,
+                "training_started": False,
+                "formal_benchmark_acceptance": False,
+                "validation_subset_used_for_training": False,
+            }
+        else:
+            result = build_mpdocvqa_insufficient_data(
+                evidence_manifest=args.mpdocvqa_evidence_manifest,
+                db_path=args.mpdocvqa_db_path,
+                output_root=args.output_root,
+                run_id=args.run_id,
+                split=args.split,
+                limit=args.limit,
+                max_candidates=args.max_candidates,
+                max_candidate_chars=args.max_candidate_chars,
+                allow_non_train_source=bool(args.allow_non_train_source),
+                sync_output_dir=args.sync_output_dir,
+            )
+    else:
+        result = build_tatqa_insufficient_data(
+            tatqa_raw=args.tatqa_raw,
+            output_root=args.output_root,
+            run_id=args.run_id,
+            split=args.split,
+            limit=args.limit,
+            max_candidates=args.max_candidates,
+            max_candidate_chars=args.max_candidate_chars,
+            allow_non_train_source=bool(args.allow_non_train_source),
+            sync_output_dir=args.sync_output_dir,
+        )
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
