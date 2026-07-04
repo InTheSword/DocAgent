@@ -386,6 +386,14 @@ Phase 5 Personal-use DocAgent MVP
    checks (`answer_keyword_missing`, one `citation_page_mismatch`), so this is
    execution-chain integration evidence only, not answer-quality benchmark
    acceptance
+-> AnswerPolicy v3 first training report implemented locally:
+   `docs/ANSWER_POLICY_V3_FIRST_TRAINING_REPORT.md` summarizes the first
+   expanded ms-swift SFT run, including MP-DocVQA 400-window materialization,
+   mixed-pack composition, train/heldout split, 480-step LoRA training
+   configuration, base-vs-adapter heldout deltas, and the v3_refs CLI smoke;
+   it records the run as train-only heldout diagnostic evidence, with
+   `formal_benchmark_acceptance=false`, `validation_subset_used_for_training=false`,
+   and GRPO still unapproved
 -> AnswerPolicy v3 refs CLI/Qwen integration real-model verified:
    `docagent_answer_v3_supporting_refs` is now an optional CLI/Qwen
    AnswerPolicy contract via `--answer-output-contract v3_refs`; the model

@@ -661,6 +661,15 @@ Both rows still failed diagnostic answer/citation checks
 system integration evidence for the trained v3 checkpoint, not final
 answer-quality benchmark acceptance.
 
+AnswerPolicy v3 first training report is implemented in
+`docs/ANSWER_POLICY_V3_FIRST_TRAINING_REPORT.md`. It summarizes MP-DocVQA
+400-window materialization, mixed-pack composition, 1920/128 train-heldout
+split, 480-step ms-swift LoRA training configuration, base-vs-adapter heldout
+deltas, CLI v3_refs smoke, limitations, and the next decision. It records
+train-only heldout improvement evidence while keeping
+`formal_benchmark_acceptance=false`, `validation_subset_used_for_training=false`,
+and GRPO unapproved.
+
 AnswerPolicy v3 refs CLI/Qwen integration is real-model verified at commit
 `56b7726`. `scripts/docagent_cli.py` now accepts
 `--answer-output-contract v3_refs`; Qwen AnswerPolicy can compile the
