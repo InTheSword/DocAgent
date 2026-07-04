@@ -72,6 +72,13 @@ final answer-quality benchmark.
 readiness only unless MinerU/OCR/retrieval artifacts are provided later. It
 does not evaluate MP-DocVQA answer quality by itself.
 
+AnswerPolicy v3 training-data trials may use MP-DocVQA train parquet shards
+from `/root/autodl-tmp/datasets/mp_docvqa/parquet_train`. These runs must
+write under `outputs/training_prep/`, pass `--mpdocvqa-split train` during
+page-window subset preparation, then materialize evidence with MinerU API
+before building v3 SFT records. Do not reuse `outputs/final_eval/` validation
+artifacts as training data.
+
 ## 3. Frozen Phase 1 artifacts
 
 Representative artifacts:

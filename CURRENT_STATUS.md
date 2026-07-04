@@ -325,6 +325,13 @@ records without making `block_id`, `doc_id`, or paths model-generation targets.
 The local TAT-QA train smoke `answer_policy_v3_tatqa_trial_20260704` produced
 200 high-confidence records and preserved `used_training=false`,
 `training_started=false`, and `validation_subset_used_for_training=false`.
+Server MP-DocVQA train smoke
+`mpdocvqa_train_v3_pipeline_splitfix2_20260704` at commit `9433315` used
+MinerU API on 5 train documents, materialized 10/10 evidence-ready samples
+with answer-text gold-page hit rate 0.8, and produced 7
+`evidence_extractive_supported` v3 SFT records while keeping
+`used_training=false`, `formal_benchmark_acceptance=false`, and
+`validation_subset_used_for_training=false`.
 
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in

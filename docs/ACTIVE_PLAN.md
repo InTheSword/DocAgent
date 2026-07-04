@@ -132,9 +132,14 @@ Phase 5 Personal-use DocAgent MVP
    `reasoning_summary`; `EvidenceRefMap` maps temporary `E#` refs to internal
    evidence/citation metadata without making block IDs a model target;
    `scripts/build_answer_policy_v3_training_data.py` builds high-confidence
-   TAT-QA train-only v3 SFT trial artifacts and blocks validation-like sources
-   by default; local smoke `answer_policy_v3_tatqa_trial_20260704` produced
-   200 records, `used_training=false`, and no SFT/GRPO execution
+   TAT-QA and MP-DocVQA train-only v3 SFT trial artifacts and blocks
+   validation-like sources by default; local TAT-QA smoke
+   `answer_policy_v3_tatqa_trial_20260704` produced 200 records; server
+   MP-DocVQA train smoke
+   `mpdocvqa_train_v3_pipeline_splitfix2_20260704` used MinerU API on 5 train
+   documents, materialized 10/10 evidence-ready samples, and produced 7
+   high-confidence v3 SFT records; both kept `used_training=false` and no
+   SFT/GRPO execution
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real

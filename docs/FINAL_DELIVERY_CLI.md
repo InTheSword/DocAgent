@@ -447,6 +447,37 @@ Temporary `E#` refs are mapped back to internal citation metadata through
 `EvidenceRefMap`; `block_id`, `doc_id`, and file paths are not model-generation
 targets. The command does not start SFT/GRPO or use validation/final-eval data.
 
+For MP-DocVQA train data, first prepare a train-labeled page-window subset,
+materialize evidence with MinerU API, then build v3 records from the evidence
+manifest and SQLite DB:
+
+```bash
+python scripts/prepare_final_eval_subset.py \
+  --dataset mpdocvqa \
+  --mpdocvqa-parquet-dir /root/autodl-tmp/datasets/mp_docvqa/parquet_train \
+  --mpdocvqa-parquet /root/autodl-tmp/datasets/mp_docvqa/parquet_train/train-00009-of-00029.parquet \
+  --mpdocvqa-output-root outputs/training_prep/mpdocvqa_train_subset_v3 \
+  --mpdocvqa-split train \
+  --overwrite
+
+python scripts/prepare_mpdocvqa_evidence.py \
+  --subset-root outputs/training_prep/mpdocvqa_train_subset_v3 \
+  --output-dir outputs/training_prep/mpdocvqa_train_evidence_v3 \
+  --run-id mpdocvqa_train_evidence_v3 \
+  --live-api \
+  --mineru-env-file .secrets/mineru.env \
+  --mineru-ocr \
+  --max-documents 5 \
+  --rebuild-evidence-blocks
+
+python scripts/build_answer_policy_v3_training_data.py \
+  --source mpdocvqa \
+  --mpdocvqa-evidence-manifest outputs/training_prep/mpdocvqa_train_evidence_v3/mpdocvqa_train_evidence_v3/sample_evidence_manifest.jsonl \
+  --mpdocvqa-db-path outputs/training_prep/mpdocvqa_train_evidence_v3/mpdocvqa_train_evidence_v3/docagent.db \
+  --run-id answer_policy_v3_mpdocvqa_train_trial \
+  --split train
+```
+
 Enable optional query planning:
 
 ```powershell
