@@ -426,6 +426,41 @@ Phase 5 Personal-use DocAgent MVP
    14 cases, but `accepted_answer_quality_case_count=0`, so the current
    default Phase 5I cases should not be used as the automatic system-level
    AnswerPolicy answer-quality target for more training decisions
+-> Phase 5I clean answer-quality case pack implemented locally:
+   `scripts/build_phase5i_clean_answer_quality_cases.py` validates curated
+   Phase 5I candidate cases against persisted EvidenceBlocks before they can be
+   used as a controlled AnswerPolicy contract probe; local targeted tests pass,
+   and server run `phase5i_clean_answer_quality_cases_selected_context_20260704`
+   at commit `0c61411` validated 6/6 curated cases against
+   `outputs/docagent.db` / `c1fc1c5e040ec894` with zero rejections. This pack
+   is a small clean evidence-board probe target only; it does not call Qwen,
+   create training data, or claim benchmark acceptance
+-> AnswerPolicy v3 clean case contract probe real-model verified:
+   server run `phase5ib_v3refs_clean6_adapter480_contract_probe_20260704`
+   used the 6-case clean pack with real LLM query rewriting, BGE-M3 retrieval,
+   cross-encoder reranking, Qwen3-1.7B plus the 480-step LoRA adapter, and
+   `answer_output_contract=v3_refs`; all 6 cases reached CLI success, used
+   Qwen/query rewriting, produced JSON-valid artifacts, and had citation page
+   hits. Artifact review
+   `phase5ib_v3refs_clean6_adapter480_contract_probe_review_20260704`
+   passed manifest and safety-flag checks with `used_training=false`,
+   `formal_benchmark_acceptance=false`, and
+   `validation_subset_used_for_training=false`. Passed count was 3/6 and is
+   retained only as small-scenario diagnostic signal; the run verifies
+   clean-pack system-flow and v3 citation contract behavior, not final
+   training-effect acceptance
+-> AnswerPolicy v3 training-effect boundary recorded:
+   SFT/rejection-SFT training is expected to improve the AnswerPolicy's use of
+   provided evidence candidates, `supporting_refs`, `support_status`, concise
+   reasoning, and insufficient-evidence behavior. It is not expected to improve
+   upstream retrieval recall or add missing model knowledge. Therefore
+   train-only heldout and clean fixed-evidence probes are the primary evidence
+   for whether the training objective improved, while real workflow diagnostic
+   samples mainly validate end-to-end routing/retrieval/citation continuity and
+   classify remaining failures as retrieval/context, citation packaging,
+   metric/gold issue, or AnswerPolicy generation with correct evidence present.
+   Do not judge adapter usefulness from uncontrolled real workflow answer-hit
+   rate alone
 -> AnswerPolicy v3 first training report implemented locally:
    `docs/ANSWER_POLICY_V3_FIRST_TRAINING_REPORT.md` summarizes the first
    expanded ms-swift SFT run, including MP-DocVQA 400-window materialization,
