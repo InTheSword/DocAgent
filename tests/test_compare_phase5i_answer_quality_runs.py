@@ -94,6 +94,9 @@ def test_compare_phase5i_answer_quality_runs_detects_candidate_regression(tmp_pa
     assert result["candidate"]["passed_count"] == 1
     assert result["case_change_counts"] == {"both_passed": 1, "candidate_regressed": 2}
     assert result["interpretation"]["contract_result"] == "candidate_underperformed_base_on_clean_contract"
+    assert result["promotion_gate"]["decision"] == "blocked"
+    assert result["promotion_gate"]["candidate_promotable_from_this_artifact"] is False
+    assert "candidate_regressed_cases_present" in result["promotion_gate"]["reasons"]
     assert result["used_training"] is False
     assert result["formal_benchmark_acceptance"] is False
     assert (tmp_path / "sync" / "compare" / "summary.json").is_file()
@@ -118,6 +121,9 @@ def test_compare_phase5i_answer_quality_runs_handles_candidate_improvement(tmp_p
 
     assert result["case_change_counts"] == {"candidate_improved": 1}
     assert result["interpretation"]["contract_result"] == "candidate_outperformed_base_on_clean_contract"
+    assert result["promotion_gate"]["decision"] == "requires_broader_eval"
+    assert result["promotion_gate"]["broader_eval_recommended"] is True
+    assert result["promotion_gate"]["candidate_promotable_from_this_artifact"] is False
 
 
 def test_compare_phase5i_answer_quality_runs_blocks_missing_artifacts(tmp_path: Path) -> None:

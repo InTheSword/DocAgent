@@ -215,6 +215,51 @@ def interpretation(base: dict[str, Any], candidate: dict[str, Any], changes: Cou
     }
 
 
+def promotion_gate(base: dict[str, Any], candidate: dict[str, Any], changes: Counter[str]) -> dict[str, Any]:
+    """Conservative checkpoint-promotion guard.
+
+    This comparison is intentionally not enough to promote a checkpoint by
+    itself. It can only block promotion or mark a candidate as worth broader
+    clean/heldout evaluation.
+    """
+    reasons: list[str] = []
+    base_passed = int(base.get("passed_count") or 0)
+    candidate_passed = int(candidate.get("passed_count") or 0)
+    if int(changes.get("candidate_regressed") or 0):
+        reasons.append("candidate_regressed_cases_present")
+    if candidate_passed < base_passed:
+        reasons.append("candidate_passed_count_below_base")
+
+    base_metrics = base.get("metrics") or {}
+    candidate_metrics = candidate.get("metrics") or {}
+    for key in ("format_valid_rate", "citation_valid_rate", "location_valid_rate"):
+        base_value = base_metrics.get(key)
+        candidate_value = candidate_metrics.get(key)
+        if isinstance(base_value, (int, float)) and isinstance(candidate_value, (int, float)) and candidate_value < base_value:
+            reasons.append(f"candidate_{key}_below_base")
+
+    if reasons:
+        decision = "blocked"
+        broader_eval_recommended = False
+        next_action = "keep_current_baseline_or_inspect_candidate_failures"
+    elif candidate_passed > base_passed:
+        decision = "requires_broader_eval"
+        broader_eval_recommended = True
+        next_action = "run_broader_clean_or_train_heldout_evaluation_before_default_promotion"
+    else:
+        decision = "hold"
+        broader_eval_recommended = False
+        next_action = "keep_current_baseline_until_candidate_shows_broader_benefit"
+
+    return {
+        "decision": decision,
+        "candidate_promotable_from_this_artifact": False,
+        "broader_eval_recommended": broader_eval_recommended,
+        "reasons": reasons,
+        "next_action": next_action,
+    }
+
+
 def write_outputs(
     *,
     artifact_dir: Path,
@@ -332,6 +377,7 @@ def compare_phase5i_answer_quality_runs(
         "case_count": len(rows),
         "case_change_counts": dict(sorted(changes.items())),
         "interpretation": interpretation(base, candidate, changes),
+        "promotion_gate": promotion_gate(base, candidate, changes),
         "used_qwen": True,
         "used_training": False,
         "used_vlm": False,
