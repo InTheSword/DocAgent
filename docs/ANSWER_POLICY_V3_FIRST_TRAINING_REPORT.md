@@ -586,6 +586,18 @@ evidence board. This should be addressed, if pursued, through broader
 fixed-evidence table/value-selection training or evaluation design, not through
 clean6-specific prompt rules.
 
+After this attribution, the v3 training-data prompt contract was repaired. The
+training converter now uses runtime-style v3 evidence headers such as
+`[E1] kind=table page=1`, includes the shared table/list/key-value extraction
+rules from the workflow prompt, emits the `ModelOutputV3` schema line, and
+preserves `calculation_result` observation labels. Server train-only smoke
+`answer_policy_v3_prompt_contract_tatqa_smoke_20260705` at commit `a4ef88c`
+rebuilt 32 TAT-QA records and verified the repaired prompt shape without
+training or using validation data. This means the full4096 and
+rejection-continuation checkpoints above remain valid historical diagnostics,
+but the next SFT experiment should rebuild the train-only data with the
+repaired prompt contract before further training.
+
 ## 9. Limitations
 
 1. This was a diagnostic SFT run, not a final production SFT acceptance run.

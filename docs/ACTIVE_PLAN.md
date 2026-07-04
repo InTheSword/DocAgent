@@ -432,6 +432,22 @@ Phase 5 Personal-use DocAgent MVP
    for row-specific prompt repairs. This blocks default adapter deployment and
    keeps DPO/GRPO unapproved, while leaving the train-only v3 objective gains
    valid as diagnostic evidence
+-> AnswerPolicy v3 training-prompt contract repair implemented locally:
+   `scripts/build_answer_policy_v3_training_data.py` now formats SFT user
+   prompts with the same v3-style evidence candidate headers used by the
+   runtime workflow (`[E#] kind=... page=...`), includes the shared table/list
+   extraction rules, emits the `ModelOutputV3` schema line, and preserves
+   `calculation_result` observation text without stripping its label. Local
+   targeted tests for v3 data construction, contract validation, mixed-pack
+   building, ms-swift command generation, checkpoint evaluation, and split
+   plumbing passed. Server train-only smoke
+   `answer_policy_v3_prompt_contract_tatqa_smoke_20260705` at commit
+   `a4ef88c` rebuilt 32 TAT-QA train records with the repaired prompt contract
+   and verified `used_training=false`, `validation_subset_used_for_training=false`,
+   `formal_benchmark_acceptance=false`, `has_kind_page_candidate=true`, and
+   `has_legacy_table_prefix=false`. Existing full4096/rejection checkpoints
+   remain valid historical diagnostics, but any next SFT experiment should
+   rebuild train-only data with this repaired prompt contract before training
 -> AnswerPolicy v3 train-only heldout diagnostic split implemented locally:
    `scripts/split_answer_policy_v3_sft_records.py` deterministically splits
    validated v3 SFT records into non-overlapping `train_sft.jsonl` and

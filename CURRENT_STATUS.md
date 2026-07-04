@@ -755,6 +755,23 @@ deployment and does not justify DPO/GRPO; it points to broader fixed-evidence
 AnswerPolicy table/value selection work rather than case-specific clean6
 repairs.
 
+AnswerPolicy v3 training-prompt contract repair is implemented locally and
+server-smoked on train-only data. `scripts/build_answer_policy_v3_training_data.py`
+now builds SFT prompts with runtime-style v3 evidence headers
+`[E#] kind=... page=...`, includes the shared table/list/key-value extraction
+rules used by the workflow prompt, emits the `ModelOutputV3` schema line, and
+keeps `calculation_result` observation text intact. Local targeted tests for
+v3 data construction, v3 contract validation, mixed-pack building, ms-swift
+command generation, checkpoint evaluation, and split plumbing passed. Server
+smoke `answer_policy_v3_prompt_contract_tatqa_smoke_20260705` at commit
+`a4ef88c` rebuilt 32 TAT-QA train records with
+`used_training=false`, `validation_subset_used_for_training=false`,
+`formal_benchmark_acceptance=false`, `has_kind_page_candidate=true`, and
+`has_legacy_table_prefix=false`. Existing full4096 and rejection-continuation
+checkpoints are retained as historical diagnostics; the next SFT experiment
+should rebuild train-only data with this repaired prompt contract before
+training.
+
 AnswerPolicy v3 train-only heldout diagnostic splitting is implemented locally
 in `scripts/split_answer_policy_v3_sft_records.py`. The splitter validates v3
 SFT records, blocks validation-like input paths by default, writes
