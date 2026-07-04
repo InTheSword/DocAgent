@@ -645,6 +645,22 @@ raising JSON/schema validity to 1.0/1.0. This is train-only heldout diagnostic
 evidence that the v3 SFT method can improve the intended contract; it is not
 formal benchmark acceptance, validation-subset training, or GRPO approval.
 
+AnswerPolicy v3 480-step checkpoint CLI integration smoke is real-model
+verified. `scripts/run_phase5i_answer_quality_benchmark.py` now accepts and
+passes `--answer-output-contract` through to `scripts/docagent_cli.py`; local
+targeted tests verified the generated CLI command carries `v3_refs`. Server
+smoke `phase5ib_v3refs_400doc_checkpoint_cli_smoke_20260704` at commit
+`1bc3b2e` ran 2 Phase 5I full-model cases with real LLM query rewriting,
+BGE-M3 retrieval, cross-encoder reranking, Qwen3-1.7B plus the 480-step
+ms-swift LoRA checkpoint, and `--answer-output-contract v3_refs`. Both cases
+used Qwen AnswerPolicy and the LLM query rewriter, retrieved 5 evidence items,
+and emitted citations; the recorded commands contain
+`--answer-output-contract v3_refs` and `--adapter-path .../checkpoint-480`.
+Both rows still failed diagnostic answer/citation checks
+(`answer_keyword_missing`, with one `citation_page_mismatch`), so this is
+system integration evidence for the trained v3 checkpoint, not final
+answer-quality benchmark acceptance.
+
 AnswerPolicy v3 refs CLI/Qwen integration is real-model verified at commit
 `56b7726`. `scripts/docagent_cli.py` now accepts
 `--answer-output-contract v3_refs`; Qwen AnswerPolicy can compile the

@@ -373,6 +373,19 @@ Phase 5 Personal-use DocAgent MVP
    insufficient empty-ref rate 0.0 -> 0.9167, and JSON/schema validity to
    1.0/1.0; this is train-only heldout diagnostic evidence, not formal
    benchmark acceptance or GRPO approval
+-> AnswerPolicy v3 480-step checkpoint CLI integration smoke real-model
+   verified: `scripts/run_phase5i_answer_quality_benchmark.py` now passes
+   `--answer-output-contract` through to `scripts/docagent_cli.py`; local
+   targeted tests verified the CLI command contains `v3_refs`; server smoke
+   `phase5ib_v3refs_400doc_checkpoint_cli_smoke_20260704` at commit
+   `1bc3b2e` ran 2 Phase 5I full-model cases with real LLM query rewriting,
+   BGE-M3 retrieval, cross-encoder reranking, Qwen3-1.7B plus
+   `checkpoint-480`, and `--answer-output-contract v3_refs`; both cases used
+   Qwen AnswerPolicy and query rewriter, retrieved 5 evidence items, and
+   emitted citations. The two cases still failed diagnostic answer/citation
+   checks (`answer_keyword_missing`, one `citation_page_mismatch`), so this is
+   execution-chain integration evidence only, not answer-quality benchmark
+   acceptance
 -> AnswerPolicy v3 refs CLI/Qwen integration real-model verified:
    `docagent_answer_v3_supporting_refs` is now an optional CLI/Qwen
    AnswerPolicy contract via `--answer-output-contract v3_refs`; the model
