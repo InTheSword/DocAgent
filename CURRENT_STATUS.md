@@ -678,6 +678,14 @@ confirms real workflow integration but not system-level answer-quality
 improvement, so the next step is failure attribution before more training or
 post-training.
 
+Read-only failure inspection
+`answer_policy_v3_system_failure_inspect_base_vs_adapter480_8cases_20260704`
+then bucketed the 8 rows into 2 already-passed rows, 4
+answer-generation-or-keyword-metric rows, and 2
+citation-or-expected-page-alignment rows. This reinforces that the next lever
+is cleaner system-level evaluation and targeted reusable failure attribution,
+not blindly increasing SFT steps or starting GRPO from the current checkpoint.
+
 AnswerPolicy v3 first training report is implemented in
 `docs/ANSWER_POLICY_V3_FIRST_TRAINING_REPORT.md`. It summarizes MP-DocVQA
 400-window materialization, mixed-pack composition, 1920/128 train-heldout

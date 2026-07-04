@@ -365,6 +365,35 @@ Interpretation:
   retrieval/context selection, benchmark keyword expectations, citation
   packaging, or AnswerPolicy generation.
 
+Follow-up read-only failure inspection:
+
+```text
+answer_policy_v3_system_failure_inspect_base_vs_adapter480_8cases_20260704
+```
+
+Bucket counts:
+
+| Bucket | Count |
+|---|---:|
+| already_passed | 2 |
+| answer_generation_or_keyword_metric | 4 |
+| citation_or_expected_page_alignment | 2 |
+
+The inspection did not call Qwen or start training. It showed that the remaining
+failures are mixed:
+
+- Some rows have correct-page citations but fail keyword checks where expected
+  keywords are coarse labels such as `date` or `%`, so the current diagnostic
+  metric is not always a precise measure of answer usefulness.
+- Two rows cite page 1 while the scenario expects page 24, indicating an
+  evidence/page-alignment or scenario-definition issue rather than a pure SFT
+  optimization target.
+
+This reinforces the stop condition: do not increase SFT steps or start GRPO
+based on these 8 workflow rows. First build or select a cleaner system-level
+answer-quality evaluation target, or fix generic evidence/citation packaging if
+the failure is confirmed to be a reusable system defect.
+
 ## 7. Limitations
 
 1. This was a diagnostic SFT run, not a final production SFT acceptance run.

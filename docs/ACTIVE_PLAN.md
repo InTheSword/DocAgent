@@ -404,6 +404,13 @@ Phase 5 Personal-use DocAgent MVP
    steps or start GRPO before inspecting whether unchanged failures are caused
    by retrieval/context, citation packaging, benchmark keyword expectations,
    or AnswerPolicy generation with correct evidence available
+-> AnswerPolicy v3 system comparison failure inspection completed:
+   read-only artifact inspection
+   `answer_policy_v3_system_failure_inspect_base_vs_adapter480_8cases_20260704`
+   found 2 already-passed rows, 4 answer-generation-or-keyword-metric rows,
+   and 2 citation-or-expected-page-alignment rows; this reinforces that the
+   next step is cleaner system-level evaluation/failure attribution, not
+   blindly increasing SFT steps or starting GRPO
 -> AnswerPolicy v3 first training report implemented locally:
    `docs/ANSWER_POLICY_V3_FIRST_TRAINING_REPORT.md` summarizes the first
    expanded ms-swift SFT run, including MP-DocVQA 400-window materialization,
