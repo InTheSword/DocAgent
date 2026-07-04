@@ -1,4 +1,4 @@
-# Current Status
+﻿# Current Status
 
 Updated: 2026-07-04
 
@@ -32,7 +32,7 @@ writes case-level movement rows, and keeps training/benchmark safety flags
 false. Local targeted tests passed, and server run
 `phase5ib_v3refs_clean6_base_vs_adapter480_compare_script_20260704` reproduced
 the clean6 base-vs-adapter result without calling Qwen or training. Follow-up
-server run `phase5ib_v3refs_clean6_base_vs_adapter480_promotion_gate_20260704`
+server run `phase5ib_v3refs_clean6_base_vs_adapter480_boundaryfix_20260704`
 adds `promotion_gate.gate_scope=default_checkpoint_deployment_guard`,
 `promotion_gate.training_effectiveness_judged=false`, and
 `promotion_gate.decision=blocked` for default adapter deployment from this

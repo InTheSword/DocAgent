@@ -1,4 +1,4 @@
-# Active Plan
+﻿# Active Plan
 
 > Stable entry point for the current Codex task. Detailed phase history stays in
 > the phase-specific plan files linked below.
@@ -130,7 +130,7 @@ Phase 5 Personal-use DocAgent MVP
    server run `phase5ib_v3refs_clean6_base_vs_adapter480_compare_script_20260704`
    reproduced the clean6 base-vs-adapter comparison with base 6/6 versus
    adapter480 3/6; follow-up server run
-   `phase5ib_v3refs_clean6_base_vs_adapter480_promotion_gate_20260704`
+   `phase5ib_v3refs_clean6_base_vs_adapter480_boundaryfix_20260704`
    recorded `promotion_gate.decision=blocked` for default deployment. This is
    an artifact-only deployment/regression guard; it does not call Qwen or
    training and must not be read as a standalone judgement of whether the
@@ -473,7 +473,7 @@ Phase 5 Personal-use DocAgent MVP
    `phase5ib_v3refs_clean6_base_vs_adapter480_contract_compare_20260704`
    found base 6/6 versus adapter480 3/6, with `adapter_regressed=3` and
    `both_passed=3`; artifact-only comparison
-   `phase5ib_v3refs_clean6_base_vs_adapter480_promotion_gate_20260704`
+   `phase5ib_v3refs_clean6_base_vs_adapter480_boundaryfix_20260704`
    confirmed the candidate is blocked for default deployment from this signal.
    This confirms the v3 system path is usable, but it does not measure retrieval
    improvement, model knowledge gain, or training-target effectiveness; more

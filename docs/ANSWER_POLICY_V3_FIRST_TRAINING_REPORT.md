@@ -1,4 +1,4 @@
-# AnswerPolicy v3 First Training Report
+﻿# AnswerPolicy v3 First Training Report
 
 > Scope: first expanded AnswerPolicy v3 SFT diagnostic with ms-swift.
 > This report summarizes train-only data construction, training execution,
@@ -409,7 +409,7 @@ Runs:
 phase5ib_v3refs_clean6_base_contract_probe_20260704
 phase5ib_v3refs_clean6_adapter480_contract_probe_20260704
 phase5ib_v3refs_clean6_base_vs_adapter480_contract_compare_20260704
-phase5ib_v3refs_clean6_base_vs_adapter480_promotion_gate_20260704
+phase5ib_v3refs_clean6_base_vs_adapter480_boundaryfix_20260704
 ```
 
 Artifacts:
@@ -417,8 +417,8 @@ Artifacts:
 ```text
 outputs/final_eval/phase5i_answer_quality_compare/phase5ib_v3refs_clean6_base_vs_adapter480_contract_compare_20260704/result.json
 outputs/sync/phase5ib_v3refs_clean6_base_vs_adapter480_contract_compare_20260704/
-outputs/final_eval/phase5i_answer_quality_compare/phase5ib_v3refs_clean6_base_vs_adapter480_promotion_gate_20260704/summary.json
-outputs/sync/phase5ib_v3refs_clean6_base_vs_adapter480_promotion_gate_20260704/
+outputs/final_eval/phase5i_answer_quality_compare/phase5ib_v3refs_clean6_base_vs_adapter480_boundaryfix_20260704/summary.json
+outputs/sync/phase5ib_v3refs_clean6_base_vs_adapter480_boundaryfix_20260704/
 ```
 
 The clean pack was built from curated cases validated against persisted
