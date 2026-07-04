@@ -216,6 +216,18 @@ Phase 5 Personal-use DocAgent MVP
    `supporting_refs_subset_rate=1.0`, with `formal_benchmark_acceptance=false`
    and `validation_subset_used_for_training=false`; answer/status metrics
    remain small-smoke diagnostics only
+-> AnswerPolicy v3 MP-DocVQA train expansion real-model verified:
+   server run `mpdocvqa_train_v3_expand20_20260704_verify` used MinerU API/OCR
+   on 20 MP-DocVQA train documents from `parquet_train`, materialized 65/65
+   evidence-ready QA samples, produced 52 high-confidence MP-DocVQA v3 SFT
+   records, and built a 96-record mixed pack with selected counts
+   MP-DocVQA 48, TAT-QA 38, insufficient 10 and no shortage/backfill; follow-up
+   server run `answer_policy_v3_msswift_stage2_expand20_short_20260704`
+   trained Qwen3-1.7B for 3 ms-swift LoRA steps on that pack and checkpoint
+   diagnostic over 12 records kept `json_valid_rate=1.0`,
+   `schema_valid_rate=1.0`, and `supporting_refs_subset_rate=1.0`; this
+   verifies expanded train-data and short training-chain stability only, not
+   final model quality or benchmark acceptance
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real

@@ -435,6 +435,24 @@ Checkpoint diagnostic evaluated 8 records with `json_valid_rate=1.0`,
 contract after adding insufficient records; answer/status rates remain
 small-smoke diagnostics only.
 
+AnswerPolicy v3 MP-DocVQA train expansion is real-model verified through
+server run `mpdocvqa_train_v3_expand20_20260704_verify` at commit `cd31d12`.
+The run used MinerU API/OCR on 20 MP-DocVQA train documents, materialized
+65/65 evidence-ready QA samples with `answer_text_gold_page_hit_rate=0.8615`,
+and built 52 high-confidence MP-DocVQA v3 SFT records. The mixed pack
+`answer_policy_v3_mixed_expand20_20260704` selected 96 records with category
+counts MP-DocVQA 48, TAT-QA 38, and insufficient 10, with no MP-DocVQA
+shortage/backfill. Follow-up server run
+`answer_policy_v3_msswift_stage2_expand20_short_20260704` trained Qwen3-1.7B
+for 3 ms-swift LoRA steps on the expanded pack, and checkpoint diagnostic
+`answer_policy_v3_msswift_stage2_expand20_checkpoint_eval_20260704` evaluated
+12 records with `json_valid_rate=1.0`, `schema_valid_rate=1.0`,
+`supporting_refs_subset_rate=1.0`, `positive_ref_hit_rate=0.5`, and
+`answer_exact_rate=0.25`, while preserving `formal_benchmark_acceptance=false`
+and `validation_subset_used_for_training=false`. This verifies the expanded
+train-data and short training-chain stability only; it does not claim final
+model quality or benchmark acceptance.
+
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in
 `tests/test_run_final_raw_pdf_smoke.py`. The runner executes
