@@ -771,7 +771,45 @@ Interpretation:
   It should be used as training-objective evidence, while full workflow probes
   remain deployment/regression checks.
 
-## 11. Limitations
+## 11. Final-Delivery Gate Adapter/V3 Workflow Probe
+
+After the final-delivery gate gained explicit candidate-checkpoint
+passthrough, a small server diagnostic verified that the promptfix adapter can
+enter the same MP-DocVQA workflow path used by the final delivery gate:
+
+```text
+final_delivery_gate_promptfix_adapter_v3_limit8_20260705
+final_delivery_gate_promptfix_adapter_v3_limit8_20260705_review
+```
+
+Configuration:
+
+```text
+answer_policy = sft
+answer_output_contract = v3_refs
+adapter_path = outputs/training/answer_policy_v3_msswift_sft/answer_policy_v3_msswift_stage2_promptfix3840_1024steps_20260705/swift_output/v0-20260705-060610/checkpoint-1024
+```
+
+Result:
+
+| Metric | Value |
+|---|---:|
+| Evaluated MP-DocVQA workflow rows | 8 |
+| CLI success rate | 1.0000 |
+| Qwen AnswerPolicy use count | 8 |
+| Dense retrieval use count | 8 |
+| Reranker use count | 8 |
+| LLM query rewriter use count | 8 |
+| Retrieved gold-page hit rate | 0.8750 |
+| Citation page hit rate | 0.8750 |
+| Answer hit rate | 0.3750 |
+
+The review verified local/sync manifests, safety flags, and complete
+component-use metrics. This is execution-chain evidence for the candidate
+checkpoint and v3 contract; it is not default deployment approval and not
+formal benchmark acceptance.
+
+## 12. Limitations
 
 1. This was a diagnostic SFT run, not a final production SFT acceptance run.
 2. The heldout set came from the generated train-source pack, not validation or
@@ -789,7 +827,7 @@ Interpretation:
 7. No GRPO, DPO, or best-of-N distillation was approved by this run.
 8. Pixel-level VLM image reasoning remains out of scope for this training run.
 
-## 12. Decision
+## 13. Decision
 
 This first training run should be treated as a successful AnswerPolicy v3 SFT
 method validation:

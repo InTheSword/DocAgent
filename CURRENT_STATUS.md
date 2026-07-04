@@ -24,6 +24,17 @@ Defaults remain unchanged. This fixes execution-chain plumbing for future
 candidate adapter probes; it is not itself a model-quality or deployment
 acceptance.
 
+Server diagnostic `final_delivery_gate_promptfix_adapter_v3_limit8_20260705`
+verified that plumbing with the promptfix 1024-step adapter on 8 MP-DocVQA
+workflow rows. The run completed readiness and MP-DocVQA workflow steps
+successfully, used Qwen/BGE/reranker/LLM query rewriting on all 8 evaluated
+rows, kept `used_training=false`, `formal_benchmark_acceptance=false`, and
+`validation_subset_used_for_training=false`, and artifact review
+`final_delivery_gate_promptfix_adapter_v3_limit8_20260705_review` passed
+manifest and component-metric checks. Diagnostic answer-hit was 0.375 and
+retrieved/citation page-hit rates were 0.875; this is execution-chain evidence,
+not default checkpoint promotion.
+
 AnswerPolicy v3 clean fixed-evidence comparison is real-model verified as a
 diagnostic contract probe, not as formal benchmark acceptance. Server run
 `phase5ib_v3refs_clean6_base_vs_adapter480_contract_compare_20260704` compared

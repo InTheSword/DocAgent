@@ -512,7 +512,19 @@ Phase 5 Personal-use DocAgent MVP
    MP-DocVQA full-workflow diagnostic step. Defaults remain unchanged
    (`candidate_citations` and no adapter), so this enables explicit candidate
    checkpoint workflow probes without promoting any adapter as the default
-   AnswerPolicy
+   AnswerPolicy. Server diagnostic
+   `final_delivery_gate_promptfix_adapter_v3_limit8_20260705` at commit
+   `d97ff4d` ran readiness plus 8 MP-DocVQA workflow rows with
+   `answer_policy=sft`, the promptfix 1024-step adapter, and
+   `answer_output_contract=v3_refs`; it completed successfully with
+   `cli_success_rate=1.0`, `used_qwen_answer_policy_count=8`,
+   `used_dense_retrieval_count=8`, `used_reranker_count=8`,
+   `used_llm_query_rewriter_count=8`, retrieved/citation page hit rates 0.875,
+   and answer-hit rate 0.375. Review
+   `final_delivery_gate_promptfix_adapter_v3_limit8_20260705_review`
+   verified local/sync manifests, safety flags, and complete component metrics.
+   This is candidate-checkpoint execution-chain evidence, not default
+   deployment approval or formal benchmark acceptance
 -> AnswerPolicy v3 train-only heldout diagnostic split implemented locally:
    `scripts/split_answer_policy_v3_sft_records.py` deterministically splits
    validated v3 SFT records into non-overlapping `train_sft.jsonl` and
