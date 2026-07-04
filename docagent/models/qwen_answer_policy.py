@@ -8,7 +8,7 @@ from typing import Any
 from docagent.models.base import GenerationError, GenerationResult, ModelLoadError
 from docagent.models.output_parser import parse_generation_output
 from docagent.schemas import EvidenceBlock
-from docagent.workflow.prompts import compile_answer_prompt, fallback_chat_prompt
+from docagent.workflow.prompts import compile_answer_prompt, compile_answer_prompt_v3, fallback_chat_prompt
 
 
 @dataclass
@@ -31,6 +31,7 @@ class QwenAnswerPolicyConfig:
     max_total_chars: int | None = None
     max_reason_chars: int | None = 300
     rank_aware_context: bool = False
+    answer_output_contract: str = "candidate_citations"
 
 
 class QwenAnswerPolicy:
@@ -43,6 +44,8 @@ class QwenAnswerPolicy:
     ) -> None:
         if config.mode not in {"base", "sft", "grpo"}:
             raise ValueError(f"unsupported Qwen policy mode: {config.mode}")
+        if config.answer_output_contract not in {"candidate_citations", "v3_refs"}:
+            raise ValueError(f"unsupported answer output contract: {config.answer_output_contract}")
         self.config = config
         self.mode = config.mode
         self._tokenizer = tokenizer
@@ -60,7 +63,8 @@ class QwenAnswerPolicy:
     ) -> GenerationResult:
         start = time.perf_counter()
         tokenizer, model = self._load()
-        bundle = compile_answer_prompt(
+        prompt_compiler = compile_answer_prompt_v3 if self.config.answer_output_contract == "v3_refs" else compile_answer_prompt
+        bundle = prompt_compiler(
             question=question,
             evidence_blocks=evidence_blocks,
             tool_results=tool_results,
@@ -109,6 +113,7 @@ class QwenAnswerPolicy:
             latency_ms=(time.perf_counter() - start) * 1000,
             metadata={
                 "policy_mode": self.mode,
+                "answer_output_contract": self.config.answer_output_contract,
                 "qid": qid,
                 "parse_result": parse_result.to_dict(),
                 "max_new_tokens": self.config.max_new_tokens,

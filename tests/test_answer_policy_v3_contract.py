@@ -4,6 +4,7 @@ from docagent.rewards.combined import docqa_v3_reward
 from docagent.schemas import EvidenceBlock, EvidenceLocation
 from docagent.workflow.answer_contract import validate_model_output_v3
 from docagent.workflow.output_adapter import canonicalize_output, render_user_answer_text
+from docagent.workflow.prompts import PROMPT_VERSION_V3, compile_answer_prompt_v3
 
 
 def _block(block_id: str = "b1") -> EvidenceBlock:
@@ -97,6 +98,39 @@ def test_canonicalize_v3_maps_supporting_refs_to_internal_citations() -> None:
     assert output["evidence_location"]["block_id"] == "b1"
     assert output["citations"][0]["doc_id"] == "doc1"
     assert output["citation_validation"]["valid_supporting_refs"] == ["E1"]
+
+
+def test_compile_answer_prompt_v3_uses_numbered_refs_and_internal_ref_map() -> None:
+    block = _block("table1")
+    tool_result = {
+        "status": "success",
+        "answer": "The average is -1161.33.",
+        "reasoning_summary": "The table values were averaged.",
+        "citations": [{"block_id": "table1", "text_preview": "Operating income values."}],
+        "structured_result": {
+            "operation": "simple_calculation",
+            "calculation": {"expression": "(-2235 + -6986 + 5737) / 3", "result_text": "-1161.33"},
+        },
+    }
+
+    bundle = compile_answer_prompt_v3(
+        question="What is the average operating income?",
+        evidence_blocks=[block],
+        tool_results=[tool_result],
+        answer_type="numeric",
+    )
+
+    content = bundle.messages[1]["content"]
+    ref_map = bundle.metadata["evidence_ref_map"]
+    assert bundle.prompt_version == PROMPT_VERSION_V3
+    assert "[E1]" in content
+    assert "[E2]" in content
+    assert "supporting_refs" in content
+    assert "citation_block_ids" in content
+    assert "table1" not in content
+    assert ref_map["E1"]["block_id"] == "table1"
+    assert ref_map["E2"]["block_id"] == "table1"
+    assert ref_map["E2"]["kind"] == "calculation_result"
 
 
 def test_canonicalize_v3_uses_derived_refs_for_calculation_observation() -> None:

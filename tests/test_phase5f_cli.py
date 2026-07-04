@@ -20,6 +20,24 @@ from scripts import docagent_cli
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_answer_output_contract_argument_builds_qwen_policy() -> None:
+    args = docagent_cli.build_parser().parse_args(["--answer-policy", "base", "--answer-output-contract", "v3_refs"])
+
+    policy = docagent_cli._build_answer_policy(
+        answer_policy=args.answer_policy,
+        base_model_path=args.base_model_path,
+        adapter_path=args.adapter_path,
+        device="cpu",
+        torch_dtype=args.torch_dtype,
+        max_prompt_tokens=args.max_prompt_tokens,
+        max_new_tokens=args.max_new_tokens,
+        answer_output_contract=args.answer_output_contract,
+    )
+
+    assert policy.config.answer_output_contract == "v3_refs"
+    assert docagent_cli._answer_policy_metadata(policy)["answer_output_contract"] == "v3_refs"
+
+
 def _repository_with_document(tmp_path: Path) -> Path:
     db_path = tmp_path / "docagent.sqlite"
     conn = connect(db_path)

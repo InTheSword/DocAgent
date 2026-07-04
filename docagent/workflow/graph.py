@@ -219,11 +219,14 @@ def run_qa_workflow(
         )
         raw_draft = generation.parsed or {}
         state.parse_result = dict(generation.metadata.get("parse_result") or {})
+        raw_evidence_ref_map = generation.metadata.get("evidence_ref_map")
+        evidence_ref_map = raw_evidence_ref_map if isinstance(raw_evidence_ref_map, dict) else None
         canonical_draft = (
             canonicalize_output(
                 raw_draft,
                 citation_allowlist_blocks,
                 preferred_citation_block_ids=preferred_citation_block_ids,
+                evidence_ref_map=evidence_ref_map,
             )
             if raw_draft
             else {}
@@ -319,6 +322,7 @@ def run_qa_workflow(
             state.final_answer,
             citation_allowlist_blocks,
             preferred_citation_block_ids=preferred_citation_block_ids,
+            evidence_ref_map=evidence_ref_map,
         )
         state.repair_result.update(
             {

@@ -8,10 +8,11 @@ from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any
 
 from docagent.schemas import EvidenceBlock
-from docagent.workflow.answer_contract import ANSWER_CANDIDATE_SCHEMA
+from docagent.workflow.answer_contract import ANSWER_CANDIDATE_SCHEMA, MODEL_OUTPUT_V3_SCHEMA, citation_from_block
 
 
 PROMPT_VERSION = "docagent_answer_v2_candidate_citations"
+PROMPT_VERSION_V3 = "docagent_answer_v3_supporting_refs"
 DEFAULT_TASK_TYPE = "local_fact_qa"
 
 SYSTEM_PROMPT = (
@@ -33,6 +34,12 @@ RANK_AWARE_EXTRACTION_RULES_TEXT = (
     "- citation_block_ids must point to the block where the final answer actually comes from."
 )
 
+RANK_AWARE_EXTRACTION_RULES_V3_TEXT = (
+    "- Prefer evidence from pages with higher retrieval rank; use lower-ranked pages only when the question intent fits them better.\n"
+    "- If multiple pages contain similar fields, choose the field type requested by the question, such as index, percentage, source, date, or heading.\n"
+    "- supporting_refs must point to the numbered evidence candidate where the final answer actually comes from."
+)
+
 OUTPUT_SCHEMA = ANSWER_CANDIDATE_SCHEMA
 
 
@@ -45,7 +52,7 @@ class PromptBundle:
 
     @property
     def metadata(self) -> dict[str, Any]:
-        return {
+        payload = {
             "prompt_version": self.prompt_version,
             "task_type": self.task_type,
             "selected_block_ids": self.evidence_context["selected_block_ids"],
@@ -55,6 +62,11 @@ class PromptBundle:
             "evidence_count": len(self.evidence_context["evidence"]),
             "rank_aware_context": bool(self.evidence_context.get("rank_aware_context")),
         }
+        evidence_ref_map = self.evidence_context.get("evidence_ref_map")
+        if isinstance(evidence_ref_map, dict):
+            payload["evidence_ref_map"] = evidence_ref_map
+            payload["evidence_ref_count"] = len(evidence_ref_map)
+        return payload
 
 
 def sha256_json(value: Any) -> str:
@@ -328,6 +340,136 @@ def format_evidence_blocks(
     return "\n\n".join(parts)
 
 
+def _v3_candidate_kind(block: EvidenceBlock) -> str:
+    block_type = _context_block_type(block)
+    if block_type == "table":
+        return "table"
+    if block_type in {"image", "figure", "visual_summary", "chart"}:
+        return "image"
+    if block.metadata.get("raw_mineru_type"):
+        return "ocr"
+    return "text"
+
+
+def _v3_ref_entry_from_block(ref: str, block: EvidenceBlock) -> dict[str, Any]:
+    citation = citation_from_block(block)
+    return {
+        key: value
+        for key, value in {
+            "ref": ref,
+            "source_kind": "evidence_block",
+            "kind": _v3_candidate_kind(block),
+            "doc_id": citation.get("doc_id"),
+            "page": citation.get("page"),
+            "block_id": citation.get("block_id"),
+            "block_type": citation.get("block_type"),
+            "preview": citation.get("text_preview"),
+            "table_caption": citation.get("table_caption"),
+            "image_caption": citation.get("image_caption"),
+            "nearby_text": citation.get("nearby_text"),
+        }.items()
+        if value not in {None, ""}
+    }
+
+
+def _v3_media_text(media: dict[str, Any]) -> str:
+    payload = {key: media.get(key) for key in ("table_caption", "image_caption", "nearby_text") if media.get(key)}
+    return json.dumps(payload, ensure_ascii=False) if payload else ""
+
+
+def _format_v3_evidence_candidates(
+    context: dict[str, Any],
+    blocks: list[EvidenceBlock],
+    *,
+    tool_results: list[dict[str, Any]] | None = None,
+    max_chars_per_tool_result: int = 1200,
+) -> tuple[str, dict[str, dict[str, Any]]]:
+    by_id = {block.block_id: block for block in blocks}
+    parts: list[str] = []
+    ref_map: dict[str, dict[str, Any]] = {}
+    block_ref_by_id: dict[str, str] = {}
+    next_ref = 1
+    for item in context["evidence"]:
+        block = by_id.get(str(item.get("block_id") or ""))
+        if block is None:
+            continue
+        ref = f"E{next_ref}"
+        next_ref += 1
+        block_ref_by_id[block.block_id] = ref
+        ref_map[ref] = _v3_ref_entry_from_block(ref, block)
+        page = item.get("location", {}).get("page")
+        media_text = _v3_media_text(item.get("media") or {})
+        metadata_line = f"\nMetadata: {media_text}" if media_text else ""
+        parts.append(
+            f"[{ref}] kind={_v3_candidate_kind(block)} page={page if page is not None else 'unknown'}\n"
+            f"{item['content']}{metadata_line}"
+        )
+    for result in tool_results or []:
+        if not isinstance(result, dict) or str(result.get("status") or "") not in {"success", ""}:
+            continue
+        preview = _tool_result_display_text(result, max_chars=max_chars_per_tool_result)
+        if not preview:
+            continue
+        ref = f"E{next_ref}"
+        next_ref += 1
+        block_id = _tool_result_block_id(result)
+        derived_refs = [block_ref_by_id[block_id]] if block_id and block_id in block_ref_by_id else []
+        raw_entry = {
+            "ref": ref,
+            "source_kind": "tool_observation",
+            "kind": _tool_result_kind(result),
+            "block_id": block_id,
+            "derived_from_refs": derived_refs,
+            "display_text": preview,
+            "preview": preview,
+        }
+        entry = {key: value for key, value in raw_entry.items() if value is not None and value != "" and value != []}
+        ref_map[ref] = entry
+        parts.append(f"[{ref}] kind={entry['kind']}\n{preview}")
+    return "\n\n".join(parts), ref_map
+
+
+def _tool_result_kind(result: dict[str, Any]) -> str:
+    operation = str((result.get("structured_result") or {}).get("operation") or result.get("tool") or "")
+    return "calculation_result" if "calculation" in operation else "tool_observation"
+
+
+def _tool_result_block_id(result: dict[str, Any]) -> str:
+    for key in ("citations", "evidence_used"):
+        values = result.get(key)
+        if not isinstance(values, list):
+            continue
+        for item in values:
+            if isinstance(item, dict) and str(item.get("block_id") or "").strip():
+                return str(item["block_id"])
+    supporting_ids = result.get("supporting_evidence_ids")
+    if isinstance(supporting_ids, list):
+        for item in supporting_ids:
+            if str(item or "").strip():
+                return str(item)
+    return ""
+
+
+def _tool_result_display_text(result: dict[str, Any], *, max_chars: int) -> str:
+    parts: list[str] = []
+    if result.get("answer") not in {None, ""}:
+        parts.append(f"Tool answer: {result['answer']}")
+    if result.get("reasoning_summary") not in {None, ""}:
+        parts.append(f"Rationale: {result['reasoning_summary']}")
+    structured = result.get("structured_result")
+    if isinstance(structured, dict):
+        calculation = structured.get("calculation")
+        if isinstance(calculation, dict):
+            expression = calculation.get("expression")
+            result_text = calculation.get("result_text") or calculation.get("result")
+            if expression not in {None, ""}:
+                parts.append(f"Calculation: {expression} = {result_text}")
+        selected_value = structured.get("selected_value")
+        if isinstance(selected_value, dict):
+            parts.append(f"Selected value: {json.dumps(selected_value, ensure_ascii=False)}")
+    return smart_truncate(" ".join(parts), max_chars)
+
+
 def compile_answer_prompt(
     *,
     question: str,
@@ -400,6 +542,76 @@ def compile_answer_prompt(
             {"role": "user", "content": user_content},
         ],
         prompt_version=PROMPT_VERSION,
+        task_type=task_type,
+        evidence_context=context,
+    )
+
+
+def compile_answer_prompt_v3(
+    *,
+    question: str,
+    evidence_blocks: list[EvidenceBlock],
+    tool_results: list[dict[str, Any]] | None = None,
+    answer_type: str | None = None,
+    task_type: str = DEFAULT_TASK_TYPE,
+    append_no_think: bool = False,
+    max_chars_per_block: int = 1200,
+    max_total_chars: int | None = None,
+    answer: str = "",
+    gold_block_id: str | None = None,
+    rank_aware_context: bool = False,
+) -> PromptBundle:
+    output_schema = json.dumps(MODEL_OUTPUT_V3_SCHEMA, ensure_ascii=False)
+    context = build_evidence_context(
+        question=question,
+        evidence_blocks=evidence_blocks,
+        task_type=task_type,
+        token_budget=max_total_chars,
+        max_chars_per_block=max_chars_per_block,
+        answer=answer,
+        gold_block_id=gold_block_id,
+        rank_aware_context=rank_aware_context,
+    )
+    evidence_text, ref_map = _format_v3_evidence_candidates(
+        context,
+        evidence_blocks,
+        tool_results=tool_results,
+    )
+    context = {**context, "evidence_ref_map": ref_map}
+    extraction_rules = EXTRACTION_RULES_TEXT
+    if rank_aware_context:
+        extraction_rules = f"{EXTRACTION_RULES_TEXT}\n{RANK_AWARE_EXTRACTION_RULES_V3_TEXT}"
+    user_content = (
+        "## Task\n"
+        "Answer the question from the numbered evidence candidates. Select only supporting_refs from the listed [E#] refs.\n\n"
+        "## Question\n"
+        f"{question}\n\n"
+        "## Answer Type\n"
+        f"{answer_type or 'extractive'}\n\n"
+        "## Evidence Candidates\n"
+        f"{evidence_text}\n\n"
+        "## Output Contract\n"
+        f"Return JSON matching this schema: {output_schema}\n"
+        "Rules:\n"
+        f"{extraction_rules}\n"
+        "- answer must be concise and grounded in the evidence.\n"
+        "- supporting_refs must contain only listed refs such as E1 or E2.\n"
+        "- support_status must be supported when the answer is supported by evidence.\n"
+        "- support_status must be insufficient and supporting_refs must be [] when the evidence is insufficient.\n"
+        "- Do not output block_id, doc_id, page, image_path, trace_path, citations, citation_block_ids, or evidence_used.\n"
+        "- reasoning_summary must be one short sentence under 300 characters."
+    )
+    if append_no_think:
+        user_content = (
+            f"{user_content}\n\n/no_think\n"
+            "Return only one valid JSON object. Start with { and end with }."
+        )
+    return PromptBundle(
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_content},
+        ],
+        prompt_version=PROMPT_VERSION_V3,
         task_type=task_type,
         evidence_context=context,
     )

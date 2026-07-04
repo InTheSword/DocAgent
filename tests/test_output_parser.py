@@ -24,6 +24,17 @@ def test_parse_answer_candidate_schema() -> None:
     assert result.parsed["citation_block_ids"] == ["b1"]
 
 
+def test_parse_model_output_v3_schema() -> None:
+    result = parse_generation_output(
+        '{"answer": "A", "supporting_refs": ["E1"], "support_status": "supported", '
+        '"reasoning_summary": "E1 states A."}'
+    )
+
+    assert result.raw_json_ok
+    assert result.schema_ok
+    assert result.parsed["supporting_refs"] == ["E1"]
+
+
 def test_parse_recovers_json_after_extra_text_and_think_tags() -> None:
     result = parse_generation_output(
         '<think>hidden</think>\nHere is the answer:\n'

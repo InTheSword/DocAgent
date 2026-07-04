@@ -107,6 +107,7 @@ def _build_answer_policy(
     torch_dtype: str,
     max_prompt_tokens: int | None,
     max_new_tokens: int,
+    answer_output_contract: str,
 ):
     if answer_policy == "heuristic":
         from docagent.models.base import HeuristicAnswerPolicy
@@ -123,17 +124,23 @@ def _build_answer_policy(
             torch_dtype=torch_dtype,
             max_prompt_tokens=max_prompt_tokens,
             max_new_tokens=max_new_tokens,
+            answer_output_contract=answer_output_contract,
         )
     )
 
 
 def _answer_policy_metadata(answer_policy: Any) -> dict[str, Any]:
     mode = str(getattr(answer_policy, "mode", "unknown") or "unknown")
-    return {
+    config = getattr(answer_policy, "config", None)
+    output_contract = str(getattr(config, "answer_output_contract", "") or "")
+    payload = {
         "answer_policy_mode": mode,
         "used_qwen_answer_policy": mode in {"base", "sft", "grpo"},
         "used_external_answer_api": False,
     }
+    if output_contract:
+        payload["answer_output_contract"] = output_contract
+    return payload
 
 
 def _router_execution(router_plan: dict[str, Any]) -> dict[str, Any]:
@@ -1885,6 +1892,7 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
                 torch_dtype=str(args.torch_dtype),
                 max_prompt_tokens=args.max_prompt_tokens,
                 max_new_tokens=int(args.max_new_tokens),
+                answer_output_contract=str(args.answer_output_contract),
             )
         except Exception as exc:
             result = _error_result(
@@ -1901,6 +1909,7 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
             )
             result["full_model_path"] = full_model_path
             result["answer_policy_mode"] = str(args.answer_policy)
+            result["answer_output_contract"] = str(args.answer_output_contract)
             result["used_qwen_answer_policy"] = False
             result["used_external_answer_api"] = False
             result["router_execution"] = _router_execution(router_plan)
@@ -1967,6 +1976,7 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
         result["used_llm_query_rewriter"] = bool(query_planner_execution.get("used_llm_query_rewriter"))
         result["llm_query_rewriter_status"] = str(query_planner_execution.get("llm_query_rewriter_status") or "")
         result["answer_policy_mode"] = str(tool_result.get("answer_policy_mode") or args.answer_policy)
+        result["answer_output_contract"] = str(tool_result.get("answer_output_contract") or args.answer_output_contract)
         result["used_qwen_answer_policy"] = bool(tool_result.get("used_qwen_answer_policy", False))
         result["used_external_answer_api"] = bool(tool_result.get("used_external_answer_api", False))
         result["retrieval_candidate_count"] = int(tool_result.get("retrieval_candidate_count") or len(result["supporting_evidence_ids"]))
@@ -2067,6 +2077,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Enable the full model-enhanced QA path: LLM router, hybrid LLM query planning, and real local_fact_qa.",
     )
     parser.add_argument("--answer-policy", choices=sorted(ANSWER_POLICY_CHOICES), default="heuristic")
+    parser.add_argument(
+        "--answer-output-contract",
+        choices=["candidate_citations", "v3_refs"],
+        default="candidate_citations",
+        help="Internal AnswerPolicy output contract; v3_refs maps model-selected E# refs back to citations.",
+    )
     parser.add_argument("--base-model-path", default=DEFAULT_QWEN_BASE_MODEL_PATH)
     parser.add_argument("--adapter-path")
     parser.add_argument("--device", default="cuda")

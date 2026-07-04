@@ -4,11 +4,12 @@ import json
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from docagent.workflow.answer_contract import validate_candidate_schema
+from docagent.workflow.answer_contract import validate_candidate_schema, validate_model_output_v3
 
 
 REQUIRED_FIELDS = {"answer", "evidence_location", "evidence", "reason"}
 CANDIDATE_OUTPUT_FIELDS = {"answer", "reasoning_summary", "citation_block_ids", "citations", "evidence_used"}
+MODEL_OUTPUT_V3_FIELDS = {"answer", "supporting_refs", "support_status", "reasoning_summary"}
 
 
 @dataclass
@@ -49,7 +50,7 @@ def _raw_json_object(text: str) -> tuple[dict[str, Any] | None, str | None]:
 
 
 def _has_output_field(parsed: dict[str, Any]) -> bool:
-    return bool((REQUIRED_FIELDS | CANDIDATE_OUTPUT_FIELDS) & set(parsed))
+    return bool((REQUIRED_FIELDS | CANDIDATE_OUTPUT_FIELDS | MODEL_OUTPUT_V3_FIELDS) & set(parsed))
 
 
 def _scan_first_json_object(text: str) -> tuple[dict[str, Any] | None, str | None, str | None]:
@@ -110,21 +111,29 @@ def _recover_partial_output_object(text: str) -> dict[str, Any] | None:
     evidence_used = _json_value_after_key(text, "evidence_used")
     if isinstance(evidence_used, (list, str)):
         partial["evidence_used"] = evidence_used
+    supporting_refs = _json_value_after_key(text, "supporting_refs")
+    if isinstance(supporting_refs, list):
+        partial["supporting_refs"] = supporting_refs
+    support_status = _json_value_after_key(text, "support_status")
+    if isinstance(support_status, str):
+        partial["support_status"] = support_status
     return partial if _has_output_field(partial) else None
 
 
 def validate_schema(parsed: dict[str, Any] | None, max_reason_chars: int | None = 300) -> tuple[bool, str | None]:
     if not isinstance(parsed, dict):
         return False, "parsed output is not an object"
+    v3_ok, v3_error = validate_model_output_v3(parsed, max_reason_chars=max_reason_chars)
+    if v3_ok:
+        return True, None
     legacy_ok, legacy_error = _validate_legacy_schema(parsed, max_reason_chars=max_reason_chars)
     if legacy_ok:
         return True, None
     candidate_ok, candidate_error = validate_candidate_schema(parsed, max_reason_chars=max_reason_chars)
     if candidate_ok:
         return True, None
-    if legacy_error and candidate_error:
-        return False, f"{legacy_error}; candidate schema: {candidate_error}"
-    return False, legacy_error or candidate_error
+    errors = [error for error in (legacy_error, candidate_error, v3_error) if error]
+    return False, "; ".join(errors)
 
 
 def _validate_legacy_schema(
