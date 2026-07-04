@@ -127,6 +127,14 @@ Phase 5 Personal-use DocAgent MVP
    manifest with hashes, and blocks non-train splits or validation-like input
    paths by default; it does not start SFT/GRPO, call Qwen, use validation
    subsets for training, or claim benchmark acceptance
+-> AnswerPolicy v3 small training-data trial implemented locally:
+   `ModelOutputV3` uses `answer`, `supporting_refs`, `support_status`, and
+   `reasoning_summary`; `EvidenceRefMap` maps temporary `E#` refs to internal
+   evidence/citation metadata without making block IDs a model target;
+   `scripts/build_answer_policy_v3_training_data.py` builds high-confidence
+   TAT-QA train-only v3 SFT trial artifacts and blocks validation-like sources
+   by default; local smoke `answer_policy_v3_tatqa_trial_20260704` produced
+   200 records, `used_training=false`, and no SFT/GRPO execution
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real

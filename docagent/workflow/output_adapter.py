@@ -5,9 +5,12 @@ from typing import Any
 from docagent.schemas import EvidenceBlock
 from docagent.workflow.answer_contract import (
     citation_from_block,
+    evidence_ref_map_from_blocks,
     evidence_used_from_blocks,
     filtered_citation_blocks,
     is_candidate_output,
+    is_model_output_v3,
+    normalize_supporting_refs,
 )
 
 
@@ -23,8 +26,15 @@ def canonicalize_output(
     evidence_blocks: list[EvidenceBlock],
     *,
     preferred_citation_block_ids: list[str] | None = None,
+    evidence_ref_map: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     data = output if isinstance(output, dict) else {}
+    if is_model_output_v3(data):
+        return _canonicalize_model_output_v3(
+            data,
+            evidence_blocks,
+            evidence_ref_map=evidence_ref_map,
+        )
     if is_candidate_output(data):
         return _canonicalize_candidate_output(
             data,
@@ -49,6 +59,67 @@ def canonicalize_output(
         "evidence_location": {key: value for key, value in location.items() if value is not None},
         "evidence": str(data.get("evidence") or ""),
         "reason": str(data.get("reason") or ""),
+    }
+
+
+def render_user_answer_text(output: dict[str, Any]) -> str:
+    answer = str(output.get("answer") or "").strip()
+    source_lines: list[str] = []
+    sources = output.get("citations") if isinstance(output.get("citations"), list) else []
+    for citation in sources:
+        if not isinstance(citation, dict):
+            continue
+        preview = str(citation.get("text_preview") or citation.get("table_caption") or citation.get("image_caption") or "").strip()
+        if not preview:
+            continue
+        page = citation.get("page")
+        block_type = str(citation.get("block_type") or "evidence")
+        location = f"Page {page}, {block_type}" if page is not None else block_type
+        source_lines.append(f"- {location}: {preview}")
+    if not source_lines:
+        return answer
+    return f"{answer}\n\nSources:\n" + "\n".join(source_lines)
+
+
+def _canonicalize_model_output_v3(
+    data: dict[str, Any],
+    evidence_blocks: list[EvidenceBlock],
+    *,
+    evidence_ref_map: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    ref_map = evidence_ref_map or evidence_ref_map_from_blocks(evidence_blocks)
+    refs = normalize_supporting_refs(data)
+    selected_blocks, invalid_refs, unmapped_refs = _blocks_for_supporting_refs(refs, ref_map, evidence_blocks)
+    support_status = str(data.get("support_status") or "")
+    if support_status == "insufficient":
+        selected_blocks = []
+    first_block = selected_blocks[0] if selected_blocks else None
+    evidence_used = evidence_used_from_blocks(selected_blocks)
+    if not evidence_used and support_status == "supported":
+        evidence_used = _evidence_used_from_ref_map(refs, ref_map)
+    evidence_text = str(evidence_used[0].get("text_preview") or evidence_used[0].get("preview") or "") if evidence_used else ""
+    reasoning_summary = str(data.get("reasoning_summary") or "")
+    citation_ids = [block.block_id for block in selected_blocks]
+    return {
+        "answer": str(data.get("answer") or ""),
+        "evidence_location": _location_from_block(first_block) if first_block is not None else {},
+        "evidence": evidence_text,
+        "reason": reasoning_summary,
+        "reasoning_summary": reasoning_summary,
+        "support_status": support_status,
+        "supporting_refs": refs,
+        "citation_block_ids": citation_ids,
+        "citations": [citation_from_block(block) for block in selected_blocks],
+        "evidence_used": evidence_used,
+        "citation_validation": {
+            "requested_supporting_refs": refs,
+            "valid_supporting_refs": [ref for ref in refs if ref in ref_map and ref not in invalid_refs],
+            "invalid_supporting_refs": invalid_refs,
+            "unmapped_supporting_refs": unmapped_refs,
+            "valid_block_ids": citation_ids,
+            "allowlist_size": len(evidence_blocks),
+            "evidence_ref_map_size": len(ref_map),
+        },
     }
 
 
@@ -163,6 +234,62 @@ def _blocks_for_ids(block_ids: list[str], evidence_blocks: list[EvidenceBlock]) 
             continue
         blocks.append(block)
     return blocks, missing
+
+
+def _blocks_for_supporting_refs(
+    refs: list[str],
+    ref_map: dict[str, dict[str, Any]],
+    evidence_blocks: list[EvidenceBlock],
+) -> tuple[list[EvidenceBlock], list[str], list[str]]:
+    by_id = _block_by_id(evidence_blocks)
+    blocks: list[EvidenceBlock] = []
+    invalid_refs: list[str] = []
+    unmapped_refs: list[str] = []
+    for ref in refs:
+        entry = ref_map.get(ref)
+        if entry is None:
+            invalid_refs.append(ref)
+            continue
+        candidate_ids = []
+        block_id = entry.get("block_id")
+        if block_id:
+            candidate_ids.append(str(block_id))
+        for derived_ref in entry.get("derived_from_refs") or []:
+            derived = ref_map.get(str(derived_ref))
+            if isinstance(derived, dict) and derived.get("block_id"):
+                candidate_ids.append(str(derived["block_id"]))
+        matched = False
+        for block_id in candidate_ids:
+            block = by_id.get(block_id)
+            if block is None:
+                continue
+            blocks.append(block)
+            matched = True
+        if not matched:
+            unmapped_refs.append(ref)
+    return _merge_blocks([], blocks), invalid_refs, unmapped_refs
+
+
+def _evidence_used_from_ref_map(refs: list[str], ref_map: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for ref in refs:
+        entry = ref_map.get(ref)
+        if not isinstance(entry, dict):
+            continue
+        rows.append(
+            {
+                key: value
+                for key, value in {
+                    "ref": ref,
+                    "source_kind": entry.get("source_kind"),
+                    "block_type": entry.get("block_type"),
+                    "page": entry.get("page"),
+                    "text_preview": entry.get("preview") or entry.get("display_text"),
+                }.items()
+                if value not in {None, ""}
+            }
+        )
+    return rows
 
 
 def _merge_blocks(first: list[EvidenceBlock], second: list[EvidenceBlock]) -> list[EvidenceBlock]:

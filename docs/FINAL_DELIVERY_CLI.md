@@ -431,6 +431,22 @@ summary, and a hash manifest. By default it blocks non-train sample splits and
 validation-like input paths such as `final_eval`; it does not start SFT/GRPO,
 call Qwen, or promote validation subsets to training data.
 
+Build a small AnswerPolicy v3 SFT-contract trial from TAT-QA train data:
+
+```powershell
+python scripts\build_answer_policy_v3_training_data.py `
+  --tatqa-raw data\benchmark\tatqa\tatqa_dataset_train.json `
+  --run-id answer_policy_v3_tatqa_trial
+```
+
+This writes `aligned_records.jsonl`, `sft_train.jsonl`, rejected-bucket JSONL
+files, `preview.json`, `summary.json`, `summary.md`, and `manifest.json` under
+`outputs\training_prep\answer_policy_v3\<run_id>\`. The assistant target uses
+only `answer`, `supporting_refs`, `support_status`, and `reasoning_summary`.
+Temporary `E#` refs are mapped back to internal citation metadata through
+`EvidenceRefMap`; `block_id`, `doc_id`, and file paths are not model-generation
+targets. The command does not start SFT/GRPO or use validation/final-eval data.
+
 Enable optional query planning:
 
 ```powershell

@@ -19,6 +19,26 @@ ANSWER_CANDIDATE_SCHEMA = {
 
 ANSWER_CANDIDATE_REQUIRED_FIELDS = {"answer", "reasoning_summary"}
 
+MODEL_OUTPUT_V3_SCHEMA = {
+    "answer": "final answer string, or an evidence-insufficient response",
+    "supporting_refs": ["temporary evidence candidate refs such as E1, E2"],
+    "support_status": "supported or insufficient",
+    "reasoning_summary": "short user-facing explanation, not hidden reasoning",
+}
+
+MODEL_OUTPUT_V3_REQUIRED_FIELDS = {"answer", "supporting_refs", "support_status", "reasoning_summary"}
+MODEL_OUTPUT_V3_SUPPORT_STATUSES = {"supported", "insufficient"}
+
+EVIDENCE_CANDIDATE_KINDS = {
+    "text",
+    "table",
+    "ocr",
+    "markdown",
+    "image",
+    "calculation_result",
+    "tool_observation",
+}
+
 
 def candidate_citation_ids(output: dict[str, Any] | None) -> list[str]:
     if not isinstance(output, dict):
@@ -101,6 +121,82 @@ def validate_candidate_schema(
     if "evidence_used" in output and not isinstance(evidence_used, (list, str)):
         return False, "evidence_used must be a list or string"
     return True, None
+
+
+def normalize_supporting_refs(output: dict[str, Any] | None) -> list[str]:
+    if not isinstance(output, dict):
+        return []
+    raw_refs = output.get("supporting_refs")
+    if not isinstance(raw_refs, list):
+        return []
+    refs: list[str] = []
+    for item in raw_refs:
+        ref = str(item or "").strip()
+        if ref:
+            refs.append(ref)
+    return list(dict.fromkeys(refs))
+
+
+def is_model_output_v3(output: dict[str, Any] | None) -> bool:
+    if not isinstance(output, dict):
+        return False
+    return bool(MODEL_OUTPUT_V3_REQUIRED_FIELDS & set(output)) and "supporting_refs" in output
+
+
+def validate_model_output_v3(
+    output: dict[str, Any] | None,
+    *,
+    allowed_refs: set[str] | None = None,
+    max_reason_chars: int | None = 300,
+) -> tuple[bool, str | None]:
+    if not isinstance(output, dict):
+        return False, "parsed output is not an object"
+    missing = sorted(MODEL_OUTPUT_V3_REQUIRED_FIELDS - set(output))
+    if missing:
+        return False, f"missing fields: {', '.join(missing)}"
+    if not isinstance(output.get("answer"), str):
+        return False, "answer must be a string"
+    if not isinstance(output.get("reasoning_summary"), str):
+        return False, "reasoning_summary must be a string"
+    if max_reason_chars is not None and len(str(output.get("reasoning_summary") or "")) > max_reason_chars:
+        return False, f"reasoning_summary exceeds {max_reason_chars} characters"
+    support_status = str(output.get("support_status") or "")
+    if support_status not in MODEL_OUTPUT_V3_SUPPORT_STATUSES:
+        return False, "support_status must be supported or insufficient"
+    if not isinstance(output.get("supporting_refs"), list):
+        return False, "supporting_refs must be a list"
+    refs = normalize_supporting_refs(output)
+    if support_status == "supported" and not refs:
+        return False, "supported output requires at least one supporting_ref"
+    if support_status == "insufficient" and refs:
+        return False, "insufficient output must not include supporting_refs"
+    if allowed_refs is not None:
+        invalid = [ref for ref in refs if ref not in allowed_refs]
+        if invalid:
+            return False, f"invalid supporting_refs: {', '.join(invalid)}"
+    return True, None
+
+
+def evidence_ref_map_from_blocks(blocks: list[EvidenceBlock]) -> dict[str, dict[str, Any]]:
+    ref_map: dict[str, dict[str, Any]] = {}
+    for index, block in enumerate(blocks, start=1):
+        citation = citation_from_block(block)
+        ref_map[f"E{index}"] = {
+            key: value
+            for key, value in {
+                "source_kind": "evidence_block",
+                "doc_id": citation.get("doc_id"),
+                "page": citation.get("page"),
+                "block_id": citation.get("block_id"),
+                "block_type": citation.get("block_type"),
+                "preview": citation.get("text_preview"),
+                "table_caption": citation.get("table_caption"),
+                "image_caption": citation.get("image_caption"),
+                "nearby_text": citation.get("nearby_text"),
+            }.items()
+            if value not in {None, ""}
+        }
+    return ref_map
 
 
 def citation_from_block(block: EvidenceBlock) -> dict[str, Any]:

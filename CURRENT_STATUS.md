@@ -315,6 +315,17 @@ preserving `used_training=false`, `training_started=false`,
 start SFT/GRPO, call Qwen, load checkpoints, or promote diagnostic validation
 subsets to training data.
 
+AnswerPolicy v3 small training-data trial is implemented locally in
+`scripts/build_answer_policy_v3_training_data.py` with tests in
+`tests/test_answer_policy_v3_contract.py` and
+`tests/test_build_answer_policy_v3_training_data.py`. The v3 model target is
+`answer`, `supporting_refs`, `support_status`, and `reasoning_summary`; internal
+`EvidenceRefMap` metadata maps temporary `E#` refs back to evidence/citation
+records without making `block_id`, `doc_id`, or paths model-generation targets.
+The local TAT-QA train smoke `answer_policy_v3_tatqa_trial_20260704` produced
+200 high-confidence records and preserved `used_training=false`,
+`training_started=false`, and `validation_subset_used_for_training=false`.
+
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in
 `tests/test_run_final_raw_pdf_smoke.py`. The runner executes
