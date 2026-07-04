@@ -335,9 +335,16 @@ def _compact_metrics(payload: dict[str, Any]) -> dict[str, Any]:
         "used_llm_query_rewriter_count",
         "local_fact_qa_count",
     )
+    string_keys = (
+        "answer_policy_mode",
+        "answer_policy",
+        "answer_output_contract",
+        "adapter_path",
+    )
     structured_keys = ("bucket_counts", "failure_reason_distribution", "step_statuses")
     metrics = payload.get("metrics") if isinstance(payload.get("metrics"), dict) else payload
     compact = {key: metrics.get(key) for key in scalar_keys if metrics.get(key) is not None}
+    compact.update({key: metrics.get(key) for key in string_keys if metrics.get(key)})
     for key in structured_keys:
         value = metrics.get(key)
         if isinstance(value, dict):

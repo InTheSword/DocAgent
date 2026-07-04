@@ -78,6 +78,7 @@ def _fake_runner(command: list[str], _cwd: Path, _timeout: int) -> CommandResult
         payload = {
             "command": "run_final_answer_policy_baseline",
             "status": "success",
+            "answer_output_contract": "candidate_citations",
             "evaluated_count": 3,
             "answer_hit_rate": 0.67,
             "citation_block_hit_rate": 1.0,
@@ -88,6 +89,7 @@ def _fake_runner(command: list[str], _cwd: Path, _timeout: int) -> CommandResult
         payload = {
             "command": "run_mpdocvqa_full_workflow_diagnostic",
             "status": "success",
+            "answer_output_contract": "candidate_citations",
             "evaluated_count": 2,
             "local_fact_qa_count": 2,
             "used_qwen_answer_policy_count": 2,
@@ -141,6 +143,9 @@ def test_inspect_final_delivery_benchmark_gate_accepts_valid_artifacts(tmp_path:
     assert result["sync_manifest"]["status"] == "success"
     assert result["step_metrics"]["answer_policy_baseline"]["answer_hit_rate"] == 0.67
     assert result["metric_review"]["answer_policy"]["citation_block_hit_rate"] == 1.0
+    assert result["metric_review"]["contract_review"]["failure_count"] == 0
+    assert result["metric_review"]["contract_review"]["steps"]["answer_policy_baseline"]["answer_output_contract_match"] is True
+    assert result["metric_review"]["contract_review"]["steps"]["mpdocvqa_full_workflow"]["answer_output_contract_match"] is True
     assert result["metric_review"]["mpdocvqa_full_workflow"]["component_usage"]["incomplete_components"] == []
     assert result["next_action"] == "review_answer_quality_metrics_before_formal_benchmark_or_training"
 
@@ -227,6 +232,31 @@ def test_inspect_final_delivery_benchmark_gate_flags_missing_component_metrics(t
     ]
     assert result["metric_review"]["metric_gaps"] == ["mpdocvqa_full_workflow_component_usage"]
     assert result["next_action"] == "rerun_gate_with_component_metric_contract_before_benchmark"
+
+
+def test_inspect_final_delivery_benchmark_gate_flags_child_output_contract_mismatch(tmp_path: Path) -> None:
+    run_dir, sync_dir = _make_gate_run(tmp_path)
+    summary_path = run_dir / "summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    for step in summary["steps"]:
+        if step["name"] == "mpdocvqa_full_workflow":
+            step["metrics"]["answer_output_contract"] = "v3_refs"
+    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    _refresh_local_manifest_hash(run_dir, summary_path)
+
+    result = inspect_gate(run_dir, sync_bundle_dir=sync_dir)
+
+    assert result["status"] == "failed"
+    assert "child_step_output_contract_failed" in result["failures"]
+    contract_failures = result["metric_review"]["contract_review"]["failures"]
+    assert contract_failures == [
+        {
+            "step": "mpdocvqa_full_workflow",
+            "type": "answer_output_contract_mismatch",
+            "expected": "candidate_citations",
+            "observed": "v3_refs",
+        }
+    ]
 
 
 def test_inspect_final_delivery_benchmark_gate_rejects_stale_hash(tmp_path: Path) -> None:

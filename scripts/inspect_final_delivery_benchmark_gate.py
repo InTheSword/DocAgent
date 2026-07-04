@@ -66,6 +66,19 @@ def write_summary_markdown(path: Path, result: dict[str, Any]) -> None:
             bucket_counts = metrics.get("bucket_counts")
             if isinstance(bucket_counts, dict) and bucket_counts:
                 lines.append(f"  - bucket_counts: `{json.dumps(bucket_counts, ensure_ascii=False)}`")
+    contract_review = (result.get("metric_review") or {}).get("contract_review") if isinstance(result.get("metric_review"), dict) else {}
+    if isinstance(contract_review, dict) and contract_review:
+        lines.extend(["", "## Output Contract", ""])
+        lines.append(f"- failure_count: {contract_review.get('failure_count', 0)}")
+        for name, review in (contract_review.get("steps") or {}).items():
+            if not isinstance(review, dict):
+                continue
+            lines.append(
+                "- "
+                f"{name}: expected={review.get('expected_answer_output_contract')}, "
+                f"observed={review.get('observed_answer_output_contract')}, "
+                f"match={str(review.get('answer_output_contract_match')).lower()}"
+            )
     lines.extend(
         [
             "",
@@ -175,6 +188,79 @@ def _metric_number(metrics: dict[str, Any], key: str) -> float | None:
     return None
 
 
+def _command_arg(command: Any, flag: str) -> str | None:
+    if not isinstance(command, list):
+        return None
+    values = [str(item) for item in command]
+    try:
+        index = values.index(flag)
+    except ValueError:
+        return None
+    if index + 1 >= len(values):
+        return ""
+    return values[index + 1]
+
+
+def _child_step_contract_review(summary: dict[str, Any], step_metrics: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    reviews: dict[str, dict[str, Any]] = {}
+    failures: list[dict[str, Any]] = []
+    model_step_names = {"answer_policy_baseline", "mpdocvqa_full_workflow"}
+    for step in summary.get("steps", []):
+        if not isinstance(step, dict):
+            continue
+        name = str(step.get("name") or "")
+        if name not in model_step_names:
+            continue
+        command = step.get("command")
+        expected_contract = _command_arg(command, "--answer-output-contract")
+        expected_adapter = _command_arg(command, "--adapter-path")
+        metrics = step_metrics.get(name, {})
+        observed_contract = metrics.get("answer_output_contract")
+        observed_adapter = metrics.get("adapter_path")
+        review = {
+            "expected_answer_output_contract": expected_contract,
+            "observed_answer_output_contract": observed_contract,
+            "answer_output_contract_match": expected_contract is None or observed_contract == expected_contract,
+            "adapter_path_requested": bool(expected_adapter),
+            "adapter_path_metric_present": bool(observed_adapter),
+        }
+        if observed_adapter:
+            review["adapter_path_match"] = expected_adapter is None or str(observed_adapter) == str(expected_adapter)
+        if expected_contract is not None and not observed_contract:
+            failures.append(
+                {
+                    "step": name,
+                    "type": "missing_answer_output_contract_metric",
+                    "expected": expected_contract,
+                }
+            )
+        elif expected_contract is not None and str(observed_contract) != str(expected_contract):
+            failures.append(
+                {
+                    "step": name,
+                    "type": "answer_output_contract_mismatch",
+                    "expected": expected_contract,
+                    "observed": observed_contract,
+                }
+            )
+        if expected_adapter is not None and observed_adapter and str(observed_adapter) != str(expected_adapter):
+            failures.append(
+                {
+                    "step": name,
+                    "type": "adapter_path_mismatch",
+                    "expected": expected_adapter,
+                    "observed": observed_adapter,
+                }
+            )
+        reviews[name] = review
+    return {
+        "steps": reviews,
+        "failure_count": len(failures),
+        "failures": failures,
+        "all_requested_output_contracts_observed": not failures,
+    }
+
+
 def _component_usage_review(mpdocvqa_metrics: dict[str, Any]) -> dict[str, Any]:
     local_fact_count = _metric_number(mpdocvqa_metrics, "local_fact_qa_count")
     evaluated_count = _metric_number(mpdocvqa_metrics, "evaluated_count")
@@ -218,11 +304,17 @@ def _component_usage_review(mpdocvqa_metrics: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _metric_review(summary: dict[str, Any], failures: list[str]) -> dict[str, Any]:
+def _metric_review(
+    summary: dict[str, Any],
+    failures: list[str],
+    *,
+    contract_review: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     step_metrics = _step_metrics(summary)
     answer_metrics = step_metrics.get("answer_policy_baseline", {})
     mpdocvqa_metrics = step_metrics.get("mpdocvqa_full_workflow", {})
     component_review = _component_usage_review(mpdocvqa_metrics)
+    contract_review = contract_review or _child_step_contract_review(summary, step_metrics)
     answer_hit_rate = _metric_number(answer_metrics, "answer_hit_rate")
     mpdocvqa_answer_hit_rate = _metric_number(mpdocvqa_metrics, "answer_hit_rate")
     mpdocvqa_retrieval_hit_rate = _metric_number(mpdocvqa_metrics, "retrieved_gold_page_hit_rate")
@@ -232,6 +324,8 @@ def _metric_review(summary: dict[str, Any], failures: list[str]) -> dict[str, An
             metric_gaps.append(name)
     if mpdocvqa_metrics and component_review["missing_component_metrics"]:
         metric_gaps.append("mpdocvqa_full_workflow_component_usage")
+    if contract_review.get("failures"):
+        metric_gaps.append("child_step_output_contract")
     if failures:
         next_action = "fix_gate_artifact_contract_or_rerun_gate"
     elif component_review["missing_component_metrics"]:
@@ -261,6 +355,7 @@ def _metric_review(summary: dict[str, Any], failures: list[str]) -> dict[str, An
             "component_usage": component_review,
         },
         "metric_gaps": metric_gaps,
+        "contract_review": contract_review,
         "recommendation": {
             "next_action": next_action,
             "do_not_train_yet": True,
@@ -327,8 +422,11 @@ def inspect_gate(run_dir: Path, *, sync_bundle_dir: Path | None = None) -> dict[
         failures.append("used_training_not_false")
 
     step_metrics = _step_metrics(summary)
+    contract_review = _child_step_contract_review(summary, step_metrics)
+    if contract_review.get("failures"):
+        failures.append("child_step_output_contract_failed")
     step_artifact_refs = _step_artifact_refs(summary)
-    metric_review = _metric_review(summary, failures)
+    metric_review = _metric_review(summary, failures, contract_review=contract_review)
     next_action = metric_review["recommendation"]["next_action"] if not failures else "fix_gate_artifact_contract_or_rerun_gate"
 
     return {

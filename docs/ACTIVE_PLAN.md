@@ -538,6 +538,12 @@ Phase 5 Personal-use DocAgent MVP
    counts all 4. Review
    `final_delivery_gate_promptfix_adapter_v3_fullsmall_20260705_review`
    verified manifests, safety flags, and complete component metrics.
+   The gate summary now preserves `answer_output_contract` and adapter metadata
+   in compact step metrics, and
+   `scripts/inspect_final_delivery_benchmark_gate.py` compares each
+   model-backed child step's command against those recorded contract fields.
+   Missing or mismatched child-step output contracts now fail artifact review
+   before any benchmark or checkpoint-promotion decision.
    This is candidate-checkpoint execution-chain evidence, not default
    deployment approval or formal benchmark acceptance
 -> AnswerPolicy v3 train-only heldout diagnostic split implemented locally:

@@ -48,6 +48,14 @@ artifacts passed manifest, safety-flag, and component-metric checks. This
 accepts the full gate contract plumbing only; answer quality remains
 diagnostic and not formal benchmark acceptance.
 
+The final-delivery gate inspector now treats child-step output-contract
+consistency as a first-class artifact contract. Gate summaries preserve
+`answer_output_contract` and adapter metadata in compact step metrics, and
+`scripts/inspect_final_delivery_benchmark_gate.py` compares each model-backed
+child step's command against the recorded child-step contract. Missing or
+mismatched output contracts fail the review before any benchmark or checkpoint
+promotion decision.
+
 AnswerPolicy v3 clean fixed-evidence comparison is real-model verified as a
 diagnostic contract probe, not as formal benchmark acceptance. Server run
 `phase5ib_v3refs_clean6_base_vs_adapter480_contract_compare_20260704` compared
