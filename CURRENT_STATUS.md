@@ -710,6 +710,21 @@ json/schema/supporting-ref legality and insufficient empty-ref rates all 1.0
 for both. This verifies the intended v3 train-only distillation objective and
 adapter-continuation execution path; it still does not approve DPO/GRPO or
 claim final workflow answer-quality acceptance.
+Follow-up train-only heldout diagnostic
+`answer_policy_v3_full4096_mixed_heldout_compare128_20260705` split the
+4096-record mixed pack into 3840 train and 256 heldout records with zero
+overlap, then evaluated 128 heldout records. Compared with the full4096
+adapter, the continued rejection-SFT adapter improved aggregate json/schema
+validity 0.9921875 -> 1.0, answer-exact 0.6015625 -> 0.609375, and
+supporting-ref subset legality 0.9921875 -> 1.0, while preserving
+support-status match 0.984375, positive-ref hit about 0.95, insufficient
+empty-ref 0.857142857, and thinking 0.0. Source breakdown showed MP-DocVQA
+supported answer-exact 0.3662 -> 0.3944 and positive-ref hit 0.9155 ->
+0.9296, while TAT-QA supported answer-exact changed 0.90 -> 0.88 and
+positive-ref hit 1.0 -> 0.98. This indicates no broad v3 contract regression
+on the mixed train-only heldout subset, but the slight TAT-QA movement means
+the continued adapter remains a candidate checkpoint pending wider diagnostics,
+not a default deployment choice.
 
 AnswerPolicy v3 train-only heldout diagnostic splitting is implemented locally
 in `scripts/split_answer_policy_v3_sft_records.py`. The splitter validates v3

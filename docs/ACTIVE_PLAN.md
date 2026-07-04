@@ -398,9 +398,17 @@ Phase 5 Personal-use DocAgent MVP
    `swift_output/v0-20260705-044828/checkpoint-56`; same-input 64-record
    diagnostics improved answer-exact 0.875 -> 0.921875, support-status match
    0.984375 -> 1.0, and positive-ref hit 0.975 -> 1.0 while keeping
-   json/schema/ref legality and insufficient empty-ref rates at 1.0; this
-   verifies train-only v3 distillation and adapter-continuation execution,
-   not final answer-quality acceptance or DPO/GRPO approval
+   json/schema/ref legality and insufficient empty-ref rates at 1.0; follow-up
+   mixed train-only heldout diagnostic
+   `answer_policy_v3_full4096_mixed_heldout_compare128_20260705` split the
+   4096-record mixed pack into 3840 train and 256 heldout records with zero
+   overlap and evaluated 128 heldout rows, where continuation improved
+   aggregate json/schema validity 0.9921875 -> 1.0 and answer-exact
+   0.6015625 -> 0.609375, with MP-DocVQA supported answer-exact 0.3662 ->
+   0.3944 but TAT-QA supported answer-exact 0.90 -> 0.88; this shows no broad
+   v3 contract regression but leaves the continued adapter as a candidate
+   checkpoint pending wider diagnostics, not final answer-quality acceptance
+   or DPO/GRPO approval
 -> AnswerPolicy v3 train-only heldout diagnostic split implemented locally:
    `scripts/split_answer_policy_v3_sft_records.py` deterministically splits
    validated v3 SFT records into non-overlapping `train_sft.jsonl` and
