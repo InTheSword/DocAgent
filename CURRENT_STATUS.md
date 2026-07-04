@@ -710,21 +710,21 @@ json/schema/supporting-ref legality and insufficient empty-ref rates all 1.0
 for both. This verifies the intended v3 train-only distillation objective and
 adapter-continuation execution path; it still does not approve DPO/GRPO or
 claim final workflow answer-quality acceptance.
-Follow-up train-only heldout diagnostic
-`answer_policy_v3_full4096_mixed_heldout_compare128_20260705` split the
-4096-record mixed pack into 3840 train and 256 heldout records with zero
-overlap, then evaluated 128 heldout records. Compared with the full4096
-adapter, the continued rejection-SFT adapter improved aggregate json/schema
-validity 0.9921875 -> 1.0, answer-exact 0.6015625 -> 0.609375, and
-supporting-ref subset legality 0.9921875 -> 1.0, while preserving
-support-status match 0.984375, positive-ref hit about 0.95, insufficient
-empty-ref 0.857142857, and thinking 0.0. Source breakdown showed MP-DocVQA
-supported answer-exact 0.3662 -> 0.3944 and positive-ref hit 0.9155 ->
-0.9296, while TAT-QA supported answer-exact changed 0.90 -> 0.88 and
-positive-ref hit 1.0 -> 0.98. This indicates no broad v3 contract regression
-on the mixed train-only heldout subset, but the slight TAT-QA movement means
-the continued adapter remains a candidate checkpoint pending wider diagnostics,
-not a default deployment choice.
+Follow-up full train-only heldout diagnostic
+`answer_policy_v3_full4096_mixed_heldout256_compare_20260705` evaluated the
+complete 256-record heldout split from the 4096-record mixed pack. Compared
+with the 1024-step full4096 adapter, the continued rejection-SFT adapter
+improved aggregate json/schema validity 0.9921875 -> 0.99609375,
+answer-exact 0.6484375 -> 0.66796875, support-status match 0.984375 ->
+0.98828125, supporting-ref subset legality 0.9921875 -> 0.99609375, and
+positive-ref hit 0.953586 -> 0.962185, while preserving insufficient
+empty-ref at 0.941176 and thinking leakage at 0.0. Source breakdown showed
+MP-DocVQA supported answer-exact 0.43609 -> 0.481203 and positive-ref hit
+0.924812 -> 0.93985, while TAT-QA supported answer-exact changed 0.867925 ->
+0.858491 and positive-ref hit stayed about 0.9904. This indicates no broad v3
+contract regression and a modest MP-DocVQA-supported gain, but the TAT-QA
+answer-exact dip means the continued adapter remains a candidate checkpoint,
+not a default deployment choice or DPO/GRPO approval.
 
 AnswerPolicy v3 train-only heldout diagnostic splitting is implemented locally
 in `scripts/split_answer_policy_v3_sft_records.py`. The splitter validates v3

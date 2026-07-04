@@ -482,7 +482,72 @@ Interpretation:
   training is attempted, it should first diagnose why the adapter regressed on
   clean evidence despite improving train-only heldout contract metrics.
 
-## 8. Limitations
+## 8. Follow-Up Expanded v3 Training
+
+Later Stage 2 expansion completed the full MP-DocVQA train-window
+materialization and trained a larger mixed AnswerPolicy v3 SFT checkpoint:
+
+```text
+mpdocvqa_train_evidence_api_848_resume400_20260705
+answer_policy_v3_mixed_stage2_full4096_20260705
+answer_policy_v3_msswift_stage2_full4096_1024steps_20260705
+```
+
+The materialization processed 848/848 MP-DocVQA train document windows with
+live MinerU API/OCR. The resulting train-only v3 sources provided 2156
+MP-DocVQA supported records, 2000 MP-DocVQA insufficient records, 5000 TAT-QA
+supported records, and 2000 TAT-QA insufficient records. The mixed Stage 2 pack
+selected 4096 records with no shortage/backfill: 2048 MP-DocVQA supported,
+1638 TAT-QA supported, and 410 insufficient records.
+
+The 1024-step ms-swift LoRA run wrote checkpoint:
+
+```text
+outputs/training/answer_policy_v3_msswift_sft/answer_policy_v3_msswift_stage2_full4096_1024steps_20260705/swift_output/v0-20260705-033450/checkpoint-1024
+```
+
+The follow-up rejection-SFT continuation run selected 222 train-only
+rejection-SFT rows and continued from the 1024-step adapter for 56 update
+steps:
+
+```text
+answer_policy_v3_rejection_sft_full4096_adapter_56steps_20260705
+```
+
+Full 256-record train-only heldout comparison:
+
+```text
+answer_policy_v3_full4096_mixed_heldout256_compare_20260705
+```
+
+| Metric | 1024-step adapter | Rejection continuation | Delta |
+|---|---:|---:|---:|
+| JSON valid rate | 0.9922 | 0.9961 | +0.0039 |
+| Schema valid rate | 0.9922 | 0.9961 | +0.0039 |
+| Answer exact rate | 0.6484 | 0.6680 | +0.0195 |
+| Support status match rate | 0.9844 | 0.9883 | +0.0039 |
+| Supporting refs subset rate | 0.9922 | 0.9961 | +0.0039 |
+| Positive ref hit rate | 0.9536 | 0.9622 | +0.0086 |
+| Insufficient empty-ref rate | 0.9412 | 0.9412 | 0.0000 |
+
+Source-level movement:
+
+| Source/status | 1024-step answer exact | Continued answer exact | Delta |
+|---|---:|---:|---:|
+| MP-DocVQA supported | 0.4361 | 0.4812 | +0.0451 |
+| TAT-QA supported | 0.8679 | 0.8585 | -0.0094 |
+| TAT-QA insufficient | 0.9412 | 0.9412 | 0.0000 |
+
+Interpretation:
+
+- The continuation checkpoint shows a modest aggregate gain and a clearer
+  MP-DocVQA-supported gain on train-only heldout data.
+- It does not show a broad v3 contract regression.
+- The small TAT-QA supported answer-exact dip means the checkpoint remains a
+  candidate checkpoint, not a default deployment choice.
+- This still does not approve DPO/GRPO or formal benchmark acceptance.
+
+## 9. Limitations
 
 1. This was a diagnostic SFT run, not a final production SFT acceptance run.
 2. The heldout set came from the generated train-source pack, not validation or
@@ -494,12 +559,13 @@ Interpretation:
    improvement checkpoint.
 5. The 6-case clean fixed-evidence comparison showed base outperforming the
    480-step adapter on current full-workflow answer quality.
-6. MP-DocVQA materialization stopped at 400 document windows by design; the
-   remaining train windows are available for later expansion.
+6. The later MP-DocVQA expansion processed 848/848 train document windows, but
+   the resulting heldout diagnostics remain train-source diagnostics rather
+   than formal benchmark acceptance.
 7. No GRPO, DPO, or best-of-N distillation was approved by this run.
 8. Pixel-level VLM image reasoning remains out of scope for this training run.
 
-## 9. Decision
+## 10. Decision
 
 This first training run should be treated as a successful AnswerPolicy v3 SFT
 method validation:
@@ -515,11 +581,12 @@ grpo_approved = false
 Recommended next step:
 
 ```text
-Do not promote the 480-step adapter as the default full-workflow AnswerPolicy.
-Do not increase SFT steps or start GRPO from this evidence alone. Keep the base
-model as the safer current workflow baseline, and use the adapter evidence as a
-validated training-method result plus a regression signal to guide the next
-training-data or objective audit.
+Do not promote either the 480-step adapter or the 56-step rejection-continuation
+adapter as the default full-workflow AnswerPolicy from heldout evidence alone.
+Keep DPO/GRPO unapproved. Treat the 1024-step full4096 adapter and its
+rejection-continuation checkpoint as candidate checkpoints for targeted
+fixed-evidence/system-chain diagnostics, or continue bounded train-only
+candidate distillation if the next experiment has a clear acceptance gate.
 ```
 
 Do not tune against the two failed CLI smoke cases individually.
