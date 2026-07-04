@@ -324,7 +324,7 @@ def mpdocvqa_manifest_row(record: dict[str, Any], *, split: str = "val") -> dict
     return {
         "sample_id": str(record.get("qid") or record.get("raw_question_id")),
         "dataset": "mp_docvqa",
-        "split": str(record.get("source_split") or split),
+        "split": split,
         "doc_id": str(record.get("doc_id")),
         "source_document": str(record.get("source_doc_id")),
         "question": str(record.get("question") or ""),
@@ -344,6 +344,7 @@ def mpdocvqa_manifest_row(record: dict[str, Any], *, split: str = "val") -> dict
         ],
         "source_record_id": str(record.get("raw_question_id") or record.get("qid")),
         "source_shard": record.get("source_shard"),
+        "source_split": record.get("source_split"),
         "source_row_index": record.get("source_row_index"),
         "filter_tags": ["page_window", "raw_pdf_candidate", "extractive"],
     }

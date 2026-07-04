@@ -121,12 +121,13 @@ def test_prepare_mpdocvqa_subset_blocks_when_no_parquet(tmp_path: Path) -> None:
     assert report["temporary_download_files"] == ["partial.crdownload"]
 
 
-def test_mpdocvqa_manifest_row_uses_explicit_split_when_source_split_missing() -> None:
+def test_mpdocvqa_manifest_row_uses_explicit_split_when_source_split_exists() -> None:
     row = mpdocvqa_manifest_row(
         {
             "qid": "q1",
             "doc_id": "window_doc",
             "source_doc_id": "source_doc",
+            "source_split": "val",
             "question": "What is shown?",
             "answers": ["answer"],
             "gold_page_ordinal": 1,
@@ -135,3 +136,4 @@ def test_mpdocvqa_manifest_row_uses_explicit_split_when_source_split_missing() -
     )
 
     assert row["split"] == "train"
+    assert row["source_split"] == "val"
