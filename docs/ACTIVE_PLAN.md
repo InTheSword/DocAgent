@@ -140,6 +140,16 @@ Phase 5 Personal-use DocAgent MVP
    documents, materialized 10/10 evidence-ready samples, and produced 7
    high-confidence v3 SFT records; both kept `used_training=false` and no
    SFT/GRPO execution
+-> AnswerPolicy v3 schema warmup SFT smoke real-model verified:
+   `scripts/run_answer_policy_v3_sft_warmup.py` merges v3 SFT records,
+   validates the `ModelOutputV3` target, and runs a tiny PEFT LoRA warmup
+   without Swift; server run `answer_policy_v3_sft_warmup_smoke_20260704`
+   at commit `e9257fd` built 80 TAT-QA train v3 records, mixed them with
+   the 7 MP-DocVQA train v3 records, trained Qwen3-1.7B for 1 step on 16
+   selected records, wrote adapter artifacts, and preserved
+   `formal_benchmark_acceptance=false` and
+   `validation_subset_used_for_training=false`; this verifies the schema
+   warmup training path only, not final answer-quality improvement or GRPO
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real

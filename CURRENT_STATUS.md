@@ -333,6 +333,17 @@ with answer-text gold-page hit rate 0.8, and produced 7
 `used_training=false`, `formal_benchmark_acceptance=false`, and
 `validation_subset_used_for_training=false`.
 
+AnswerPolicy v3 schema warmup SFT is real-model verified through
+`scripts/run_answer_policy_v3_sft_warmup.py` and server run
+`answer_policy_v3_sft_warmup_smoke_20260704` at commit `e9257fd`. The run
+rebuilt 80 TAT-QA train v3 records, mixed them with the 7 MP-DocVQA train v3
+records, selected 16 records for a 1-step Qwen3-1.7B PEFT LoRA warmup, and
+wrote adapter artifacts under
+`outputs/training/answer_policy_v3_sft_warmup/answer_policy_v3_sft_warmup_smoke_20260704/adapter`.
+It kept `formal_benchmark_acceptance=false` and
+`validation_subset_used_for_training=false`; it is a schema/training-path smoke,
+not final answer-quality acceptance or GRPO.
+
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in
 `tests/test_run_final_raw_pdf_smoke.py`. The runner executes

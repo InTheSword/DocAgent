@@ -478,6 +478,28 @@ python scripts/build_answer_policy_v3_training_data.py \
   --split train
 ```
 
+Run a tiny server-only schema warmup SFT smoke after v3 records exist:
+
+```bash
+python scripts/run_answer_policy_v3_sft_warmup.py \
+  --sft-input outputs/training_prep/answer_policy_v3/answer_policy_v3_tatqa_train80_20260704/sft_train.jsonl \
+  --sft-input outputs/training_prep/answer_policy_v3/answer_policy_v3_mpdocvqa_train_splitfix2_20260704/sft_train.jsonl \
+  --output-root outputs/training/answer_policy_v3_sft_warmup \
+  --run-id answer_policy_v3_sft_warmup_smoke \
+  --base-model-path /root/autodl-tmp/models/Qwen3-1.7B \
+  --max-records 16 \
+  --max-steps 1 \
+  --max-length 1024 \
+  --gradient-accumulation-steps 2 \
+  --lora-rank 4 \
+  --lora-alpha 8 \
+  --sync-output-dir outputs/sync
+```
+
+This command starts a small PEFT LoRA training smoke. It verifies the v3
+schema and training path only; it does not claim final answer-quality
+improvement, formal benchmark acceptance, GRPO, or validation-subset training.
+
 Enable optional query planning:
 
 ```powershell
