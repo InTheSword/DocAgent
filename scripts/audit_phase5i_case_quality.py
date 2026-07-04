@@ -197,14 +197,37 @@ def audit_phase5i_case_quality(
     cases = _load_cases(cases_path)
     run_rows = _load_run_rows(run_dirs)
     rows = [_audit_case(case, run_rows.get(case.case_id, [])) for case in cases]
+    case_by_id = {case.case_id: case for case in cases}
 
     severity_counts = Counter(row["severity"] for row in rows)
     flag_counts = Counter(flag for row in rows for flag in row["flags"])
     review_rows = [row for row in rows if row["severity"] != "info"]
+    accepted_rows = [row for row in rows if row["severity"] == "info"]
 
     output_dir.mkdir(parents=True, exist_ok=True)
     rows_path = output_dir / "rows.jsonl"
     rows_path.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n", encoding="utf-8")
+    accepted_cases_path = output_dir / "accepted_cases.jsonl"
+    accepted_cases_path.write_text(
+        "\n".join(json.dumps(case_by_id[row["case_id"]].to_dict(), ensure_ascii=False) for row in accepted_rows) + "\n",
+        encoding="utf-8",
+    )
+    review_cases_path = output_dir / "review_cases.jsonl"
+    review_cases_path.write_text(
+        "\n".join(
+            json.dumps(
+                {
+                    **case_by_id[row["case_id"]].to_dict(),
+                    "case_quality_flags": row["flags"],
+                    "case_quality_severity": row["severity"],
+                },
+                ensure_ascii=False,
+            )
+            for row in review_rows
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     preview_path = output_dir / "preview.json"
     _write_json(preview_path, {"review_rows": review_rows[:20], "flag_counts": dict(flag_counts)})
 
@@ -216,6 +239,7 @@ def audit_phase5i_case_quality(
         "evaluation_scope": "phase5i_case_quality_audit_not_training",
         "quality_status": "diagnostic_only",
         "case_count": len(rows),
+        "accepted_case_count": len(accepted_rows),
         "review_case_count": len(review_rows),
         "severity_counts": dict(severity_counts),
         "flag_counts": dict(flag_counts),
@@ -245,18 +269,35 @@ def audit_phase5i_case_quality(
     manifest = {
         "run_id": run_id,
         "script_version": SCRIPT_VERSION,
-        "artifact_paths": [str(path) for path in [result_path, summary_path, summary_md_path, rows_path, preview_path]],
+        "artifact_paths": [
+            str(path)
+            for path in [result_path, summary_path, summary_md_path, rows_path, accepted_cases_path, review_cases_path, preview_path]
+        ],
         "used_qwen": False,
         "used_training": False,
         "formal_benchmark_acceptance": False,
         "validation_subset_used_for_training": False,
     }
     _write_json(manifest_path, manifest)
-    summary["artifact_paths"] = [str(path) for path in [result_path, summary_path, summary_md_path, rows_path, preview_path, manifest_path]]
+    summary["accepted_cases_path"] = str(accepted_cases_path)
+    summary["review_cases_path"] = str(review_cases_path)
+    summary["artifact_paths"] = [
+        str(path)
+        for path in [result_path, summary_path, summary_md_path, rows_path, accepted_cases_path, review_cases_path, preview_path, manifest_path]
+    ]
 
     if sync_output_dir is not None:
         sync_output_dir.mkdir(parents=True, exist_ok=True)
-        for path in [result_path, summary_path, summary_md_path, rows_path, preview_path, manifest_path]:
+        for path in [
+            result_path,
+            summary_path,
+            summary_md_path,
+            rows_path,
+            accepted_cases_path,
+            review_cases_path,
+            preview_path,
+            manifest_path,
+        ]:
             shutil.copy2(path, sync_output_dir / path.name)
         summary["sync_bundle_path"] = str(sync_output_dir)
 
@@ -270,6 +311,7 @@ def _summary_markdown(summary: dict[str, Any], review_rows: list[dict[str, Any]]
         "# Phase 5I Case Quality Audit",
         "",
         f"- case_count: {summary['case_count']}",
+        f"- accepted_case_count: {summary['accepted_case_count']}",
         f"- review_case_count: {summary['review_case_count']}",
         f"- severity_counts: {json.dumps(summary['severity_counts'], ensure_ascii=False)}",
         f"- flag_counts: {json.dumps(summary['flag_counts'], ensure_ascii=False)}",
