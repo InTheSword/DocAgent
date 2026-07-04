@@ -231,9 +231,15 @@ Use:
 
 ```bash
 cd /root/autodl-tmp/docagent
+source /etc/network_turbo 2>/dev/null || true
 git status --short
 git fetch origin --prune
 ```
+
+AutoDL provides `/etc/network_turbo` to improve outbound network reliability.
+Source it before server-side Git commands such as `fetch`, `pull`, or `push`.
+If the file is unavailable, continue with normal Git diagnostics and report the
+network failure compactly.
 
 Do not run destructive reset commands without explicit user approval.
 

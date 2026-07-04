@@ -319,12 +319,12 @@ def discover_mpdocvqa_parquets(parquet_dir: Path, explicit_paths: Iterable[str] 
     return sorted(parquet_dir.glob("*.parquet"), key=lambda item: item.name)
 
 
-def mpdocvqa_manifest_row(record: dict[str, Any]) -> dict[str, Any]:
+def mpdocvqa_manifest_row(record: dict[str, Any], *, split: str = "val") -> dict[str, Any]:
     page = record.get("gold_page_ordinal")
     return {
         "sample_id": str(record.get("qid") or record.get("raw_question_id")),
         "dataset": "mp_docvqa",
-        "split": str(record.get("source_split") or "val"),
+        "split": str(record.get("source_split") or split),
         "doc_id": str(record.get("doc_id")),
         "source_document": str(record.get("source_doc_id")),
         "question": str(record.get("question") or ""),
@@ -358,6 +358,7 @@ def prepare_mpdocvqa_subset(
     min_qa_count: int,
     max_qa_count: int,
     seed: str,
+    split: str,
     validate_only: bool,
     overwrite: bool,
     baseline_doc_ids: list[str],
@@ -392,14 +393,14 @@ def prepare_mpdocvqa_subset(
     qa_path = output_root / "qa.jsonl"
     manifests: list[dict[str, Any]] = []
     if qa_path.is_file():
-        manifests = [mpdocvqa_manifest_row(record) for record in read_jsonl(qa_path)]
+        manifests = [mpdocvqa_manifest_row(record, split=split) for record in read_jsonl(qa_path)]
         write_jsonl(output_root / "sample_manifest.jsonl", manifests)
         write_json(output_root / "preview.json", manifests[:5])
 
     source_files = [source_file_record(path) for path in parquets]
     filter_report = {
         "dataset": "mp_docvqa",
-        "split": "val",
+        "split": split,
         "status": status,
         "script_version": SCRIPT_VERSION,
         "validate_only": validate_only,
@@ -422,7 +423,8 @@ def prepare_mpdocvqa_subset(
     if source_manifest_path.exists():
         source_manifest = json.loads(source_manifest_path.read_text(encoding="utf-8"))
     else:
-        source_manifest = {"dataset": "mp_docvqa", "split": "val"}
+        source_manifest = {"dataset": "mp_docvqa"}
+    source_manifest["split"] = split
     source_manifest["final_eval_preparation"] = {
         "status": status,
         "script_version": SCRIPT_VERSION,
@@ -478,6 +480,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--mpdocvqa-parquet-dir", default="data/benchmark/mp_docvqa/val")
     parser.add_argument("--mpdocvqa-parquet", nargs="*")
     parser.add_argument("--mpdocvqa-output-root", default="outputs/final_eval/mpdocvqa_val_subset")
+    parser.add_argument("--mpdocvqa-split", default="val")
     parser.add_argument("--mpdocvqa-target-qa-count", type=int, default=50)
     parser.add_argument("--mpdocvqa-min-qa-count", type=int, default=30)
     parser.add_argument("--mpdocvqa-max-qa-count", type=int, default=70)
@@ -512,6 +515,7 @@ def main(argv: list[str] | None = None) -> None:
                     min_qa_count=int(args.mpdocvqa_min_qa_count),
                     max_qa_count=int(args.mpdocvqa_max_qa_count),
                     seed=str(args.mpdocvqa_seed),
+                    split=str(args.mpdocvqa_split),
                     validate_only=bool(args.mpdocvqa_validate_only),
                     overwrite=bool(args.overwrite),
                     baseline_doc_ids=list(args.mpdocvqa_baseline_doc_id),

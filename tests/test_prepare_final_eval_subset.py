@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from docagent.utils.jsonl import read_jsonl
-from scripts.prepare_final_eval_subset import prepare_mpdocvqa_subset, prepare_tatqa_subset
+from scripts.prepare_final_eval_subset import mpdocvqa_manifest_row, prepare_mpdocvqa_subset, prepare_tatqa_subset
 
 
 def _write_tatqa_fixture(path: Path) -> None:
@@ -109,6 +109,7 @@ def test_prepare_mpdocvqa_subset_blocks_when_no_parquet(tmp_path: Path) -> None:
         min_qa_count=1,
         max_qa_count=10,
         seed="fixture-seed",
+        split="val",
         validate_only=False,
         overwrite=False,
         baseline_doc_ids=[],
@@ -118,3 +119,19 @@ def test_prepare_mpdocvqa_subset_blocks_when_no_parquet(tmp_path: Path) -> None:
     assert payload["status"] == "blocked"
     assert payload["reason"] == "missing_parquet_shards"
     assert report["temporary_download_files"] == ["partial.crdownload"]
+
+
+def test_mpdocvqa_manifest_row_uses_explicit_split_when_source_split_missing() -> None:
+    row = mpdocvqa_manifest_row(
+        {
+            "qid": "q1",
+            "doc_id": "window_doc",
+            "source_doc_id": "source_doc",
+            "question": "What is shown?",
+            "answers": ["answer"],
+            "gold_page_ordinal": 1,
+        },
+        split="train",
+    )
+
+    assert row["split"] == "train"
