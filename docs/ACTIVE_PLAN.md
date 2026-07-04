@@ -476,6 +476,27 @@ Phase 5 Personal-use DocAgent MVP
    candidate regressions remain. This verifies the repaired-prompt train-only
    SFT objective and system-chain operability, not formal benchmark acceptance
    or default adapter promotion
+-> AnswerPolicy v3 fixed-evidence table/calculation subset selector
+   implemented locally:
+   `scripts/select_answer_policy_v3_fixed_evidence_subset.py` filters
+   train-only v3 SFT records by target supporting-ref evidence kind, producing
+   `eval_records.jsonl`, row audit, preview, summary, and manifest artifacts
+   that can be consumed directly by the existing checkpoint evaluator. It
+   blocks validation-like inputs, does not call Qwen, does not train, and does
+   not create benchmark claims. Local targeted tests passed. Server run
+   `answer_policy_v3_fixed_evidence_table_calc_promptfix_20260705` at commit
+   `a9f0117` selected 512 supported table/calculation records from the
+   repaired-prompt full4096 train-only pack: 202 calculation-supported and
+   310 table-value-supported records, with source counts MP-DocVQA 218 and
+   TAT-QA 294. Follow-up real-Qwen fixed-evidence eval
+   `answer_policy_v3_fixed_tablecalc_eval128_promptfix_20260705` compared base
+   Qwen3-1.7B with the promptfix 1024-step adapter on 128 selected rows. The
+   adapter improved answer-exact 0.5234375 -> 0.7890625 and schema validity
+   0.7734375 -> 1.0 while keeping positive-ref hit 0.96875 and thinking rate
+   0.0. Category breakdown showed calculation answer-exact 0.7692 -> 0.9808
+   and table-value answer-exact 0.3553 -> 0.6579. This supports the training
+   objective improvement on a reusable fixed-evidence table/calculation slice,
+   but still does not override the clean6 deployment guard
 -> AnswerPolicy v3 train-only heldout diagnostic split implemented locally:
    `scripts/split_answer_policy_v3_sft_records.py` deterministically splits
    validated v3 SFT records into non-overlapping `train_sft.jsonl` and

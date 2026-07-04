@@ -677,7 +677,76 @@ Interpretation:
 - The remaining clean6 failures are a small deployment/regression signal, not a
   reason for row-specific prompt rules or DPO/GRPO approval.
 
-## 10. Limitations
+## 10. Fixed-Evidence Table/Calculation Probe
+
+To avoid over-reading the tiny clean6 guard, a reusable fixed-evidence
+table/calculation subset selector was added:
+
+```text
+scripts/select_answer_policy_v3_fixed_evidence_subset.py
+```
+
+It reads train-only v3 SFT records, parses the runtime-style evidence headers
+such as `[E1] kind=table page=1`, and selects records whose target
+`supporting_refs` point to requested evidence kinds. It does not call Qwen,
+does not train, and blocks validation-like input paths.
+
+Server selector run:
+
+```text
+answer_policy_v3_fixed_evidence_table_calc_promptfix_20260705
+```
+
+Selected subset from the repaired-prompt full4096 pack:
+
+| Category | Count |
+|---|---:|
+| `calculation_supported` | 202 |
+| `table_value_supported` | 310 |
+
+Source counts:
+
+| Source | Count |
+|---|---:|
+| MP-DocVQA | 218 |
+| TAT-QA | 294 |
+
+Real-Qwen fixed-evidence diagnostic:
+
+```text
+answer_policy_v3_fixed_tablecalc_eval128_promptfix_20260705_base
+answer_policy_v3_fixed_tablecalc_eval128_promptfix_20260705_adapter1024
+```
+
+Overall 128-row result:
+
+| Metric | Base | Promptfix adapter | Delta |
+|---|---:|---:|---:|
+| Schema valid | 0.7734 | 1.0000 | +0.2266 |
+| Answer exact | 0.5234 | 0.7891 | +0.2656 |
+| Support-status match | 1.0000 | 0.9922 | -0.0078 |
+| Supporting refs subset legal | 1.0000 | 1.0000 | 0.0000 |
+| Positive-ref hit | 0.9688 | 0.9688 | 0.0000 |
+| Thinking leakage | 0.0000 | 0.0000 | 0.0000 |
+
+Category breakdown:
+
+| Category | Count | Base answer exact | Promptfix adapter answer exact |
+|---|---:|---:|---:|
+| `calculation_supported` | 52 | 0.7692 | 0.9808 |
+| `table_value_supported` | 76 | 0.3553 | 0.6579 |
+
+Interpretation:
+
+- The promptfix adapter improves table/calculation answer selection on a
+  reusable train-only fixed-evidence slice.
+- The improvement is especially clear for calculation observations and still
+  material for table-value selection.
+- This fixed-evidence result does not override the clean6 deployment guard.
+  It should be used as training-objective evidence, while full workflow probes
+  remain deployment/regression checks.
+
+## 11. Limitations
 
 1. This was a diagnostic SFT run, not a final production SFT acceptance run.
 2. The heldout set came from the generated train-source pack, not validation or
@@ -695,7 +764,7 @@ Interpretation:
 7. No GRPO, DPO, or best-of-N distillation was approved by this run.
 8. Pixel-level VLM image reasoning remains out of scope for this training run.
 
-## 11. Decision
+## 12. Decision
 
 This first training run should be treated as a successful AnswerPolicy v3 SFT
 method validation:

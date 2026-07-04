@@ -806,6 +806,31 @@ default deployment gate `blocked` because the base clean6 run passed 6/6 and
 candidate regressions remain. This confirms system-chain operability but does
 not promote the adapter as the default full-workflow AnswerPolicy.
 
+AnswerPolicy v3 fixed-evidence table/calculation subset selection is
+implemented locally in
+`scripts/select_answer_policy_v3_fixed_evidence_subset.py`. The selector reads
+train-only v3 SFT records, parses runtime-style `[E#] kind=...` evidence
+headers, filters by the target `supporting_refs` evidence kind, and writes an
+`eval_records.jsonl` subset plus row audit, preview, summary, and manifest. It
+blocks validation-like inputs and does not call Qwen, start training, or claim
+benchmark acceptance. Local targeted tests passed, and server test validation
+passed in the `docagent` environment.
+
+Server run `answer_policy_v3_fixed_evidence_table_calc_promptfix_20260705` at
+commit `a9f0117` selected 512 supported table/calculation records from the
+repaired-prompt full4096 train-only pack. The selected subset contains 202
+`calculation_supported` rows and 310 `table_value_supported` rows, with source
+counts MP-DocVQA 218 and TAT-QA 294. Follow-up real-Qwen diagnostic
+`answer_policy_v3_fixed_tablecalc_eval128_promptfix_20260705` evaluated 128
+selected rows with base Qwen3-1.7B and the promptfix 1024-step adapter. The
+adapter improved `answer_exact_rate` 0.5234375 -> 0.7890625 and schema
+validity 0.7734375 -> 1.0, while preserving `positive_ref_hit_rate=0.96875`
+and `thinking_rate=0.0`. Category breakdown: calculation answer exact improved
+0.7692 -> 0.9808, and table-value answer exact improved 0.3553 -> 0.6579.
+This is stronger reusable evidence for the fixed-evidence table/calculation
+training target than the tiny clean6 workflow guard, but it still does not
+promote the adapter as the default full-workflow AnswerPolicy.
+
 AnswerPolicy v3 train-only heldout diagnostic splitting is implemented locally
 in `scripts/split_answer_policy_v3_sft_records.py`. The splitter validates v3
 SFT records, blocks validation-like input paths by default, writes
