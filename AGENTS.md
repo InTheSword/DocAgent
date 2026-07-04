@@ -190,9 +190,13 @@ Fix only issues that block the active milestone.
 
 ## 8. Server boundary
 
-Codex works locally and cannot assume AutoDL resources exist.
+Codex may operate both the local workspace and the configured AutoDL server.
+When the server connection is available and direct server work is authorized,
+run the required server-side checks over SSH instead of asking the user to
+manually paste commands or shuttle result files. Direct SSH access does not
+remove the need for path, package, model, dataset, and GPU preflights.
 
-Before proposing server commands, read:
+Before running or proposing server commands, read:
 
 ```text
 docs/SERVER_SETUP.md
@@ -217,7 +221,11 @@ This is not, by itself, an environment error.
 
 ## 9. Server command and result protocol
 
-Provide at most one executable server command group per round.
+Use direct SSH as the default server execution path when available. Provide a
+user-pasted command group only when SSH is unavailable, the user explicitly
+requests a pasted command, or the task requires user-side interactive handling.
+In either mode, keep the server action focused and report compact structured
+results.
 
 Commands must:
 
@@ -233,8 +241,13 @@ Commands must:
   groups must not deliberately terminate the shell or parent terminal when a
   step fails.
 
+When Codex runs the command over SSH, inspect the generated server artifacts
+directly and summarize the result. Do not require manual upload/return of files
+that can be read through the active server connection.
+
 For Phase 4B Gate 3 server evaluation, provide Git sync, environment preflight,
-and real evaluation as three short foreground Bash command blocks. Do not use
+and real evaluation as three short foreground Bash command blocks only if the
+user must paste the commands. Do not use
 `nohup`, `setsid`, background `&`, `tmux`, `kill`, `pkill`, or `exec` in
 user-pasted commands.
 
@@ -277,11 +290,11 @@ sync raw datasets, full output trees, model weights, databases, complete logs,
 or secrets.
 
 Treat terminal JSON as the first triage layer, not the whole evidence record.
-Do not ask for extra files by default. If the compact JSON is insufficient to
-determine whether a failure is a code defect, command/configuration issue,
-missing artifact, or non-blocking quality issue, request the named sync/result
-files or propose a small read-only server inspection command before doing a
-deep local code audit.
+Do not ask for extra files by default. If Codex has SSH access and compact JSON
+is insufficient to classify a failure, inspect the named sync/result files or
+run a small read-only server inspection command before doing a deep local code
+audit. If SSH is unavailable, request only the specific named files or compact
+inspection output needed to classify the failure.
 
 ## 10. Completion rule
 
