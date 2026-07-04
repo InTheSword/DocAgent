@@ -20,7 +20,7 @@ Read additional documents only when the task requires them.
 | Document | Read when |
 |---|---|
 | `docs/IMPLEMENTATION_PLAN.md` | deciding project scope, changing milestones, or updating the roadmap |
-| `docs/SERVER_SETUP.md` | proposing server commands, checking environments, installing packages, downloading models, or running real models/tools |
+| `docs/SERVER_SETUP.md` | running or proposing server work, checking environments, installing packages, downloading models, or running real models/tools |
 | `docs/GPU_SERVER_BOUNDARY.md` | classifying whether implementation, tests, evaluation, or artifacts require GPU/server resources |
 | `docs/DATASETS.md` | downloading, converting, splitting, rebuilding, or evaluating datasets |
 | `docs/PHASE3_ACTIVE_PLAN.md` | checking detailed Phase 3 implementation notes or updating the Phase 3 working record |
@@ -220,14 +220,14 @@ torch.cuda.is_available() == False
 
 This is not, by itself, an environment error.
 
-## 9. Server command and result protocol
+## 9. Server execution and result protocol
 
-Use direct SSH as the default server execution path. Provide a user-pasted
-command group only as an exception: SSH unavailable, explicit user request, or
-required user-side interactive handling. In either mode, keep the server action
-focused and report compact structured results.
+Use direct SSH as the default server execution path. Do the server work, inspect
+the resulting compact artifacts over SSH, and summarize the result. Provide a
+user-pasted command group only as an exception: SSH unavailable, explicit user
+request, or required user-side interactive handling.
 
-Commands must:
+Server actions must:
 
 - use the correct project directory and Conda environment;
 - contain no unresolved placeholders;
@@ -239,26 +239,17 @@ Commands must:
 - define a two-layer evidence contract when terminal JSON may be insufficient:
   compact terminal JSON for status routing, plus named result/sync files for
   optional follow-up triage.
-- preserve the user's interactive terminal session. User-pasted server command
-  groups must not deliberately terminate the shell or parent terminal when a
-  step fails.
 
-When Codex runs the command over SSH, inspect the generated server artifacts
-directly and summarize the result. Do not require manual upload/return of files
-that can be read through the active server connection.
+Fallback command groups, when unavoidable, must preserve the user's interactive
+terminal session and must not deliberately terminate the shell or parent
+terminal when a step fails.
 
-For Phase 4B Gate 3 server evaluation, provide Git sync, environment preflight,
-and real evaluation as three short foreground Bash command blocks only if the
-user must paste the commands. Do not use
-`nohup`, `setsid`, background `&`, `tmux`, `kill`, `pkill`, or `exec` in
-user-pasted commands.
-
-Also do not use `set -e`, shell `exit`, `trap ... EXIT`, or inline Python
-`raise SystemExit` / `sys.exit(...)` as outer-wrapper failure propagation in
-commands the user pastes into an interactive server terminal. Capture
-subprocess return codes and exceptions into compact JSON instead. If a called
-script may return non-zero, wrap it so the supervising command still prints a
-structured failure result and leaves the terminal open.
+Do not use `nohup`, `setsid`, background `&`, `tmux`, `kill`, `pkill`, or
+`exec` in fallback commands that the user directly pastes into the server
+terminal. Also do not use `set -e`, shell `exit`, `trap ... EXIT`, or inline
+Python `raise SystemExit` / `sys.exit(...)` as outer-wrapper failure
+propagation in those fallback commands. Capture subprocess return codes and
+exceptions into compact JSON instead.
 
 Success response:
 

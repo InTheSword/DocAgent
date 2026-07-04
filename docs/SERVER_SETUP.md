@@ -10,16 +10,16 @@ local Windows workspace:
   Codex edits code, runs local tests, commits, and pushes
 
 AutoDL server:
-  Codex runs server work directly over SSH by default. User-pasted command
-  groups are a fallback only when SSH is unavailable, explicitly requested, or
-  an interactive user-side step is required.
+  Codex runs server work directly over SSH by default, inspects compact
+  artifacts over SSH, and summarizes results without manual file handoff.
+  User-pasted command groups are exceptional fallback only.
 ```
 
 Direct server operation does not relax the environment-safety rules in this
-document. Server commands still need preflights, compact artifacts, no silent
+document. Server actions still need preflights, compact artifacts, no silent
 large downloads, no unapproved package installation, and no destructive Git or
-filesystem operations. Codex should read relevant sync/result artifacts over SSH
-and summarize them instead of asking the user to transfer files manually.
+filesystem operations. Manual command/file transfer is reserved for SSH outage,
+explicit user request, or genuinely interactive user-side handling.
 
 ## 2. Server paths
 
@@ -172,7 +172,7 @@ The preflight must:
 - output compact JSON;
 - report missing optional resources without a long traceback.
 
-## 8. Server command requirements
+## 8. Server action requirements
 
 Every server action must:
 
@@ -181,30 +181,23 @@ Every server action must:
 - contain no unresolved placeholders;
 - check required files/packages first;
 - write long output under `outputs/logs/`;
-- when a fallback command is needed, provide at most one command group per
-  interaction;
 - define the expected evidence contract: compact terminal JSON for status
   routing, and only when useful, exact result files, sync-bundle files,
   previews, or log-tail files for optional follow-up triage;
-- preserve the interactive terminal when a command is provided for user-pasted
-  fallback. A pasted command group must not deliberately close, replace, or
-  terminate the user's shell or terminal session when any inner command fails.
+- inspect the generated server artifacts directly over SSH before deciding the
+  next local code or documentation change.
 
-Codex should execute the server action itself over SSH and then inspect the
-compact artifacts needed for the next decision. For user-pasted fallback
-commands, use short foreground Bash blocks. For Phase 4B Gate 3, split fallback
-commands into Git sync, environment/data/model preflight, and the actual
-evaluation. Do not use `nohup`, `setsid`, background `&`, `tmux`, `kill`,
-`pkill`, or `exec` in commands the user directly pastes into the server
-terminal. The evaluation block should write full stdout/stderr to logs while
-printing stage messages and a compact final JSON in the foreground.
+If a user-pasted fallback command is unavoidable, provide at most one short
+foreground command group per interaction. It must preserve the interactive terminal
+and must not deliberately close, replace, or terminate the user's shell when any
+inner command fails. Do not use `nohup`, `setsid`, background `&`, `tmux`,
+`kill`, `pkill`, or `exec` in commands the user directly pastes into the server
+terminal.
 
 Do not use `set -e`, shell `exit`, `trap ... EXIT`, or inline Python
 `raise SystemExit` / `sys.exit(...)` as outer-wrapper failure propagation in
-commands pasted into an interactive server terminal. Capture return codes and
-exceptions into the compact JSON result instead. If a called script may fail
-with a non-zero status, the wrapper must continue far enough to print the
-failure JSON and leave the terminal open.
+fallback commands pasted into an interactive server terminal. Capture return
+codes and exceptions into compact JSON instead.
 
 If a task targets MinerU, explicitly activate the isolated MinerU environment instead of `docagent`.
 
