@@ -45,7 +45,7 @@ def artifact_entry(path: Path) -> dict[str, Any]:
     return {"path": safe_relpath(path), "bytes": path.stat().st_size, "sha256": sha256_file(path)}
 
 
-def load_sft_records(paths: list[Path], *, limit: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def load_sft_records(paths: list[Path], *, limit: int, offset: int = 0) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     records: list[dict[str, Any]] = []
     invalid = Counter()
     duplicate_count = 0
@@ -56,6 +56,8 @@ def load_sft_records(paths: list[Path], *, limit: int) -> tuple[list[dict[str, A
         "valid_record_count": 0,
         "duplicate_record_count": 0,
         "invalid_reason_counts": {},
+        "offset": offset,
+        "limit": limit,
     }
     for path in paths:
         source_rows = read_jsonl(path)
@@ -71,6 +73,8 @@ def load_sft_records(paths: list[Path], *, limit: int) -> tuple[list[dict[str, A
                 continue
             seen.add(record_id)
             records.append(row)
+    if offset > 0:
+        records = records[offset:]
     if limit > 0:
         records = records[:limit]
     audit["valid_record_count"] = len(records)
@@ -362,6 +366,7 @@ def build_rejection_sampling_artifacts(
     output_root: str | Path = DEFAULT_OUTPUT_ROOT,
     run_id: str = "answer_policy_v3_rejection_sampling",
     limit: int = 128,
+    offset: int = 0,
     min_chosen_reward: float = 0.95,
     min_margin: float = 0.2,
     use_calibration_variants: bool = False,
@@ -394,6 +399,8 @@ def build_rejection_sampling_artifacts(
         block_reasons.append("no_sft_inputs")
     if not candidate_paths and not use_calibration_variants:
         block_reasons.append("no_candidate_inputs")
+    if offset < 0:
+        block_reasons.append("offset_must_be_non_negative")
 
     records: list[dict[str, Any]] = []
     sft_audit: dict[str, Any] = {}
@@ -401,7 +408,7 @@ def build_rejection_sampling_artifacts(
     source_mode = "candidate_input" if candidate_paths else "calibration_variants"
     candidates_by_id: dict[str, list[dict[str, Any]]] = defaultdict(list)
     if not block_reasons:
-        records, sft_audit = load_sft_records(input_paths, limit=limit)
+        records, sft_audit = load_sft_records(input_paths, limit=limit, offset=offset)
         if not records:
             block_reasons.append("no_valid_sft_records")
         records_by_id = record_map(records)
@@ -457,6 +464,7 @@ def build_rejection_sampling_artifacts(
         "sft_inputs": [safe_relpath(path) for path in input_paths],
         "candidate_inputs": [safe_relpath(path) for path in candidate_paths],
         "use_calibration_variants": use_calibration_variants,
+        "offset": offset,
         "min_chosen_reward": min_chosen_reward,
         "min_margin": min_margin,
         "sft_audit": sft_audit,
@@ -505,6 +513,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output-root", default=str(DEFAULT_OUTPUT_ROOT))
     parser.add_argument("--run-id", default="answer_policy_v3_rejection_sampling")
     parser.add_argument("--limit", type=int, default=128)
+    parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--min-chosen-reward", type=float, default=0.95)
     parser.add_argument("--min-margin", type=float, default=0.2)
     parser.add_argument("--use-calibration-variants", action="store_true")
@@ -522,6 +531,7 @@ def main(argv: list[str] | None = None) -> None:
             output_root=args.output_root,
             run_id=args.run_id,
             limit=args.limit,
+            offset=args.offset,
             min_chosen_reward=args.min_chosen_reward,
             min_margin=args.min_margin,
             use_calibration_variants=bool(args.use_calibration_variants),

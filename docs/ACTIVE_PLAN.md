@@ -285,7 +285,15 @@ Phase 5 Personal-use DocAgent MVP
    dry-run `answer_policy_v3_rejection_sft_msswift_dryrun_20260704`
    validated those 2 records as ms-swift-compatible input without executing
    training, with source_counts mp_docvqa:1 and tatqa:1; preference pairs did
-   not meet the reward-margin threshold, and DPO/GRPO remain unapproved
+   not meet the reward-margin threshold; a bounded follow-up server run
+   `answer_policy_v3_candidate_generation_expand20_adapter24x3_20260704` at
+   commit `25dc367` generated 72 adapter-backed `model_generation` candidates
+   from 24 train-only records with raw_json_ok_rate 1.0 and schema_ok_rate
+   1.0, and ranking
+   `answer_policy_v3_rejection_sampling_expand20_adapter24x3_20260704`
+   again produced only 2 training-ready rejection-SFT rows, with 22 selected
+   rows below the chosen-reward threshold and zero training-ready preference
+   pairs; no additional training was started, and DPO/GRPO remain unapproved
 -> AnswerPolicy v3 rejection-SFT distillation smoke real-model verified:
    server run `answer_policy_v3_rejection_sft_msswift_execute_smoke_20260704`
    at commit `0ff5792` trained Qwen3-1.7B for 1 ms-swift LoRA step on the

@@ -151,3 +151,41 @@ def test_rejection_sampling_blocks_validation_like_input(tmp_path: Path) -> None
     assert result["status"] == "blocked"
     assert result["block_reasons"] == [f"validation_like_input_path:{sft_path.as_posix()}:final_eval"]
     assert read_jsonl(tmp_path / "out" / "blocked" / "ranked_candidates.jsonl") == []
+
+
+def test_rejection_sampling_honors_offset(tmp_path: Path) -> None:
+    sft_path = tmp_path / "train" / "sft_train.jsonl"
+    candidate_path = tmp_path / "train" / "candidates.jsonl"
+    q1 = _record("q1")
+    q2 = _record("q2")
+    target_q2 = json.loads(q2["messages"][-1]["content"])
+    write_jsonl(sft_path, [q1, q2])
+    write_jsonl(
+        candidate_path,
+        [
+            {
+                "id": "q2",
+                "candidates": [
+                    {"candidate_id": "good-q2", "candidate_source": "model_generation", "prediction": target_q2}
+                ],
+            }
+        ],
+    )
+
+    result = build_rejection_sampling_artifacts(
+        sft_inputs=[sft_path],
+        candidate_inputs=[candidate_path],
+        output_root=tmp_path / "out",
+        run_id="offset",
+        limit=1,
+        offset=1,
+    )
+
+    ranked = read_jsonl(tmp_path / "out" / "offset" / "ranked_candidates.jsonl")
+
+    assert result["status"] == "success"
+    assert result["offset"] == 1
+    assert result["sft_audit"]["offset"] == 1
+    assert result["metrics"]["record_count"] == 1
+    assert ranked[0]["id"] == "q2"
+    assert result["metrics"]["training_ready_selected_count"] == 1

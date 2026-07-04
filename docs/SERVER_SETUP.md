@@ -253,6 +253,19 @@ Source it before server-side Git commands such as `fetch`, `pull`, or `push`.
 If the file is unavailable, continue with normal Git diagnostics and report the
 network failure compactly.
 
+If Git network access still fails after sourcing `/etc/network_turbo`, clear
+proxy variables and retry after a short pause before re-enabling the accelerator:
+
+```bash
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
+sleep 30
+source /etc/network_turbo 2>/dev/null || true
+git fetch origin --prune
+```
+
+If this still fails, use compact diagnostics or an SSH-transferred Git bundle
+for small code/doc syncs rather than blocking on repeated GitHub retries.
+
 Do not run destructive reset commands without explicit user approval.
 
 Large generated artifacts, model weights, raw datasets, and indexes should remain outside Git or be ignored.

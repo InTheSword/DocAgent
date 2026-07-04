@@ -528,6 +528,17 @@ preference pairs stayed below the reward-margin threshold. Dry-run
 source counts `mp_docvqa=1` and `tatqa=1`. This verifies the candidate
 generation -> reward selection -> rejection-SFT artifact -> ms-swift input
 path only; it does not claim answer-quality improvement or approve DPO/GRPO.
+Bounded follow-up server run
+`answer_policy_v3_candidate_generation_expand20_adapter24x3_20260704` at
+commit `25dc367` generated 72 adapter-backed `model_generation` candidates
+from 24 train-only records with `raw_json_ok_rate=1.0`,
+`schema_ok_rate=1.0`, `used_qwen=true`, `used_training=false`, and
+`validation_subset_used_for_training=false`. Ranking run
+`answer_policy_v3_rejection_sampling_expand20_adapter24x3_20260704`
+selected the best candidate for all 24 records but only 2 rows met the
+training-ready rejection-SFT threshold; 22 selected rows were below the chosen
+reward threshold and all 24 preference pairs stayed below the reward-margin
+threshold. No additional training was started from this run.
 
 AnswerPolicy v3 rejection-SFT distillation smoke is real-model verified at the
 execution-contract level. Server run

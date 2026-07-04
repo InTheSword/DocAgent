@@ -44,7 +44,7 @@ def artifact_entry(path: Path) -> dict[str, Any]:
     return {"path": safe_relpath(path), "bytes": path.stat().st_size, "sha256": sha256_file(path)}
 
 
-def load_records(paths: list[Path], *, limit: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def load_records(paths: list[Path], *, limit: int, offset: int = 0) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     records: list[dict[str, Any]] = []
     seen: set[str] = set()
     invalid = Counter()
@@ -55,6 +55,8 @@ def load_records(paths: list[Path], *, limit: int) -> tuple[list[dict[str, Any]]
         "valid_record_count": 0,
         "duplicate_record_count": 0,
         "invalid_reason_counts": {},
+        "offset": offset,
+        "limit": limit,
     }
     for path in paths:
         rows = read_jsonl(path)
@@ -70,6 +72,8 @@ def load_records(paths: list[Path], *, limit: int) -> tuple[list[dict[str, Any]]
                 continue
             seen.add(record_id)
             records.append(row)
+    if offset > 0:
+        records = records[offset:]
     if limit > 0:
         records = records[:limit]
     audit["valid_record_count"] = len(records)
@@ -293,6 +297,7 @@ def generate_candidates(
     base_model_path: str | Path = "/root/autodl-tmp/models/Qwen3-1.7B",
     adapter_path: str | Path | None = None,
     limit: int = 16,
+    offset: int = 0,
     num_candidates: int = 4,
     max_new_tokens: int = 256,
     temperature: float = 0.7,
@@ -325,11 +330,13 @@ def generate_candidates(
         block_reasons.append("no_sft_inputs")
     if num_candidates <= 0:
         block_reasons.append("num_candidates_must_be_positive")
+    if offset < 0:
+        block_reasons.append("offset_must_be_non_negative")
 
     records: list[dict[str, Any]] = []
     audit: dict[str, Any] = {}
     if not block_reasons:
-        records, audit = load_records(input_paths, limit=limit)
+        records, audit = load_records(input_paths, limit=limit, offset=offset)
         if not records:
             block_reasons.append("no_valid_sft_records")
 
@@ -378,6 +385,7 @@ def generate_candidates(
         "base_model_path": str(base_model_path),
         "adapter_path": str(adapter_path or ""),
         "limit": limit,
+        "offset": offset,
         "num_candidates": num_candidates,
         "dry_run": dry_run,
         "audit": audit,
@@ -428,6 +436,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--base-model-path", default="/root/autodl-tmp/models/Qwen3-1.7B")
     parser.add_argument("--adapter-path")
     parser.add_argument("--limit", type=int, default=16)
+    parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--num-candidates", type=int, default=4)
     parser.add_argument("--max-new-tokens", type=int, default=256)
     parser.add_argument("--temperature", type=float, default=0.7)
@@ -450,6 +459,7 @@ def main(argv: list[str] | None = None) -> None:
             base_model_path=args.base_model_path,
             adapter_path=args.adapter_path,
             limit=args.limit,
+            offset=args.offset,
             num_candidates=args.num_candidates,
             max_new_tokens=args.max_new_tokens,
             temperature=args.temperature,

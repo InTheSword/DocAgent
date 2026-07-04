@@ -73,3 +73,26 @@ def test_generate_answer_policy_v3_candidates_blocks_validation_like_input(tmp_p
     assert result["status"] == "blocked"
     assert result["block_reasons"] == [f"validation_like_input_path:{sft_path.as_posix()}:final_eval"]
     assert read_jsonl(tmp_path / "out" / "blocked" / "candidates.jsonl") == []
+
+
+def test_generate_answer_policy_v3_candidates_honors_offset(tmp_path: Path) -> None:
+    sft_path = tmp_path / "train" / "sft_train.jsonl"
+    write_jsonl(sft_path, [_record("q1"), _record("q2"), _record("q3")])
+
+    result = generate_candidates(
+        sft_inputs=[sft_path],
+        output_root=tmp_path / "out",
+        run_id="offset",
+        limit=1,
+        offset=1,
+        num_candidates=1,
+        dry_run=True,
+    )
+
+    rows = read_jsonl(tmp_path / "out" / "offset" / "candidates.jsonl")
+
+    assert result["status"] == "success"
+    assert result["offset"] == 1
+    assert result["audit"]["offset"] == 1
+    assert result["metrics"]["record_count"] == 1
+    assert rows[0]["id"] == "q2"
