@@ -203,6 +203,11 @@ def audit_phase5i_case_quality(
     flag_counts = Counter(flag for row in rows for flag in row["flags"])
     review_rows = [row for row in rows if row["severity"] != "info"]
     accepted_rows = [row for row in rows if row["severity"] == "info"]
+    accepted_answer_quality_rows = [
+        row for row in accepted_rows if case_by_id[row["case_id"]].downstream_answer_required
+    ]
+    accepted_task_counts = Counter(case_by_id[row["case_id"]].expected_task_type for row in accepted_rows)
+    review_task_counts = Counter(case_by_id[row["case_id"]].expected_task_type for row in review_rows)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     rows_path = output_dir / "rows.jsonl"
@@ -210,6 +215,14 @@ def audit_phase5i_case_quality(
     accepted_cases_path = output_dir / "accepted_cases.jsonl"
     accepted_cases_path.write_text(
         "\n".join(json.dumps(case_by_id[row["case_id"]].to_dict(), ensure_ascii=False) for row in accepted_rows) + "\n",
+        encoding="utf-8",
+    )
+    accepted_answer_quality_cases_path = output_dir / "accepted_answer_quality_cases.jsonl"
+    accepted_answer_quality_cases_path.write_text(
+        "\n".join(
+            json.dumps(case_by_id[row["case_id"]].to_dict(), ensure_ascii=False) for row in accepted_answer_quality_rows
+        )
+        + "\n",
         encoding="utf-8",
     )
     review_cases_path = output_dir / "review_cases.jsonl"
@@ -240,9 +253,12 @@ def audit_phase5i_case_quality(
         "quality_status": "diagnostic_only",
         "case_count": len(rows),
         "accepted_case_count": len(accepted_rows),
+        "accepted_answer_quality_case_count": len(accepted_answer_quality_rows),
         "review_case_count": len(review_rows),
         "severity_counts": dict(severity_counts),
         "flag_counts": dict(flag_counts),
+        "accepted_task_counts": dict(accepted_task_counts),
+        "review_task_counts": dict(review_task_counts),
         "cases_path": str(cases_path) if cases_path else "default_cases",
         "run_dirs": [str(path) for path in run_dirs],
         "used_qwen": False,
@@ -255,7 +271,9 @@ def audit_phase5i_case_quality(
             "reason": (
                 "This audit identifies weak case definitions and observed page/keyword "
                 "mismatches without changing benchmark scoring, rerunning models, or "
-                "creating training data."
+                "creating training data. Use accepted_answer_quality_cases.jsonl, not "
+                "the broader accepted_cases.jsonl, for AnswerPolicy answer-quality "
+                "comparisons."
             ),
         },
     }
@@ -271,7 +289,16 @@ def audit_phase5i_case_quality(
         "script_version": SCRIPT_VERSION,
         "artifact_paths": [
             str(path)
-            for path in [result_path, summary_path, summary_md_path, rows_path, accepted_cases_path, review_cases_path, preview_path]
+            for path in [
+                result_path,
+                summary_path,
+                summary_md_path,
+                rows_path,
+                accepted_cases_path,
+                accepted_answer_quality_cases_path,
+                review_cases_path,
+                preview_path,
+            ]
         ],
         "used_qwen": False,
         "used_training": False,
@@ -280,10 +307,21 @@ def audit_phase5i_case_quality(
     }
     _write_json(manifest_path, manifest)
     summary["accepted_cases_path"] = str(accepted_cases_path)
+    summary["accepted_answer_quality_cases_path"] = str(accepted_answer_quality_cases_path)
     summary["review_cases_path"] = str(review_cases_path)
     summary["artifact_paths"] = [
         str(path)
-        for path in [result_path, summary_path, summary_md_path, rows_path, accepted_cases_path, review_cases_path, preview_path, manifest_path]
+        for path in [
+            result_path,
+            summary_path,
+            summary_md_path,
+            rows_path,
+            accepted_cases_path,
+            accepted_answer_quality_cases_path,
+            review_cases_path,
+            preview_path,
+            manifest_path,
+        ]
     ]
 
     if sync_output_dir is not None:
@@ -294,6 +332,7 @@ def audit_phase5i_case_quality(
             summary_md_path,
             rows_path,
             accepted_cases_path,
+            accepted_answer_quality_cases_path,
             review_cases_path,
             preview_path,
             manifest_path,
@@ -312,9 +351,12 @@ def _summary_markdown(summary: dict[str, Any], review_rows: list[dict[str, Any]]
         "",
         f"- case_count: {summary['case_count']}",
         f"- accepted_case_count: {summary['accepted_case_count']}",
+        f"- accepted_answer_quality_case_count: {summary['accepted_answer_quality_case_count']}",
         f"- review_case_count: {summary['review_case_count']}",
         f"- severity_counts: {json.dumps(summary['severity_counts'], ensure_ascii=False)}",
         f"- flag_counts: {json.dumps(summary['flag_counts'], ensure_ascii=False)}",
+        f"- accepted_task_counts: {json.dumps(summary['accepted_task_counts'], ensure_ascii=False)}",
+        f"- review_task_counts: {json.dumps(summary['review_task_counts'], ensure_ascii=False)}",
         "",
         "This audit is diagnostic-only. It does not rerun models, alter scoring, or create training data.",
         "",

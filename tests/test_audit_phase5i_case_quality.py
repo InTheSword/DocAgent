@@ -136,6 +136,44 @@ def test_phase5i_case_quality_writes_clean_accepted_cases(tmp_path: Path) -> Non
     accepted = json.loads((tmp_path / "out" / "accepted_cases.jsonl").read_text(encoding="utf-8").strip())
 
     assert summary["accepted_case_count"] == 1
+    assert summary["accepted_answer_quality_case_count"] == 0
     assert summary["review_case_count"] == 0
     assert accepted["case_id"] == "clean_case"
     assert "case_quality_flags" not in accepted
+    assert (tmp_path / "out" / "accepted_answer_quality_cases.jsonl").read_text(encoding="utf-8").strip() == ""
+
+
+def test_phase5i_case_quality_writes_answer_quality_ready_cases(tmp_path: Path) -> None:
+    cases_path = tmp_path / "cases.jsonl"
+    _write_jsonl(
+        cases_path,
+        [
+            {
+                "case_id": "clean_fact_case",
+                "user_request": "Find the financial year related to unclaimed dividend.",
+                "request_form": "interrogative",
+                "expected_task_type": "local_fact_qa",
+                "expected_answer_type": "extractive",
+                "answerable": True,
+                "unsupported_ok": False,
+                "expected_page": 24,
+                "expected_evidence_keywords": ["dividend"],
+                "expected_answer_keywords": ["2000-01"],
+                "forbidden_answer_keywords": [],
+            }
+        ],
+    )
+
+    summary = audit_phase5i_case_quality(
+        cases_path=cases_path,
+        run_dirs=[],
+        output_dir=tmp_path / "out",
+        run_id="audit_test",
+    )
+    answer_quality_case = json.loads(
+        (tmp_path / "out" / "accepted_answer_quality_cases.jsonl").read_text(encoding="utf-8").strip()
+    )
+
+    assert summary["accepted_case_count"] == 1
+    assert summary["accepted_answer_quality_case_count"] == 1
+    assert answer_quality_case["case_id"] == "clean_fact_case"
