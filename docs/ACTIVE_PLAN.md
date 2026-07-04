@@ -411,6 +411,18 @@ Phase 5 Personal-use DocAgent MVP
    and 2 citation-or-expected-page-alignment rows; this reinforces that the
    next step is cleaner system-level evaluation/failure attribution, not
    blindly increasing SFT steps or starting GRPO
+-> Phase 5I answer-quality case-quality audit implemented locally:
+   `scripts/audit_phase5i_case_quality.py` audits built-in or JSONL Phase 5I
+   cases plus optional existing run artifacts for weak answer keywords,
+   missing automatic answer-quality gold, and repeated non-expected citation
+   pages without rerunning models, changing scoring, or creating training
+   data; local targeted tests passed, and server read-only audit
+   `phase5i_case_quality_v3refs_compare8_20260704` over the base-vs-adapter
+   v3_refs artifacts found 12/26 default cases needing review, including
+   8 cases whose answer keywords are type markers, 5 observed rows where all
+   runs failed weak answer-keyword checks, and 2 observed rows where all runs
+   cited a non-expected page; use this as a case-quality guard before more
+   system-level answer-quality training or benchmark decisions
 -> AnswerPolicy v3 first training report implemented locally:
    `docs/ANSWER_POLICY_V3_FIRST_TRAINING_REPORT.md` summarizes the first
    expanded ms-swift SFT run, including MP-DocVQA 400-window materialization,
