@@ -502,17 +502,20 @@ Phase 5 Personal-use DocAgent MVP
    regressions. This supports the training objective improvement on a reusable
    fixed-evidence table/calculation slice, but still does not override the
    clean6 deployment guard
--> Final-delivery gate adapter/v3 workflow parameter passthrough implemented
+-> Final-delivery gate adapter/v3 parameter passthrough implemented
    locally:
+   `scripts/run_final_answer_policy_baseline.py` now accepts
+   `--answer-output-contract`, forwards it into `QwenAnswerPolicyConfig`, and
+   records the contract in result/summary/manifest artifacts.
    `scripts/run_mpdocvqa_full_workflow_diagnostic.py` now forwards
    `--answer-output-contract` and optional `--adapter-path` to
    `scripts/docagent_cli.py`, and records those settings in its summary.
    `scripts/run_final_delivery_benchmark_gate.py` now exposes
-   `--answer-output-contract` and forwards both it and `--adapter-path` to the
-   MP-DocVQA full-workflow diagnostic step. Defaults remain unchanged
+   `--answer-output-contract` and forwards both it and `--adapter-path` to
+   both model-backed child steps. Defaults remain unchanged
    (`candidate_citations` and no adapter), so this enables explicit candidate
-   checkpoint workflow probes without promoting any adapter as the default
-   AnswerPolicy. Server diagnostic
+   checkpoint gate probes without promoting any adapter as the default
+   AnswerPolicy. Initial server diagnostic
    `final_delivery_gate_promptfix_adapter_v3_limit8_20260705` at commit
    `d97ff4d` ran readiness plus 8 MP-DocVQA workflow rows with
    `answer_policy=sft`, the promptfix 1024-step adapter, and
@@ -523,6 +526,18 @@ Phase 5 Personal-use DocAgent MVP
    and answer-hit rate 0.375. Review
    `final_delivery_gate_promptfix_adapter_v3_limit8_20260705_review`
    verified local/sync manifests, safety flags, and complete component metrics.
+   Follow-up server diagnostic
+   `final_delivery_gate_promptfix_adapter_v3_fullsmall_20260705` at commit
+   `29deb63` ran readiness, AnswerPolicy baseline, and MP-DocVQA workflow
+   together with the same adapter and `answer_output_contract=v3_refs`.
+   The baseline child summary recorded `answer_output_contract=v3_refs`,
+   evaluated 8 rows with format-valid rate 1.0, answer-hit 0.25, and
+   citation-block hit 0.75. The workflow child summary recorded
+   `answer_output_contract=v3_refs`, evaluated 4 rows with CLI success 1.0,
+   retrieved/citation page-hit 0.75, and Qwen/BGE/reranker/query-rewriter use
+   counts all 4. Review
+   `final_delivery_gate_promptfix_adapter_v3_fullsmall_20260705_review`
+   verified manifests, safety flags, and complete component metrics.
    This is candidate-checkpoint execution-chain evidence, not default
    deployment approval or formal benchmark acceptance
 -> AnswerPolicy v3 train-only heldout diagnostic split implemented locally:

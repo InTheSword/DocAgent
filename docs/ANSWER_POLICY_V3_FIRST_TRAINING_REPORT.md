@@ -771,7 +771,7 @@ Interpretation:
   It should be used as training-objective evidence, while full workflow probes
   remain deployment/regression checks.
 
-## 11. Final-Delivery Gate Adapter/V3 Workflow Probe
+## 11. Final-Delivery Gate Adapter/V3 Probes
 
 After the final-delivery gate gained explicit candidate-checkpoint
 passthrough, a small server diagnostic verified that the promptfix adapter can
@@ -808,6 +808,36 @@ The review verified local/sync manifests, safety flags, and complete
 component-use metrics. This is execution-chain evidence for the candidate
 checkpoint and v3 contract; it is not default deployment approval and not
 formal benchmark acceptance.
+
+After the AnswerPolicy baseline runner also gained `--answer-output-contract`
+support, a second small complete-gate probe verified both model-backed child
+steps with the same adapter and v3 contract:
+
+```text
+final_delivery_gate_promptfix_adapter_v3_fullsmall_20260705
+final_delivery_gate_promptfix_adapter_v3_fullsmall_20260705_review
+```
+
+Result:
+
+| Metric | Value |
+|---|---:|
+| AnswerPolicy baseline evaluated rows | 8 |
+| AnswerPolicy baseline format-valid rate | 1.0000 |
+| AnswerPolicy baseline answer-hit rate | 0.2500 |
+| AnswerPolicy baseline citation-block hit rate | 0.7500 |
+| MP-DocVQA workflow evaluated rows | 4 |
+| MP-DocVQA workflow CLI success rate | 1.0000 |
+| MP-DocVQA workflow component-use counts | 4 / 4 / 4 / 4 |
+| MP-DocVQA workflow retrieved page hit rate | 0.7500 |
+| MP-DocVQA workflow citation page hit rate | 0.7500 |
+| MP-DocVQA workflow answer-hit rate | 0.0000 |
+
+Both child summaries recorded `answer_output_contract=v3_refs`. The review
+again verified local/sync manifests, safety flags, and complete component-use
+metrics. This proves the candidate adapter can enter the complete diagnostic
+gate contract; it still does not promote the adapter as the default checkpoint
+or claim formal benchmark acceptance.
 
 ## 12. Limitations
 

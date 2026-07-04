@@ -241,8 +241,9 @@ baseline runner, and the MP-DocVQA full-workflow diagnostic runner. It writes
 compact artifacts and sync bundles, keeps `formal_benchmark_acceptance=false`,
 and does not start SFT/GRPO training.
 
-To exercise a candidate AnswerPolicy adapter in the MP-DocVQA workflow step,
-pass the same model policy options used by `docagent_cli.py`:
+To exercise a candidate AnswerPolicy adapter in both the AnswerPolicy baseline
+step and the MP-DocVQA workflow step, pass the same model policy options used
+by `docagent_cli.py`:
 
 ```powershell
 python scripts\run_final_delivery_benchmark_gate.py `
@@ -252,9 +253,9 @@ python scripts\run_final_delivery_benchmark_gate.py `
   --answer-output-contract v3_refs
 ```
 
-This only changes the diagnostic workflow invocation. It does not make the
-adapter the default checkpoint, and it does not promote the result to formal
-benchmark acceptance.
+This only changes the diagnostic gate invocation. It does not make the adapter
+the default checkpoint, and it does not promote the result to formal benchmark
+acceptance.
 
 Inspect a completed final-delivery benchmark gate artifact directory:
 
@@ -407,8 +408,10 @@ python scripts\run_final_answer_policy_baseline.py `
 ```
 
 On a GPU server with Qwen available, use `--answer-policy base` and
-`--base-model-path /root/autodl-tmp/models/Qwen3-1.7B`. This runner is a
-diagnostic prompt-v2 baseline, not formal benchmark acceptance. With
+`--base-model-path /root/autodl-tmp/models/Qwen3-1.7B`. Candidate v3 adapters
+can use `--answer-policy sft`, `--adapter-path <checkpoint>`, and
+`--answer-output-contract v3_refs`. This runner is a diagnostic baseline, not
+formal benchmark acceptance. With
 `--sync-output-dir`, it writes a compact `outputs/sync/<run_id>/` bundle with
 `result.json`, summaries, previews, failure samples, manifest, and log-tail
 placeholders suitable for server result return.

@@ -17,12 +17,13 @@ is evidence that the v3 AnswerPolicy objective improved; it does not promote
 the adapter as the default full-workflow checkpoint.
 
 The final-delivery benchmark gate now has a complete candidate-checkpoint
-parameter path for MP-DocVQA workflow diagnostics: it can forward explicit
-`--answer-policy sft`, `--adapter-path`, and `--answer-output-contract v3_refs`
-through `run_mpdocvqa_full_workflow_diagnostic.py` into `docagent_cli.py`.
-Defaults remain unchanged. This fixes execution-chain plumbing for future
-candidate adapter probes; it is not itself a model-quality or deployment
-acceptance.
+parameter path for both AnswerPolicy baseline diagnostics and MP-DocVQA
+workflow diagnostics: it can forward explicit `--answer-policy sft`,
+`--adapter-path`, and `--answer-output-contract v3_refs` through the baseline
+runner and through `run_mpdocvqa_full_workflow_diagnostic.py` into
+`docagent_cli.py`. Defaults remain unchanged. This fixes execution-chain
+plumbing for candidate adapter probes; it is not itself a model-quality or
+deployment acceptance.
 
 Server diagnostic `final_delivery_gate_promptfix_adapter_v3_limit8_20260705`
 verified that plumbing with the promptfix 1024-step adapter on 8 MP-DocVQA
@@ -34,6 +35,18 @@ rows, kept `used_training=false`, `formal_benchmark_acceptance=false`, and
 manifest and component-metric checks. Diagnostic answer-hit was 0.375 and
 retrieved/citation page-hit rates were 0.875; this is execution-chain evidence,
 not default checkpoint promotion.
+
+Server diagnostic `final_delivery_gate_promptfix_adapter_v3_fullsmall_20260705`
+then verified the same promptfix adapter through a small complete gate that ran
+readiness, AnswerPolicy baseline, and MP-DocVQA workflow steps. Both model
+steps used `answer_policy=sft`, the promptfix 1024-step adapter, and
+`answer_output_contract=v3_refs`. The baseline evaluated 8 rows with
+format-valid rate 1.0, answer-hit 0.25, and citation-block hit 0.75. The
+workflow evaluated 4 rows with CLI success 1.0, all four real components used
+on every row, retrieved/citation page-hit 0.75, and answer-hit 0.0. Review
+artifacts passed manifest, safety-flag, and component-metric checks. This
+accepts the full gate contract plumbing only; answer quality remains
+diagnostic and not formal benchmark acceptance.
 
 AnswerPolicy v3 clean fixed-evidence comparison is real-model verified as a
 diagnostic contract probe, not as formal benchmark acceptance. Server run
