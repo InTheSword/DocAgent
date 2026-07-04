@@ -690,14 +690,18 @@ Phase 5I answer-quality case-quality audit is implemented in
 `scripts/audit_phase5i_case_quality.py`. It audits built-in or JSONL Phase 5I
 cases and optional existing run artifacts for weak answer keywords, missing
 automatic answer-quality gold, and repeated non-expected citation pages without
-rerunning models, changing scoring, or creating training data. Local targeted
-tests passed, and server read-only audit
-`phase5i_case_quality_v3refs_compare8_20260704` over the v3_refs base-vs-
-adapter artifacts found 12/26 default cases needing review: 8 cases whose
-answer keywords are type markers, 5 observed rows where all runs failed weak
-answer-keyword checks, and 2 observed rows where all runs cited a non-expected
-page. This is a case-quality guard for future system-level answer-quality
-experiments, not a benchmark acceptance result.
+rerunning models, changing scoring, or creating training data. It writes
+`accepted_cases.jsonl`, `accepted_answer_quality_cases.jsonl`, and
+`review_cases.jsonl`. Local targeted tests passed, and server read-only audit
+`phase5i_case_quality_v3refs_compare8_answerpack_20260704` over the v3_refs
+base-vs-adapter artifacts found 12/26 default cases needing review: 8 cases
+whose answer keywords are type markers, 5 observed rows where all runs failed
+weak answer-keyword checks, and 2 observed rows where all runs cited a
+non-expected page. The broader accepted pack contains 14 cases, but
+`accepted_answer_quality_case_count=0`; therefore the current default Phase 5I
+cases should not be used as the automatic system-level AnswerPolicy
+answer-quality target for more training decisions. This is a case-quality
+guard, not a benchmark acceptance result.
 
 AnswerPolicy v3 first training report is implemented in
 `docs/ANSWER_POLICY_V3_FIRST_TRAINING_REPORT.md`. It summarizes MP-DocVQA

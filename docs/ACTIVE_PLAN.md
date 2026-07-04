@@ -416,13 +416,16 @@ Phase 5 Personal-use DocAgent MVP
    cases plus optional existing run artifacts for weak answer keywords,
    missing automatic answer-quality gold, and repeated non-expected citation
    pages without rerunning models, changing scoring, or creating training
-   data; local targeted tests passed, and server read-only audit
-   `phase5i_case_quality_v3refs_compare8_20260704` over the base-vs-adapter
-   v3_refs artifacts found 12/26 default cases needing review, including
-   8 cases whose answer keywords are type markers, 5 observed rows where all
-   runs failed weak answer-keyword checks, and 2 observed rows where all runs
-   cited a non-expected page; use this as a case-quality guard before more
-   system-level answer-quality training or benchmark decisions
+   data; it writes `accepted_cases.jsonl`, `accepted_answer_quality_cases.jsonl`,
+   and `review_cases.jsonl`; local targeted tests passed, and server read-only
+   audit `phase5i_case_quality_v3refs_compare8_answerpack_20260704` over the
+   base-vs-adapter v3_refs artifacts found 12/26 default cases needing review,
+   including 8 cases whose answer keywords are type markers, 5 observed rows
+   where all runs failed weak answer-keyword checks, and 2 observed rows where
+   all runs cited a non-expected page; the broader accepted pack contains
+   14 cases, but `accepted_answer_quality_case_count=0`, so the current
+   default Phase 5I cases should not be used as the automatic system-level
+   AnswerPolicy answer-quality target for more training decisions
 -> AnswerPolicy v3 first training report implemented locally:
    `docs/ANSWER_POLICY_V3_FIRST_TRAINING_REPORT.md` summarizes the first
    expanded ms-swift SFT run, including MP-DocVQA 400-window materialization,
