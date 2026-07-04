@@ -59,6 +59,8 @@ def test_answer_policy_v3_msswift_dry_run_writes_swift_artifacts(tmp_path: Path)
     assert "sft" in command
     assert "--dataset" in command
     assert str(artifact_dir / "swift_train.jsonl") in command
+    assert "--tuner_type" in command
+    assert "--train_type" not in command
     assert (artifact_dir / "result.json").is_file()
     assert (artifact_dir / "summary.json").is_file()
     assert (artifact_dir / "summary.md").is_file()

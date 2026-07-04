@@ -68,7 +68,7 @@ def build_swift_command(
     batch_size: int,
     gradient_accumulation_steps: int,
     learning_rate: float,
-    train_type: str,
+    tuner_type: str,
     torch_dtype: str,
     lora_rank: int,
     lora_alpha: int,
@@ -80,8 +80,8 @@ def build_swift_command(
         str(model_path),
         "--dataset",
         str(dataset_path),
-        "--train_type",
-        train_type,
+        "--tuner_type",
+        tuner_type,
         "--output_dir",
         str(output_dir),
         "--max_steps",
@@ -160,7 +160,7 @@ def run_msswift_sft(
     learning_rate: float = 1e-4,
     batch_size: int = 1,
     gradient_accumulation_steps: int = 4,
-    train_type: str = "lora",
+    tuner_type: str = "lora",
     torch_dtype: str = "bfloat16",
     lora_rank: int = 8,
     lora_alpha: int = 16,
@@ -223,7 +223,7 @@ def run_msswift_sft(
         batch_size=batch_size,
         gradient_accumulation_steps=gradient_accumulation_steps,
         learning_rate=learning_rate,
-        train_type=train_type,
+        tuner_type=tuner_type,
         torch_dtype=torch_dtype,
         lora_rank=lora_rank,
         lora_alpha=lora_alpha,
@@ -326,7 +326,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=4)
-    parser.add_argument("--train-type", default="lora")
+    parser.add_argument("--tuner-type", default="lora")
     parser.add_argument("--torch-dtype", default="bfloat16")
     parser.add_argument("--lora-rank", type=int, default=8)
     parser.add_argument("--lora-alpha", type=int, default=16)
@@ -352,7 +352,7 @@ def main(argv: list[str] | None = None) -> None:
             learning_rate=args.learning_rate,
             batch_size=args.batch_size,
             gradient_accumulation_steps=args.gradient_accumulation_steps,
-            train_type=args.train_type,
+            tuner_type=args.tuner_type,
             torch_dtype=args.torch_dtype,
             lora_rank=args.lora_rank,
             lora_alpha=args.lora_alpha,
