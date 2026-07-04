@@ -348,8 +348,16 @@ Phase 5 Personal-use DocAgent MVP
    commit `ddab988`, generating 144 more adapter-backed candidates from
    train-only records, selecting 6 and 7 additional training-ready
    rejection-SFT rows respectively, and producing 3 total training-ready
-   preference pairs across the four 24-record slices; the preference-pair
-   volume remains too small for DPO/GRPO approval
+   preference pairs across the four 24-record slices; full-pack follow-up
+   `answer_policy_v3_candidates_full4096_adapter1024_256x4_20260705` loaded
+   the 1024-step full4096 ms-swift LoRA adapter and generated 1024 real
+   candidates from 256 train-only v3 records with raw_json_ok_rate 1.0 and
+   schema_ok_rate 1.0, while ranking run
+   `answer_policy_v3_rejection_full4096_adapter1024_256x4_20260705` selected
+   222 training-ready rejection-SFT rows and 25 training-ready preference
+   pairs; this supports bounded rejection-SFT distillation or wider candidate
+   generation, but the preference-pair volume remains too small for DPO/GRPO
+   approval
 -> AnswerPolicy v3 rejection-SFT distillation smoke real-model verified:
    server run `answer_policy_v3_rejection_sft_msswift_execute_smoke_20260704`
    at commit `0ff5792` trained Qwen3-1.7B for 1 ms-swift LoRA step on the

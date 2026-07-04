@@ -639,6 +639,19 @@ four 24-record slices, the artifact path now has 26 training-ready
 rejection-SFT rows and 3 training-ready preference pairs. This is enough for a
 small rejection-SFT smoke, but still too small to approve DPO/GRPO.
 
+Full-pack adapter-backed candidate generation is real-model verified at the
+post-training artifact level. Server run
+`answer_policy_v3_candidates_full4096_adapter1024_256x4_20260705` loaded the
+1024-step full4096 ms-swift LoRA adapter, generated 1024 real
+`model_generation` candidates from 256 train-only v3 records, and kept
+`raw_json_ok_rate=1.0`, `schema_ok_rate=1.0`, `used_qwen=true`,
+`used_training=false`, `formal_benchmark_acceptance=false`, and
+`validation_subset_used_for_training=false`. Follow-up ranking
+`answer_policy_v3_rejection_full4096_adapter1024_256x4_20260705` selected
+222 training-ready rejection-SFT rows and 25 training-ready preference pairs.
+This is enough evidence to expand or run a bounded rejection-SFT distillation
+experiment; the preference-pair volume remains too small to approve DPO/GRPO.
+
 AnswerPolicy v3 rejection-SFT distillation smoke is real-model verified at the
 execution-contract level. Server run
 `answer_policy_v3_rejection_sft_msswift_execute_smoke_20260704` at commit
