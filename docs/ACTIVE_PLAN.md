@@ -273,6 +273,19 @@ Phase 5 Personal-use DocAgent MVP
    `model_generation` candidates successfully; no selected/pair rows passed
    reward thresholds in this tiny base-model smoke, so no rejection-SFT rows
    were emitted and GRPO remains unapproved
+-> AnswerPolicy v3 adapter-backed rejection distillation artifact path
+   real-model verified:
+   server run `answer_policy_v3_candidate_generation_expand20_adapter_smoke_20260704`
+   at commit `f7120c7` loaded the short expanded ms-swift LoRA adapter
+   `answer_policy_v3_msswift_stage2_expand20_short_20260704`, generated
+   24 adapter-backed `model_generation` candidates from 8 train-only records
+   with raw_json_ok_rate 1.0 and schema_ok_rate 1.0, and follow-up ranking
+   `answer_policy_v3_rejection_sampling_expand20_adapter_smoke_20260704`
+   selected 2 reward-qualified rows into `rejection_sft_candidates.jsonl`;
+   dry-run `answer_policy_v3_rejection_sft_msswift_dryrun_20260704`
+   validated those 2 records as ms-swift-compatible input without executing
+   training, with source_counts mp_docvqa:1 and tatqa:1; preference pairs did
+   not meet the reward-margin threshold, and DPO/GRPO remain unapproved
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real

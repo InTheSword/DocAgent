@@ -511,6 +511,24 @@ consumed the `model_generation` candidates successfully; no selected/pair rows
 passed the reward thresholds in this tiny base-model smoke, so no
 rejection-SFT rows were emitted and GRPO remains unapproved.
 
+AnswerPolicy v3 adapter-backed rejection distillation artifacts are
+real-model verified at the artifact-contract level. Server run
+`answer_policy_v3_candidate_generation_expand20_adapter_smoke_20260704` at
+commit `f7120c7` loaded the short expanded ms-swift LoRA adapter from
+`answer_policy_v3_msswift_stage2_expand20_short_20260704`, generated 24
+adapter-backed `model_generation` candidates from 8 train-only records, and
+kept `raw_json_ok_rate=1.0`, `schema_ok_rate=1.0`, `used_qwen=true`,
+`used_training=false`, and `validation_subset_used_for_training=false`.
+Follow-up ranking
+`answer_policy_v3_rejection_sampling_expand20_adapter_smoke_20260704`
+selected 2 reward-qualified rows into `rejection_sft_candidates.jsonl`;
+preference pairs stayed below the reward-margin threshold. Dry-run
+`answer_policy_v3_rejection_sft_msswift_dryrun_20260704` accepted those
+2 records as ms-swift-compatible SFT input without executing training, with
+source counts `mp_docvqa=1` and `tatqa=1`. This verifies the candidate
+generation -> reward selection -> rejection-SFT artifact -> ms-swift input
+path only; it does not claim answer-quality improvement or approve DPO/GRPO.
+
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in
 `tests/test_run_final_raw_pdf_smoke.py`. The runner executes
