@@ -18,7 +18,8 @@ from docagent.schemas import EvidenceBlock
 from docagent.storage.db import connect
 from docagent.storage.repositories import DocumentRepository
 from docagent.utils.jsonl import write_jsonl
-from docagent.workflow.answer_contract import validate_model_output_v3
+from docagent.workflow.answer_contract import MODEL_OUTPUT_V3_SCHEMA, validate_model_output_v3
+from docagent.workflow.prompts import EXTRACTION_RULES_TEXT
 
 
 SCRIPT_VERSION = "answer-policy-v3-training-data-v1"
@@ -155,18 +156,39 @@ def ref_map_entry(candidate: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_prompt(question: str, candidates: list[dict[str, Any]]) -> str:
-    evidence_lines = [f"[{item['ref']}] {item['display_text']}" for item in candidates]
+def candidate_prompt_text(candidate: dict[str, Any]) -> str:
+    kind = str(candidate.get("kind") or "text").strip() or "text"
+    metadata = candidate.get("metadata") if isinstance(candidate.get("metadata"), dict) else {}
+    page = metadata.get("page")
+    header = f"[{candidate['ref']}] kind={kind}"
+    if kind not in {"calculation_result", "tool_observation"} and page not in {None, ""}:
+        header = f"{header} page={page}"
+    display_text = str(candidate.get("display_text") or "")
+    if kind in {"calculation_result", "tool_observation"}:
+        content = display_text.strip()
+    else:
+        content = re.sub(r"^[A-Za-z_ ]+(?:, page [^:]+)?:\s*", "", display_text, count=1).strip()
+    return f"{header}\n{content or display_text}"
+
+
+def build_prompt(question: str, candidates: list[dict[str, Any]], *, answer_type: str = "extractive") -> str:
+    evidence_lines = [candidate_prompt_text(item) for item in candidates]
+    output_schema = json.dumps(MODEL_OUTPUT_V3_SCHEMA, ensure_ascii=False)
     return (
+        "## Task\n"
+        "Answer the question from the numbered evidence candidates. Select only supporting_refs from the listed [E#] refs.\n\n"
         "## Question\n"
         f"{question}\n\n"
+        "## Answer Type\n"
+        f"{answer_type or 'extractive'}\n\n"
         "## Evidence Candidates\n"
         + "\n".join(evidence_lines)
         + "\n\n"
         "## Output Contract\n"
-        "Return exactly one JSON object:\n"
-        '{"answer":"...","supporting_refs":["E1"],"support_status":"supported|insufficient","reasoning_summary":"..."}\n'
+        f"Return JSON matching this schema: {output_schema}\n"
         "Rules:\n"
+        f"{EXTRACTION_RULES_TEXT}\n"
+        "- answer must be concise and grounded in the evidence.\n"
         "- Use only the numbered evidence candidates.\n"
         "- For supported answers, supporting_refs must contain the evidence refs that directly support the answer.\n"
         "- For insufficient evidence, use support_status=insufficient and supporting_refs=[].\n"
@@ -220,12 +242,14 @@ def make_target(answer: str, refs: list[str], *, status: str, reason: str) -> di
 
 def build_sft_record(record: dict[str, Any]) -> dict[str, Any]:
     target = record["target_model_output"]
+    metadata = record.get("metadata") if isinstance(record.get("metadata"), dict) else {}
+    answer_type = "numeric" if metadata.get("derivation") or metadata.get("raw_answer_type") in {"arithmetic", "count"} else "extractive"
     return {
         "id": record["sample_id"],
         "source": record["source"],
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": build_prompt(record["question"], record["evidence_candidates"])},
+            {"role": "user", "content": build_prompt(record["question"], record["evidence_candidates"], answer_type=answer_type)},
             {"role": "assistant", "content": json.dumps(target, ensure_ascii=False)},
         ],
         "metadata": {

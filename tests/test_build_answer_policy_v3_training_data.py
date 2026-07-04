@@ -105,12 +105,21 @@ def test_build_answer_policy_v3_tatqa_data_writes_schema_artifacts(tmp_path: Pat
     assert "evidence_used" not in assistant_target
     assert "under 300 characters" in sft[0]["messages"][0]["content"]
     assert "under 300 characters" in sft[0]["messages"][1]["content"]
+    user_prompt = sft[0]["messages"][1]["content"]
+    assert "## Task\nAnswer the question from the numbered evidence candidates." in user_prompt
+    assert "Return JSON matching this schema" in user_prompt
+    assert "[E1] kind=table page=1" in user_prompt
+    assert "For tables, lists, and key-value blocks" in user_prompt
+    assert "Table, page 1:" not in user_prompt
 
     calc_record = next(record for record in aligned if record["bucket"] == "deterministic_tool_supported")
     assert calc_record["target_model_output"]["supporting_refs"] == ["E4"]
     assert calc_record["evidence_candidates"][-1]["kind"] == "calculation_result"
     assert calc_record["evidence_ref_map"]["E4"]["source_kind"] == "calculation_result"
     assert calc_record["evidence_ref_map"]["E4"]["derived_from_refs"] == ["E1"]
+    calc_sft = next(record for record in sft if record["id"] == "q_calc")
+    assert "[E4] kind=calculation_result\nCalculation result:" in calc_sft["messages"][1]["content"]
+    assert "## Answer Type\nnumeric" in calc_sft["messages"][1]["content"]
 
 
 def test_answer_policy_v3_tatqa_data_blocks_validation_like_paths(tmp_path: Path) -> None:
