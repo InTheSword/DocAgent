@@ -340,6 +340,19 @@ Phase 5 Personal-use DocAgent MVP
    and answer-exact rates all 1.0, `thinking_rate=0.0`, and safety flags
    preserved false; this remains execution-chain evidence, not final
    answer-quality acceptance
+-> AnswerPolicy v3 train-only heldout diagnostic split implemented locally:
+   `scripts/split_answer_policy_v3_sft_records.py` deterministically splits
+   validated v3 SFT records into non-overlapping `train_sft.jsonl` and
+   `heldout_eval.jsonl`, writes excluded records plus summary/manifest
+   artifacts, and blocks validation-like input paths by default; server run
+   `answer_policy_v3_heldout_smoke_20260704` at commit `7a0d68a` split the
+   96-record expanded train-only mixed pack into 64 train, 16 heldout, and
+   16 excluded records with `overlap_count=0`, trained Qwen3-1.7B for
+   3 ms-swift LoRA steps on the train split, and evaluated 16 heldout records
+   with json/schema/supporting-ref legality rates all 1.0, support-status
+   match 0.8125, positive-ref hit 0.5625, answer-exact 0.25, and
+   `thinking_rate=0.0`; this verifies separated train/heldout execution
+   plumbing only, not final model quality
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real

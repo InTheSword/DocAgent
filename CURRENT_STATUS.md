@@ -604,6 +604,24 @@ evaluated 16 records with `json_valid_rate=1.0`, `schema_valid_rate=1.0`,
 `validation_subset_used_for_training=false`; it verifies the merged
 rejection-SFT execution chain, not final answer-quality improvement.
 
+AnswerPolicy v3 train-only heldout diagnostic splitting is implemented locally
+in `scripts/split_answer_policy_v3_sft_records.py`. The splitter validates v3
+SFT records, blocks validation-like input paths by default, writes
+non-overlapping `train_sft.jsonl` and `heldout_eval.jsonl`, records excluded
+rows, and emits summary/manifest artifacts without calling models or starting
+training. Server smoke `answer_policy_v3_heldout_smoke_20260704` at commit
+`7a0d68a` used the 96-record expanded train-only mixed pack, produced
+64 train records, 16 heldout records, 16 excluded records, and
+`overlap_count=0`. Follow-up training
+`answer_policy_v3_msswift_heldout_short_20260704` trained Qwen3-1.7B for
+3 ms-swift LoRA steps on the train split, and heldout checkpoint diagnostic
+`answer_policy_v3_msswift_heldout_checkpoint_eval_20260704` evaluated
+16 heldout rows with `json_valid_rate=1.0`, `schema_valid_rate=1.0`,
+`supporting_refs_subset_rate=1.0`, `support_status_match_rate=0.8125`,
+`positive_ref_hit_rate=0.5625`, `answer_exact_rate=0.25`, and
+`thinking_rate=0.0`. This verifies separated train/heldout execution plumbing
+on train-only data; it is not final answer-quality acceptance.
+
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in
 `tests/test_run_final_raw_pdf_smoke.py`. The runner executes
