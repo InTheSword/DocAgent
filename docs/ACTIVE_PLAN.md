@@ -205,6 +205,17 @@ Phase 5 Personal-use DocAgent MVP
    1.0, positive_ref_hit_rate 0.875, answer_exact_rate 0.5, and kept
    `formal_benchmark_acceptance=false`; this verifies the mixed-pack and short
    SFT execution path only, not final model quality
+-> AnswerPolicy v3 prompt-limit contract repair real-model verified:
+   the v3 training prompt now explicitly requires `reasoning_summary` under
+   300 characters, matching `ModelOutputV3` validation; after rebuilding
+   train-only TAT-QA positive records, insufficient records, and a 64-record
+   mixed pack with 19 insufficient records, server run
+   `answer_policy_v3_promptlimit_stage2_short_20260704_verify` at commit
+   `800c6ed` trained Qwen3-1.7B for 3 ms-swift LoRA steps and checkpoint
+   diagnostic restored `json_valid_rate=1.0`, `schema_valid_rate=1.0`,
+   `supporting_refs_subset_rate=1.0`, with `formal_benchmark_acceptance=false`
+   and `validation_subset_used_for_training=false`; answer/status metrics
+   remain small-smoke diagnostics only
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real

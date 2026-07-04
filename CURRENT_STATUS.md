@@ -419,6 +419,22 @@ with `json_valid_rate=1.0`, `schema_valid_rate=1.0`,
 construction and short SFT execution only; expanded SFT, final answer-quality
 benchmarking, and GRPO remain not_started.
 
+AnswerPolicy v3 prompt-limit contract repair is real-model verified through
+`scripts/build_answer_policy_v3_training_data.py` and server run
+`answer_policy_v3_promptlimit_stage2_short_20260704_verify` at commit
+`800c6ed`. The v3 training prompt now explicitly requires
+`reasoning_summary` under 300 characters, matching `ModelOutputV3` validation.
+The server rebuilt 80 TAT-QA train records, 64 insufficient records, and a
+64-record mixed pack with 19 insufficient records selected after MP-DocVQA
+shortage backfill, then trained Qwen3-1.7B for 3 ms-swift LoRA steps.
+Checkpoint diagnostic evaluated 8 records with `json_valid_rate=1.0`,
+`schema_valid_rate=1.0`, `supporting_refs_subset_rate=1.0`,
+`positive_ref_hit_rate=0.625`, and `answer_exact_rate=0.375`, while preserving
+`formal_benchmark_acceptance=false` and
+`validation_subset_used_for_training=false`. This verifies the prompt/schema
+contract after adding insufficient records; answer/status rates remain
+small-smoke diagnostics only.
+
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in
 `tests/test_run_final_raw_pdf_smoke.py`. The runner executes
