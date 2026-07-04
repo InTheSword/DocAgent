@@ -109,6 +109,63 @@ def load_rows(path: Path) -> list[dict[str, Any]]:
     return [row for row in read_jsonl(path) if isinstance(row, dict)]
 
 
+def _qa_row_split(row: dict[str, Any], subset_root: Path) -> str:
+    shard = str(row.get("source_shard") or "")
+    root_text = subset_root.as_posix().lower()
+    if shard.startswith("train-") or "train" in root_text:
+        return "train"
+    return str(row.get("split") or row.get("source_split") or "train")
+
+
+def _qa_row_gold_page(row: dict[str, Any]) -> int | None:
+    for key in ("gold_page_ordinal", "answer_page_ordinal"):
+        value = row.get(key)
+        try:
+            page = int(value)
+        except (TypeError, ValueError):
+            continue
+        if page > 0:
+            return page
+    try:
+        return int(row.get("answer_page_idx")) + 1
+    except (TypeError, ValueError):
+        return None
+
+
+def sample_manifest_from_qa_row(row: dict[str, Any], subset_root: Path) -> dict[str, Any]:
+    sample_id = str(row.get("qid") or row.get("raw_question_id") or row.get("sample_id") or "")
+    doc_id = str(row.get("doc_id") or "")
+    gold_page = _qa_row_gold_page(row)
+    gold_evidence = [{"page": gold_page}] if gold_page is not None else []
+    return {
+        "sample_id": sample_id,
+        "dataset": "mp_docvqa",
+        "split": _qa_row_split(row, subset_root),
+        "doc_id": doc_id,
+        "source_document": str(row.get("source_doc_id") or row.get("source_document") or ""),
+        "question": str(row.get("question") or ""),
+        "answers": as_list(row.get("answers")),
+        "expected_answer_type": str(row.get("expected_answer_type") or "extractive"),
+        "expected_tools": [str(item) for item in row.get("expected_tools") or ["retrieval", "local_fact_qa"]],
+        "gold_evidence": gold_evidence,
+        "raw_answer_page_idx": row.get("raw_answer_page_idx", row.get("answer_page_idx")),
+        "gold_page_id": row.get("gold_page_id"),
+        "source_shard": row.get("source_shard"),
+        "source_row_index": row.get("source_row_index"),
+        "raw_source_split": row.get("source_split"),
+    }
+
+
+def load_sample_manifests(subset_root: Path) -> list[dict[str, Any]]:
+    sample_manifest_path = subset_root / "sample_manifest.jsonl"
+    if sample_manifest_path.is_file():
+        return load_rows(sample_manifest_path)
+    qa_path = subset_root / "qa.jsonl"
+    if qa_path.is_file():
+        return [sample_manifest_from_qa_row(row, subset_root) for row in load_rows(qa_path)]
+    return []
+
+
 def rows_by_doc_id(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return {str(row.get("doc_id") or ""): row for row in rows if row.get("doc_id")}
 
@@ -295,6 +352,11 @@ def build_sample_rows(
                 "block_count": len(blocks),
                 "page_block_count": len(page_blocks),
                 "candidate_block_count_on_gold_pages": len(child_blocks_on_gold_pages),
+                "raw_answer_page_idx": manifest.get("raw_answer_page_idx"),
+                "gold_page_id": manifest.get("gold_page_id"),
+                "source_shard": manifest.get("source_shard"),
+                "source_row_index": manifest.get("source_row_index"),
+                "raw_source_split": manifest.get("raw_source_split"),
                 "evaluation_mode": "mpdocvqa_mineru_evidence_readiness",
                 "requires_model_answer": True,
                 "requires_mineru_or_retrieval": False,
@@ -482,7 +544,7 @@ def prepare_mpdocvqa_evidence(
             if row.get("pass_fail") != "passed"
         }
         source_documents = [row for row in all_source_documents if str(row.get("doc_id") or "") in failed_doc_ids]
-    sample_manifests = load_rows(subset_root / "sample_manifest.jsonl")
+    sample_manifests = load_sample_manifests(subset_root)
     if previous_run_dir is not None:
         selected_doc_ids = {str(row.get("doc_id") or "") for row in previous_document_rows}
         selected_doc_ids.update(str(row.get("doc_id") or "") for row in source_documents)

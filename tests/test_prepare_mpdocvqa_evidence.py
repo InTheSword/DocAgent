@@ -9,7 +9,7 @@ from docagent.schemas import EvidenceBlock, EvidenceLocation
 from docagent.storage.db import connect
 from docagent.storage.repositories import DocumentRepository
 from docagent.utils.jsonl import read_jsonl, write_jsonl
-from scripts.prepare_mpdocvqa_evidence import CommandResult, prepare_mpdocvqa_evidence
+from scripts.prepare_mpdocvqa_evidence import CommandResult, load_sample_manifests, prepare_mpdocvqa_evidence
 
 
 def _write_subset(tmp_path: Path) -> Path:
@@ -48,6 +48,40 @@ def _write_subset(tmp_path: Path) -> Path:
         ],
     )
     return subset_root
+
+
+def test_load_sample_manifests_accepts_raw_train_qa_jsonl(tmp_path: Path) -> None:
+    subset_root = tmp_path / "mpdocvqa_train_raw"
+    subset_root.mkdir()
+    write_jsonl(
+        subset_root / "qa.jsonl",
+        [
+            {
+                "qid": "16999",
+                "doc_id": "fpbw0217__window",
+                "source_doc_id": "fpbw0217",
+                "question": "What is the Budget Estimate for Pharmaceutical Compendia Surveillance?",
+                "answers": ["$100,000"],
+                "answer_page_idx": 5,
+                "gold_page_ordinal": 6,
+                "gold_page_id": "fpbw0217_p17",
+                "source_split": "val",
+                "source_shard": "train-00001-of-00017.parquet",
+                "source_row_index": 12,
+            }
+        ],
+    )
+
+    manifests = load_sample_manifests(subset_root)
+
+    assert len(manifests) == 1
+    assert manifests[0]["sample_id"] == "16999"
+    assert manifests[0]["split"] == "train"
+    assert manifests[0]["doc_id"] == "fpbw0217__window"
+    assert manifests[0]["source_document"] == "fpbw0217"
+    assert manifests[0]["gold_evidence"] == [{"page": 6}]
+    assert manifests[0]["raw_source_split"] == "val"
+    assert manifests[0]["expected_tools"] == ["retrieval", "local_fact_qa"]
 
 
 def test_prepare_mpdocvqa_evidence_writes_mapping_artifacts(tmp_path: Path) -> None:
