@@ -622,6 +622,19 @@ training. Server smoke `answer_policy_v3_heldout_smoke_20260704` at commit
 `thinking_rate=0.0`. This verifies separated train/heldout execution plumbing
 on train-only data; it is not final answer-quality acceptance.
 
+AnswerPolicy v3 refs CLI/Qwen integration is real-model verified at commit
+`56b7726`. `scripts/docagent_cli.py` now accepts
+`--answer-output-contract v3_refs`; Qwen AnswerPolicy can compile the
+`docagent_answer_v3_supporting_refs` prompt, parse `ModelOutputV3`, and let the
+workflow map temporary `supporting_refs` back to internal citations through
+`EvidenceRefMap`. Server smoke
+`answer_policy_v3_refs_cli_smoke_retry_20260704` loaded the short expanded
+ms-swift SFT adapter through the real CLI path, produced schema-valid v3 JSON
+with `support_status=supported` and `supporting_refs=["E1"]`, and mapped the
+ref to citation block `c1fc1c5e040ec894_p001_b0002`. This verifies system
+integration for the v3 adapter contract; it is not final answer-quality
+acceptance.
+
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in
 `tests/test_run_final_raw_pdf_smoke.py`. The runner executes

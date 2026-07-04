@@ -353,6 +353,17 @@ Phase 5 Personal-use DocAgent MVP
    match 0.8125, positive-ref hit 0.5625, answer-exact 0.25, and
    `thinking_rate=0.0`; this verifies separated train/heldout execution
    plumbing only, not final model quality
+-> AnswerPolicy v3 refs CLI/Qwen integration real-model verified:
+   `docagent_answer_v3_supporting_refs` is now an optional CLI/Qwen
+   AnswerPolicy contract via `--answer-output-contract v3_refs`; the model
+   outputs `supporting_refs` and `support_status`, while the system maps refs
+   back to internal citations through `EvidenceRefMap`; server smoke
+   `answer_policy_v3_refs_cli_smoke_retry_20260704` at commit `56b7726`
+   loaded a ms-swift SFT adapter through `scripts/docagent_cli.py`, produced
+   schema-valid v3 JSON with `supporting_refs=["E1"]`, and mapped it to
+   citation block `c1fc1c5e040ec894_p001_b0002`; this verifies the trained
+   v3 adapter can enter the actual CLI/Qwen workflow, not final answer-quality
+   acceptance
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real
