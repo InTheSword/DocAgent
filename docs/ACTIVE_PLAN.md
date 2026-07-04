@@ -494,9 +494,14 @@ Phase 5 Personal-use DocAgent MVP
    adapter improved answer-exact 0.5234375 -> 0.7890625 and schema validity
    0.7734375 -> 1.0 while keeping positive-ref hit 0.96875 and thinking rate
    0.0. Category breakdown showed calculation answer-exact 0.7692 -> 0.9808
-   and table-value answer-exact 0.3553 -> 0.6579. This supports the training
-   objective improvement on a reusable fixed-evidence table/calculation slice,
-   but still does not override the clean6 deployment guard
+   and table-value answer-exact 0.3553 -> 0.6579. Read-only artifact
+   comparator `answer_policy_v3_fixed_tablecalc_compare128_promptfix_20260705`
+   recorded 65 rows both answer-exact, 36 candidate improvements, 2 candidate
+   regressions, and 25 rows both missed; calculation rows had 11 improvements
+   and 0 regressions, while table-value rows had 25 improvements and 2
+   regressions. This supports the training objective improvement on a reusable
+   fixed-evidence table/calculation slice, but still does not override the
+   clean6 deployment guard
 -> AnswerPolicy v3 train-only heldout diagnostic split implemented locally:
    `scripts/split_answer_policy_v3_sft_records.py` deterministically splits
    validated v3 SFT records into non-overlapping `train_sft.jsonl` and

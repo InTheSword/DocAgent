@@ -4,6 +4,18 @@ Updated: 2026-07-05
 
 ## Phase 4D-C Accepted / Phase 5 Active
 
+AnswerPolicy v3 promptfix Stage 2 SFT is real-model verified as a train-only
+objective improvement, not as final workflow deployment acceptance. The
+repaired-prompt full4096 pack trained Qwen3-1.7B with ms-swift LoRA for 1024
+update steps and improved the 256-row train-only heldout answer-exact rate
+from 0.3750 to 0.5859 while improving schema validity and support/ref metrics.
+The focused table/calculation fixed-evidence comparator
+`answer_policy_v3_fixed_tablecalc_compare128_promptfix_20260705` further
+recorded 36 candidate improvements and 2 regressions over 128 train-only
+fixed-evidence rows, with answer-exact improving from 0.5234 to 0.7891. This
+is evidence that the v3 AnswerPolicy objective improved; it does not promote
+the adapter as the default full-workflow checkpoint.
+
 AnswerPolicy v3 clean fixed-evidence comparison is real-model verified as a
 diagnostic contract probe, not as formal benchmark acceptance. Server run
 `phase5ib_v3refs_clean6_base_vs_adapter480_contract_compare_20260704` compared

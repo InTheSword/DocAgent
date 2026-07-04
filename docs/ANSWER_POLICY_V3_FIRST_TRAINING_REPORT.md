@@ -736,6 +736,31 @@ Category breakdown:
 | `calculation_supported` | 52 | 0.7692 | 0.9808 |
 | `table_value_supported` | 76 | 0.3553 | 0.6579 |
 
+Artifact-level comparison:
+
+```text
+answer_policy_v3_fixed_tablecalc_compare128_promptfix_20260705
+```
+
+This read-only comparator consumed the existing base and adapter evaluation
+artifacts plus the fixed-evidence row metadata. It did not call Qwen, start
+training, use validation data, or claim benchmark acceptance. The row-level
+movement summary was:
+
+| Movement | Count |
+|---|---:|
+| Both answer exact | 65 |
+| Candidate improved | 36 |
+| Candidate regressed | 2 |
+| Both answer miss | 25 |
+
+Movement by category:
+
+| Category | Improved | Regressed | Both exact | Both miss |
+|---|---:|---:|---:|---:|
+| `calculation_supported` | 11 | 0 | 40 | 1 |
+| `table_value_supported` | 25 | 2 | 25 | 24 |
+
 Interpretation:
 
 - The promptfix adapter improves table/calculation answer selection on a
