@@ -772,6 +772,40 @@ checkpoints are retained as historical diagnostics; the next SFT experiment
 should rebuild train-only data with this repaired prompt contract before
 training.
 
+AnswerPolicy v3 promptfix full4096 SFT diagnostic is real-model verified on
+train-only data. Server rebuilds
+`answer_policy_v3_tatqa_train_full_promptfix_20260705`,
+`answer_policy_v3_tatqa_insufficient_full_promptfix_20260705`,
+`answer_policy_v3_mpdocvqa_supported_848docs_promptfix_20260705`, and
+`answer_policy_v3_mpdocvqa_insufficient_848docs_promptfix_20260705` fed the
+mixed pack `answer_policy_v3_mixed_stage2_full4096_promptfix_20260705`.
+The pack contains 4096 train-only records with 2048 TAT-QA records,
+2048 MP-DocVQA records, and 410 insufficient examples. Split
+`answer_policy_v3_full4096_promptfix_split256_20260705` produced 3840 train
+rows and 256 heldout rows with `overlap_count=0`.
+
+Server run `answer_policy_v3_msswift_stage2_promptfix3840_1024steps_20260705`
+trained Qwen3-1.7B with ms-swift LoRA for 1024 update steps on the promptfix
+train split and wrote checkpoint
+`swift_output/v0-20260705-060610/checkpoint-1024`. Heldout comparison
+`answer_policy_v3_promptfix_heldout256_compare_20260705` showed the adapter
+improving the base model on the intended v3 objective: `answer_exact_rate`
+0.375 -> 0.5859375, schema validity 0.890625 -> 0.99609375,
+`support_status_match_rate` 0.90625 -> 0.97265625, positive-ref hit
+0.885106 -> 0.940678, and insufficient empty-ref behavior 0.055556 ->
+0.947368. This is training-method and output-contract evidence, not formal
+benchmark acceptance.
+
+The same promptfix checkpoint was also run through the clean6 full workflow as
+`phase5ib_v3refs_clean6_promptfix_adapter1024_20260705`, using real LLM query
+rewriting, BGE-M3 retrieval, cross-encoder reranking, Qwen AnswerPolicy, and
+`answer_output_contract=v3_refs`. It passed 4/6 with format, citation, and
+location rates all 1.0. Artifact-only comparison
+`phase5ib_v3refs_clean6_base_vs_promptfix_adapter1024_20260705` kept the
+default deployment gate `blocked` because the base clean6 run passed 6/6 and
+candidate regressions remain. This confirms system-chain operability but does
+not promote the adapter as the default full-workflow AnswerPolicy.
+
 AnswerPolicy v3 train-only heldout diagnostic splitting is implemented locally
 in `scripts/split_answer_policy_v3_sft_records.py`. The splitter validates v3
 SFT records, blocks validation-like input paths by default, writes

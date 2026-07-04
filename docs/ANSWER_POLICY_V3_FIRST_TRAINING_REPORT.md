@@ -598,7 +598,86 @@ rejection-continuation checkpoints above remain valid historical diagnostics,
 but the next SFT experiment should rebuild the train-only data with the
 repaired prompt contract before further training.
 
-## 9. Limitations
+## 9. Promptfix Full4096 Follow-Up
+
+The repaired prompt contract was then used to rebuild the full train-only
+Stage 2 pack and train a new ms-swift LoRA checkpoint.
+
+Runs:
+
+```text
+answer_policy_v3_mixed_stage2_full4096_promptfix_20260705
+answer_policy_v3_full4096_promptfix_split256_20260705
+answer_policy_v3_msswift_stage2_promptfix3840_1024steps_20260705
+answer_policy_v3_promptfix_heldout256_compare_20260705
+phase5ib_v3refs_clean6_promptfix_adapter1024_20260705
+phase5ib_v3refs_clean6_base_vs_promptfix_adapter1024_20260705
+```
+
+The promptfix mixed pack selected 4096 train-only records:
+
+| Source | Count |
+|---|---:|
+| TAT-QA | 2048 |
+| MP-DocVQA | 2048 |
+
+The selected buckets were:
+
+| Bucket | Count |
+|---|---:|
+| `evidence_extractive_supported` | 2862 |
+| `deterministic_tool_supported` | 824 |
+| `insufficient_confirmed` | 410 |
+
+The split produced 3840 train rows and 256 heldout rows with no overlap.
+The SFT run trained Qwen3-1.7B with ms-swift LoRA for 1024 update steps and
+wrote:
+
+```text
+outputs/training/answer_policy_v3_msswift_sft/answer_policy_v3_msswift_stage2_promptfix3840_1024steps_20260705/swift_output/v0-20260705-060610/checkpoint-1024
+```
+
+Heldout comparison against the base model:
+
+| Metric | Base | Promptfix adapter | Delta |
+|---|---:|---:|---:|
+| JSON valid | 0.9883 | 0.9961 | +0.0078 |
+| Schema valid | 0.8906 | 0.9961 | +0.1055 |
+| Answer exact | 0.3750 | 0.5859 | +0.2109 |
+| Support-status match | 0.9063 | 0.9727 | +0.0664 |
+| Supporting refs subset legal | 0.9883 | 0.9961 | +0.0078 |
+| Positive-ref hit | 0.8851 | 0.9407 | +0.0556 |
+| Insufficient empty refs | 0.0556 | 0.9474 | +0.8918 |
+
+Source-level heldout answer exact:
+
+| Source | Base | Promptfix adapter |
+|---|---:|---:|
+| TAT-QA | 0.4661 | 0.8220 |
+| MP-DocVQA | 0.2971 | 0.3841 |
+
+The clean6 workflow guard with the promptfix checkpoint passed 4/6 cases, with
+format, citation, and location rates all 1.0. This improves over the earlier
+3/6 adapter clean6 signal, but it is still below the base clean6 run at 6/6.
+The deployment comparison therefore remains blocked:
+
+```text
+promotion_gate.decision = blocked
+candidate_promotable_from_this_artifact = false
+reasons = candidate_regressed_cases_present, candidate_passed_count_below_base
+```
+
+Interpretation:
+
+- The repaired-prompt SFT improved the intended train-only v3 objective
+  substantially, especially schema stability, answer exactness, and
+  insufficient-evidence behavior.
+- The adapter is still not the default full-workflow AnswerPolicy because the
+  clean6 guard remains below the base model.
+- The remaining clean6 failures are a small deployment/regression signal, not a
+  reason for row-specific prompt rules or DPO/GRPO approval.
+
+## 10. Limitations
 
 1. This was a diagnostic SFT run, not a final production SFT acceptance run.
 2. The heldout set came from the generated train-source pack, not validation or
@@ -616,7 +695,7 @@ repaired prompt contract before further training.
 7. No GRPO, DPO, or best-of-N distillation was approved by this run.
 8. Pixel-level VLM image reasoning remains out of scope for this training run.
 
-## 10. Decision
+## 11. Decision
 
 This first training run should be treated as a successful AnswerPolicy v3 SFT
 method validation:
@@ -632,10 +711,10 @@ grpo_approved = false
 Recommended next step:
 
 ```text
-Do not promote either the 480-step adapter or the 56-step rejection-continuation
-adapter as the default full-workflow AnswerPolicy from heldout evidence alone.
-Keep DPO/GRPO unapproved. Treat the 1024-step full4096 adapter and its
-rejection-continuation checkpoint as candidate checkpoints for targeted
+Do not promote the 480-step adapter, the original 1024-step full4096 adapter,
+the 56-step rejection-continuation adapter, or the promptfix 1024-step adapter
+as the default full-workflow AnswerPolicy from heldout evidence alone. Keep
+DPO/GRPO unapproved. Treat these as candidate checkpoints for targeted
 fixed-evidence/system-chain diagnostics, or continue bounded train-only
 candidate distillation if the next experiment has a clear acceptance gate.
 ```

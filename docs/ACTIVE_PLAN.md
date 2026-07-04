@@ -448,6 +448,34 @@ Phase 5 Personal-use DocAgent MVP
    `has_legacy_table_prefix=false`. Existing full4096/rejection checkpoints
    remain valid historical diagnostics, but any next SFT experiment should
    rebuild train-only data with this repaired prompt contract before training
+-> AnswerPolicy v3 promptfix full4096 SFT diagnostic real-model verified:
+   server rebuilds `answer_policy_v3_tatqa_train_full_promptfix_20260705`,
+   `answer_policy_v3_tatqa_insufficient_full_promptfix_20260705`,
+   `answer_policy_v3_mpdocvqa_supported_848docs_promptfix_20260705`, and
+   `answer_policy_v3_mpdocvqa_insufficient_848docs_promptfix_20260705`
+   produced a repaired-prompt mixed pack
+   `answer_policy_v3_mixed_stage2_full4096_promptfix_20260705` with 4096
+   train-only records and no shortage/backfill: 2048 TAT-QA and 2048
+   MP-DocVQA records, with 410 insufficient examples. Split
+   `answer_policy_v3_full4096_promptfix_split256_20260705` created 3840
+   train rows and 256 heldout rows with zero overlap. Server run
+   `answer_policy_v3_msswift_stage2_promptfix3840_1024steps_20260705`
+   trained Qwen3-1.7B with ms-swift LoRA for 1024 update steps and wrote
+   checkpoint `swift_output/v0-20260705-060610/checkpoint-1024`. On the
+   promptfix 256-row train-only heldout split, the adapter improved base
+   `answer_exact_rate` 0.375 -> 0.5859375, schema validity 0.890625 ->
+   0.99609375, support-status match 0.90625 -> 0.97265625, positive-ref hit
+   0.885106 -> 0.940678, and insufficient empty-ref behavior 0.055556 ->
+   0.947368. Clean full-workflow guard
+   `phase5ib_v3refs_clean6_promptfix_adapter1024_20260705` used real query
+   rewriting, BGE-M3 retrieval, cross-encoder reranking, Qwen AnswerPolicy,
+   and `v3_refs`; it passed 4/6 with format/citation/location rates all 1.0.
+   Artifact comparison
+   `phase5ib_v3refs_clean6_base_vs_promptfix_adapter1024_20260705` kept
+   default deployment `blocked` because the base clean6 run passed 6/6 and
+   candidate regressions remain. This verifies the repaired-prompt train-only
+   SFT objective and system-chain operability, not formal benchmark acceptance
+   or default adapter promotion
 -> AnswerPolicy v3 train-only heldout diagnostic split implemented locally:
    `scripts/split_answer_policy_v3_sft_records.py` deterministically splits
    validated v3 SFT records into non-overlapping `train_sft.jsonl` and
