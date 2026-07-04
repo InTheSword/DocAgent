@@ -552,6 +552,16 @@ candidates. Ranking run
 selected 11 training-ready rejection-SFT rows, with 13 selected rows below the
 chosen reward threshold, 2 chosen schema invalid rows, and zero training-ready
 preference pairs.
+Follow-up server run `answer_policy_v3_rejection_adapter_remaining_slices_20260704`
+at commit `ddab988` completed the remaining train-only offset slices 48-71 and
+72-95. Offset 48 generated 72 candidates with `raw_json_ok_rate=0.8194`,
+`schema_ok_rate=0.8194`, selected 6 training-ready rejection-SFT rows, and
+produced 2 training-ready preference pairs. Offset 72 generated 72 candidates
+with `raw_json_ok_rate=1.0`, `schema_ok_rate=1.0`, selected 7 training-ready
+rejection-SFT rows, and produced 1 training-ready preference pair. Across the
+four 24-record slices, the artifact path now has 26 training-ready
+rejection-SFT rows and 3 training-ready preference pairs. This is enough for a
+small rejection-SFT smoke, but still too small to approve DPO/GRPO.
 
 AnswerPolicy v3 rejection-SFT distillation smoke is real-model verified at the
 execution-contract level. Server run
@@ -580,6 +590,19 @@ evaluated 8 rows with `json_valid_rate=1.0`, `schema_valid_rate=1.0`,
 `formal_benchmark_acceptance=false`, and
 `validation_subset_used_for_training=false` for the evaluation. This remains a
 train-only execution-chain smoke, not a final answer-quality claim.
+Merged-slice server run `answer_policy_v3_rejection_sft_merged_slices_20260704`
+combined four train-only slices into 26 rejection-SFT records with source
+counts `mp_docvqa=18` and `tatqa=8`. Follow-up training run
+`answer_policy_v3_rejection_sft_merged_slices_short_20260704` trained
+Qwen3-1.7B for 3 ms-swift LoRA steps on 24 selected records, and checkpoint
+diagnostic `answer_policy_v3_rejection_sft_merged_slices_checkpoint_eval_20260704`
+evaluated 16 records with `json_valid_rate=1.0`, `schema_valid_rate=1.0`,
+`answer_exact_rate=1.0`, `support_status_match_rate=1.0`,
+`supporting_refs_subset_rate=1.0`, `positive_ref_hit_rate=1.0`, and
+`thinking_rate=0.0`. The run used training only in the training step, kept
+`formal_benchmark_acceptance=false`, and kept
+`validation_subset_used_for_training=false`; it verifies the merged
+rejection-SFT execution chain, not final answer-quality improvement.
 
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in
