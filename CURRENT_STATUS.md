@@ -15,13 +15,28 @@ BGE-M3 retrieval, cross-encoder reranking, Qwen AnswerPolicy, and
 integration evidence, but it should not be promoted as the default full-workflow
 AnswerPolicy from this signal.
 
+This full-workflow clean6 result is a deployment/regression guard, not a
+standalone training-effectiveness judgement. SFT/RL effectiveness must be
+judged primarily with the intended AnswerPolicy v3 objectives on train-only
+heldout or fixed-evidence probes: schema legality, `supporting_refs`,
+`support_status`, positive evidence-ref hit, concise grounded reasoning, and
+insufficient-evidence behavior. Real workflow diagnostics mainly verify that
+the system follows the intended route through retrieval, evidence mapping,
+citation, and answer generation; they cannot by themselves prove retrieval
+improvement or new model knowledge.
+
 Phase 5I answer-quality run comparison guard is implemented in
 `scripts/compare_phase5i_answer_quality_runs.py`. It reads existing
 `phase5i_summary.json`, `metrics.json`, and `case_reports.jsonl` artifacts,
 writes case-level movement rows, and keeps training/benchmark safety flags
 false. Local targeted tests passed, and server run
 `phase5ib_v3refs_clean6_base_vs_adapter480_compare_script_20260704` reproduced
-the clean6 base-vs-adapter result without calling Qwen or training.
+the clean6 base-vs-adapter result without calling Qwen or training. Follow-up
+server run `phase5ib_v3refs_clean6_base_vs_adapter480_promotion_gate_20260704`
+adds `promotion_gate.gate_scope=default_checkpoint_deployment_guard`,
+`promotion_gate.training_effectiveness_judged=false`, and
+`promotion_gate.decision=blocked` for default adapter deployment from this
+artifact.
 
 Phase 4D-C expanded unseen validation is accepted on MP-DocVQA validation
 shards 5-8 using the accepted default `candidate_spans` pipeline. The strict

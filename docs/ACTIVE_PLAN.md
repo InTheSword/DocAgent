@@ -129,8 +129,12 @@ Phase 5 Personal-use DocAgent MVP
    `formal_benchmark_acceptance=false`; local targeted tests passed, and
    server run `phase5ib_v3refs_clean6_base_vs_adapter480_compare_script_20260704`
    reproduced the clean6 base-vs-adapter comparison with base 6/6 versus
-   adapter480 3/6. This is an artifact-only checkpoint-promotion guard; it
-   does not call Qwen or training
+   adapter480 3/6; follow-up server run
+   `phase5ib_v3refs_clean6_base_vs_adapter480_promotion_gate_20260704`
+   recorded `promotion_gate.decision=blocked` for default deployment. This is
+   an artifact-only deployment/regression guard; it does not call Qwen or
+   training and must not be read as a standalone judgement of whether the
+   AnswerPolicy v3 training objective improved
 -> AnswerPolicy training-pack preprocessing implemented locally:
    `scripts/build_answer_policy_training_pack.py` builds audited SFT and GRPO
    training-format artifacts from train-split `DocAgentSample` JSONL input,
@@ -468,9 +472,12 @@ Phase 5 Personal-use DocAgent MVP
    1.0. Comparison artifact
    `phase5ib_v3refs_clean6_base_vs_adapter480_contract_compare_20260704`
    found base 6/6 versus adapter480 3/6, with `adapter_regressed=3` and
-   `both_passed=3`. This confirms the v3 system path is usable, but the
-   480-step adapter should not be promoted as the default workflow
-   AnswerPolicy, and more SFT/GRPO is not justified from this signal alone
+   `both_passed=3`; artifact-only comparison
+   `phase5ib_v3refs_clean6_base_vs_adapter480_promotion_gate_20260704`
+   confirmed the candidate is blocked for default deployment from this signal.
+   This confirms the v3 system path is usable, but it does not measure retrieval
+   improvement, model knowledge gain, or training-target effectiveness; more
+   SFT/GRPO is not justified from this workflow signal alone
 -> AnswerPolicy v3 training-effect boundary recorded:
    SFT/rejection-SFT training is expected to improve the AnswerPolicy's use of
    provided evidence candidates, `supporting_refs`, `support_status`, concise
@@ -478,9 +485,11 @@ Phase 5 Personal-use DocAgent MVP
    upstream retrieval recall or add missing model knowledge. Therefore
    train-only heldout and clean fixed-evidence probes are the primary evidence
    for whether the training objective improved, while real workflow diagnostic
-   samples mainly validate end-to-end routing/retrieval/citation continuity and
-   classify remaining failures as retrieval/context, citation packaging,
-   metric/gold issue, or AnswerPolicy generation with correct evidence present.
+   samples mainly validate whether the ideal end-to-end processing flow is
+   executed correctly: routing, query rewriting, retrieval, evidence mapping,
+   citation packaging, and final answer generation. They also classify
+   remaining failures as retrieval/context, citation packaging, metric/gold
+   issue, or AnswerPolicy generation with correct evidence present.
    Do not judge adapter usefulness from uncontrolled real workflow answer-hit
    rate alone
 -> AnswerPolicy v3 first training report implemented locally:

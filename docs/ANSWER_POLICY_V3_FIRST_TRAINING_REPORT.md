@@ -409,6 +409,7 @@ Runs:
 phase5ib_v3refs_clean6_base_contract_probe_20260704
 phase5ib_v3refs_clean6_adapter480_contract_probe_20260704
 phase5ib_v3refs_clean6_base_vs_adapter480_contract_compare_20260704
+phase5ib_v3refs_clean6_base_vs_adapter480_promotion_gate_20260704
 ```
 
 Artifacts:
@@ -416,6 +417,8 @@ Artifacts:
 ```text
 outputs/final_eval/phase5i_answer_quality_compare/phase5ib_v3refs_clean6_base_vs_adapter480_contract_compare_20260704/result.json
 outputs/sync/phase5ib_v3refs_clean6_base_vs_adapter480_contract_compare_20260704/
+outputs/final_eval/phase5i_answer_quality_compare/phase5ib_v3refs_clean6_base_vs_adapter480_promotion_gate_20260704/summary.json
+outputs/sync/phase5ib_v3refs_clean6_base_vs_adapter480_promotion_gate_20260704/
 ```
 
 The clean pack was built from curated cases validated against persisted
@@ -462,6 +465,17 @@ Interpretation:
   execution.
 - The result does not test retrieval improvement or model knowledge gain; it
   tests the AnswerPolicy contract inside a complete system path.
+- The promotion gate is a default-deployment regression guard. It does not
+  judge whether the SFT training objective improved.
+- Training effectiveness should be judged with the predefined v3 objective
+  metrics on train-only heldout or fixed-evidence probes: JSON/schema legality,
+  legal `supporting_refs`, `support_status`, positive evidence-ref hit,
+  concise grounded reasoning, and insufficient-evidence behavior.
+- Real workflow diagnostics are still necessary, but their role is to check
+  whether the intended system processing flow is followed: retrieval, evidence
+  mapping, citation packaging, and answer generation. They should not be
+  reduced to "did the final answer string match" when retrieval/context or
+  gold/metric issues may dominate.
 - The 480-step adapter should not be promoted as the default AnswerPolicy for
   current CLI workflow use.
 - More SFT steps or GRPO are not justified by this signal alone. If further

@@ -210,16 +210,19 @@ def interpretation(base: dict[str, Any], candidate: dict[str, Any], changes: Cou
         "boundary": (
             "This compares existing Phase 5I answer-quality artifacts only. "
             "It does not call models, create training data, measure retrieval improvement, "
-            "or claim formal benchmark acceptance."
+            "claim formal benchmark acceptance, or judge whether the training objective improved. "
+            "Training effectiveness must be judged with train-only heldout/fixed-evidence "
+            "v3 objective metrics; real workflow diagnostics mainly check execution continuity "
+            "and deployment regression risk."
         ),
     }
 
 
 def promotion_gate(base: dict[str, Any], candidate: dict[str, Any], changes: Counter[str]) -> dict[str, Any]:
-    """Conservative checkpoint-promotion guard.
+    """Conservative default-deployment guard for a checkpoint.
 
-    This comparison is intentionally not enough to promote a checkpoint by
-    itself. It can only block promotion or mark a candidate as worth broader
+    This comparison is intentionally not a training-effectiveness judgement.
+    It can only block default deployment or mark a candidate as worth broader
     clean/heldout evaluation.
     """
     reasons: list[str] = []
@@ -252,11 +255,19 @@ def promotion_gate(base: dict[str, Any], candidate: dict[str, Any], changes: Cou
         next_action = "keep_current_baseline_until_candidate_shows_broader_benefit"
 
     return {
+        "gate_scope": "default_checkpoint_deployment_guard",
         "decision": decision,
         "candidate_promotable_from_this_artifact": False,
+        "training_effectiveness_judged": False,
         "broader_eval_recommended": broader_eval_recommended,
         "reasons": reasons,
         "next_action": next_action,
+        "training_effectiveness_boundary": (
+            "Use train-only heldout or fixed-evidence v3 objective metrics "
+            "(schema, support_status, supporting_refs, positive-ref hit, insufficient behavior) "
+            "to judge training-target improvement. Do not treat real workflow answer-hit "
+            "rate as a standalone training-effectiveness metric."
+        ),
     }
 
 
@@ -312,6 +323,7 @@ def summary_markdown(summary: dict[str, Any]) -> str:
     base = summary.get("base") or {}
     candidate = summary.get("candidate") or {}
     interpretation_data = summary.get("interpretation") or {}
+    promotion = summary.get("promotion_gate") or {}
     return "\n".join(
         [
             "# Phase 5I Answer-Quality Run Compare",
@@ -321,8 +333,10 @@ def summary_markdown(summary: dict[str, Any]) -> str:
             f"- candidate: {candidate.get('label')} passed {candidate.get('passed_count')}/{candidate.get('case_count')}",
             f"- contract_result: {interpretation_data.get('contract_result')}",
             f"- case_change_counts: {json.dumps(summary.get('case_change_counts') or {}, ensure_ascii=False)}",
+            f"- promotion_gate: {promotion.get('decision')} ({promotion.get('gate_scope')})",
             "",
-            "This artifact is diagnostic-only and does not call models or create training data.",
+            "This artifact is diagnostic-only and does not call models or create training data. "
+            "It is a deployment/regression guard, not a standalone judgement of SFT/RL training effectiveness.",
             "",
         ]
     )

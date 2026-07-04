@@ -335,9 +335,14 @@ This read-only guard compares existing `phase5i_summary.json`, `metrics.json`,
 and `case_reports.jsonl` files, writes case-level movement rows, and keeps
 `used_training=false`, `validation_subset_used_for_training=false`, and
 `formal_benchmark_acceptance=false`. It does not call Qwen, retrieval models,
-or training. A candidate checkpoint should not be promoted from this comparison
-alone; use it as a controlled contract signal before broader clean heldout or
-workflow evaluation.
+or training. The `promotion_gate` field is a default-deployment regression
+guard, not a training-effectiveness judgement. A candidate checkpoint should
+not be promoted from this comparison alone; use it as a controlled workflow
+contract signal before broader clean heldout or workflow evaluation. Judge
+training-target improvement with train-only heldout or fixed-evidence v3
+metrics such as schema validity, legal `supporting_refs`, `support_status`,
+positive-ref hit, concise grounded reasoning, and insufficient-evidence
+behavior.
 
 Materialize MP-DocVQA final-subset PDFs into MinerU-backed evidence:
 
