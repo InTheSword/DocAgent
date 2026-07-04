@@ -70,16 +70,26 @@ def score_prediction(record: dict[str, Any], prediction: dict[str, Any] | None, 
     schema_ok, schema_error = validate_model_output_v3(prediction, allowed_refs=allowed_refs) if prediction else (False, "no_json")
     target_refs = set(normalize_supporting_refs(target))
     pred_refs = set(normalize_supporting_refs(prediction or {}))
+    positive_ref_hit = bool(pred_refs & target_refs) if target_refs else None
+    insufficient_ref_empty = not pred_refs if not target_refs else None
     return {
         "json_ok": json_ok,
         "schema_ok": schema_ok,
         "schema_error": schema_error,
         "answer_exact": exact_match(str((prediction or {}).get("answer") or ""), str(target.get("answer") or "")) if prediction else False,
         "support_status_match": prediction is not None and prediction.get("support_status") == target.get("support_status"),
-        "supporting_refs_subset": bool(pred_refs) and pred_refs.issubset(allowed_refs) if prediction else False,
-        "positive_ref_hit": bool(pred_refs & target_refs) if prediction else False,
+        "supporting_refs_subset": pred_refs.issubset(allowed_refs) if prediction else False,
+        "positive_ref_hit": positive_ref_hit if prediction else None,
+        "insufficient_ref_empty": insufficient_ref_empty if prediction else None,
         "has_thinking": has_thinking_text(raw_text),
     }
+
+
+def rate_for_key(metrics: list[dict[str, Any]], key: str) -> tuple[float, int]:
+    applicable = [item for item in metrics if item.get(key) is not None]
+    if not applicable:
+        return 0.0, 0
+    return sum(bool(item.get(key)) for item in applicable) / len(applicable), len(applicable)
 
 
 def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -92,11 +102,16 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "support_status_match_rate": 0.0,
             "supporting_refs_subset_rate": 0.0,
             "positive_ref_hit_rate": 0.0,
+            "positive_ref_evaluated_count": 0,
+            "insufficient_ref_empty_rate": 0.0,
+            "insufficient_ref_evaluated_count": 0,
             "thinking_rate": 0.0,
             "schema_error_counts": {},
         }
     total = len(rows)
     metrics = [row["metrics"] for row in rows]
+    positive_ref_hit_rate, positive_ref_count = rate_for_key(metrics, "positive_ref_hit")
+    insufficient_ref_empty_rate, insufficient_ref_count = rate_for_key(metrics, "insufficient_ref_empty")
     return {
         "evaluated_count": total,
         "json_valid_rate": sum(item["json_ok"] for item in metrics) / total,
@@ -104,7 +119,10 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "answer_exact_rate": sum(item["answer_exact"] for item in metrics) / total,
         "support_status_match_rate": sum(item["support_status_match"] for item in metrics) / total,
         "supporting_refs_subset_rate": sum(item["supporting_refs_subset"] for item in metrics) / total,
-        "positive_ref_hit_rate": sum(item["positive_ref_hit"] for item in metrics) / total,
+        "positive_ref_hit_rate": positive_ref_hit_rate,
+        "positive_ref_evaluated_count": positive_ref_count,
+        "insufficient_ref_empty_rate": insufficient_ref_empty_rate,
+        "insufficient_ref_evaluated_count": insufficient_ref_count,
         "thinking_rate": sum(item["has_thinking"] for item in metrics) / total,
         "schema_error_counts": dict(sorted(Counter(str(item.get("schema_error") or "") for item in metrics if item.get("schema_error")).items())),
     }

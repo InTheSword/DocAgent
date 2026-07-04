@@ -25,6 +25,24 @@ def _record(record_id: str = "q1") -> dict:
     }
 
 
+def _insufficient_record(record_id: str = "q_insufficient") -> dict:
+    target = {
+        "answer": "Insufficient evidence.",
+        "supporting_refs": [],
+        "support_status": "insufficient",
+        "reasoning_summary": "The evidence candidates do not contain the requested answer.",
+    }
+    return {
+        "id": record_id,
+        "source": "tatqa",
+        "messages": [
+            {"role": "system", "content": "Return v3 JSON."},
+            {"role": "user", "content": "## Evidence Candidates\n[E1] Unrelated text."},
+            {"role": "assistant", "content": json.dumps(target)},
+        ],
+    }
+
+
 def test_decode_first_json_object_recovers_embedded_v3_json() -> None:
     parsed = decode_first_json_object('prefix {"answer":"A","supporting_refs":["E1"],"support_status":"supported","reasoning_summary":"R"} tail')
 
@@ -49,6 +67,18 @@ def test_score_prediction_checks_v3_schema_refs_and_answer() -> None:
     assert metrics["positive_ref_hit"] is True
     assert bad_ref["schema_ok"] is False
     assert bad_ref["positive_ref_hit"] is False
+
+
+def test_score_prediction_treats_insufficient_empty_refs_as_legal() -> None:
+    record = _insufficient_record()
+    prediction = json.loads(record["messages"][-1]["content"])
+
+    metrics = score_prediction(record, prediction, json.dumps(prediction))
+
+    assert metrics["schema_ok"] is True
+    assert metrics["supporting_refs_subset"] is True
+    assert metrics["positive_ref_hit"] is None
+    assert metrics["insufficient_ref_empty"] is True
 
 
 def test_eval_answer_policy_v3_checkpoint_dry_run_writes_artifacts(tmp_path: Path) -> None:
