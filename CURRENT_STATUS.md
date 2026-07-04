@@ -362,6 +362,25 @@ PEFT runner remains a minimal schema-smoke path. Before using `ms-swift` on the
 server, run an environment/package preflight and get explicit approval before
 installing or replacing packages in the stable `docagent` environment.
 
+AnswerPolicy v3 ms-swift SFT smoke is real-model verified through
+`scripts/run_answer_policy_v3_msswift_sft.py`. The server preflight found
+`ms-swift=4.2.3`, CUDA available, Qwen3-1.7B present, and both TAT-QA/MP-DocVQA
+train-only v3 SFT inputs present. Server dry-run
+`answer_policy_v3_msswift_dry_run_20260704` converted 16 v3 records into
+Swift message JSONL and wrote the exact `swift sft` command without starting
+training. Server execute smoke
+`answer_policy_v3_msswift_execute_smoke2_20260704` then trained Qwen3-1.7B for
+1 step with LoRA via ms-swift, wrote a PEFT checkpoint under its
+`swift_output/.../checkpoint-1` directory, and preserved
+`formal_benchmark_acceptance=false` and
+`validation_subset_used_for_training=false`. Follow-up checkpoint diagnostic
+`answer_policy_v3_msswift_checkpoint_eval_20260704` evaluated 4 records with
+`json_valid_rate=1.0`, `schema_valid_rate=1.0`,
+`support_status_match_rate=1.0`, `supporting_refs_subset_rate=1.0`,
+`positive_ref_hit_rate=1.0`, and `answer_exact_rate=0.5`. This verifies the
+ms-swift training entrypoint and checkpoint contract only; full SFT and any
+model-quality claim remain not_started.
+
 Phase 5 final raw PDF smoke runner is implemented locally in
 `scripts/run_final_raw_pdf_smoke.py` with tests in
 `tests/test_run_final_raw_pdf_smoke.py`. The runner executes

@@ -47,6 +47,7 @@ Observed environment:
 Python: 3.10.20
 PyTorch: 2.12.0+cu130
 Transformers: 5.8.1
+ms-swift: 4.2.3
 TorchVision: not installed
 GPU: 1 x NVIDIA GeForce RTX 4090D 24GB
 ```

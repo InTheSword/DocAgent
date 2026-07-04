@@ -163,6 +163,19 @@ Phase 5 Personal-use DocAgent MVP
    `ms-swift` for later full/expanded SFT experiments after an environment
    preflight and explicit approval for any package installation; GRPO remains
    gated optional and not part of the current warmup
+-> AnswerPolicy v3 ms-swift SFT smoke real-model verified:
+   `scripts/run_answer_policy_v3_msswift_sft.py` converts validated v3 SFT
+   records into Swift message JSONL, writes the exact `swift sft` command and
+   compact artifacts, and only starts training with explicit `--execute`;
+   server dry-run `answer_policy_v3_msswift_dry_run_20260704` confirmed
+   `ms-swift=4.2.3` and train-only v3 input availability; server execute
+   smoke `answer_policy_v3_msswift_execute_smoke2_20260704` trained Qwen3-1.7B
+   for 1 step on 16 v3 records with LoRA and wrote a Swift PEFT checkpoint;
+   follow-up diagnostic `answer_policy_v3_msswift_checkpoint_eval_20260704`
+   evaluated 4 records with json/schema/support-status/ref legality rates all
+   1.0, positive_ref_hit_rate 1.0, answer_exact_rate 0.5, and kept
+   `formal_benchmark_acceptance=false`; this verifies the ms-swift training
+   entrypoint and checkpoint contract only, not final model quality
 -> AnswerPolicy IO candidate schema and citation allowlist implemented locally
 -> Qwen/AnswerPolicy shared prompt v2 candidate-citation contract implemented locally
 -> final subset AnswerPolicy baseline runner implemented locally; first real
