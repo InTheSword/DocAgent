@@ -4,6 +4,17 @@ Updated: 2026-07-04
 
 ## Phase 4D-C Accepted / Phase 5 Active
 
+AnswerPolicy v3 clean fixed-evidence comparison is real-model verified as a
+diagnostic contract probe, not as formal benchmark acceptance. Server run
+`phase5ib_v3refs_clean6_base_vs_adapter480_contract_compare_20260704` compared
+the same 6 curated clean Phase 5I cases through real LLM query rewriting,
+BGE-M3 retrieval, cross-encoder reranking, Qwen AnswerPolicy, and
+`answer_output_contract=v3_refs`. Qwen3-1.7B base passed 6/6, while the
+480-step LoRA adapter passed 3/6; both kept JSON/citation/location validity at
+1.0. The current 480-step adapter remains useful as train-only heldout and
+integration evidence, but it should not be promoted as the default full-workflow
+AnswerPolicy from this signal.
+
 Phase 4D-C expanded unseen validation is accepted on MP-DocVQA validation
 shards 5-8 using the accepted default `candidate_spans` pipeline. The strict
 accepted set contains 77 document windows, 572 pages, and 218 QA. The main

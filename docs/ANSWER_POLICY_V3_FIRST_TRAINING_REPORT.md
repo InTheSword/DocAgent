@@ -51,6 +51,13 @@ answer-quality outcome. This means the first SFT run is validated as a contract
 and train-only heldout improvement, but it is not yet validated as a full
 workflow answer-quality improvement.
 
+A later clean fixed-evidence contract probe over 6 curated Phase 5I cases made
+the boundary sharper: the Qwen3-1.7B base model passed 6/6, while the 480-step
+adapter passed 3/6 on the same clean evidence-board workflow. Both paths kept
+JSON/citation/location validity at 1.0. This confirms the v3 system contract is
+usable, but the 480-step adapter should not be promoted over the base model for
+the current full workflow without stronger clean-probe or heldout evidence.
+
 ## 2. Data Construction
 
 ### MP-DocVQA Train Materialization
@@ -394,7 +401,74 @@ based on these 8 workflow rows. First build or select a cleaner system-level
 answer-quality evaluation target, or fix generic evidence/citation packaging if
 the failure is confirmed to be a reusable system defect.
 
-## 7. Limitations
+## 7. Clean Fixed-Evidence Contract Probe
+
+Runs:
+
+```text
+phase5ib_v3refs_clean6_base_contract_probe_20260704
+phase5ib_v3refs_clean6_adapter480_contract_probe_20260704
+phase5ib_v3refs_clean6_base_vs_adapter480_contract_compare_20260704
+```
+
+Artifacts:
+
+```text
+outputs/final_eval/phase5i_answer_quality_compare/phase5ib_v3refs_clean6_base_vs_adapter480_contract_compare_20260704/result.json
+outputs/sync/phase5ib_v3refs_clean6_base_vs_adapter480_contract_compare_20260704/
+```
+
+The clean pack was built from curated cases validated against persisted
+EvidenceBlocks in `outputs/docagent.db` / `c1fc1c5e040ec894`. Both base and
+adapter probes used the same real system stack:
+
+```text
+accepted clean cases
+-> LLM query rewriting
+-> BGE-M3 retrieval
+-> cross-encoder reranking
+-> Qwen AnswerPolicy
+-> answer_output_contract=v3_refs
+```
+
+Observed:
+
+| Metric | Base | 480-step adapter | Delta |
+|---|---:|---:|---:|
+| Case count | 6 | 6 | 0 |
+| Passed count | 6 | 3 | -3 |
+| JSON valid count | 6 | 6 | 0 |
+| Citation page hit count | 6 | 6 | 0 |
+| Answer keyword hit count | 6 | 4 | -2 |
+| Evidence keyword hit count | 6 | 5 | -1 |
+| Answer correct rate | 1.0000 | 0.6667 | -0.3333 |
+| Format valid rate | 1.0000 | 1.0000 | 0 |
+| Citation valid rate | 1.0000 | 1.0000 | 0 |
+| Location valid rate | 1.0000 | 1.0000 | 0 |
+
+Case-level movement:
+
+| Change | Count |
+|---|---:|
+| Both passed | 3 |
+| Adapter regressed | 3 |
+| Adapter improved | 0 |
+| Both failed | 0 |
+
+Interpretation:
+
+- The clean fixed-evidence probe is a better controlled signal than the earlier
+  default Phase 5I cases, because the evidence board was validated before model
+  execution.
+- The result does not test retrieval improvement or model knowledge gain; it
+  tests the AnswerPolicy contract inside a complete system path.
+- The 480-step adapter should not be promoted as the default AnswerPolicy for
+  current CLI workflow use.
+- More SFT steps or GRPO are not justified by this signal alone. If further
+  training is attempted, it should first diagnose why the adapter regressed on
+  clean evidence despite improving train-only heldout contract metrics.
+
+## 8. Limitations
 
 1. This was a diagnostic SFT run, not a final production SFT acceptance run.
 2. The heldout set came from the generated train-source pack, not validation or
@@ -404,12 +478,14 @@ the failure is confirmed to be a reusable system defect.
 4. The 8-case base-vs-adapter system comparison also did not show a pass-rate
    gain, so the current checkpoint should not be treated as a system-quality
    improvement checkpoint.
-5. MP-DocVQA materialization stopped at 400 document windows by design; the
+5. The 6-case clean fixed-evidence comparison showed base outperforming the
+   480-step adapter on current full-workflow answer quality.
+6. MP-DocVQA materialization stopped at 400 document windows by design; the
    remaining train windows are available for later expansion.
-6. No GRPO, DPO, or best-of-N distillation was approved by this run.
-7. Pixel-level VLM image reasoning remains out of scope for this training run.
+7. No GRPO, DPO, or best-of-N distillation was approved by this run.
+8. Pixel-level VLM image reasoning remains out of scope for this training run.
 
-## 8. Decision
+## 9. Decision
 
 This first training run should be treated as a successful AnswerPolicy v3 SFT
 method validation:
@@ -425,11 +501,11 @@ grpo_approved = false
 Recommended next step:
 
 ```text
-Inspect the unchanged failed real workflow rows before scaling training. If the
-failures are primarily retrieval/context/citation packaging or benchmark-keyword
-expectation issues, fix those generic system issues first. If failures are
-confirmed to be AnswerPolicy generation weaknesses with correct evidence
-available, expand train-only data and run a second SFT.
+Do not promote the 480-step adapter as the default full-workflow AnswerPolicy.
+Do not increase SFT steps or start GRPO from this evidence alone. Keep the base
+model as the safer current workflow baseline, and use the adapter evidence as a
+validated training-method result plus a regression signal to guide the next
+training-data or objective audit.
 ```
 
 Do not tune against the two failed CLI smoke cases individually.
