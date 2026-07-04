@@ -259,6 +259,34 @@ def test_inspect_final_delivery_benchmark_gate_flags_child_output_contract_misma
     ]
 
 
+def test_inspect_final_delivery_benchmark_gate_falls_back_to_child_summary_contract(tmp_path: Path) -> None:
+    run_dir, sync_dir = _make_gate_run(tmp_path)
+    summary_path = run_dir / "summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    child_dir = run_dir / "child_summaries"
+    child_dir.mkdir()
+    for step in summary["steps"]:
+        if step["name"] not in {"answer_policy_baseline", "mpdocvqa_full_workflow"}:
+            continue
+        step["metrics"].pop("answer_output_contract", None)
+        child_summary_path = child_dir / f"{step['name']}_summary.json"
+        child_summary_path.write_text(
+            json.dumps({"status": "success", "answer_output_contract": "candidate_citations"}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        step["artifact_paths"] = [str(child_summary_path)]
+    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    _refresh_local_manifest_hash(run_dir, summary_path)
+
+    result = inspect_gate(run_dir, sync_bundle_dir=sync_dir)
+
+    contract_review = result["metric_review"]["contract_review"]
+    assert result["status"] == "success"
+    assert contract_review["failure_count"] == 0
+    assert contract_review["steps"]["answer_policy_baseline"]["answer_output_contract_source"] == "child_summary"
+    assert contract_review["steps"]["mpdocvqa_full_workflow"]["answer_output_contract_source"] == "child_summary"
+
+
 def test_inspect_final_delivery_benchmark_gate_rejects_stale_hash(tmp_path: Path) -> None:
     run_dir, sync_dir = _make_gate_run(tmp_path)
     summary_path = run_dir / "summary.json"

@@ -201,6 +201,31 @@ def _command_arg(command: Any, flag: str) -> str | None:
     return values[index + 1]
 
 
+def _read_step_output_summary(step: dict[str, Any]) -> tuple[dict[str, Any], str | None, str | None]:
+    artifact_paths = step.get("artifact_paths")
+    if not isinstance(artifact_paths, list):
+        return {}, None, "missing_artifact_paths"
+    candidates: list[Path] = []
+    for artifact in artifact_paths:
+        if not isinstance(artifact, str):
+            continue
+        path = resolve_manifest_entry(artifact)
+        if path.name == "summary.json" or path.name.endswith("_summary.json"):
+            candidates.insert(0, path)
+        elif path.name == "result.json":
+            candidates.append(path)
+    if not candidates:
+        return {}, None, "missing_summary_or_result_artifact"
+    for path in candidates:
+        if not path.is_file():
+            continue
+        try:
+            return read_json(path), safe_relpath(path), None
+        except Exception as exc:
+            return {}, safe_relpath(path), f"{type(exc).__name__}: {exc}"
+    return {}, safe_relpath(candidates[0]), "artifact_not_found"
+
+
 def _child_step_contract_review(summary: dict[str, Any], step_metrics: dict[str, dict[str, Any]]) -> dict[str, Any]:
     reviews: dict[str, dict[str, Any]] = {}
     failures: list[dict[str, Any]] = []
@@ -215,15 +240,34 @@ def _child_step_contract_review(summary: dict[str, Any], step_metrics: dict[str,
         expected_contract = _command_arg(command, "--answer-output-contract")
         expected_adapter = _command_arg(command, "--adapter-path")
         metrics = step_metrics.get(name, {})
+        child_summary: dict[str, Any] = {}
+        child_summary_path: str | None = None
+        child_summary_error: str | None = None
         observed_contract = metrics.get("answer_output_contract")
         observed_adapter = metrics.get("adapter_path")
+        contract_source = "step_metrics" if observed_contract is not None else ""
+        adapter_source = "step_metrics" if observed_adapter is not None else ""
+        if observed_contract is None or observed_adapter is None:
+            child_summary, child_summary_path, child_summary_error = _read_step_output_summary(step)
+        if observed_contract is None and child_summary:
+            observed_contract = child_summary.get("answer_output_contract")
+            contract_source = "child_summary" if observed_contract is not None else ""
+        if observed_adapter is None and child_summary:
+            observed_adapter = child_summary.get("adapter_path")
+            adapter_source = "child_summary" if observed_adapter is not None else ""
         review = {
             "expected_answer_output_contract": expected_contract,
             "observed_answer_output_contract": observed_contract,
+            "answer_output_contract_source": contract_source or None,
             "answer_output_contract_match": expected_contract is None or observed_contract == expected_contract,
             "adapter_path_requested": bool(expected_adapter),
             "adapter_path_metric_present": bool(observed_adapter),
+            "adapter_path_source": adapter_source or None,
         }
+        if child_summary_path is not None:
+            review["child_summary_path"] = child_summary_path
+        if child_summary_error is not None:
+            review["child_summary_error"] = child_summary_error
         if observed_adapter:
             review["adapter_path_match"] = expected_adapter is None or str(observed_adapter) == str(expected_adapter)
         if expected_contract is not None and not observed_contract:
