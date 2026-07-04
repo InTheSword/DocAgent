@@ -147,7 +147,11 @@ Phase 5 Personal-use DocAgent MVP
    answer string, producing v3 `support_status=insufficient` targets with empty
    `supporting_refs`; local smoke
    `answer_policy_v3_tatqa_insufficient_local_smoke_20260704` produced 32
-   records and kept `used_training=false`,
+   records; server smoke
+   `answer_policy_v3_insufficient_server_smoke_20260704_verify` at commit
+   `00a3fa2` produced 64 insufficient records from TAT-QA train data and a
+   64-record mixed pack with 19 insufficient records selected after MP-DocVQA
+   shortage backfill; both kept `used_training=false`, `used_qwen=false`,
    `validation_subset_used_for_training=false`, and
    `formal_benchmark_acceptance=false`; this fills the Stage 2 negative-sample
    data-prep gap but does not start or evaluate training

@@ -342,6 +342,13 @@ emits `insufficient_confirmed` v3 records whose target has
 `support_status=insufficient` and empty `supporting_refs`. Local smoke
 `answer_policy_v3_tatqa_insufficient_local_smoke_20260704` produced 32 records
 with `used_training=false`, `formal_benchmark_acceptance=false`, and
+`validation_subset_used_for_training=false`. Server smoke
+`answer_policy_v3_insufficient_server_smoke_20260704_verify` at commit
+`00a3fa2` produced 64 insufficient records from
+`/root/autodl-tmp/datasets/tatqa/tatqa_dataset_train.json`, then built a
+64-record mixed pack that selected 19 insufficient records after MP-DocVQA
+shortage backfill. The server run kept `used_training=false`,
+`used_qwen=false`, `formal_benchmark_acceptance=false`, and
 `validation_subset_used_for_training=false`. This fills the current Stage 2
 negative-sample data-prep gap; it does not start SFT/GRPO or claim answer
 quality.
