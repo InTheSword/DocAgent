@@ -572,6 +572,20 @@ it reinforces that current SFT improves the intended v3 evidence-output
 contract more reliably than it improves the small clean workflow answer-quality
 guard.
 
+Read-only failure attribution:
+
+```text
+phase5ib_v3refs_clean6_checkpoint_failure_attribution_20260705
+```
+
+The attribution found 3 `both_adapters_regress_from_base` rows and 3 `all_pass`
+rows. The regressed rows still had successful `hybrid_rerank` retrieval and
+citation-page hits, so they are not evidence of a broken execution chain. The
+generic pattern is AnswerPolicy table/value selection from a correct-page
+evidence board. This should be addressed, if pursued, through broader
+fixed-evidence table/value-selection training or evaluation design, not through
+clean6-specific prompt rules.
+
 ## 9. Limitations
 
 1. This was a diagnostic SFT run, not a final production SFT acceptance run.

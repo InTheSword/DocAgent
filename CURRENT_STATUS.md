@@ -741,6 +741,20 @@ each adapter regressed 3 cases. Comparison
 rejection continuation matched the 1024-step adapter at 3/6; it did not improve
 the clean workflow pass signal.
 
+Read-only attribution
+`phase5ib_v3refs_clean6_checkpoint_failure_attribution_20260705` compared the
+same clean6 case reports and predictions without calling models or training.
+It found 3 `both_adapters_regress_from_base` cases and 3 `all_pass` cases. The
+adapter-regressed rows preserved citation-page hits and successful
+`hybrid_rerank` retrieval, so the failure is not a broken routing, retrieval,
+or citation-mapping chain. The generic pattern is AnswerPolicy value selection
+from a correct-page table/evidence board, with one answer-selection gap, one
+table evidence/metric plus answer-selection gap, and one evidence-keyword
+metric gap with a correct answer possible. This blocks default adapter
+deployment and does not justify DPO/GRPO; it points to broader fixed-evidence
+AnswerPolicy table/value selection work rather than case-specific clean6
+repairs.
+
 AnswerPolicy v3 train-only heldout diagnostic splitting is implemented locally
 in `scripts/split_answer_policy_v3_sft_records.py`. The splitter validates v3
 SFT records, blocks validation-like input paths by default, writes

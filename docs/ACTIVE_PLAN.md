@@ -423,7 +423,15 @@ Phase 5 Personal-use DocAgent MVP
    `phase5ib_v3refs_clean6_base_contract_probe_20260704` kept the default
    deployment gate `blocked` because base passed 6/6 and each candidate
    regressed 3 cases; the rejection continuation matched the 1024-step adapter
-   at 3/6 rather than improving the clean workflow signal
+   at 3/6 rather than improving the clean workflow signal. Read-only
+   attribution
+   `phase5ib_v3refs_clean6_checkpoint_failure_attribution_20260705` found the
+   adapter failures preserve citation-page hits and successful hybrid-rerank
+   retrieval; the generic pattern is AnswerPolicy table/value selection from a
+   correct-page evidence board, not a broken execution chain and not a reason
+   for row-specific prompt repairs. This blocks default adapter deployment and
+   keeps DPO/GRPO unapproved, while leaving the train-only v3 objective gains
+   valid as diagnostic evidence
 -> AnswerPolicy v3 train-only heldout diagnostic split implemented locally:
    `scripts/split_answer_policy_v3_sft_records.py` deterministically splits
    validated v3 SFT records into non-overlapping `train_sft.jsonl` and
