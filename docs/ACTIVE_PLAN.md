@@ -45,7 +45,9 @@ Phase 5 Personal-use DocAgent MVP
 -> final-delivery benchmark gate implemented locally for server-side
    readiness, AnswerPolicy baseline, and MP-DocVQA full-workflow diagnostic
    orchestration; it keeps formal_benchmark_acceptance false and does not
-   start training
+   start training; when a requested model-backed child step uses a `cuda*`
+   device, the gate preflight now blocks execution in AutoDL no-card mode
+   before launching Qwen, BGE-M3, or reranker subprocesses
 -> final-delivery benchmark gate server diagnostic accepted: server run
    `final_delivery_benchmark_gate_server_20260702_componentmetrics` completed
    readiness, real-Qwen AnswerPolicy baseline, and MP-DocVQA full-workflow
@@ -569,7 +571,9 @@ Phase 5 Personal-use DocAgent MVP
    both model-backed child steps. Defaults remain unchanged
    (`candidate_citations` and no adapter), so this enables explicit candidate
    checkpoint gate probes without promoting any adapter as the default
-   AnswerPolicy. Initial server diagnostic
+   AnswerPolicy. Its preflight also records requested CUDA devices and fails
+   before child-step launch when the server is in no-card mode but the gate was
+   configured for `cuda*` model devices. Initial server diagnostic
    `final_delivery_gate_promptfix_adapter_v3_limit8_20260705` at commit
    `d97ff4d` ran readiness plus 8 MP-DocVQA workflow rows with
    `answer_policy=sft`, the promptfix 1024-step adapter, and

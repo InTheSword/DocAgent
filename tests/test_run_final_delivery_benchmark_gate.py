@@ -97,6 +97,8 @@ def test_final_delivery_benchmark_gate_orchestrates_safe_steps(tmp_path: Path) -
         str(qwen_path),
         "--adapter-path",
         str(adapter_path),
+        "--device",
+        "cpu",
         "--answer-output-contract",
         "v3_refs",
     )
@@ -160,7 +162,16 @@ def test_final_delivery_benchmark_gate_orchestrates_safe_steps(tmp_path: Path) -
 
 def test_final_delivery_benchmark_gate_blocks_missing_qwen_model_before_steps(tmp_path: Path) -> None:
     paths = _touch_inputs(tmp_path)
-    args = _args(tmp_path, paths, "--answer-policy", "base", "--base-model-path", str(tmp_path / "missing_qwen"))
+    args = _args(
+        tmp_path,
+        paths,
+        "--answer-policy",
+        "base",
+        "--base-model-path",
+        str(tmp_path / "missing_qwen"),
+        "--device",
+        "cpu",
+    )
     called = False
 
     def fake_runner(_command: list[str], _cwd: Path, _timeout: int) -> CommandResult:
@@ -175,4 +186,55 @@ def test_final_delivery_benchmark_gate_blocks_missing_qwen_model_before_steps(tm
     summary = json.loads((tmp_path / "gate" / "gate_test" / "summary.json").read_text(encoding="utf-8"))
     assert summary["preflight"]["status"] == "failed"
     assert "qwen_base_model" in summary["preflight"]["missing"]
+    assert summary["steps"] == []
+
+
+def test_final_delivery_benchmark_gate_blocks_cuda_request_when_unavailable(tmp_path: Path, monkeypatch) -> None:
+    paths = _touch_inputs(tmp_path)
+    qwen_path = tmp_path / "models" / "qwen"
+    bge_path = tmp_path / "models" / "bge-m3"
+    for model_path in (qwen_path, bge_path):
+        model_path.mkdir(parents=True)
+        (model_path / "config.json").write_text("{}", encoding="utf-8")
+    args = _args(
+        tmp_path,
+        paths,
+        "--answer-policy",
+        "base",
+        "--base-model-path",
+        str(qwen_path),
+        "--device",
+        "cuda",
+        "--dense-backend",
+        "bge",
+        "--dense-model-path",
+        str(bge_path),
+        "--dense-device",
+        "cuda:0",
+        "--reranker-backend",
+        "keyword",
+    )
+    monkeypatch.setattr(
+        "scripts.run_final_delivery_benchmark_gate._cuda_availability",
+        lambda: {"torch_import_ok": True, "available": False, "device_count": 0},
+    )
+    called = False
+
+    def fake_runner(_command: list[str], _cwd: Path, _timeout: int) -> CommandResult:
+        nonlocal called
+        called = True
+        return CommandResult(0, "{}", "")
+
+    result = run_final_delivery_benchmark_gate(args=args, command_runner=fake_runner)
+
+    assert called is False
+    assert result["status"] == "failed"
+    summary = json.loads((tmp_path / "gate" / "gate_test" / "summary.json").read_text(encoding="utf-8"))
+    assert "cuda_device" in summary["preflight"]["missing"]
+    cuda_check = summary["preflight"]["checks"]["cuda_device"]
+    assert cuda_check["available"] is False
+    assert cuda_check["requested_devices"] == [
+        {"component": "answer_policy", "device": "cuda"},
+        {"component": "dense_retrieval", "device": "cuda:0"},
+    ]
     assert summary["steps"] == []

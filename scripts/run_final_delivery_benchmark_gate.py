@@ -113,6 +113,45 @@ def _path_exists(path: Path, *, require_config: bool = False) -> bool:
     return path.exists()
 
 
+def _is_cuda_device(device: str | None) -> bool:
+    return bool(device) and str(device).lower().startswith("cuda")
+
+
+def _cuda_availability() -> dict[str, Any]:
+    try:
+        import torch  # type: ignore
+    except Exception as exc:
+        return {"torch_import_ok": False, "available": False, "device_count": 0, "error": repr(exc)}
+    try:
+        return {
+            "torch_import_ok": True,
+            "available": bool(torch.cuda.is_available()),
+            "device_count": int(torch.cuda.device_count()) if torch.cuda.is_available() else 0,
+        }
+    except Exception as exc:
+        return {"torch_import_ok": True, "available": False, "device_count": 0, "error": repr(exc)}
+
+
+def _requested_cuda_devices(args: argparse.Namespace) -> list[dict[str, str]]:
+    requested: list[dict[str, str]] = []
+    if args.answer_policy != "heuristic" and (not args.skip_answer_policy or not args.skip_mpdocvqa_workflow):
+        if _is_cuda_device(args.device):
+            requested.append({"component": "answer_policy", "device": args.device})
+    if not args.skip_mpdocvqa_workflow:
+        if args.dense_backend == "bge" and _is_cuda_device(args.dense_device):
+            requested.append({"component": "dense_retrieval", "device": args.dense_device})
+        if args.reranker_backend == "cross_encoder" and _is_cuda_device(args.reranker_device):
+            requested.append({"component": "reranker", "device": args.reranker_device})
+    unique: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for item in requested:
+        key = (item["component"], item["device"])
+        if key not in seen:
+            unique.append(item)
+            seen.add(key)
+    return unique
+
+
 def preflight(args: argparse.Namespace) -> dict[str, Any]:
     checks: dict[str, dict[str, Any]] = {}
     required: dict[str, tuple[Path, bool]] = {
@@ -158,6 +197,17 @@ def preflight(args: argparse.Namespace) -> dict[str, Any]:
             missing.append(name)
     if checks.get("adapter_path", {}).get("exists") is False:
         missing.append("adapter_path")
+    cuda_requests = _requested_cuda_devices(args)
+    if cuda_requests:
+        cuda = _cuda_availability()
+        checks["cuda_device"] = {
+            "required": True,
+            "available": bool(cuda.get("available")),
+            "requested_devices": cuda_requests,
+            **cuda,
+        }
+        if not cuda.get("available"):
+            missing.append("cuda_device")
     return {"status": "success" if not missing else "failed", "missing": missing, "checks": checks}
 
 
