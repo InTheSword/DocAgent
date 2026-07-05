@@ -91,6 +91,26 @@ regressions, while schema/ref/status metrics stayed unchanged. This verifies
 the DPO training entrypoint, but blocks DPO promotion and further DPO tuning
 without stronger train-only preference data.
 
+Because the DPO checkpoint regressed the fixed-evidence objective, the same
+train-only candidate pool was used for one bounded rejection-SFT continuation
+instead of further DPO tuning. Run
+`answer_policy_v3_rejection_sft_temp095_402records_96steps_20260705`
+continued from the temp0.95 checkpoint on 402 train-only rejection-SFT records
+for 96 ms-swift steps and ended with `train_loss=0.02247`. Heldout256
+comparison `answer_policy_v3_heldout256_compare_temp095_vs_rejsft402_20260705`
+improved answer exact 0.6055 -> 0.6133, support-status match
+0.9766 -> 0.9805, and insufficient empty-ref behavior 0.9474 -> 1.0, while
+JSON/schema/supporting-ref legality stayed at 1.0 and row movement was net
+positive with 10 improvements and 8 regressions. System-chain gate
+`final_delivery_gate_temp095_rejsft402_v3refs_system_subset_20260705` and
+review `final_delivery_gate_temp095_rejsft402_v3refs_system_subset_20260705_review`
+verified readiness, AnswerPolicy baseline, MP-DocVQA workflow, complete
+Qwen/BGE/reranker/query-rewriter component use, manifests, safety flags, and
+observed `v3_refs` output contracts. This checkpoint is now the strongest
+current fixed-evidence/post-training SFT candidate. It is not the default
+production AnswerPolicy, does not establish formal benchmark acceptance, and
+does not unblock DPO/GRPO.
+
 The final-delivery benchmark gate now has a complete candidate-checkpoint
 parameter path for both AnswerPolicy baseline diagnostics and MP-DocVQA
 workflow diagnostics: it can forward explicit `--answer-policy sft`,

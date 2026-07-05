@@ -603,7 +603,23 @@ Phase 5 Personal-use DocAgent MVP
    regressions, while schema/ref/status metrics stayed unchanged. This accepts
    the DPO entrypoint as real-model verified but blocks DPO promotion and
    further DPO tuning without stronger train-only preference data; GRPO remains
-   unapproved
+   unapproved. The same train-only candidate pool was then used for one
+   bounded rejection-SFT continuation instead of more DPO:
+   `answer_policy_v3_rejection_sft_temp095_402records_96steps_20260705`
+   continued from the temp0.95 checkpoint on 402 rejection-SFT records for 96
+   steps, ending with `train_loss=0.02247`. Heldout256 comparison
+   `answer_policy_v3_heldout256_compare_temp095_vs_rejsft402_20260705`
+   improved answer exact 0.60546875 -> 0.61328125, support-status match
+   0.9765625 -> 0.98046875, and insufficient empty-ref behavior
+   0.947368 -> 1.0, with schema/ref legality unchanged at 1.0 and net-positive
+   row movement 10 improvements versus 8 regressions. System-chain gate
+   `final_delivery_gate_temp095_rejsft402_v3refs_system_subset_20260705`
+   plus review verified readiness, AnswerPolicy baseline, MP-DocVQA workflow,
+   complete Qwen/BGE/reranker/query-rewriter component use, manifests, safety
+   flags, and `v3_refs` contract observation. Freeze this checkpoint as the
+   strongest current fixed-evidence/post-training SFT candidate only; do not
+   promote as default production AnswerPolicy and do not continue DPO/GRPO
+   without stronger preference data or a new approved reward strategy
 -> Final-delivery gate adapter/v3 parameter passthrough implemented
    locally:
    `scripts/run_final_answer_policy_baseline.py` now accepts

@@ -376,7 +376,53 @@ do not promote the DPO checkpoint; do not continue DPO tuning unless stronger
 train-only preference-pair coverage or a clearer reward/data strategy is added
 ```
 
-### 3.4 Table/calculation continuation diagnostic
+### 3.4 Temp0.95 rejection-SFT continuation
+
+Because the DPO smoke regressed the fixed-evidence heldout objective, the same
+train-only candidate pool was used for one bounded rejection-SFT continuation
+instead of further preference optimization:
+
+```text
+answer_policy_v3_rejection_sft_temp095_402records_96steps_20260705
+```
+
+This run continued from the temp0.95 checkpoint on 402 train-only
+rejection-SFT records for 96 ms-swift steps. It ended with
+`train_loss=0.02247`. Heldout256 comparison against the temp0.95 checkpoint:
+
+| Metric | temp0.95 continuation | 402-record rejection-SFT |
+|---|---:|---:|
+| json_valid_rate | 1.0000 | 1.0000 |
+| schema_valid_rate | 1.0000 | 1.0000 |
+| answer_exact_rate | 0.6055 | 0.6133 |
+| support_status_match_rate | 0.9766 | 0.9805 |
+| supporting_refs_subset_rate | 1.0000 | 1.0000 |
+| positive_ref_hit_rate | 0.9409 | 0.9409 |
+| insufficient_ref_empty_rate | 0.9474 | 1.0000 |
+| thinking_rate | 0.0000 | 0.0000 |
+
+Row movement was net positive, with 10 candidate improvements and 8
+regressions. The small system-chain gate
+`final_delivery_gate_temp095_rejsft402_v3refs_system_subset_20260705` then ran
+readiness, AnswerPolicy baseline, and MP-DocVQA full workflow diagnostics with
+the new checkpoint and `answer_output_contract=v3_refs`; review
+`final_delivery_gate_temp095_rejsft402_v3refs_system_subset_20260705_review`
+verified manifests, safety flags, complete component metrics, and observed
+`v3_refs` contracts. MP-DocVQA workflow execution remained healthy
+(`cli_success_rate=1.0`, 8/8 Qwen/BGE/reranker/query-rewriter component use,
+retrieved/citation page-hit rates 0.875). This is system compatibility
+evidence, not formal benchmark acceptance.
+
+Decision:
+
+```text
+freeze the 402-record rejection-SFT checkpoint as the strongest current
+fixed-evidence/post-training SFT candidate; do not promote as default
+production AnswerPolicy; do not continue DPO/GRPO without stronger preference
+data or a new approved reward strategy
+```
+
+### 3.5 Table/calculation continuation diagnostic
 
 Run:
 
