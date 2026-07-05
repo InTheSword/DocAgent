@@ -52,9 +52,13 @@ The final-delivery gate inspector now treats child-step output-contract
 consistency as a first-class artifact contract. Gate summaries preserve
 `answer_output_contract` and adapter metadata in compact step metrics, and
 `scripts/inspect_final_delivery_benchmark_gate.py` compares each model-backed
-child step's command against the recorded child-step contract. Missing or
-mismatched output contracts fail the review before any benchmark or checkpoint
-promotion decision.
+child step's command against the recorded child-step contract. For historical
+gate artifacts created before compact string metrics were preserved, the
+inspector falls back to the child step `summary.json`; server artifact-only
+review `final_delivery_gate_promptfix_adapter_v3_fullsmall_20260705_contractguard_review_childsummary`
+confirmed both model-backed child steps requested and recorded `v3_refs`.
+Missing or mismatched output contracts fail the review before any benchmark or
+checkpoint promotion decision.
 
 AnswerPolicy v3 clean fixed-evidence comparison is real-model verified as a
 diagnostic contract probe, not as formal benchmark acceptance. Server run

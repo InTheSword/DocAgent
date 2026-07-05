@@ -58,6 +58,26 @@ JSON/citation/location validity at 1.0. This confirms the v3 system contract is
 usable, but the 480-step adapter should not be promoted over the base model for
 the current full workflow without stronger clean-probe or heldout evidence.
 
+The later full4096 promptfix follow-up supersedes the 480-step run as the
+strongest current train-only SFT diagnostic. It used the completed
+848-window MP-DocVQA train materialization plus expanded TAT-QA and
+insufficient-evidence records, trained for 1024 optimizer update steps, and
+improved the intended v3 objective metrics while preserving the same deployment
+boundary:
+
+| Metric | Base | 1024-step promptfix adapter | Delta |
+|---|---:|---:|---:|
+| Heldout answer exact rate | 0.3750 | 0.5859 | +0.2109 |
+| Heldout schema/ref legality | lower than adapter | 1.0000 / 1.0000 | improved |
+| Support status behavior | lower than adapter | improved | improved |
+| Table/calculation fixed-evidence answer exact | 0.5234 | 0.7891 | +0.2657 |
+| Table/calculation candidate movements | - | 36 improvements / 2 regressions | positive |
+
+This is the current evidence that the AnswerPolicy v3 SFT objective is
+learnable. It still does not approve GRPO, does not use validation/final-eval
+data for training, and does not promote the adapter as the default full
+workflow checkpoint.
+
 ## 2. Data Construction
 
 ### MP-DocVQA Train Materialization
@@ -92,6 +112,27 @@ Summary:
 
 The command-level status was `failed` only because 2 QA samples were marked
 `evidence_not_ready`. Document parsing itself succeeded for 400/400 windows.
+
+Follow-up full train materialization:
+
+```text
+mpdocvqa_train_evidence_api_848_resume400_20260705
+```
+
+Summary:
+
+| Item | Value |
+|---|---:|
+| Document windows requested | 848 |
+| Document windows passed | 848 |
+| Document windows failed | 0 |
+| QA samples | 3039 |
+| Evidence-ready QA samples | 3036 |
+| Evidence-ready rate | 0.9990 |
+| MinerU API/OCR used | true |
+
+The command-level status remained diagnostic `failed` only because 3 QA rows
+were not evidence-ready. Document parsing itself succeeded for all 848 windows.
 
 ### MP-DocVQA v3 SFT Conversion
 
