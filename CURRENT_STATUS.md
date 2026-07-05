@@ -122,6 +122,21 @@ regressed heldout256 against the 402-record checkpoint: answer exact
 stop condition for this post-training branch. Keep the 402-record checkpoint as
 the current candidate.
 
+AnswerPolicy v3 custom GRPO was tried from the 402-record rejection-SFT
+checkpoint as a bounded post-training probe, not as open-ended tuning. The
+first smoke run `answer_policy_v3_grpo_smoke4_ng2_from_rejsft402_20260705`
+completed four update steps but had `nonzero_reward_std_steps=0`, so all group
+advantages were zero; heldout256 comparison against the 402-record checkpoint
+was identical with no improvement or regression rows. A second diversity probe
+`answer_policy_v3_grpo_variance_probe8_ng3_temp12_20260705` used
+`num_generations=3`, `temperature=1.2`, and eight update steps. It produced
+nonzero reward variance on 3/8 steps, but heldout256 regressed answer exact
+0.6133 -> 0.6055 with zero improvements and two regressions, while schema,
+ref, status, and insufficient behavior stayed unchanged. This verifies the
+custom GRPO execution path and shows that the current GRPO recipe is not a
+promotion candidate. Keep the 402-record rejection-SFT checkpoint as the best
+current fixed-evidence/post-training candidate.
+
 The final-delivery benchmark gate now has a complete candidate-checkpoint
 parameter path for both AnswerPolicy baseline diagnostics and MP-DocVQA
 workflow diagnostics: it can forward explicit `--answer-policy sft`,

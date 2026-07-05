@@ -451,7 +451,71 @@ Row movement was 11 improvements and 14 regressions. This triggers the
 post-training stop condition for this branch: keep the 402-record checkpoint
 and do not keep adding rejection-SFT steps from the current candidate recipe.
 
-### 3.5 Table/calculation continuation diagnostic
+### 3.5 Custom GRPO bounded probes
+
+Custom GRPO was then tried from the 402-record rejection-SFT checkpoint as a
+bounded post-training probe:
+
+```text
+answer_policy_v3_grpo_smoke4_ng2_from_rejsft402_20260705
+answer_policy_v3_grpo_variance_probe8_ng3_temp12_20260705
+```
+
+The first run used 64 selected train-only records, 4 update steps, and 2
+generations per prompt. It completed successfully, but every group had identical
+rewards:
+
+```text
+nonzero_reward_std_steps = 0
+```
+
+Therefore all advantages and losses were effectively zero. Heldout256
+comparison against the 402-record checkpoint was identical:
+
+| Metric | 402-record checkpoint | GRPO smoke4 |
+|---|---:|---:|
+| answer_exact_rate | 0.6133 | 0.6133 |
+| support_status_match_rate | 0.9805 | 0.9805 |
+| supporting_refs_subset_rate | 1.0000 | 1.0000 |
+| positive_ref_hit_rate | 0.9409 | 0.9409 |
+| insufficient_ref_empty_rate | 1.0000 | 1.0000 |
+
+Row movement was 0 improvements and 0 regressions. This verifies execution
+plumbing only; it is not a learning result.
+
+The second run increased sampling diversity with `num_generations=3`,
+`temperature=1.2`, `top_p=0.95`, 8 update steps, and a low learning rate. It
+produced nonzero reward variance on 3/8 steps, mostly on MP-DocVQA supported
+records, so the GRPO objective did receive a real advantage signal. Heldout256
+comparison still regressed:
+
+| Metric | 402-record checkpoint | GRPO variance probe |
+|---|---:|---:|
+| answer_exact_rate | 0.6133 | 0.6055 |
+| support_status_match_rate | 0.9805 | 0.9805 |
+| supporting_refs_subset_rate | 1.0000 | 1.0000 |
+| positive_ref_hit_rate | 0.9409 | 0.9409 |
+| insufficient_ref_empty_rate | 1.0000 | 1.0000 |
+
+Row movement was 0 improvements and 2 regressions.
+
+Decision:
+
+```text
+do not promote either GRPO checkpoint
+```
+
+Rationale:
+
+- The 2-generation smoke had no reward variance, so it could not learn.
+- The diversity probe created reward variance, but the heldout delta was
+  negative.
+- Continuing the same recipe by adding steps would be open-ended tuning rather
+  than a justified training-plan stage.
+- The 402-record rejection-SFT checkpoint remains the strongest current
+  fixed-evidence/post-training candidate.
+
+### 3.6 Table/calculation continuation diagnostic
 
 Run:
 
@@ -572,14 +636,17 @@ Current post-training result:
 - a later 512-row temp0.95 candidate slice produced 131 training-ready
   preference pairs and enabled a 16-step DPO smoke, but the DPO checkpoint
   regressed heldout256 answer exact 0.6055 -> 0.5977 with no improvement rows.
+- the 402-record rejection-SFT continuation is the strongest current
+  fixed-evidence/post-training candidate, with heldout256 answer exact 0.6133,
+  support-status match 0.9805, and insufficient empty-ref behavior 1.0.
+- bounded custom GRPO probes from that checkpoint either had zero reward
+  variance or regressed heldout256 to 0.6055, so GRPO is not promoted.
 
-Therefore, the next step is not more DPO/GRPO tuning. The 377-record
-continuation can be used as the safer insufficient-behavior candidate, while
-the temp0.95 continuation remains the strongest answer-exact candidate.
+Therefore, the next step is not more DPO/GRPO tuning under the current recipe.
 Default deployment remains unapproved. If post-training continues, it should
-first improve train-only preference-data quality or reward separation; simply
-adding DPO steps from the current pair set is not justified. GRPO remains
-optional and gated.
+first improve train-only preference-data quality, reward separation, or GRPO
+hard-sample selection; simply adding DPO/GRPO steps from the current artifacts
+is not justified.
 
 GPU boundary:
 

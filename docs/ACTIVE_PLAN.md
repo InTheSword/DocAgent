@@ -629,7 +629,18 @@ Phase 5 Personal-use DocAgent MVP
    0.61328125 -> 0.6015625, support-status match 0.98046875 -> 0.96484375,
    positive-ref hit 0.940928 -> 0.92766, and schema/ref legality also dipped
    from 1.0 to 0.9921875. Stop this post-training branch here; the
-   402-record checkpoint remains the frozen current candidate
+   402-record checkpoint remains the frozen current candidate. Bounded custom
+   GRPO was then tried from the same checkpoint with
+   `scripts/run_answer_policy_v3_custom_grpo.py`: smoke
+   `answer_policy_v3_grpo_smoke4_ng2_from_rejsft402_20260705` completed but
+   had zero reward variance and zero advantages, producing identical heldout256
+   metrics; diversity probe
+   `answer_policy_v3_grpo_variance_probe8_ng3_temp12_20260705` produced
+   nonzero reward variance on 3/8 steps but regressed heldout256 answer exact
+   0.61328125 -> 0.60546875 with zero improvements and two regressions. This
+   real-model verifies the custom GRPO path only; it blocks GRPO promotion
+   under the current recipe and keeps the 402-record rejection-SFT checkpoint
+   as the frozen current fixed-evidence candidate
 -> Final-delivery gate adapter/v3 parameter passthrough implemented
    locally:
    `scripts/run_final_answer_policy_baseline.py` now accepts
