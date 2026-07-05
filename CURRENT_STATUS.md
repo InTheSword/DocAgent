@@ -33,6 +33,23 @@ safe post-training candidate, not a default deployment checkpoint. Simple
 expansion of the same candidate-generation recipe is unlikely to make DPO ready
 quickly because reward-margin failures dominate; DPO/GRPO remain unapproved.
 
+A follow-up bounded continuation used the combined 377 train-only
+rejection-SFT records:
+`answer_policy_v3_rejection_sft_promptfix1024_377records_96steps_20260705`.
+It trained for 96 ms-swift steps from the frozen promptfix checkpoint with
+final `train_loss=0.01395`. Heldout256 comparison
+`answer_policy_v3_heldout256_compare_promptfix_vs_rejection377_20260705`
+improved answer exact 0.5859 -> 0.6016, restored JSON/schema/ref legality and
+insufficient empty-ref behavior to 1.0, and had net-positive row movement
+(10 improvements, 6 regressions). Positive-ref hit moved slightly down
+0.9407 -> 0.9367. Clean6 workflow guard
+`phase5ib_v3refs_clean6_rejection377_continue96_20260705` preserved full
+workflow execution and citation page hits at 6/6, but comparison
+`phase5ib_v3refs_clean6_promptfix1024_vs_rejection377_continue96_20260705`
+blocked default deployment because the pass count underperformed the compared
+adapter run. This is the current post-training candidate checkpoint, not the
+default production AnswerPolicy.
+
 The final-delivery benchmark gate now has a complete candidate-checkpoint
 parameter path for both AnswerPolicy baseline diagnostics and MP-DocVQA
 workflow diagnostics: it can forward explicit `--answer-policy sft`,

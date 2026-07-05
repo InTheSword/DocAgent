@@ -553,7 +553,22 @@ Phase 5 Personal-use DocAgent MVP
    showed no aggregate contract regression: answer exact stayed 0.5859375,
    schema/ref/status/insufficient metrics improved slightly, and row movement
    was balanced at 9 improvements and 9 regressions. Keep this as a
-   post-training candidate only; do not promote it as default. Simple expansion
+   post-training candidate only; do not promote it as default. Follow-up
+   bounded continuation
+   `answer_policy_v3_rejection_sft_promptfix1024_377records_96steps_20260705`
+   trained on the combined 377 train-only rejection-SFT records for 96
+   ms-swift steps from the same frozen promptfix checkpoint. Heldout comparison
+   `answer_policy_v3_heldout256_compare_promptfix_vs_rejection377_20260705`
+   improved answer exact 0.5859375 -> 0.6015625, restored JSON/schema/ref
+   legality and insufficient empty-ref behavior to 1.0, and had net-positive
+   row movement (10 improvements, 6 regressions), while positive-ref hit moved
+   slightly down 0.9407 -> 0.9367. Clean6 guard
+   `phase5ib_v3refs_clean6_rejection377_continue96_20260705` preserved full
+   execution and citation-page hits at 6/6 but deployment comparison
+   `phase5ib_v3refs_clean6_promptfix1024_vs_rejection377_continue96_20260705`
+   blocked default promotion because clean6 pass count was lower than the
+   compared adapter run. Keep this as the current post-training candidate, not
+   as the default production AnswerPolicy. Simple expansion
    of the same candidate-generation recipe is unlikely to produce enough
    preference-pair coverage quickly because reward-margin failures dominate; do
    not start DPO/GRPO without a bounded strategy change and stronger train-only

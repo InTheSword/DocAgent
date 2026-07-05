@@ -221,10 +221,54 @@ means the continuation is a valid bounded post-training candidate with no
 aggregate contract regression, but it is not a clear answer-quality improvement
 over the frozen promptfix SFT checkpoint.
 
+The combined 377 rejection-SFT records were then trained in one bounded
+continuation:
+
+```text
+answer_policy_v3_rejection_sft_promptfix1024_377records_96steps_20260705
+```
+
+This run continued from the same frozen promptfix checkpoint for 96 ms-swift
+steps. Training completed successfully with final `train_loss=0.01395`.
+Heldout256 comparison against the promptfix checkpoint:
+
+| Metric | Promptfix | 377-record continuation |
+|---|---:|---:|
+| json_valid_rate | 0.9961 | 1.0000 |
+| schema_valid_rate | 0.9961 | 1.0000 |
+| answer_exact_rate | 0.5859 | 0.6016 |
+| support_status_match_rate | 0.9727 | 0.9766 |
+| supporting_refs_subset_rate | 0.9961 | 1.0000 |
+| positive_ref_hit_rate | 0.9407 | 0.9367 |
+| insufficient_ref_empty_rate | 0.9474 | 1.0000 |
+| thinking_rate | 0.0000 | 0.0000 |
+
+Row movement was net positive on the fixed-evidence heldout: 10 candidate
+improvements, 6 regressions, 144 both correct, and 96 both missed. This makes
+the checkpoint a stronger post-training candidate than the 182-record
+continuation for the intended AnswerPolicy v3 objective. It still should not be
+promoted as the default production checkpoint from this signal alone.
+
+Clean6 full-workflow guard:
+
+```text
+phase5ib_v3refs_clean6_rejection377_continue96_20260705
+phase5ib_v3refs_clean6_promptfix1024_vs_rejection377_continue96_20260705
+```
+
+The 377-record continuation preserved workflow execution and citation mapping:
+6/6 rows used the LLM query rewriter, BGE-M3 retrieval, reranker, Qwen SFT
+AnswerPolicy, and `v3_refs`; JSON/artifact output and citation page hits were
+6/6. The deployment guard still blocked default promotion because the clean6
+pass count moved from 3/6 in the compared adapter run to 2/6, with two
+candidate regressions and one candidate improvement. This is a deployment
+guard result, not a rejection of the fixed-evidence training objective gain.
+
 Decision:
 
 ```text
-keep as post-training candidate; do not promote as default; do not start DPO/GRPO
+keep the 377-record continuation as the current post-training candidate;
+do not promote as default; do not start DPO/GRPO
 ```
 
 ### 3.4 Table/calculation continuation diagnostic
@@ -285,6 +329,8 @@ Current clean6 signal:
 
 - base Qwen path: 6/6 in the recorded guard;
 - promptfix adapter: 4/6;
+- promptfix-based 377-record rejection continuation: 2/6 in the compared
+  clean6 guard, while preserving 6/6 citation page hits and workflow execution;
 - tablecalc continuation: 4/6.
 
 Therefore, the promptfix adapter is suitable as the SFT anchor for post-training
@@ -330,19 +376,21 @@ preparation:
 
 Current post-training result:
 
-- bounded rejection-SFT from the promptfix checkpoint is executable and
-  aggregate-safe on heldout256;
-- answer exact did not improve over the frozen promptfix checkpoint;
+- bounded rejection-SFT from the promptfix checkpoint is executable;
+- the 377-record continuation improved heldout256 answer exact from 0.5859 to
+  0.6016 and restored JSON/schema/ref legality plus insufficient empty-ref
+  behavior to 1.0;
+- positive-ref hit moved slightly down from 0.9407 to 0.9367, so this remains
+  a candidate checkpoint rather than a final default;
 - two 256-row candidate slices produced 377 training-ready rejection-SFT rows
   but only 44 training-ready preference pairs.
 
-Therefore, the next step is not DPO/GRPO. Simple expansion of the same
-candidate-generation recipe is unlikely to produce enough preference-pair
-coverage quickly because reward-margin failures dominate. If post-training
-continues, first change the candidate-generation or ranking strategy in a
-bounded way, then require stronger train-only preference-pair coverage before
-any DPO decision. GRPO remains optional and gated. It is not the next default
-action.
+Therefore, the next step is not DPO/GRPO. The 377-record continuation can be
+used as the current post-training candidate for further fixed-evidence or
+system-chain diagnostics, but default deployment remains blocked by the clean6
+guard. If post-training continues, change the candidate-generation or ranking
+strategy in a bounded way and require stronger train-only preference-pair
+coverage before any DPO decision. GRPO remains optional and gated.
 
 GPU boundary:
 
