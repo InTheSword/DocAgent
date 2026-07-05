@@ -105,7 +105,19 @@ Phase 5 Personal-use DocAgent MVP
    failures are diagnostic answer/citation quality issues
    (`answer_keyword_missing`, `citation_page_mismatch`,
    `downstream_answer_not_evaluated`), not execution-chain blockers; accepted
-   final answer-quality benchmark status remains not_started
+   final answer-quality benchmark status remains not_started. Follow-up
+   clean-case server diagnostic
+   `phase5ib_clean6_rejsft402_answer_quality_20260705` ran the accepted
+   Phase 5I-B artifact contract on 6 curated answer-quality cases with the
+   current 402-record AnswerPolicy v3 checkpoint, real LLM query rewriting,
+   BGE-M3, cross-encoder reranker, Qwen SFT AnswerPolicy, and `v3_refs`.
+   Artifact review
+   `phase5ib_clean6_rejsft402_answer_quality_20260705_review` passed manifest
+   and safety checks. The run had 6/6 JSON-valid outputs, 6/6 citation page
+   hits, answer keyword hits on 4/6, and 3/6 passed cases; failures remained
+   evidence/answer keyword diagnostics, not execution-chain blockers. This is
+   small-scenario real-model answer-quality diagnostic evidence, not formal
+   benchmark acceptance
 -> Phase 5I-B document-context inventory implemented locally:
    `scripts/inspect_phase5i_document_contexts.py` reads candidate SQLite
    `db_path` / `doc_id` pairs, checks persisted retrievable EvidenceBlocks,
@@ -2755,7 +2767,9 @@ Phase 4D-B1.3 server sanity accepted
   validation-subset training disabled and formal benchmark acceptance still
   false; `scripts/inspect_phase5i_answer_quality_artifacts.py` validates the
   artifact contract without rerunning models or creating training data
-+ Phase 5I-B Final Answer Quality Benchmark execution not_started
++ Phase 5I-B Final Answer Quality Benchmark artifact contract executed on a
+  6-case clean small-scenario diagnostic with real BGE-M3, reranker, Qwen SFT,
+  query rewriting, and `v3_refs`; formal benchmark acceptance remains false
 + Phase 5E Document Summary MVP implemented with local targeted and Phase 5
   regression tests passing
 + Phase 5F full CLI acceptance accepted after AutoDL server smoke with

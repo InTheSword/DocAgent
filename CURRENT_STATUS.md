@@ -154,6 +154,20 @@ runner and through `run_mpdocvqa_full_workflow_diagnostic.py` into
 plumbing for candidate adapter probes; it is not itself a model-quality or
 deployment acceptance.
 
+Phase 5I-B clean answer-quality diagnostic
+`phase5ib_clean6_rejsft402_answer_quality_20260705` ran after the training
+branch was closed, using the current 402-record AnswerPolicy v3 checkpoint,
+real LLM query rewriting, BGE-M3 dense retrieval, cross-encoder reranker, Qwen
+SFT AnswerPolicy, and `v3_refs` on 6 curated clean answer-quality cases.
+Artifact review `phase5ib_clean6_rejsft402_answer_quality_20260705_review`
+passed manifest and safety checks. The run produced 6/6 JSON-valid outputs,
+6/6 citation page hits, answer keyword hits on 4/6, and 3/6 passed cases.
+Failures were classified under evidence readiness / answer keyword diagnostics
+(`evidence_keyword_missing`, `answer_keyword_missing`), not workflow execution
+or artifact-contract blockers. This starts Phase 5I-B small-scenario
+answer-quality evidence collection but still does not claim formal benchmark
+acceptance or default checkpoint promotion.
+
 Server diagnostic `final_delivery_gate_promptfix_adapter_v3_limit8_20260705`
 verified that plumbing with the promptfix 1024-step adapter on 8 MP-DocVQA
 workflow rows. The run completed readiness and MP-DocVQA workflow steps
