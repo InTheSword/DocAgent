@@ -523,6 +523,18 @@ Phase 5 Personal-use DocAgent MVP
    matching promptfix and still underperforming base 6/6, so this checkpoint is
    a targeted train-only objective artifact and must not be promoted as the
    default AnswerPolicy
+-> AnswerPolicy v3 SFT-stage decision frozen:
+   `docs/ANSWER_POLICY_V3_TRAINING_SUMMARY.md` records the current SFT
+   decision. The promptfix checkpoint
+   `answer_policy_v3_msswift_stage2_promptfix3840_1024steps_20260705`
+   is the current SFT anchor for bounded post-training preparation because it
+   improves the train-only v3 heldout objective across answer/schema/support/ref
+   metrics after prompt-contract repair. The earlier full4096 checkpoint,
+   rejection-SFT continuation, and table/calculation continuation remain
+   diagnostics. Do not continue open-ended LoRA tuning before post-training;
+   allow at most one future bounded refresher SFT only if train-only
+   post-training preparation exposes a broad contract regression that can be
+   corrected without hurting insufficient-evidence behavior
 -> Final-delivery gate adapter/v3 parameter passthrough implemented
    locally:
    `scripts/run_final_answer_policy_baseline.py` now accepts
