@@ -568,7 +568,28 @@ Phase 5 Personal-use DocAgent MVP
    `phase5ib_v3refs_clean6_promptfix1024_vs_rejection377_continue96_20260705`
    blocked default promotion because clean6 pass count was lower than the
    compared adapter run. Keep this as the current post-training candidate, not
-   as the default production AnswerPolicy. Simple expansion
+   as the default production AnswerPolicy. A bounded high-diversity candidate
+   strategy from this checkpoint then used `temperature=0.95`, `top_p=0.97`,
+   and 8 candidates per row over 256 additional train-only rows. Runs
+   `answer_policy_v3_candidates_rejection377_temp095_train64x8_offset512_20260705`
+   and
+   `answer_policy_v3_candidates_rejection377_temp095_train192x8_offset576_20260705`
+   produced 2048 candidates, 201 rejection-SFT rows, and 26 training-ready
+   preference pairs. Continuation
+   `answer_policy_v3_rejection_sft_temp095_201records_52steps_20260705`
+   trained 52 ms-swift steps from the 377-record checkpoint. Heldout comparison
+   `answer_policy_v3_heldout256_compare_promptfix_vs_temp095_201_20260705`
+   improved answer exact 0.5859375 -> 0.60546875 with schema/ref legality at
+   1.0 and positive-ref hit 0.9409, while insufficient empty-ref behavior
+   stayed at the promptfix level 0.9474. Clean6 run
+   `phase5ib_v3refs_clean6_temp095_rejection201_20260705` preserved full
+   execution and citation-page hits at 6/6 and matched the compared
+   promptfix/adapter clean6 pass count at 3/6; comparison
+   `phase5ib_v3refs_clean6_rejection377_vs_temp095_rejection201_20260705`
+   improved over the 377-record continuation but still required broader
+   evaluation before default promotion. Keep this as the strongest current
+   fixed-evidence post-training candidate, not as the default production
+   AnswerPolicy. Simple expansion
    of the same candidate-generation recipe is unlikely to produce enough
    preference-pair coverage quickly because reward-margin failures dominate; do
    not start DPO/GRPO without a bounded strategy change and stronger train-only

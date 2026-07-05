@@ -50,6 +50,30 @@ blocked default deployment because the pass count underperformed the compared
 adapter run. This is the current post-training candidate checkpoint, not the
 default production AnswerPolicy.
 
+A bounded high-diversity candidate strategy was then tested from the 377-record
+checkpoint. Runs
+`answer_policy_v3_candidates_rejection377_temp095_train64x8_offset512_20260705`
+and
+`answer_policy_v3_candidates_rejection377_temp095_train192x8_offset576_20260705`
+used `temperature=0.95`, `top_p=0.97`, and 8 candidates per row over 256
+additional train-only records. They produced 2048 candidates, 201
+rejection-SFT records, and 26 training-ready preference pairs. DPO still is not
+ready from this coverage. Continuation
+`answer_policy_v3_rejection_sft_temp095_201records_52steps_20260705` trained
+52 ms-swift steps from the 377-record checkpoint with final
+`train_loss=0.01452`. Heldout comparison
+`answer_policy_v3_heldout256_compare_promptfix_vs_temp095_201_20260705`
+improved answer exact 0.5859 -> 0.6055 with JSON/schema/ref legality at 1.0
+and positive-ref hit 0.9409; insufficient empty-ref behavior stayed at 0.9474,
+below the 377-record checkpoint's 1.0. Clean6 run
+`phase5ib_v3refs_clean6_temp095_rejection201_20260705` preserved full workflow
+execution and citation page hits at 6/6 and matched the compared
+promptfix/adapter pass count at 3/6, while
+`phase5ib_v3refs_clean6_rejection377_vs_temp095_rejection201_20260705` showed
+it improved over the 377-record continuation on this guard. This is the
+strongest current fixed-evidence post-training candidate, but it still is not
+the default production AnswerPolicy.
+
 The final-delivery benchmark gate now has a complete candidate-checkpoint
 parameter path for both AnswerPolicy baseline diagnostics and MP-DocVQA
 workflow diagnostics: it can forward explicit `--answer-policy sft`,

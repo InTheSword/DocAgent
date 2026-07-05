@@ -264,11 +264,67 @@ pass count moved from 3/6 in the compared adapter run to 2/6, with two
 candidate regressions and one candidate improvement. This is a deployment
 guard result, not a rejection of the fixed-evidence training objective gain.
 
+High-diversity candidate generation was then tested from the 377-record
+continuation checkpoint:
+
+```text
+answer_policy_v3_candidates_rejection377_temp095_train64x8_offset512_20260705
+answer_policy_v3_candidates_rejection377_temp095_train192x8_offset576_20260705
+answer_policy_v3_rejection_rejection377_temp095_train64x8_offset512_20260705
+answer_policy_v3_rejection_rejection377_temp095_train192x8_offset576_20260705
+```
+
+The strategy used `temperature=0.95`, `top_p=0.97`, and 8 candidates per
+record over 256 additional train-only records. It produced 2048 candidates,
+201 rejection-SFT records, and 26 training-ready preference pairs. Schema
+validity stayed high, but preference-pair coverage remained too low for DPO.
+
+A second bounded continuation used those 201 high-diversity rejection-SFT
+records:
+
+```text
+answer_policy_v3_rejection_sft_temp095_201records_52steps_20260705
+```
+
+This continued from the 377-record checkpoint for 52 ms-swift steps and ended
+with `train_loss=0.01452`. Heldout256 comparison:
+
+| Metric | Promptfix | 377-record continuation | temp0.95 continuation |
+|---|---:|---:|---:|
+| json_valid_rate | 0.9961 | 1.0000 | 1.0000 |
+| schema_valid_rate | 0.9961 | 1.0000 | 1.0000 |
+| answer_exact_rate | 0.5859 | 0.6016 | 0.6055 |
+| support_status_match_rate | 0.9727 | 0.9766 | 0.9766 |
+| supporting_refs_subset_rate | 0.9961 | 1.0000 | 1.0000 |
+| positive_ref_hit_rate | 0.9407 | 0.9367 | 0.9409 |
+| insufficient_ref_empty_rate | 0.9474 | 1.0000 | 0.9474 |
+| thinking_rate | 0.0000 | 0.0000 | 0.0000 |
+
+Compared with the frozen promptfix checkpoint, the temp0.95 continuation had
+13 answer improvements and 8 regressions. Compared with the 377-record
+continuation, it had 5 improvements and 4 regressions, with answer exact and
+positive-ref hit slightly higher but insufficient empty-ref behavior lower.
+
+Clean6 guard:
+
+```text
+phase5ib_v3refs_clean6_temp095_rejection201_20260705
+phase5ib_v3refs_clean6_promptfix1024_vs_temp095_rejection201_20260705
+phase5ib_v3refs_clean6_rejection377_vs_temp095_rejection201_20260705
+```
+
+The checkpoint preserved full workflow execution, JSON/artifact output, and
+6/6 citation page hits. It matched the compared promptfix/adapter clean6 pass
+count at 3/6 and improved over the 377-record continuation's 2/6, but the
+deployment gate still requires broader evaluation because clean6 remains a
+small guard and candidate regressions are present.
+
 Decision:
 
 ```text
-keep the 377-record continuation as the current post-training candidate;
-do not promote as default; do not start DPO/GRPO
+keep the temp0.95 201-record continuation as the strongest current
+post-training candidate for fixed-evidence metrics; do not promote as default;
+do not start DPO/GRPO
 ```
 
 ### 3.4 Table/calculation continuation diagnostic
@@ -331,6 +387,8 @@ Current clean6 signal:
 - promptfix adapter: 4/6;
 - promptfix-based 377-record rejection continuation: 2/6 in the compared
   clean6 guard, while preserving 6/6 citation page hits and workflow execution;
+- temp0.95 201-record continuation: 3/6, preserving 6/6 citation page hits and
+  workflow execution;
 - tablecalc continuation: 4/6.
 
 Therefore, the promptfix adapter is suitable as the SFT anchor for post-training
@@ -382,15 +440,18 @@ Current post-training result:
   behavior to 1.0;
 - positive-ref hit moved slightly down from 0.9407 to 0.9367, so this remains
   a candidate checkpoint rather than a final default;
+- the temp0.95 continuation improved heldout256 answer exact further to 0.6055
+  and restored positive-ref hit to 0.9409, but insufficient empty-ref behavior
+  returned to the promptfix level of 0.9474;
 - two 256-row candidate slices produced 377 training-ready rejection-SFT rows
   but only 44 training-ready preference pairs.
 
 Therefore, the next step is not DPO/GRPO. The 377-record continuation can be
-used as the current post-training candidate for further fixed-evidence or
-system-chain diagnostics, but default deployment remains blocked by the clean6
-guard. If post-training continues, change the candidate-generation or ranking
-strategy in a bounded way and require stronger train-only preference-pair
-coverage before any DPO decision. GRPO remains optional and gated.
+used as the safer insufficient-behavior candidate, while the temp0.95
+continuation is the stronger answer-exact candidate. Default deployment remains
+unapproved. If post-training continues, require either a broader clean/fixed
+heldout evaluation or stronger train-only preference-pair coverage before any
+DPO decision. GRPO remains optional and gated.
 
 GPU boundary:
 
