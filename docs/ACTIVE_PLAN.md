@@ -502,6 +502,27 @@ Phase 5 Personal-use DocAgent MVP
    regressions. This supports the training objective improvement on a reusable
    fixed-evidence table/calculation slice, but still does not override the
    clean6 deployment guard
+-> AnswerPolicy v3 table/calculation continuation diagnostic real-model
+   verified:
+   server selectors
+   `answer_policy_v3_fixed_evidence_tablecalc_train_promptfixsplit_20260705`
+   and `answer_policy_v3_fixed_evidence_tablecalc_heldout_promptfixsplit_20260705`
+   filtered the promptfix full4096 train/heldout split into 1984 train and 133
+   non-overlapping heldout table/calculation records. Server run
+   `answer_policy_v3_msswift_tablecalc_continue1984_384steps_20260705`
+   continued from the promptfix adapter for 384 ms-swift steps, with final
+   `train_loss=0.03238`, and wrote checkpoint
+   `swift_output/v0-20260705-081159/checkpoint-384`. On the heldout
+   table/calculation slice, the continued checkpoint improved answer-exact over
+   promptfix 0.7518797 -> 0.7669173 while keeping JSON/schema/ref legality at
+   1.0; the improvement was concentrated in table-value rows
+   0.611765 -> 0.635294, with calculation rows staying 1.0. Broader heldout256
+   comparison showed only a small answer-exact gain 0.5859375 -> 0.58984375 and
+   insufficient empty-ref regression 0.947368 -> 0.842105. Clean6 workflow run
+   `phase5ib_v3refs_clean6_tablecalc_continue384_20260705` passed 4/6,
+   matching promptfix and still underperforming base 6/6, so this checkpoint is
+   a targeted train-only objective artifact and must not be promoted as the
+   default AnswerPolicy
 -> Final-delivery gate adapter/v3 parameter passthrough implemented
    locally:
    `scripts/run_final_answer_policy_baseline.py` now accepts

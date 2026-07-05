@@ -14,7 +14,13 @@ The focused table/calculation fixed-evidence comparator
 recorded 36 candidate improvements and 2 regressions over 128 train-only
 fixed-evidence rows, with answer-exact improving from 0.5234 to 0.7891. This
 is evidence that the v3 AnswerPolicy objective improved; it does not promote
-the adapter as the default full-workflow checkpoint.
+the adapter as the default full-workflow checkpoint. A follow-up table/calculation
+continuation run trained from the promptfix adapter for 384 ms-swift steps on
+1984 train-only table/calculation records. It slightly improved the strict
+table/calculation heldout answer-exact rate over promptfix, 0.7519 -> 0.7669,
+but reduced insufficient empty-ref behavior on the broader 256-row heldout and
+still passed only 4/6 clean workflow cases. It remains a specialized candidate
+experiment, not a default deployment checkpoint.
 
 The final-delivery benchmark gate now has a complete candidate-checkpoint
 parameter path for both AnswerPolicy baseline diagnostics and MP-DocVQA
@@ -886,6 +892,26 @@ and `thinking_rate=0.0`. Category breakdown: calculation answer exact improved
 This is stronger reusable evidence for the fixed-evidence table/calculation
 training target than the tiny clean6 workflow guard, but it still does not
 promote the adapter as the default full-workflow AnswerPolicy.
+
+To test whether a focused second-stage SFT helps this target without using
+validation data, server run
+`answer_policy_v3_fixed_evidence_tablecalc_train_promptfixsplit_20260705`
+selected 1984 table/calculation records from the full4096 promptfix train split
+and `answer_policy_v3_fixed_evidence_tablecalc_heldout_promptfixsplit_20260705`
+selected 133 records from the non-overlapping heldout split. Continuation run
+`answer_policy_v3_msswift_tablecalc_continue1984_384steps_20260705` loaded the
+promptfix checkpoint as an adapter, trained for 384 ms-swift steps at learning
+rate 3e-5, and wrote checkpoint
+`swift_output/v0-20260705-081159/checkpoint-384`; final training loss was
+0.03238 at epoch 0.7742. On the 133-row table/calculation heldout, the
+continued checkpoint improved answer exact over base 0.5564 -> 0.7669 and over
+promptfix 0.7519 -> 0.7669; calculation rows stayed 1.0 and table-value rows
+improved 0.6118 -> 0.6353 versus promptfix. On the broader 256-row heldout, it
+only moved answer exact 0.5859 -> 0.5898 and regressed insufficient empty-ref
+behavior 0.9474 -> 0.8421. Clean6 workflow guard
+`phase5ib_v3refs_clean6_tablecalc_continue384_20260705` passed 4/6, matching
+promptfix and still underperforming base 6/6. The checkpoint is therefore a
+targeted training-signal artifact, not a production promotion candidate.
 
 AnswerPolicy v3 train-only heldout diagnostic splitting is implemented locally
 in `scripts/split_answer_policy_v3_sft_records.py`. The splitter validates v3
