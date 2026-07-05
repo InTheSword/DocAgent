@@ -1151,7 +1151,7 @@ Phase 5I-A Pre-LLM Evidence Readiness Benchmark runner -> accepted
 Phase 5I-A corrected-semantics server benchmark -> accepted
 Phase 5I-B Full Model-enhanced QA Path -> accepted
 Phase 5I-B Final Answer Quality Benchmark artifact contract -> implemented
-Phase 5I-B Final Answer Quality Benchmark execution -> not_started
+Phase 5I-B Final Answer Quality Benchmark clean small-scenario diagnostic -> real_model_verified
 Phase 5E Document Summary MVP -> implemented
 Phase 5E-A Document Summary Acceptance Pack -> implemented
 Phase 5 structured_extraction deterministic CLI -> implemented

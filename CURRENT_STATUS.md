@@ -530,9 +530,11 @@ export by default, so validation rows are not promoted to training data.
 `scripts/inspect_phase5i_answer_quality_artifacts.py` is implemented locally as
 a read-only artifact inspector for manifest hashes, required files, safety
 flags, metrics/report consistency, and the empty training-candidate export.
-Accepted final answer-quality benchmark status remains `not_started`; further
-small-scenario answer/citation failures should not be chased unless they expose
-a reusable workflow, evidence, citation, or artifact-contract defect.
+Accepted formal final answer-quality benchmark status remains not accepted;
+the clean 6-case small-scenario diagnostic is real-model evidence only.
+Further small-scenario answer/citation failures should not be chased unless
+they expose a reusable workflow, evidence, citation, or artifact-contract
+defect.
 
 AnswerPolicy training-pack preprocessing is implemented locally in
 `scripts/build_answer_policy_training_pack.py` with tests in
