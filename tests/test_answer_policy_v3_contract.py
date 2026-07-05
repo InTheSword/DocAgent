@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import shutil
+from pathlib import Path
+
+from docagent.parser.mineru_converter import content_list_to_blocks, find_content_list
 from docagent.rewards.combined import docqa_v3_reward
 from docagent.schemas import EvidenceBlock, EvidenceLocation
 from docagent.workflow.answer_contract import validate_model_output_v3
@@ -193,6 +197,59 @@ def test_render_user_answer_text_hides_internal_ids_and_paths() -> None:
     assert "doc1" not in rendered
     assert "image_path" not in rendered
     assert "trace_path" not in rendered
+
+
+def test_mineru_media_blocks_roundtrip_through_v3_refs_without_user_leaks(tmp_path: Path) -> None:
+    fixture = Path("tests/fixtures/mineru_real_schema")
+    work = tmp_path / "mineru_real_schema"
+    shutil.copytree(fixture, work)
+    blocks = content_list_to_blocks(doc_id="mineru_doc", content_list_path=find_content_list(work))
+    table = next(block for block in blocks if block.block_type == "table")
+    chart = next(block for block in blocks if block.metadata.get("raw_mineru_type") == "chart")
+
+    bundle = compile_answer_prompt_v3(
+        question="Which country has value 1?",
+        evidence_blocks=[table, chart],
+        answer_type="extractive",
+    )
+    prompt_text = bundle.messages[1]["content"]
+    ref_map = bundle.metadata["evidence_ref_map"]
+
+    assert "[E1]" in prompt_text
+    assert "[E2]" in prompt_text
+    assert "Table 1 Sample" in prompt_text
+    assert "Figure 1 Sample" in prompt_text
+    assert "mineru_doc" not in prompt_text
+    assert table.block_id not in prompt_text
+    assert "images/table.jpg" not in prompt_text
+    assert "images/chart.jpg" not in prompt_text
+    assert ref_map["E1"]["block_id"] == table.block_id
+    assert ref_map["E1"]["table_caption"] == "Table 1 Sample"
+    assert ref_map["E2"]["block_id"] == chart.block_id
+    assert ref_map["E2"]["image_caption"] == "Figure 1 Sample"
+
+    output = canonicalize_output(
+        {
+            "answer": "A",
+            "supporting_refs": ["E1"],
+            "support_status": "supported",
+            "reasoning_summary": "E1 gives the country row with value 1.",
+        },
+        [table, chart],
+        evidence_ref_map=ref_map,
+    )
+
+    assert output["citation_block_ids"] == [table.block_id]
+    assert output["citations"][0]["image_path"] == "images/table.jpg"
+    assert output["evidence_used"][0]["table_caption"] == "Table 1 Sample"
+    rendered = render_user_answer_text(output)
+    assert "A" in rendered
+    assert "Page 1" in rendered
+    assert "Table 1 Sample" in rendered
+    assert table.block_id not in rendered
+    assert "mineru_doc" not in rendered
+    assert "images/table.jpg" not in rendered
+    assert "image_path" not in rendered
 
 
 def test_docqa_v3_reward_scores_answer_refs_and_insufficient() -> None:
