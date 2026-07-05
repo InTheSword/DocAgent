@@ -23,14 +23,15 @@ still passed only 4/6 clean workflow cases. It remains a specialized candidate
 experiment, not a default deployment checkpoint.
 
 AnswerPolicy v3 post-training preparation has started from the frozen
-promptfix SFT checkpoint. The first 256-record train-only candidate slice
-produced 1024 Qwen+LoRA candidates with JSON/schema OK rate 0.9941, 182
-training-ready rejection-SFT records, and only 23 training-ready preference
-pairs. A bounded 46-step rejection-SFT continuation from the promptfix
-checkpoint preserved answer exact on heldout256 at 0.5859 and slightly improved
-schema/ref/status/insufficient aggregate metrics, but row movement was balanced
-at 9 improvements and 9 regressions. This is a safe post-training candidate,
-not a default deployment checkpoint, and DPO/GRPO remain unapproved.
+promptfix SFT checkpoint. Two bounded 256-record train-only candidate slices
+produced 2048 Qwen+LoRA candidates, 377 training-ready rejection-SFT records,
+and only 44 training-ready preference pairs. A bounded 46-step rejection-SFT
+continuation from the first 182 records preserved answer exact on heldout256 at
+0.5859 and slightly improved schema/ref/status/insufficient aggregate metrics,
+but row movement was balanced at 9 improvements and 9 regressions. This is a
+safe post-training candidate, not a default deployment checkpoint. Simple
+expansion of the same candidate-generation recipe is unlikely to make DPO ready
+quickly because reward-margin failures dominate; DPO/GRPO remain unapproved.
 
 The final-delivery benchmark gate now has a complete candidate-checkpoint
 parameter path for both AnswerPolicy baseline diagnostics and MP-DocVQA

@@ -155,37 +155,45 @@ candidates from the frozen SFT checkpoint:
 
 ```text
 answer_policy_v3_candidates_promptfix1024_train256x4_20260705
+answer_policy_v3_candidates_promptfix1024_train256x4_offset256_20260705
 ```
 
-This used 256 train-only records and 4 Qwen+LoRA candidates per record:
+These runs used two bounded 256-record train-only slices and 4 Qwen+LoRA
+candidates per record:
 
 | Metric | Value |
 |---|---:|
-| records | 256 |
-| candidates | 1024 |
-| raw JSON OK | 1018 / 1024 |
-| schema OK | 1018 / 1024 |
+| records | 512 |
+| candidates | 2048 |
+| first-slice raw JSON OK | 1018 / 1024 |
+| first-slice schema OK | 1018 / 1024 |
+| second-slice raw JSON OK | 1024 / 1024 |
+| second-slice schema OK | 1023 / 1024 |
 
 Reward ranking run:
 
 ```text
 answer_policy_v3_rejection_promptfix1024_train256x4_20260705
+answer_policy_v3_rejection_promptfix1024_train256x4_offset256_20260705
 ```
 
 produced:
 
 | Artifact | Count |
 |---|---:|
-| selected candidates | 256 |
-| training-ready selected candidates | 182 |
-| preference pairs | 256 |
-| training-ready preference pairs | 23 |
-| rejection-SFT records | 182 |
+| selected candidates | 512 |
+| training-ready selected candidates | 377 |
+| preference pairs | 512 |
+| training-ready preference pairs | 44 |
+| rejection-SFT records | 377 |
 
-The 182 rejection-SFT records contain 67 MP-DocVQA records, 115 TAT-QA records,
-161 supported records, and 21 insufficient records. This is suitable for a
-small rejection-SFT continuation, but the 23 training-ready preference pairs are
-not enough for a reliable DPO stage.
+The first 182 rejection-SFT records contained 67 MP-DocVQA records, 115 TAT-QA
+records, 161 supported records, and 21 insufficient records, and were used for a
+small bounded continuation. The combined 377 rejection-SFT records are useful
+for future rejection-SFT distillation, but the 44 training-ready preference
+pairs are still not enough for a reliable DPO stage. Most unavailable
+preference pairs are blocked by insufficient reward margin rather than schema
+failure.
 
 Promptfix-based bounded rejection-SFT continuation:
 
@@ -325,13 +333,16 @@ Current post-training result:
 - bounded rejection-SFT from the promptfix checkpoint is executable and
   aggregate-safe on heldout256;
 - answer exact did not improve over the frozen promptfix checkpoint;
-- only 23 training-ready preference pairs were produced from the first 256-row
-  candidate slice.
+- two 256-row candidate slices produced 377 training-ready rejection-SFT rows
+  but only 44 training-ready preference pairs.
 
-Therefore, the next step is not DPO/GRPO. If post-training continues, first
-expand the train-only candidate pool in bounded slices and require stronger
-preference-pair coverage before any DPO decision. GRPO remains optional and
-gated. It is not the next default action.
+Therefore, the next step is not DPO/GRPO. Simple expansion of the same
+candidate-generation recipe is unlikely to produce enough preference-pair
+coverage quickly because reward-margin failures dominate. If post-training
+continues, first change the candidate-generation or ranking strategy in a
+bounded way, then require stronger train-only preference-pair coverage before
+any DPO decision. GRPO remains optional and gated. It is not the next default
+action.
 
 GPU boundary:
 

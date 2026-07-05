@@ -63,6 +63,17 @@ This is expected and must not be treated as a broken installation.
 
 Do not reinstall PyTorch solely because no-card mode reports no CUDA device.
 
+Current operating default:
+
+```text
+AutoDL starts in no-card mode unless the user explicitly switches to GPU mode.
+```
+
+Codex may continue CPU/API-only server work in no-card mode. Any task that
+loads or trains Qwen, BGE-M3, the cross-encoder reranker, VLMs, or other
+GPU-required model paths must pause first and ask the user to switch the server
+to GPU mode.
+
 The current `docagent` environment is stable for the accepted Qwen3 workflow.
 
 Current Phase 3 evaluation policy:

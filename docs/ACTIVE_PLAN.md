@@ -536,12 +536,14 @@ Phase 5 Personal-use DocAgent MVP
    post-training preparation exposes a broad contract regression that can be
    corrected without hurting insufficient-evidence behavior
 -> AnswerPolicy v3 promptfix-based post-training preparation started:
-   server run `answer_policy_v3_candidates_promptfix1024_train256x4_20260705`
-   generated 1024 real Qwen+LoRA candidates from 256 train-only records with
-   JSON/schema OK rate 0.994140625. Ranking run
-   `answer_policy_v3_rejection_promptfix1024_train256x4_20260705` produced
-   182 training-ready rejection-SFT records but only 23 training-ready
-   preference pairs, so DPO is not ready. Bounded continuation
+   server runs `answer_policy_v3_candidates_promptfix1024_train256x4_20260705`
+   and `answer_policy_v3_candidates_promptfix1024_train256x4_offset256_20260705`
+   generated 2048 real Qwen+LoRA candidates from two bounded 256-record
+   train-only slices. Ranking runs
+   `answer_policy_v3_rejection_promptfix1024_train256x4_20260705` and
+   `answer_policy_v3_rejection_promptfix1024_train256x4_offset256_20260705`
+   produced 377 training-ready rejection-SFT records but only 44
+   training-ready preference pairs, so DPO is not ready. Bounded continuation
    `answer_policy_v3_rejection_sft_promptfix1024_182records_46steps_20260705`
    trained for 46 ms-swift steps from the frozen promptfix checkpoint and
    heldout comparison
@@ -549,8 +551,11 @@ Phase 5 Personal-use DocAgent MVP
    showed no aggregate contract regression: answer exact stayed 0.5859375,
    schema/ref/status/insufficient metrics improved slightly, and row movement
    was balanced at 9 improvements and 9 regressions. Keep this as a
-   post-training candidate only; do not promote it as default and do not start
-   DPO/GRPO without broader train-only candidate/pair coverage
+   post-training candidate only; do not promote it as default. Simple expansion
+   of the same candidate-generation recipe is unlikely to produce enough
+   preference-pair coverage quickly because reward-margin failures dominate; do
+   not start DPO/GRPO without a bounded strategy change and stronger train-only
+   candidate/pair coverage
 -> Final-delivery gate adapter/v3 parameter passthrough implemented
    locally:
    `scripts/run_final_answer_policy_baseline.py` now accepts
