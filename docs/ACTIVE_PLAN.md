@@ -589,11 +589,21 @@ Phase 5 Personal-use DocAgent MVP
    improved over the 377-record continuation but still required broader
    evaluation before default promotion. Keep this as the strongest current
    fixed-evidence post-training candidate, not as the default production
-   AnswerPolicy. Simple expansion
-   of the same candidate-generation recipe is unlikely to produce enough
-   preference-pair coverage quickly because reward-margin failures dominate; do
-   not start DPO/GRPO without a bounded strategy change and stronger train-only
-   candidate/pair coverage
+   AnswerPolicy. A bounded DPO readiness expansion from the temp0.95 checkpoint
+   then ran `answer_policy_v3_candidates_temp095_train512x8_offset768_20260705`
+   and `answer_policy_v3_rejection_temp095_train512x8_offset768_20260705`,
+   producing 4096 candidates, 402 rejection-SFT rows, and 131 training-ready
+   preference pairs from train-only data. New runner
+   `scripts/run_answer_policy_v3_msswift_dpo.py` converted 128 pairs to
+   ms-swift DPO format and server run
+   `answer_policy_v3_dpo_temp095_pairs128_16steps_20260705` completed 16 DPO
+   steps. Heldout comparison
+   `answer_policy_v3_heldout256_compare_temp095_vs_dpo16_20260705` regressed
+   answer exact 0.60546875 -> 0.59765625 with zero improvements and two
+   regressions, while schema/ref/status metrics stayed unchanged. This accepts
+   the DPO entrypoint as real-model verified but blocks DPO promotion and
+   further DPO tuning without stronger train-only preference data; GRPO remains
+   unapproved
 -> Final-delivery gate adapter/v3 parameter passthrough implemented
    locally:
    `scripts/run_final_answer_policy_baseline.py` now accepts

@@ -327,6 +327,55 @@ post-training candidate for fixed-evidence metrics; do not promote as default;
 do not start DPO/GRPO
 ```
 
+Follow-up bounded DPO readiness work expanded candidate coverage from the
+temp0.95 checkpoint:
+
+```text
+answer_policy_v3_candidates_temp095_train512x8_offset768_20260705
+answer_policy_v3_rejection_temp095_train512x8_offset768_20260705
+```
+
+This used 512 additional train-only records, 8 candidates per record,
+`temperature=0.95`, and `top_p=0.97`. It produced:
+
+| Artifact | Count |
+|---|---:|
+| model candidates | 4096 |
+| schema-valid candidates | 3693 |
+| rejection-SFT records | 402 |
+| training-ready preference pairs | 131 |
+
+The preference-pair count was enough for a small DPO smoke, so the DPO
+entrypoint was added and verified:
+
+```text
+answer_policy_v3_dpo_temp095_pairs128_16steps_20260705
+```
+
+It trained for 16 ms-swift DPO steps on 128 train-only preference pairs from
+the temp0.95 checkpoint. Heldout256 comparison against the temp0.95 checkpoint:
+
+| Metric | temp0.95 continuation | DPO 16-step |
+|---|---:|---:|
+| json_valid_rate | 1.0000 | 1.0000 |
+| schema_valid_rate | 1.0000 | 1.0000 |
+| answer_exact_rate | 0.6055 | 0.5977 |
+| support_status_match_rate | 0.9766 | 0.9766 |
+| supporting_refs_subset_rate | 1.0000 | 1.0000 |
+| positive_ref_hit_rate | 0.9409 | 0.9409 |
+| insufficient_ref_empty_rate | 0.9474 | 0.9474 |
+
+Row movement had zero improvements and two regressions. This verifies the
+ms-swift DPO training entrypoint and data format, but it does not improve the
+current checkpoint.
+
+Decision:
+
+```text
+do not promote the DPO checkpoint; do not continue DPO tuning unless stronger
+train-only preference-pair coverage or a clearer reward/data strategy is added
+```
+
 ### 3.4 Table/calculation continuation diagnostic
 
 Run:
@@ -445,13 +494,17 @@ Current post-training result:
   returned to the promptfix level of 0.9474;
 - two 256-row candidate slices produced 377 training-ready rejection-SFT rows
   but only 44 training-ready preference pairs.
+- a later 512-row temp0.95 candidate slice produced 131 training-ready
+  preference pairs and enabled a 16-step DPO smoke, but the DPO checkpoint
+  regressed heldout256 answer exact 0.6055 -> 0.5977 with no improvement rows.
 
-Therefore, the next step is not DPO/GRPO. The 377-record continuation can be
-used as the safer insufficient-behavior candidate, while the temp0.95
-continuation is the stronger answer-exact candidate. Default deployment remains
-unapproved. If post-training continues, require either a broader clean/fixed
-heldout evaluation or stronger train-only preference-pair coverage before any
-DPO decision. GRPO remains optional and gated.
+Therefore, the next step is not more DPO/GRPO tuning. The 377-record
+continuation can be used as the safer insufficient-behavior candidate, while
+the temp0.95 continuation remains the strongest answer-exact candidate.
+Default deployment remains unapproved. If post-training continues, it should
+first improve train-only preference-data quality or reward separation; simply
+adding DPO steps from the current pair set is not justified. GRPO remains
+optional and gated.
 
 GPU boundary:
 

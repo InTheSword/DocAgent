@@ -74,6 +74,23 @@ it improved over the 377-record continuation on this guard. This is the
 strongest current fixed-evidence post-training candidate, but it still is not
 the default production AnswerPolicy.
 
+A bounded DPO readiness path was then run from the temp0.95 checkpoint rather
+than continuing open-ended LoRA tuning. Additional train-only candidate
+generation
+`answer_policy_v3_candidates_temp095_train512x8_offset768_20260705` produced
+4096 candidates over 512 records; ranking
+`answer_policy_v3_rejection_temp095_train512x8_offset768_20260705` produced
+402 rejection-SFT rows and 131 training-ready preference pairs. The new
+ms-swift DPO entrypoint `scripts/run_answer_policy_v3_msswift_dpo.py` converted
+128 training-ready pairs into `messages + rejected_response` format and ran
+`answer_policy_v3_dpo_temp095_pairs128_16steps_20260705` successfully for 16
+steps. Heldout256 comparison
+`answer_policy_v3_heldout256_compare_temp095_vs_dpo16_20260705` showed the DPO
+checkpoint regressed answer exact 0.6055 -> 0.5977 with no improvements and two
+regressions, while schema/ref/status metrics stayed unchanged. This verifies
+the DPO training entrypoint, but blocks DPO promotion and further DPO tuning
+without stronger train-only preference data.
+
 The final-delivery benchmark gate now has a complete candidate-checkpoint
 parameter path for both AnswerPolicy baseline diagnostics and MP-DocVQA
 workflow diagnostics: it can forward explicit `--answer-policy sft`,
