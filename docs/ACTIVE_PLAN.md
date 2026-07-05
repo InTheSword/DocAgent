@@ -638,9 +638,15 @@ Phase 5 Personal-use DocAgent MVP
    `answer_policy_v3_grpo_variance_probe8_ng3_temp12_20260705` produced
    nonzero reward variance on 3/8 steps but regressed heldout256 answer exact
    0.61328125 -> 0.60546875 with zero improvements and two regressions. This
-   real-model verifies the custom GRPO path only; it blocks GRPO promotion
-   under the current recipe and keeps the 402-record rejection-SFT checkpoint
-   as the frozen current fixed-evidence candidate
+   real-model verifies the custom GRPO path only. A follow-up hard-sample
+   check selected 38 train-only rows with reward spread >= 0.3 from the
+   402-checkpoint candidate pool; the resource-safe run
+   `answer_policy_v3_grpo_hardsample38_ng3_lr1e7_20260705` completed 16 steps
+   with real reward variance but regressed heldout256 answer exact
+   0.61328125 -> 0.59765625, with zero improvements and four regressions.
+   This blocks GRPO promotion under the current reward/data/checkpoint recipe
+   and keeps the 402-record rejection-SFT checkpoint as the frozen current
+   fixed-evidence candidate
 -> Final-delivery gate adapter/v3 parameter passthrough implemented
    locally:
    `scripts/run_final_answer_policy_baseline.py` now accepts

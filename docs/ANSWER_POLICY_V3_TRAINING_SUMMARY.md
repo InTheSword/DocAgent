@@ -499,10 +499,49 @@ comparison still regressed:
 
 Row movement was 0 improvements and 2 regressions.
 
+An additional hard-sample check was run before closing the branch. The
+candidate expansion from the 402-record checkpoint contained 38 train-only
+supported rows with reward spread >= 0.3:
+
+```text
+answer_policy_v3_grpo_hardsample_from_rejsft402_38rows_20260705
+```
+
+These rows were mostly MP-DocVQA supported records:
+
+| Source | Records |
+|---|---:|
+| MP-DocVQA | 29 |
+| TAT-QA | 9 |
+
+The first hard-sample GRPO attempt used `num_generations=4`, but exceeded the
+24GB GPU memory budget after the first step and did not produce a checkpoint.
+A resource-safe rerun used `num_generations=3`, `temperature=1.1`,
+`top_p=0.95`, 16 update steps, and learning rate `1e-7`:
+
+```text
+answer_policy_v3_grpo_hardsample38_ng3_lr1e7_20260705
+```
+
+This run produced real reward variance, but heldout256 still regressed against
+the 402-record checkpoint:
+
+| Metric | 402-record checkpoint | GRPO hard-sample |
+|---|---:|---:|
+| answer_exact_rate | 0.6133 | 0.5977 |
+| support_status_match_rate | 0.9805 | 0.9805 |
+| supporting_refs_subset_rate | 1.0000 | 1.0000 |
+| positive_ref_hit_rate | 0.9409 | 0.9409 |
+| insufficient_ref_empty_rate | 1.0000 | 1.0000 |
+
+Row movement was 0 improvements and 4 regressions. This confirms that even
+reward-spread hard-sample selection does not produce a positive GRPO delta
+under the current reward/data/checkpoint recipe.
+
 Decision:
 
 ```text
-do not promote either GRPO checkpoint
+do not promote any GRPO checkpoint from this branch
 ```
 
 Rationale:
@@ -510,8 +549,11 @@ Rationale:
 - The 2-generation smoke had no reward variance, so it could not learn.
 - The diversity probe created reward variance, but the heldout delta was
   negative.
-- Continuing the same recipe by adding steps would be open-ended tuning rather
-  than a justified training-plan stage.
+- The hard-sample probe created stronger reward variance, but still regressed
+  heldout256 with no improvement rows.
+- Continuing the same recipe by adding steps, temperature changes, or minor
+  learning-rate changes would be open-ended tuning rather than a justified
+  training-plan stage.
 - The 402-record rejection-SFT checkpoint remains the strongest current
   fixed-evidence/post-training candidate.
 
@@ -640,13 +682,15 @@ Current post-training result:
   fixed-evidence/post-training candidate, with heldout256 answer exact 0.6133,
   support-status match 0.9805, and insufficient empty-ref behavior 1.0.
 - bounded custom GRPO probes from that checkpoint either had zero reward
-  variance or regressed heldout256 to 0.6055, so GRPO is not promoted.
+  variance, regressed heldout256 to 0.6055, or regressed to 0.5977 after
+  hard-sample selection, so GRPO is not promoted.
 
 Therefore, the next step is not more DPO/GRPO tuning under the current recipe.
-Default deployment remains unapproved. If post-training continues, it should
-first improve train-only preference-data quality, reward separation, or GRPO
-hard-sample selection; simply adding DPO/GRPO steps from the current artifacts
-is not justified.
+Default deployment remains unapproved. The current post-training branch should
+stop at the 402-record rejection-SFT checkpoint unless a materially new
+training signal is introduced, such as a different reward design or newly
+validated preference dataset. Simply adding DPO/GRPO steps, temperature
+changes, or more hard-sample GRPO from the current artifacts is not justified.
 
 GPU boundary:
 

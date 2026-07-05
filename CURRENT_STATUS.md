@@ -134,8 +134,16 @@ nonzero reward variance on 3/8 steps, but heldout256 regressed answer exact
 0.6133 -> 0.6055 with zero improvements and two regressions, while schema,
 ref, status, and insufficient behavior stayed unchanged. This verifies the
 custom GRPO execution path and shows that the current GRPO recipe is not a
-promotion candidate. Keep the 402-record rejection-SFT checkpoint as the best
-current fixed-evidence/post-training candidate.
+promotion candidate. A follow-up hard-sample GRPO check selected 38 train-only
+supported rows with reward spread >= 0.3 from the 402-checkpoint candidate
+pool. The `num_generations=4` attempt exceeded the 24GB GPU memory budget after
+one step and produced no checkpoint; the resource-safe rerun
+`answer_policy_v3_grpo_hardsample38_ng3_lr1e7_20260705` completed 16 steps
+with real reward variance but regressed heldout256 answer exact
+0.6133 -> 0.5977, with zero improvements and four regressions. This closes the
+current GRPO branch: keep the 402-record rejection-SFT checkpoint as the best
+current fixed-evidence/post-training candidate, and do not continue GRPO
+tuning without a materially new reward/data strategy.
 
 The final-delivery benchmark gate now has a complete candidate-checkpoint
 parameter path for both AnswerPolicy baseline diagnostics and MP-DocVQA
