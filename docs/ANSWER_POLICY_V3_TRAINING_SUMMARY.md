@@ -150,6 +150,75 @@ full4096 adapter rather than the promptfix checkpoint. It also was not a
 production post-training decision. Keep it as a historical path validation, not
 as the frozen SFT checkpoint.
 
+Promptfix-based bounded post-training preparation then generated real model
+candidates from the frozen SFT checkpoint:
+
+```text
+answer_policy_v3_candidates_promptfix1024_train256x4_20260705
+```
+
+This used 256 train-only records and 4 Qwen+LoRA candidates per record:
+
+| Metric | Value |
+|---|---:|
+| records | 256 |
+| candidates | 1024 |
+| raw JSON OK | 1018 / 1024 |
+| schema OK | 1018 / 1024 |
+
+Reward ranking run:
+
+```text
+answer_policy_v3_rejection_promptfix1024_train256x4_20260705
+```
+
+produced:
+
+| Artifact | Count |
+|---|---:|
+| selected candidates | 256 |
+| training-ready selected candidates | 182 |
+| preference pairs | 256 |
+| training-ready preference pairs | 23 |
+| rejection-SFT records | 182 |
+
+The 182 rejection-SFT records contain 67 MP-DocVQA records, 115 TAT-QA records,
+161 supported records, and 21 insufficient records. This is suitable for a
+small rejection-SFT continuation, but the 23 training-ready preference pairs are
+not enough for a reliable DPO stage.
+
+Promptfix-based bounded rejection-SFT continuation:
+
+```text
+answer_policy_v3_rejection_sft_promptfix1024_182records_46steps_20260705
+```
+
+continued from the promptfix checkpoint for 46 ms-swift steps on the 182
+train-only rejection-SFT records. Heldout256 comparison against the promptfix
+checkpoint:
+
+| Metric | Promptfix | Rejection-SFT continuation |
+|---|---:|---:|
+| json_valid_rate | 0.9961 | 1.0000 |
+| schema_valid_rate | 0.9961 | 1.0000 |
+| answer_exact_rate | 0.5859 | 0.5859 |
+| support_status_match_rate | 0.9727 | 0.9766 |
+| supporting_refs_subset_rate | 0.9961 | 1.0000 |
+| positive_ref_hit_rate | 0.9407 | 0.9409 |
+| insufficient_ref_empty_rate | 0.9474 | 1.0000 |
+| thinking_rate | 0.0000 | 0.0000 |
+
+Row movement was balanced: 9 candidate improvements and 9 regressions. This
+means the continuation is a valid bounded post-training candidate with no
+aggregate contract regression, but it is not a clear answer-quality improvement
+over the frozen promptfix SFT checkpoint.
+
+Decision:
+
+```text
+keep as post-training candidate; do not promote as default; do not start DPO/GRPO
+```
+
 ### 3.4 Table/calculation continuation diagnostic
 
 Run:
@@ -251,7 +320,18 @@ preparation:
 5. Do not run GRPO until reward calibration and candidate-quality separation
    are strong enough.
 
-GRPO remains optional and gated. It is not the next default action.
+Current post-training result:
+
+- bounded rejection-SFT from the promptfix checkpoint is executable and
+  aggregate-safe on heldout256;
+- answer exact did not improve over the frozen promptfix checkpoint;
+- only 23 training-ready preference pairs were produced from the first 256-row
+  candidate slice.
+
+Therefore, the next step is not DPO/GRPO. If post-training continues, first
+expand the train-only candidate pool in bounded slices and require stronger
+preference-pair coverage before any DPO decision. GRPO remains optional and
+gated. It is not the next default action.
 
 GPU boundary:
 
