@@ -422,6 +422,35 @@ production AnswerPolicy; do not continue DPO/GRPO without stronger preference
 data or a new approved reward strategy
 ```
 
+Follow-up candidate expansion from this 402-record checkpoint was used as a
+stop-condition check, not as open-ended tuning:
+
+```text
+answer_policy_v3_candidates_rejsft402_temp095_train256x8_offset1280_20260705
+answer_policy_v3_rejection_rejsft402_temp095_train256x8_offset1280_20260705
+answer_policy_v3_rejection_sft_rejsft402_offset1280_195records_48steps_20260705
+```
+
+The fresh 256-row train-only slice produced 2048 candidates with schema-ok
+rate 0.9990, 195 rejection-SFT records, but only 32 training-ready preference
+pairs. This still does not justify DPO. A bounded 48-step rejection-SFT
+continuation on the 195 rows regressed heldout256 against the 402-record
+checkpoint:
+
+| Metric | 402-record checkpoint | 195-record continuation |
+|---|---:|---:|
+| json_valid_rate | 1.0000 | 0.9922 |
+| schema_valid_rate | 1.0000 | 0.9922 |
+| answer_exact_rate | 0.6133 | 0.6016 |
+| support_status_match_rate | 0.9805 | 0.9648 |
+| supporting_refs_subset_rate | 1.0000 | 0.9922 |
+| positive_ref_hit_rate | 0.9409 | 0.9277 |
+| insufficient_ref_empty_rate | 1.0000 | 1.0000 |
+
+Row movement was 11 improvements and 14 regressions. This triggers the
+post-training stop condition for this branch: keep the 402-record checkpoint
+and do not keep adding rejection-SFT steps from the current candidate recipe.
+
 ### 3.5 Table/calculation continuation diagnostic
 
 Run:

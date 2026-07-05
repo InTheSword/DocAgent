@@ -619,7 +619,17 @@ Phase 5 Personal-use DocAgent MVP
    flags, and `v3_refs` contract observation. Freeze this checkpoint as the
    strongest current fixed-evidence/post-training SFT candidate only; do not
    promote as default production AnswerPolicy and do not continue DPO/GRPO
-   without stronger preference data or a new approved reward strategy
+   without stronger preference data or a new approved reward strategy.
+   Follow-up candidate expansion from this checkpoint on offset1280 produced
+   2048 candidates with schema-ok rate 0.9990, 195 rejection-SFT rows, but
+   only 32 training-ready preference pairs, so DPO remained unjustified.
+   Bounded continuation
+   `answer_policy_v3_rejection_sft_rejsft402_offset1280_195records_48steps_20260705`
+   regressed heldout256 against the 402-record checkpoint: answer exact
+   0.61328125 -> 0.6015625, support-status match 0.98046875 -> 0.96484375,
+   positive-ref hit 0.940928 -> 0.92766, and schema/ref legality also dipped
+   from 1.0 to 0.9921875. Stop this post-training branch here; the
+   402-record checkpoint remains the frozen current candidate
 -> Final-delivery gate adapter/v3 parameter passthrough implemented
    locally:
    `scripts/run_final_answer_policy_baseline.py` now accepts

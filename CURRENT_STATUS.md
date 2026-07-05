@@ -111,6 +111,17 @@ current fixed-evidence/post-training SFT candidate. It is not the default
 production AnswerPolicy, does not establish formal benchmark acceptance, and
 does not unblock DPO/GRPO.
 
+One additional train-only offset1280 candidate expansion from the 402-record
+checkpoint produced 2048 candidates with schema-ok rate 0.9990, 195
+rejection-SFT rows, and only 32 training-ready preference pairs. DPO therefore
+remained unjustified. The bounded 48-step continuation
+`answer_policy_v3_rejection_sft_rejsft402_offset1280_195records_48steps_20260705`
+regressed heldout256 against the 402-record checkpoint: answer exact
+0.6133 -> 0.6016, support-status match 0.9805 -> 0.9648, positive-ref hit
+0.9409 -> 0.9277, and schema/ref legality dipped to 0.9922. This triggers the
+stop condition for this post-training branch. Keep the 402-record checkpoint as
+the current candidate.
+
 The final-delivery benchmark gate now has a complete candidate-checkpoint
 parameter path for both AnswerPolicy baseline diagnostics and MP-DocVQA
 workflow diagnostics: it can forward explicit `--answer-policy sft`,
