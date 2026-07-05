@@ -74,6 +74,18 @@ loads or trains Qwen, BGE-M3, the cross-encoder reranker, VLMs, or other
 GPU-required model paths must pause first and ask the user to switch the server
 to GPU mode.
 
+Use this lightweight check to classify the current server mode without loading
+project models:
+
+```bash
+python scripts/check_runtime.py --compact
+```
+
+Interpret `resource_mode=gpu_visible` as GPU-visible for PyTorch. Treat
+`no_card_or_cpu`, `gpu_driver_visible_torch_cpu`, `cuda_inconsistent`, or
+`torch_unavailable` as not ready for GPU-required model work until the user
+switches the server mode or the environment issue is resolved.
+
 The current `docagent` environment is stable for the accepted Qwen3 workflow.
 
 Current Phase 3 evaluation policy:

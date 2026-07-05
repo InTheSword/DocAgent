@@ -72,6 +72,9 @@ unit tests and regression tests, but the final status must remain
 Server validation commands and scripts must:
 
 - check model, dataset, database, and package paths before running;
+- for GPU-required work, classify the current server mode first with
+  `python scripts/check_runtime.py --compact`; only `resource_mode=gpu_visible`
+  is GPU-ready for PyTorch model loading/training;
 - avoid silent downloads and environment replacement;
 - print a compact final JSON result;
 - write long stdout/stderr to files;
