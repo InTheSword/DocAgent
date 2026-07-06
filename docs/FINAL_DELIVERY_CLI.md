@@ -200,6 +200,29 @@ List persisted documents:
 python scripts\docagent_cli.py --list-documents --db-path outputs\docagent.db
 ```
 
+Check whether an existing document already has a matching dense index:
+
+```powershell
+python scripts\docagent_cli.py `
+  --doc-id <doc_id> `
+  --check-index `
+  --db-path outputs\docagent.db
+```
+
+Prebuild or reuse the persisted dense index before user QA:
+
+```powershell
+python scripts\docagent_cli.py `
+  --doc-id <doc_id> `
+  --prepare-index `
+  --db-path outputs\docagent.db
+```
+
+For raw files, `--prepare-index --file <path>` first ingests the document, then
+builds the dense index. In the default `user_best` profile this uses the real
+MinerU/BGE resources; use `--execution-profile self_test` for a low-cost hash
+index smoke.
+
 Ask an already ingested document:
 
 ```powershell

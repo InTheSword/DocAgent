@@ -53,6 +53,8 @@ REQUIRED_CLI_OPTIONS = (
     "--parser",
     "--live-api",
     "--mineru-env-file",
+    "--check-index",
+    "--prepare-index",
     "--retriever-mode",
     "--full-model-path",
     "--answer-policy",

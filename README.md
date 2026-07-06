@@ -40,6 +40,13 @@ List local documents:
 python scripts\docagent_cli.py --list-documents --db-path outputs\docagent.db
 ```
 
+Check or prebuild a document dense index before asking questions:
+
+```powershell
+python scripts\docagent_cli.py --doc-id <doc_id> --check-index --db-path outputs\docagent.db
+python scripts\docagent_cli.py --doc-id <doc_id> --prepare-index --db-path outputs\docagent.db
+```
+
 Prepare local final-evaluation subsets:
 
 ```powershell

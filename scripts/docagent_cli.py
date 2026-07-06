@@ -124,7 +124,7 @@ def _apply_execution_profile(args: argparse.Namespace) -> argparse.Namespace:
     if getattr(args, "retriever_mode", None) is None:
         args.retriever_mode = "hybrid_rerank" if user_best else "bm25"
     if getattr(args, "dense_backend", None) is None:
-        args.dense_backend = "bge"
+        args.dense_backend = "bge" if user_best else "hash"
     if getattr(args, "dense_model_path", None) is None:
         args.dense_model_path = DEFAULT_BGE_MODEL_PATH
     if getattr(args, "dense_device", None) is None:
@@ -173,6 +173,26 @@ def _missing_user_best_resources(args: argparse.Namespace) -> list[str]:
         os.environ.get("MINERU_TOKEN")
         or os.environ.get("API_TOKEN")
         or _resolve_optional_mineru_env_file(getattr(args, "mineru_env_file", None)) is not None
+    ):
+        missing.append(f"mineru_env_file:{getattr(args, 'mineru_env_file', None) or DEFAULT_MINERU_ENV_FILE}")
+    return missing
+
+
+def _missing_user_best_index_resources(args: argparse.Namespace) -> list[str]:
+    if str(getattr(args, "execution_profile", "")) != "user_best":
+        return []
+    missing: list[str] = []
+    if str(getattr(args, "dense_backend", "")) == "bge" and not _project_path(args.dense_model_path).exists():
+        missing.append(f"dense_model_path:{args.dense_model_path}")
+    if (
+        getattr(args, "file", None)
+        and str(getattr(args, "parser", "")) == "mineru_api"
+        and _file_extension(args.file) in {".pdf", ".png", ".jpg", ".jpeg"}
+        and not (
+            os.environ.get("MINERU_TOKEN")
+            or os.environ.get("API_TOKEN")
+            or _resolve_optional_mineru_env_file(getattr(args, "mineru_env_file", None)) is not None
+        )
     ):
         missing.append(f"mineru_env_file:{getattr(args, 'mineru_env_file', None) or DEFAULT_MINERU_ENV_FILE}")
     return missing
@@ -798,6 +818,288 @@ def _list_documents(*, db_path: Path, limit: int) -> dict[str, Any]:
     result["document_count"] = len(documents)
     result["limit"] = limit
     return result
+
+
+def _finalize_operation_result(*, result: dict[str, Any], output_dir: Path) -> dict[str, Any]:
+    run_id = str(result["run_id"])
+    artifact_dir = output_dir / run_id
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    result_path = artifact_dir / "result.json"
+    summary_path = artifact_dir / "summary.json"
+
+    result["artifact_dir"] = str(artifact_dir)
+    summary = {
+        "status": result.get("status"),
+        "mode": result.get("mode"),
+        "run_id": run_id,
+        "doc_id": result.get("doc_id") or "",
+        "source": result.get("source") or {},
+        "index_action": result.get("index_action") or "",
+        "index_ready": bool(result.get("index_ready", False)),
+        "index_built": bool(result.get("index_built", False)),
+        "index_reused": bool(result.get("index_reused", False)),
+        "index_status": result.get("index_status") or {},
+        "error": result.get("error") or {},
+    }
+    result["result_path"] = str(result_path)
+    result["summary_path"] = str(summary_path)
+    result["artifact_paths"] = [str(result_path), str(summary_path)]
+    result_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, default=_json_default), encoding="utf-8")
+    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2, default=_json_default), encoding="utf-8")
+    return result
+
+
+def _dense_encoder_from_args(args: argparse.Namespace) -> Any:
+    if str(args.dense_backend) == "hash":
+        return HashDenseEncoder()
+    return DenseEncoder(
+        DenseEncoderConfig(
+            model_path=str(args.dense_model_path),
+            device=str(args.dense_device),
+            use_fp16=bool(args.dense_fp16),
+        )
+    )
+
+
+def _dense_index_status(
+    *,
+    repository: DocumentRepository,
+    doc_id: str,
+    document_root: Path,
+    dense_encoder: Any,
+) -> dict[str, Any]:
+    document = repository.get_document(doc_id) or {}
+    blocks = repository.load_evidence_blocks(doc_id)
+    index_dir = document_root / doc_id
+    model_metadata_path = index_dir / f"index_metadata_{_safe_model_id(dense_encoder.model_id)}.json"
+    legacy_metadata_path = index_dir / "index_metadata.json"
+    metadata_path = model_metadata_path
+    metadata_source = "model_specific"
+    if not metadata_path.exists() and legacy_metadata_path.exists():
+        metadata_path = legacy_metadata_path
+        metadata_source = "legacy"
+
+    metadata: dict[str, Any] = {}
+    metadata_exists = metadata_path.exists()
+    if metadata_exists:
+        metadata = _read_dense_index_metadata(metadata_path)
+
+    embeddings_path = Path(str(metadata.get("embeddings_path") or ""))
+    faiss_path_value = metadata.get("faiss_path")
+    faiss_path = Path(str(faiss_path_value)) if faiss_path_value else None
+    metadata_block_ids = [str(item) for item in metadata.get("block_ids") or []]
+    block_ids = [block.block_id for block in blocks]
+    model_id_matches = str(metadata.get("model_id") or "") == dense_encoder.model_id
+    embeddings_exists = bool(metadata.get("embeddings_path")) and embeddings_path.exists()
+    faiss_exists = faiss_path is None or faiss_path.exists()
+    block_ids_match = bool(block_ids) and metadata_block_ids == block_ids
+    index_ready = bool(metadata_exists and model_id_matches and embeddings_exists and faiss_exists and block_ids_match)
+    if index_ready:
+        status = "ready"
+    elif not metadata_exists:
+        status = "missing"
+    else:
+        status = "stale"
+
+    return {
+        "status": status,
+        "index_ready": index_ready,
+        "doc_id": doc_id,
+        "document_found": bool(document),
+        "parse_status": str(document.get("parse_status") or ""),
+        "index_dir": str(index_dir),
+        "metadata_path": str(metadata_path),
+        "metadata_source": metadata_source,
+        "metadata_exists": metadata_exists,
+        "model_id": dense_encoder.model_id,
+        "metadata_model_id": str(metadata.get("model_id") or ""),
+        "model_id_matches": model_id_matches,
+        "block_count": len(blocks),
+        "metadata_block_count": len(metadata_block_ids),
+        "block_ids_match": block_ids_match,
+        "embeddings_path": str(embeddings_path) if metadata.get("embeddings_path") else "",
+        "embeddings_exists": embeddings_exists,
+        "faiss_path": str(faiss_path) if faiss_path is not None else "",
+        "faiss_exists": faiss_exists,
+        "repository_indexes": repository.list_indexes(doc_id),
+    }
+
+
+def _run_document_index_action(
+    *,
+    args: argparse.Namespace,
+    db_path: Path,
+    document_root: Path,
+    output_dir: Path,
+    mineru_output_dir: Path | None,
+    mineru_env_file: Path | None,
+    file_path: Path | None,
+    source: dict[str, Any],
+    source_type: str,
+) -> dict[str, Any]:
+    run_id = _now_run_id()
+    action = "prepare" if args.prepare_index else "check"
+    if args.check_index and file_path is not None and not args.doc_id:
+        return _finalize_operation_result(
+            result=_error_result(
+                mode="document_index",
+                run_id=run_id,
+                error_type="doc_id_required_for_index_check",
+                message="--check-index requires --doc-id. Use --prepare-index --file to ingest and build an index.",
+                source=source,
+            )
+            | {"index_action": action},
+            output_dir=output_dir,
+        )
+    if not args.doc_id and file_path is None:
+        return _finalize_operation_result(
+            result=_error_result(
+                mode="document_index",
+                run_id=run_id,
+                error_type="document_required",
+                message="At least one of --doc-id or --file is required for index operations.",
+                source=source,
+            )
+            | {"index_action": action},
+            output_dir=output_dir,
+        )
+    if file_path is None and not db_path.is_file():
+        return _finalize_operation_result(
+            result=_error_result(
+                mode="document_index",
+                run_id=run_id,
+                error_type="db_path_not_found",
+                message=f"SQLite database not found: {db_path}",
+                source={"type": "db", "db_path": str(db_path)},
+            )
+            | {"index_action": action},
+            output_dir=output_dir,
+        )
+
+    conn = connect(db_path)
+    try:
+        repository = DocumentRepository(conn)
+        doc_id = str(args.doc_id or "")
+        ingestion: dict[str, Any] = {}
+        if file_path is not None:
+            doc_id, ingest_error, ingestion = _ingest_file(
+                repository=repository,
+                file_path=file_path,
+                document_root=document_root,
+                parser_name=str(args.parser),
+                mineru_output_dir=mineru_output_dir,
+                live_api=bool(args.live_api),
+                mineru_env_file=mineru_env_file,
+                mineru_model_version=str(args.mineru_model_version),
+                mineru_data_id=str(args.mineru_data_id) if args.mineru_data_id else None,
+                mineru_language=str(args.mineru_language),
+                mineru_ocr=bool(args.mineru_ocr),
+                mineru_enable_table=not bool(args.disable_mineru_table),
+                mineru_enable_formula=not bool(args.disable_mineru_formula),
+                mineru_api_timeout_seconds=float(args.mineru_api_timeout_seconds),
+                mineru_api_poll_interval_seconds=float(args.mineru_api_poll_interval_seconds),
+                mineru_api_max_attempts=int(args.mineru_api_max_attempts),
+                mineru_api_retry_delay_seconds=float(args.mineru_api_retry_delay_seconds),
+                force_parse=bool(args.force_parse),
+            )
+            if ingest_error is not None or not doc_id:
+                return _finalize_operation_result(
+                    result=_error_result(
+                        mode="document_index",
+                        run_id=run_id,
+                        error_type=str((ingest_error or {}).get("type") or "file_ingestion_failed"),
+                        message=str((ingest_error or {}).get("message") or "File ingestion failed."),
+                        source=source | {"ingestion": ingestion},
+                    )
+                    | {"index_action": action},
+                    output_dir=output_dir,
+                )
+            source = source | {
+                "was_ingested": bool(ingestion.get("parse_status")),
+                "resolved_doc_id": doc_id,
+                "ingestion": ingestion,
+                "parser": str(args.parser),
+            }
+
+        document = repository.get_document(doc_id)
+        if document is None:
+            return _finalize_operation_result(
+                result=_error_result(
+                    mode="document_index",
+                    run_id=run_id,
+                    error_type="document_not_found",
+                    message=f"Document not found: {doc_id}",
+                    doc_id=doc_id,
+                    source=source or {"type": source_type, "db_path": str(db_path)},
+                )
+                | {"index_action": action},
+                output_dir=output_dir,
+            )
+
+        dense_encoder = _dense_encoder_from_args(args)
+        before = _dense_index_status(
+            repository=repository,
+            doc_id=doc_id,
+            document_root=document_root,
+            dense_encoder=dense_encoder,
+        )
+        built_metadata: dict[str, Any] = {}
+        index_built = False
+        if args.prepare_index and (bool(args.force_index) or not bool(before.get("index_ready"))):
+            blocks = repository.load_evidence_blocks(doc_id)
+            if not blocks:
+                return _finalize_operation_result(
+                    result=_error_result(
+                        mode="document_index",
+                        run_id=run_id,
+                        error_type="no_evidence_blocks",
+                        message=f"No retrievable EvidenceBlocks found for doc_id={doc_id}",
+                        doc_id=doc_id,
+                        source=source,
+                    )
+                    | {"index_action": action, "index_status": before},
+                    output_dir=output_dir,
+                )
+            _dense_index, built_metadata = _build_dense_index_for_blocks(
+                repository=repository,
+                doc_id=doc_id,
+                index_dir=document_root / doc_id,
+                blocks=blocks,
+                dense_encoder=dense_encoder,
+            )
+            index_built = True
+        after = _dense_index_status(
+            repository=repository,
+            doc_id=doc_id,
+            document_root=document_root,
+            dense_encoder=dense_encoder,
+        )
+        result = _base_result(
+            mode="document_index",
+            run_id=run_id,
+            doc_id=doc_id,
+            source=source or {"type": source_type, "db_path": str(db_path)},
+        )
+        result.update(
+            {
+                "index_action": action,
+                "execution_profile": str(args.execution_profile),
+                "dense_backend": str(args.dense_backend),
+                "dense_model_id": dense_encoder.model_id,
+                "index_ready": bool(after.get("index_ready")),
+                "index_built": index_built,
+                "index_reused": bool(args.prepare_index and before.get("index_ready") and not args.force_index),
+                "index_status_before": before,
+                "index_status": after,
+                "built_metadata": built_metadata,
+                "used_training": False,
+                "validation_subset_used_for_training": False,
+                "formal_benchmark_acceptance": False,
+            }
+        )
+        return _finalize_operation_result(result=result, output_dir=output_dir)
+    finally:
+        conn.close()
 
 
 def _parse_page(question: str) -> int | None:
@@ -1807,6 +2109,7 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
         return _list_documents(db_path=db_path, limit=limit)
 
     run_id = _now_run_id()
+    index_action_requested = bool(args.check_index or args.prepare_index)
     question = str(args.question or "").strip()
     source: dict[str, Any] = {}
     source_type = "doc_id"
@@ -1817,6 +2120,55 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
         source_type = "file"
         file_path = _project_path(args.file)
         source = _file_source(file_path=file_path, db_path=db_path)
+
+    if file_path is not None and not file_path.is_file():
+        result = _error_result(
+            mode="document_index" if index_action_requested else "qa",
+            run_id=run_id,
+            error_type="file_not_found",
+            message=f"Input file not found: {file_path}",
+            question=question,
+            source=source,
+        )
+        if index_action_requested:
+            result["index_action"] = "prepare" if args.prepare_index else "check"
+            return _finalize_operation_result(result=result, output_dir=output_dir)
+        return _finalize_qa_result(
+            result=result,
+            output_dir=output_dir,
+            router_plan={},
+            source_type=source_type,
+            used_file_ingestion=False,
+        )
+    if index_action_requested:
+        missing_index_resources = _missing_user_best_index_resources(args)
+        if missing_index_resources:
+            result = _error_result(
+                mode="document_index",
+                run_id=run_id,
+                error_type="user_best_index_resources_missing",
+                message=(
+                    "The user_best index profile requires real parser/dense resources. "
+                    "Use --execution-profile self_test for a lightweight hash index, or pass explicit paths/config."
+                ),
+                source=source or {"type": source_type, "db_path": str(db_path)},
+                warnings=["user_best_index_resources_missing"],
+            )
+            result["missing_resources"] = missing_index_resources
+            result["execution_profile"] = str(args.execution_profile)
+            result["index_action"] = "prepare" if args.prepare_index else "check"
+            return _finalize_operation_result(result=result, output_dir=output_dir)
+        return _run_document_index_action(
+            args=args,
+            db_path=db_path,
+            document_root=document_root,
+            output_dir=output_dir,
+            mineru_output_dir=mineru_output_dir,
+            mineru_env_file=mineru_env_file,
+            file_path=file_path,
+            source=source,
+            source_type=source_type,
+        )
 
     if not question:
         result = _error_result(
@@ -1845,22 +2197,6 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
             output_dir=output_dir,
             router_plan={},
             source_type="unknown",
-            used_file_ingestion=False,
-        )
-    if file_path is not None and not file_path.is_file():
-        result = _error_result(
-            mode="qa",
-            run_id=run_id,
-            error_type="file_not_found",
-            message=f"Input file not found: {file_path}",
-            question=question,
-            source=source,
-        )
-        return _finalize_qa_result(
-            result=result,
-            output_dir=output_dir,
-            router_plan={},
-            source_type=source_type,
             used_file_ingestion=False,
         )
     missing_user_best_resources = _missing_user_best_resources(args)
@@ -2237,6 +2573,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--list-documents", action="store_true")
+    parser.add_argument("--check-index", action="store_true", help="Inspect the persisted dense index for --doc-id without rebuilding it.")
+    parser.add_argument("--prepare-index", action="store_true", help="Ingest if needed and build or reuse the persisted dense index for a document.")
+    parser.add_argument("--force-index", action="store_true", help="Rebuild the dense index even when matching metadata already exists.")
     parser.add_argument("--limit", type=int, default=20)
     parser.add_argument("--allow-llm-router", action="store_true", default=None)
     parser.add_argument("--router-llm-threshold", type=float, default=DEFAULT_LLM_ROUTER_THRESHOLD)

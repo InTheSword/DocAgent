@@ -215,6 +215,94 @@ def test_list_documents_outputs_json_with_doc_id_and_page_count(tmp_path: Path) 
     assert payload["documents"][0]["page_count"] == 2
 
 
+def test_check_index_reports_missing_without_question(tmp_path: Path) -> None:
+    db_path = _repository_with_document(tmp_path)
+
+    payload = _run_cli(
+        tmp_path,
+        "--db-path",
+        str(db_path),
+        "--doc-id",
+        "doc1",
+        "--check-index",
+        "--output-dir",
+        str(tmp_path / "cli"),
+    )
+
+    assert payload["status"] == "success"
+    assert payload["mode"] == "document_index"
+    assert payload["index_action"] == "check"
+    assert payload["index_ready"] is False
+    assert payload["index_built"] is False
+    assert payload["index_status"]["status"] == "missing"
+    assert payload["question"] == ""
+
+
+def test_prepare_index_builds_and_reuses_hash_dense_index(tmp_path: Path) -> None:
+    db_path = _repository_with_document(tmp_path)
+
+    first = _run_cli(
+        tmp_path,
+        "--db-path",
+        str(db_path),
+        "--document-root",
+        str(tmp_path / "documents"),
+        "--doc-id",
+        "doc1",
+        "--prepare-index",
+        "--output-dir",
+        str(tmp_path / "cli"),
+    )
+    second = _run_cli(
+        tmp_path,
+        "--db-path",
+        str(db_path),
+        "--document-root",
+        str(tmp_path / "documents"),
+        "--doc-id",
+        "doc1",
+        "--prepare-index",
+        "--output-dir",
+        str(tmp_path / "cli"),
+    )
+
+    assert first["status"] == "success"
+    assert first["index_ready"] is True
+    assert first["index_built"] is True
+    assert first["index_reused"] is False
+    assert first["dense_backend"] == "hash"
+    assert Path(first["index_status"]["metadata_path"]).is_file()
+    assert Path(first["index_status"]["embeddings_path"]).is_file()
+    assert second["status"] == "success"
+    assert second["index_ready"] is True
+    assert second["index_built"] is False
+    assert second["index_reused"] is True
+
+
+def test_user_best_index_check_does_not_require_answer_policy_adapter(tmp_path: Path) -> None:
+    db_path = _repository_with_document(tmp_path)
+
+    payload = _run_cli(
+        tmp_path,
+        "--execution-profile",
+        "user_best",
+        "--dense-backend",
+        "hash",
+        "--db-path",
+        str(db_path),
+        "--doc-id",
+        "doc1",
+        "--check-index",
+        "--output-dir",
+        str(tmp_path / "cli"),
+    )
+
+    assert payload["status"] == "success"
+    assert payload["execution_profile"] == "user_best"
+    assert payload["dense_backend"] == "hash"
+    assert payload["error"] == {}
+
+
 def test_user_best_profile_missing_resources_returns_clear_error(tmp_path: Path) -> None:
     db_path = _repository_with_document(tmp_path)
 
