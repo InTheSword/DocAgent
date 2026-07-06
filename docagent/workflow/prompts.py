@@ -181,6 +181,9 @@ def _context_media(block: EvidenceBlock) -> dict[str, Any]:
     payload = {
         "table_caption": _metadata_text(block, "table_caption"),
         "image_caption": _metadata_text(block, "caption", "image_caption", "chart_caption"),
+        "visual_summary": smart_truncate(str(block.visual_summary or block.metadata.get("visual_summary") or ""), 220),
+        "visual_content_status": str(block.metadata.get("visual_content_status") or ""),
+        "requires_visual_understanding": True if block.metadata.get("requires_visual_understanding") else None,
         "nearby_text": smart_truncate(_metadata_text(block, "nearby_text"), 220),
         "image_path": _safe_prompt_image_path(block.image_path),
     }
@@ -366,6 +369,9 @@ def _v3_ref_entry_from_block(ref: str, block: EvidenceBlock) -> dict[str, Any]:
             "preview": citation.get("text_preview"),
             "table_caption": citation.get("table_caption"),
             "image_caption": citation.get("image_caption"),
+            "visual_summary": citation.get("visual_summary"),
+            "visual_content_status": citation.get("visual_content_status"),
+            "requires_visual_understanding": citation.get("requires_visual_understanding"),
             "nearby_text": citation.get("nearby_text"),
         }.items()
         if value not in {None, ""}
@@ -373,7 +379,18 @@ def _v3_ref_entry_from_block(ref: str, block: EvidenceBlock) -> dict[str, Any]:
 
 
 def _v3_media_text(media: dict[str, Any]) -> str:
-    payload = {key: media.get(key) for key in ("table_caption", "image_caption", "nearby_text") if media.get(key)}
+    payload = {
+        key: media.get(key)
+        for key in (
+            "table_caption",
+            "image_caption",
+            "visual_summary",
+            "visual_content_status",
+            "requires_visual_understanding",
+            "nearby_text",
+        )
+        if media.get(key)
+    }
     return json.dumps(payload, ensure_ascii=False) if payload else ""
 
 

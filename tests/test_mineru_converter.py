@@ -39,6 +39,9 @@ def test_mineru_content_list_to_blocks_handles_text_table_image(tmp_path: Path) 
     assert blocks[2].image_path == "figures/chart.png"
     assert blocks[2].metadata["caption"] == "Revenue chart"
     assert blocks[2].metadata["nearby_text"] == ["FY2020 revenue was $100,000"]
+    assert blocks[2].metadata["visual_content_status"] == "ocr_or_nearby_text"
+    assert blocks[2].metadata["visual_text_sources"] == ["caption", "nearby_text"]
+    assert blocks[2].metadata["requires_visual_understanding"] is False
     assert "FY2020 revenue was $100,000" in blocks[2].retrieval_text
     assert "normalized_resource_path" not in blocks[2].metadata
     assert "source_content_list" not in blocks[2].metadata
@@ -82,6 +85,38 @@ def test_mineru_content_list_to_blocks_preserves_secondary_text_fields(tmp_path:
     assert "$100,000" in blocks[1].text
     assert "Budget table" in blocks[2].text
     assert "$100,000" in page_text
+
+
+def test_mineru_image_blocks_mark_visual_readiness(tmp_path: Path) -> None:
+    content = [
+        {
+            "type": "image",
+            "page_idx": 0,
+            "image_path": "figures/diagram.png",
+        },
+        {
+            "type": "figure",
+            "page_idx": 0,
+            "image_path": "figures/flow.png",
+            "visual_summary": "Flow chart shows the approval sequence.",
+        },
+    ]
+    path = tmp_path / "sample_content_list.json"
+    path.write_text(json.dumps(content), encoding="utf-8")
+
+    blocks = content_list_to_blocks(doc_id="doc123", content_list_path=path)
+
+    assert [block.block_type for block in blocks] == ["image", "image"]
+    assert blocks[0].text == ""
+    assert blocks[0].retrieval_text == ""
+    assert blocks[0].metadata["visual_content_status"] == "resource_only"
+    assert blocks[0].metadata["visual_text_sources"] == []
+    assert blocks[0].metadata["requires_visual_understanding"] is True
+    assert blocks[1].visual_summary == "Flow chart shows the approval sequence."
+    assert "Flow chart shows the approval sequence." in blocks[1].retrieval_text
+    assert blocks[1].metadata["visual_content_status"] == "vlm_summarized"
+    assert blocks[1].metadata["visual_text_sources"] == ["visual_summary"]
+    assert blocks[1].metadata["requires_visual_understanding"] is False
 
 
 def test_mineru_content_list_to_blocks_preserves_remote_and_table_image_resources(tmp_path: Path) -> None:

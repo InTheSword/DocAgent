@@ -196,7 +196,16 @@ def _normalize_evidence_used(value: Any, cited_blocks: list[EvidenceBlock]) -> l
             merged.setdefault("doc_id", block.doc_id)
             merged.setdefault("page", block.location.page if block.location.page is not None else block.page_id)
             merged.setdefault("block_type", block.block_type)
-            for key in ("text_preview", "table_caption", "image_caption", "nearby_text", "image_path"):
+            for key in (
+                "text_preview",
+                "table_caption",
+                "image_caption",
+                "visual_summary",
+                "visual_content_status",
+                "requires_visual_understanding",
+                "nearby_text",
+                "image_path",
+            ):
                 value = citation.get(key)
                 if value not in {None, ""}:
                     merged.setdefault(key, value)
@@ -285,6 +294,12 @@ def _evidence_used_from_ref_map(refs: list[str], ref_map: dict[str, dict[str, An
                     "block_type": entry.get("block_type"),
                     "page": entry.get("page"),
                     "text_preview": entry.get("preview") or entry.get("display_text"),
+                    "table_caption": entry.get("table_caption"),
+                    "image_caption": entry.get("image_caption"),
+                    "visual_summary": entry.get("visual_summary"),
+                    "visual_content_status": entry.get("visual_content_status"),
+                    "requires_visual_understanding": entry.get("requires_visual_understanding"),
+                    "nearby_text": entry.get("nearby_text"),
                 }.items()
                 if value not in {None, ""}
             }

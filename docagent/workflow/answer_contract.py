@@ -192,6 +192,9 @@ def evidence_ref_map_from_blocks(blocks: list[EvidenceBlock]) -> dict[str, dict[
                 "preview": citation.get("text_preview"),
                 "table_caption": citation.get("table_caption"),
                 "image_caption": citation.get("image_caption"),
+                "visual_summary": citation.get("visual_summary"),
+                "visual_content_status": citation.get("visual_content_status"),
+                "requires_visual_understanding": citation.get("requires_visual_understanding"),
                 "nearby_text": citation.get("nearby_text"),
             }.items()
             if value not in {None, ""}
@@ -202,7 +205,10 @@ def evidence_ref_map_from_blocks(blocks: list[EvidenceBlock]) -> dict[str, dict[
 def citation_from_block(block: EvidenceBlock) -> dict[str, Any]:
     table_caption = _metadata_text(block, "table_caption")
     image_caption = _metadata_text(block, "caption", "image_caption", "chart_caption")
+    visual_summary = _metadata_preview(block, "visual_summary") or _preview_text(block.visual_summary)
     nearby_text = _metadata_preview(block, "nearby_text")
+    visual_content_status = str(block.metadata.get("visual_content_status") or "")
+    requires_visual_understanding = True if block.metadata.get("requires_visual_understanding") else None
     return {
         key: value
         for key, value in {
@@ -216,6 +222,9 @@ def citation_from_block(block: EvidenceBlock) -> dict[str, Any]:
             "image_path": block.image_path,
             "table_caption": table_caption,
             "image_caption": image_caption,
+            "visual_summary": visual_summary,
+            "visual_content_status": visual_content_status,
+            "requires_visual_understanding": requires_visual_understanding,
             "nearby_text": nearby_text,
         }.items()
         if value not in {None, ""}
@@ -260,6 +269,9 @@ def _evidence_used_from_block(block: EvidenceBlock) -> dict[str, Any]:
             "text_preview": citation.get("text_preview"),
             "table_caption": citation.get("table_caption"),
             "image_caption": citation.get("image_caption"),
+            "visual_summary": citation.get("visual_summary"),
+            "visual_content_status": citation.get("visual_content_status"),
+            "requires_visual_understanding": citation.get("requires_visual_understanding"),
             "nearby_text": citation.get("nearby_text"),
             "image_path": citation.get("image_path"),
         }.items()
@@ -288,7 +300,11 @@ def _metadata_text(block: EvidenceBlock, *keys: str) -> str:
 
 
 def _metadata_preview(block: EvidenceBlock, *keys: str, limit: int = 220) -> str:
-    text = _metadata_text(block, *keys)
+    return _preview_text(_metadata_text(block, *keys), limit=limit)
+
+
+def _preview_text(value: Any, *, limit: int = 220) -> str:
+    text = " ".join(str(value or "").split())
     if len(text) <= limit:
         return text
     preview = text[:limit]

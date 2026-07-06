@@ -27,6 +27,13 @@ TEXTISH_KEYS = (
     "chart_footnote",
     "nearby_text",
 )
+VISUAL_SUMMARY_KEYS = (
+    "visual_summary",
+    "image_summary",
+    "figure_summary",
+    "chart_summary",
+    "alt_text",
+)
 NESTED_TEXT_KEYS = ("spans", "lines", "children", "blocks", "items", "cells", "rows")
 RESOURCE_PATH_KEYS = (
     "image_path",
@@ -183,6 +190,7 @@ def _item_text(item: dict[str, Any], raw_type: str, block_type: str) -> str:
         caption = _caption_text(item, "chart_caption")
         footnote = _caption_text(item, "chart_footnote")
         content = _unique_text_parts(
+            _visual_summary(item),
             _clean_text(item.get("nearby_text")),
             _clean_text(item.get("text")),
             _clean_text(item.get("content")),
@@ -190,12 +198,53 @@ def _item_text(item: dict[str, Any], raw_type: str, block_type: str) -> str:
         return _unique_text_parts(caption, content, footnote)
     if block_type == "image":
         return _unique_text_parts(
+            _visual_summary(item),
             _caption_text(item, "caption", "image_caption"),
             _clean_text(item.get("nearby_text")),
             _clean_text(item.get("text")),
             _clean_text(item.get("content")),
         )
     return _unique_text_parts(_clean_text(item.get("text")), _clean_text(item.get("content")))
+
+
+def _visual_summary(item: dict[str, Any]) -> str:
+    return _caption_text(item, *VISUAL_SUMMARY_KEYS)
+
+
+def _visual_content_metadata(
+    item: dict[str, Any],
+    *,
+    block_type: str,
+    image_path: str | None,
+    visual_summary: str,
+) -> dict[str, Any]:
+    if block_type != "image":
+        return {}
+    sources: list[str] = []
+    if visual_summary:
+        sources.append("visual_summary")
+    if _caption_text(item, "caption", "image_caption", "chart_caption"):
+        sources.append("caption")
+    if _clean_text(item.get("nearby_text")):
+        sources.append("nearby_text")
+    if _unique_text_parts(_clean_text(item.get("text")), _clean_text(item.get("content"))):
+        sources.append("ocr_text")
+
+    if visual_summary:
+        status = "vlm_summarized"
+    elif any(source in {"nearby_text", "ocr_text"} for source in sources):
+        status = "ocr_or_nearby_text"
+    elif "caption" in sources:
+        status = "caption_only"
+    elif image_path:
+        status = "resource_only"
+    else:
+        status = "empty"
+    return {
+        "visual_content_status": status,
+        "visual_text_sources": sources,
+        "requires_visual_understanding": bool(image_path) and status in {"resource_only", "caption_only"},
+    }
 
 
 def _resource_path(item: dict[str, Any]) -> tuple[str | None, str | None]:
@@ -266,6 +315,7 @@ def _make_block(
     page = _docagent_page(item)
     mineru_page_idx = _page_idx(item)
     text = _item_text(item, raw_type, block_type)
+    visual_summary = _visual_summary(item) if block_type == "image" else ""
     boilerplate = _is_boilerplate(raw_type, text)
     table_html = _table_html(item) if block_type == "table" else None
     raw_image_path, raw_resource_key = _resource_path(item)
@@ -314,6 +364,16 @@ def _make_block(
             metadata["resource_key"] = raw_resource_key
         metadata["resource_exists"] = resource_exists
         metadata["resource_is_remote"] = resource_is_remote
+    if visual_summary:
+        metadata["visual_summary"] = visual_summary
+    metadata.update(
+        _visual_content_metadata(
+            item,
+            block_type=block_type,
+            image_path=image_path,
+            visual_summary=visual_summary,
+        )
+    )
 
     return EvidenceBlock(
         doc_id=doc_id,
@@ -323,6 +383,7 @@ def _make_block(
         text=text,
         table_html=table_html,
         image_path=image_path,
+        visual_summary=visual_summary or None,
         location=EvidenceLocation(page=page, block_id=block_id, bbox=_bbox(item)),
         metadata=metadata,
     )

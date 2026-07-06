@@ -119,8 +119,13 @@ def test_retrieval_text_uses_metadata_captions_without_resource_paths() -> None:
         block_id="image_caption_only",
         block_type="image",
         image_path="https://mineru.example/signed/chart.png",
+        visual_summary="The chart highlights FY2020 revenue.",
         location=EvidenceLocation(page=1, block_id="image_caption_only"),
-        metadata={"image_caption": "Revenue chart", "nearby_text": ["FY2020 revenue was $100,000"]},
+        metadata={
+            "image_caption": "Revenue chart",
+            "nearby_text": ["FY2020 revenue was $100,000"],
+            "visual_content_status": "vlm_summarized",
+        },
     )
     table = EvidenceBlock(
         doc_id="doc1",
@@ -141,6 +146,7 @@ def test_retrieval_text_uses_metadata_captions_without_resource_paths() -> None:
 
     assert "Revenue chart" in image.retrieval_text
     assert "FY2020 revenue was $100,000" in image.retrieval_text
+    assert "The chart highlights FY2020 revenue." in image.retrieval_text
     assert "mineru.example" not in image.retrieval_text
     assert "Budget Estimate table" in table.retrieval_text
     assert "$100,000" in table.retrieval_text
@@ -166,10 +172,12 @@ def test_context_serializes_text_table_chart_location_and_truncation() -> None:
             block_type="image",
             text="chart says 9.9",
             image_path="images/chart.png",
+            visual_summary="The chart highlights FY2020 revenue.",
             location=EvidenceLocation(page=1, block_id="chart"),
             metadata={
                 "raw_mineru_type": "chart",
                 "image_caption": "Revenue chart",
+                "visual_content_status": "vlm_summarized",
                 "nearby_text": ["FY2020 revenue was $100,000"],
             },
         ),
@@ -197,6 +205,8 @@ def test_context_serializes_text_table_chart_location_and_truncation() -> None:
     }
     assert chart_item["media"] == {
         "image_caption": "Revenue chart",
+        "visual_summary": "The chart highlights FY2020 revenue.",
+        "visual_content_status": "vlm_summarized",
         "nearby_text": "FY2020 revenue was $100,000",
         "image_path": "images/chart.png",
     }
@@ -260,9 +270,14 @@ def test_canonical_output_preserves_table_and_image_resource_fields() -> None:
         block_type="image",
         text="Revenue chart caption",
         image_path="images/chart.png",
+        visual_summary="The chart highlights FY2020 revenue.",
         page_id=2,
         location=EvidenceLocation(page=2, block_id="image1"),
-        metadata={"image_caption": "Revenue chart", "nearby_text": ["FY2020 revenue was $100,000"]},
+        metadata={
+            "image_caption": "Revenue chart",
+            "nearby_text": ["FY2020 revenue was $100,000"],
+            "visual_content_status": "vlm_summarized",
+        },
     )
 
     canonical = canonicalize_output(
@@ -278,11 +293,15 @@ def test_canonical_output_preserves_table_and_image_resource_fields() -> None:
     assert canonical["citations"][0]["table_caption"] == "Budget table"
     assert canonical["citations"][0]["image_path"] == "https://mineru.example/table.png"
     assert canonical["citations"][1]["image_caption"] == "Revenue chart"
+    assert canonical["citations"][1]["visual_summary"] == "The chart highlights FY2020 revenue."
+    assert canonical["citations"][1]["visual_content_status"] == "vlm_summarized"
     assert canonical["citations"][1]["nearby_text"] == "FY2020 revenue was $100,000"
     assert canonical["citations"][1]["image_path"] == "images/chart.png"
     assert canonical["evidence_used"][0]["table_caption"] == "Budget table"
     assert canonical["evidence_used"][0]["image_path"] == "https://mineru.example/table.png"
     assert canonical["evidence_used"][1]["image_caption"] == "Revenue chart"
+    assert canonical["evidence_used"][1]["visual_summary"] == "The chart highlights FY2020 revenue."
+    assert canonical["evidence_used"][1]["visual_content_status"] == "vlm_summarized"
     assert canonical["evidence_used"][1]["nearby_text"] == "FY2020 revenue was $100,000"
     assert canonical["evidence_used"][1]["image_path"] == "images/chart.png"
 
