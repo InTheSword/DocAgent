@@ -48,6 +48,8 @@ REQUIRED_CLI_OPTIONS = (
     "--file",
     "--doc-id",
     "--question",
+    "--execution-profile",
+    "--stdout-format",
     "--parser",
     "--live-api",
     "--mineru-env-file",

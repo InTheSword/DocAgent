@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import sys
@@ -68,8 +69,14 @@ DEFAULT_MINERU_ENV_FILE = ".secrets/mineru.env"
 DEFAULT_QWEN_BASE_MODEL_PATH = "/root/autodl-tmp/models/Qwen3-1.7B"
 DEFAULT_BGE_MODEL_PATH = "/root/autodl-tmp/models/bge-m3"
 DEFAULT_RERANKER_MODEL_PATH = "/root/autodl-tmp/models/bge-reranker-v2-m3"
+DEFAULT_BEST_ANSWER_POLICY_ADAPTER_PATH = (
+    "/root/autodl-tmp/docagent/outputs/training/answer_policy_v3_msswift_sft/"
+    "answer_policy_v3_rejection_sft_temp095_402records_96steps_20260705/"
+    "swift_output/v0-20260705-180824/checkpoint-96"
+)
 ANSWER_POLICY_CHOICES = {"heuristic", "base", "sft", "grpo"}
 RETRIEVER_MODE_CHOICES = {"bm25", "dense", "hybrid", "hybrid_rerank"}
+EXECUTION_PROFILE_CHOICES = {"user_best", "self_test"}
 
 
 def _now_run_id() -> str:
@@ -80,6 +87,110 @@ def _now_run_id() -> str:
 def _project_path(value: str | Path) -> Path:
     path = Path(value)
     return path if path.is_absolute() else ROOT / path
+
+
+def _file_extension(value: str | None) -> str:
+    return Path(value).suffix.lower() if value else ""
+
+
+def _default_parser_for_profile(args: argparse.Namespace) -> str:
+    if getattr(args, "parser", None):
+        return str(args.parser)
+    if str(args.execution_profile) == "user_best" and _file_extension(args.file) in {".pdf", ".png", ".jpg", ".jpeg"}:
+        return "mineru_api"
+    return "auto"
+
+
+def _apply_execution_profile(args: argparse.Namespace) -> argparse.Namespace:
+    profile = str(getattr(args, "execution_profile", "") or "user_best")
+    if profile not in EXECUTION_PROFILE_CHOICES:
+        profile = "user_best"
+    args.execution_profile = profile
+
+    parser_name = _default_parser_for_profile(args)
+    args.parser = parser_name
+
+    user_best = profile == "user_best"
+    if getattr(args, "live_api", None) is None:
+        args.live_api = bool(user_best and parser_name == "mineru_api")
+    if getattr(args, "allow_llm_router", None) is None:
+        args.allow_llm_router = user_best
+    if getattr(args, "enable_query_planning", None) is None:
+        args.enable_query_planning = user_best
+    if getattr(args, "full_model_path", None) is None:
+        args.full_model_path = user_best
+    if getattr(args, "query_planner_mode", None) is None:
+        args.query_planner_mode = "hybrid"
+    if getattr(args, "retriever_mode", None) is None:
+        args.retriever_mode = "hybrid_rerank" if user_best else "bm25"
+    if getattr(args, "dense_backend", None) is None:
+        args.dense_backend = "bge"
+    if getattr(args, "dense_model_path", None) is None:
+        args.dense_model_path = DEFAULT_BGE_MODEL_PATH
+    if getattr(args, "dense_device", None) is None:
+        args.dense_device = "cuda" if user_best else "cpu"
+    if getattr(args, "dense_fp16", None) is None:
+        args.dense_fp16 = False
+    if getattr(args, "build_dense_index_if_missing", None) is None:
+        args.build_dense_index_if_missing = user_best
+    if getattr(args, "reranker_backend", None) is None:
+        args.reranker_backend = "cross_encoder"
+    if getattr(args, "reranker_model_path", None) is None:
+        args.reranker_model_path = DEFAULT_RERANKER_MODEL_PATH
+    if getattr(args, "reranker_device", None) is None:
+        args.reranker_device = "cuda" if user_best else "cpu"
+    if getattr(args, "reranker_fp16", None) is None:
+        args.reranker_fp16 = False
+    if getattr(args, "answer_policy", None) is None:
+        args.answer_policy = "sft" if user_best else "heuristic"
+    if getattr(args, "answer_output_contract", None) is None:
+        args.answer_output_contract = "v3_refs" if user_best else "candidate_citations"
+    if getattr(args, "adapter_path", None) is None and user_best and str(args.answer_policy) == "sft":
+        args.adapter_path = DEFAULT_BEST_ANSWER_POLICY_ADAPTER_PATH
+    if getattr(args, "device", None) is None:
+        args.device = "cuda" if user_best else "cpu"
+    return args
+
+
+def _missing_user_best_resources(args: argparse.Namespace) -> list[str]:
+    if str(getattr(args, "execution_profile", "")) != "user_best":
+        return []
+    missing: list[str] = []
+    if str(getattr(args, "answer_policy", "")) in {"base", "sft", "grpo"}:
+        if not _project_path(args.base_model_path).exists():
+            missing.append(f"base_model_path:{args.base_model_path}")
+    if str(getattr(args, "answer_policy", "")) in {"sft", "grpo"}:
+        adapter_path = str(getattr(args, "adapter_path", "") or "")
+        if not adapter_path or not _project_path(adapter_path).exists():
+            missing.append(f"adapter_path:{adapter_path or '<empty>'}")
+    if str(getattr(args, "retriever_mode", "")) in {"dense", "hybrid", "hybrid_rerank"} and str(getattr(args, "dense_backend", "")) == "bge":
+        if not _project_path(args.dense_model_path).exists():
+            missing.append(f"dense_model_path:{args.dense_model_path}")
+    if str(getattr(args, "retriever_mode", "")) == "hybrid_rerank" and str(getattr(args, "reranker_backend", "")) == "cross_encoder":
+        if not _project_path(args.reranker_model_path).exists():
+            missing.append(f"reranker_model_path:{args.reranker_model_path}")
+    if str(getattr(args, "parser", "")) == "mineru_api" and not (
+        os.environ.get("MINERU_TOKEN")
+        or os.environ.get("API_TOKEN")
+        or _resolve_optional_mineru_env_file(getattr(args, "mineru_env_file", None)) is not None
+    ):
+        missing.append(f"mineru_env_file:{getattr(args, 'mineru_env_file', None) or DEFAULT_MINERU_ENV_FILE}")
+    return missing
+
+
+def _user_best_resource_error(run_id: str, question: str, source: dict[str, Any], missing: list[str]) -> dict[str, Any]:
+    return _error_result(
+        mode="qa",
+        run_id=run_id,
+        error_type="user_best_resources_missing",
+        message=(
+            "The default user_best execution profile requires real API/model/checkpoint resources. "
+            "Use --execution-profile self_test for lightweight local checks, or pass explicit paths/config."
+        ),
+        question=question,
+        source=source,
+        warnings=["user_best_resources_missing"],
+    ) | {"missing_resources": missing, "execution_profile": "user_best"}
 
 
 def _json_default(value: Any) -> str:
@@ -96,6 +207,54 @@ def _print_json(payload: dict[str, Any]) -> None:
         print(text)
     except UnicodeEncodeError:
         print(json.dumps(payload, ensure_ascii=True, indent=2, default=_json_default))
+
+
+def _print_text(payload: dict[str, Any]) -> None:
+    lines = _format_text_output(payload).splitlines()
+    try:
+        print("\n".join(lines))
+    except UnicodeEncodeError:
+        print("\n".join(line.encode("ascii", errors="replace").decode("ascii") for line in lines))
+
+
+def _format_text_output(payload: dict[str, Any]) -> str:
+    status = str(payload.get("status") or "")
+    answer = str(payload.get("answer") or "").strip()
+    reasoning = str(payload.get("reasoning_summary") or "").strip()
+    citations = payload.get("citations") if isinstance(payload.get("citations"), list) else []
+    tools = payload.get("tools_used") if isinstance(payload.get("tools_used"), list) else []
+    trace_path = str(payload.get("trace_path") or "").strip()
+    artifact_dir = str(payload.get("artifact_dir") or "").strip()
+    lines: list[str] = []
+
+    if status != "success":
+        error = payload.get("error") if isinstance(payload.get("error"), dict) else {}
+        error_type = str(error.get("type") or payload.get("error_type") or "error")
+        message = str(error.get("message") or payload.get("message") or "DocAgent run failed.")
+        lines.append(f"Status: {status or 'error'}")
+        lines.append(f"Error: {error_type}")
+        lines.append(message)
+    else:
+        lines.append(answer or "(no answer)")
+        if reasoning:
+            lines.extend(["", f"Reasoning: {reasoning}"])
+
+    if citations:
+        lines.extend(["", "Sources:"])
+        for index, citation in enumerate(citations[:5], start=1):
+            if not isinstance(citation, dict):
+                continue
+            page = citation.get("page")
+            block_type = str(citation.get("block_type") or "evidence")
+            caption = str(citation.get("table_caption") or citation.get("image_caption") or "").strip()
+            page_text = f"page {page}" if page not in {None, ""} else "page unknown"
+            suffix = f", {caption}" if caption else ""
+            lines.append(f"{index}. {page_text}, {block_type}{suffix}")
+    if tools:
+        lines.extend(["", f"Tools: {', '.join(str(tool) for tool in tools)}"])
+    if trace_path or artifact_dir:
+        lines.extend(["", f"Trace: {trace_path or artifact_dir}"])
+    return "\n".join(lines)
 
 
 def _build_answer_policy(
@@ -1627,6 +1786,7 @@ def _query_planner_used_external_api(query_planner: dict[str, Any]) -> bool:
 
 
 def run_cli(args: argparse.Namespace) -> dict[str, Any]:
+    args = _apply_execution_profile(args)
     db_path = _project_path(args.db_path)
     output_dir = _project_path(args.output_dir)
     document_root = _project_path(args.document_root)
@@ -1696,6 +1856,26 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
             question=question,
             source=source,
         )
+        return _finalize_qa_result(
+            result=result,
+            output_dir=output_dir,
+            router_plan={},
+            source_type=source_type,
+            used_file_ingestion=False,
+        )
+    missing_user_best_resources = _missing_user_best_resources(args)
+    if missing_user_best_resources and not args.list_documents:
+        result = _user_best_resource_error(
+            run_id=run_id,
+            question=question,
+            source=source or {"type": source_type, "db_path": str(db_path)},
+            missing=missing_user_best_resources,
+        )
+        result["answer_policy_mode"] = str(args.answer_policy)
+        result["answer_output_contract"] = str(args.answer_output_contract)
+        result["used_qwen_answer_policy"] = False
+        result["used_external_answer_api"] = False
+        result["full_model_path"] = bool(args.full_model_path)
         return _finalize_qa_result(
             result=result,
             output_dir=output_dir,
@@ -1992,6 +2172,7 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
                 + _page_metadata_warnings(metadata_consistency)
             )
         )
+        result["execution_profile"] = str(args.execution_profile)
         result["error"] = tool_result.get("error") or {}
         if tool_result.get("structured_result") is not None:
             result["structured_result"] = tool_result.get("structured_result")
@@ -2032,9 +2213,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--question")
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR))
     parser.add_argument("--document-root", default=str(DEFAULT_DOCUMENT_ROOT))
-    parser.add_argument("--parser", choices=["auto", "text", "mineru_existing", "mineru_api"], default="auto")
+    parser.add_argument("--execution-profile", choices=sorted(EXECUTION_PROFILE_CHOICES), default="user_best")
+    parser.add_argument("--stdout-format", choices=["json", "text"], default="json")
+    parser.add_argument("--parser", choices=["auto", "text", "mineru_existing", "mineru_api"], default=None)
     parser.add_argument("--mineru-output-dir", "--mineru-output", dest="mineru_output_dir")
-    parser.add_argument("--live-api", action="store_true")
+    parser.add_argument("--live-api", action="store_true", default=None)
     parser.add_argument("--mineru-env-file", help=f"Optional MinerU API env file, defaults to {DEFAULT_MINERU_ENV_FILE} when present.")
     parser.add_argument("--mineru-model-version", default="vlm")
     parser.add_argument("--mineru-data-id")
@@ -2055,37 +2238,38 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--list-documents", action="store_true")
     parser.add_argument("--limit", type=int, default=20)
-    parser.add_argument("--allow-llm-router", action="store_true")
+    parser.add_argument("--allow-llm-router", action="store_true", default=None)
     parser.add_argument("--router-llm-threshold", type=float, default=DEFAULT_LLM_ROUTER_THRESHOLD)
     parser.add_argument("--router-llm-model")
     parser.add_argument("--router-llm-env-file")
-    parser.add_argument("--enable-query-planning", action="store_true")
-    parser.add_argument("--query-planner-mode", choices=["rule", "llm", "hybrid"], default="hybrid")
-    parser.add_argument("--retriever-mode", choices=sorted(RETRIEVER_MODE_CHOICES), default="bm25")
-    parser.add_argument("--dense-backend", choices=["bge", "hash"], default="bge")
-    parser.add_argument("--dense-model-path", default=DEFAULT_BGE_MODEL_PATH)
-    parser.add_argument("--dense-device", default="cpu")
-    parser.add_argument("--dense-fp16", action="store_true")
-    parser.add_argument("--build-dense-index-if-missing", action="store_true")
-    parser.add_argument("--reranker-backend", choices=["cross_encoder", "keyword"], default="cross_encoder")
-    parser.add_argument("--reranker-model-path", default=DEFAULT_RERANKER_MODEL_PATH)
-    parser.add_argument("--reranker-device", default="cpu")
-    parser.add_argument("--reranker-fp16", action="store_true")
+    parser.add_argument("--enable-query-planning", action="store_true", default=None)
+    parser.add_argument("--query-planner-mode", choices=["rule", "llm", "hybrid"], default=None)
+    parser.add_argument("--retriever-mode", choices=sorted(RETRIEVER_MODE_CHOICES), default=None)
+    parser.add_argument("--dense-backend", choices=["bge", "hash"], default=None)
+    parser.add_argument("--dense-model-path", default=None)
+    parser.add_argument("--dense-device", default=None)
+    parser.add_argument("--dense-fp16", action="store_true", default=None)
+    parser.add_argument("--build-dense-index-if-missing", action="store_true", default=None)
+    parser.add_argument("--reranker-backend", choices=["cross_encoder", "keyword"], default=None)
+    parser.add_argument("--reranker-model-path", default=None)
+    parser.add_argument("--reranker-device", default=None)
+    parser.add_argument("--reranker-fp16", action="store_true", default=None)
     parser.add_argument(
         "--full-model-path",
         action="store_true",
+        default=None,
         help="Enable the full model-enhanced QA path: LLM router, hybrid LLM query planning, and real local_fact_qa.",
     )
-    parser.add_argument("--answer-policy", choices=sorted(ANSWER_POLICY_CHOICES), default="heuristic")
+    parser.add_argument("--answer-policy", choices=sorted(ANSWER_POLICY_CHOICES), default=None)
     parser.add_argument(
         "--answer-output-contract",
         choices=["candidate_citations", "v3_refs"],
-        default="candidate_citations",
+        default=None,
         help="Internal AnswerPolicy output contract; v3_refs maps model-selected E# refs back to citations.",
     )
     parser.add_argument("--base-model-path", default=DEFAULT_QWEN_BASE_MODEL_PATH)
     parser.add_argument("--adapter-path")
-    parser.add_argument("--device", default="cuda")
+    parser.add_argument("--device", default=None)
     parser.add_argument("--torch-dtype", default="bfloat16")
     parser.add_argument("--max-prompt-tokens", type=int, default=4096)
     parser.add_argument("--max-new-tokens", type=int, default=1024)
@@ -2104,9 +2288,15 @@ def main(argv: list[str] | None = None) -> int:
             error_type=type(exc).__name__,
             message=str(exc),
         )
-        _print_json(result)
+        if getattr(args, "stdout_format", "json") == "text":
+            _print_text(result)
+        else:
+            _print_json(result)
         return 1
-    _print_json(result)
+    if getattr(args, "stdout_format", "json") == "text":
+        _print_text(result)
+    else:
+        _print_json(result)
     return 0
 
 

@@ -1,6 +1,6 @@
 # DocAgent Final Delivery CLI Guide
 
-Updated: 2026-07-02
+Updated: 2026-07-06
 
 This guide describes the current local, CLI-only delivery surface for the
 Phase 5 personal-use DocAgent MVP. It is the practical entry point for running
@@ -17,6 +17,7 @@ Current delivery target:
 ```text
 local file or existing doc_id
 -> question / request
+-> execution profile defaults
 -> parser or persisted document lookup
 -> Router
 -> deterministic tool or local_fact_qa
@@ -26,6 +27,11 @@ local file or existing doc_id
 Implemented local capabilities:
 
 - CLI entry point: `scripts/docagent_cli.py`
+- execution profiles:
+  - `user_best` is the default for normal use and enables the best available
+    MinerU/API/model/retrieval/AnswerPolicy path
+  - `self_test` preserves low-cost local and CI behavior without requiring API,
+    GPU, or model checkpoints
 - text file ingestion through `TextParserBackend`
 - existing MinerU output ingestion through `--parser mineru_existing`
 - MinerU API ingestion through `--parser mineru_api --live-api`
@@ -107,6 +113,29 @@ python scripts\docagent_cli.py --file <path> --question "<question>"
 python scripts\docagent_cli.py --doc-id <doc_id> --question "<question>"
 ```
 
+Default normal-use profile:
+
+```text
+--execution-profile user_best
+```
+
+The default profile expands to the delivery chain currently considered best:
+MinerU API for PDF/image input, LLM Router fallback, hybrid LLM query planning,
+`hybrid_rerank`, BGE-M3, cross-encoder reranker, Qwen3 SFT AnswerPolicy,
+`v3_refs`, and the current best AnswerPolicy v3 checkpoint. Missing real
+resources are reported as `user_best_resources_missing`; the CLI does not
+silently downgrade to a low-quality path. Explicit CLI arguments override
+profile defaults.
+
+Lightweight local/CI profile:
+
+```powershell
+python scripts\docagent_cli.py --execution-profile self_test --file <path> --question "<question>"
+```
+
+This profile keeps test-friendly defaults such as heuristic AnswerPolicy and
+BM25-style retrieval unless explicitly overridden.
+
 Required output fields for normal question runs:
 
 ```json
@@ -138,6 +167,22 @@ Citation objects are normalized around these fields when available:
 `reasoning_summary` is a short user-facing explanation. It is not a hidden
 chain-of-thought field.
 
+Terminal output defaults to JSON for compatibility:
+
+```text
+--stdout-format json
+```
+
+Use text output for direct human use:
+
+```powershell
+python scripts\docagent_cli.py --file <path> --question "<question>" --stdout-format text
+```
+
+Text output presents answer, brief reasoning, readable sources, and trace path.
+It suppresses internal `block_id`, `doc_id`, image paths, and trace payloads;
+the complete structured records remain in artifacts.
+
 When an AnswerPolicy returns candidate `citation_block_ids`, DocAgent filters
 those ids to the retrieved evidence allowlist before constructing final
 citations. Invalid model-selected ids are recorded in `citation_validation` and
@@ -162,6 +207,16 @@ python scripts\docagent_cli.py `
   --db-path outputs\docagent.db `
   --doc-id <doc_id> `
   --question "What is the main conclusion?" `
+  --output-dir outputs\cli
+```
+
+Run a lightweight self-test command without API/GPU/model requirements:
+
+```powershell
+python scripts\docagent_cli.py `
+  --execution-profile self_test `
+  --file data\example.txt `
+  --question "Summarize the document." `
   --output-dir outputs\cli
 ```
 

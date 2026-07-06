@@ -587,13 +587,16 @@ def _repository_with_document(tmp_path: Path) -> Path:
 
 
 def _run_cli(*args: str) -> dict:
+    cli_args = list(args)
+    if "--execution-profile" not in cli_args:
+        cli_args = ["--execution-profile", "self_test", *cli_args]
     env = {
         key: value
         for key, value in os.environ.items()
         if not key.startswith("DOCAGENT_ROUTER_LLM_")
     }
     completed = subprocess.run(
-        [sys.executable, "scripts/docagent_cli.py", *args],
+        [sys.executable, "scripts/docagent_cli.py", *cli_args],
         cwd=ROOT,
         text=True,
         capture_output=True,

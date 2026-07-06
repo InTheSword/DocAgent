@@ -17,6 +17,23 @@ python scripts\docagent_cli.py --file <path> --question "<question>"
 python scripts\docagent_cli.py --doc-id <doc_id> --question "<question>"
 ```
 
+By default the CLI uses the `user_best` execution profile for normal use. This
+profile expects the real MinerU API token, router/query-planner LLM config,
+BGE-M3, cross-encoder reranker, Qwen3, and the current best AnswerPolicy v3
+checkpoint to be available. It fails clearly if those resources are missing.
+
+Use the lightweight profile only for local or CI checks:
+
+```powershell
+python scripts\docagent_cli.py --execution-profile self_test --file <path> --question "<question>"
+```
+
+For user-readable terminal output without internal ids:
+
+```powershell
+python scripts\docagent_cli.py --file <path> --question "<question>" --stdout-format text
+```
+
 List local documents:
 
 ```powershell
@@ -74,6 +91,9 @@ Normal QA-style CLI output includes:
 
 Citation records carry document and location fields such as `doc_id`, `page`,
 `block_id`, `block_type`, and preview text/table/image metadata when available.
+These detailed fields are kept in JSON artifacts. `--stdout-format text`
+prints a user-facing answer, brief reasoning, readable sources, and trace path
+without exposing internal `block_id`, `doc_id`, or resource paths.
 
 ## Local Storage
 

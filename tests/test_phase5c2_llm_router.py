@@ -409,6 +409,8 @@ def test_cli_without_allow_llm_router_passes_rule_only_option(tmp_path: Path, mo
     monkeypatch.setattr(docagent_cli, "plan_route_with_optional_llm", fake_plan_route)
     args = docagent_cli.build_parser().parse_args(
         [
+            "--execution-profile",
+            "self_test",
             "--db-path",
             str(db_path),
             "--doc-id",
@@ -457,6 +459,8 @@ def test_cli_allow_llm_router_records_router_source(tmp_path: Path, monkeypatch)
     monkeypatch.setattr(docagent_cli, "plan_route_with_optional_llm", fake_plan_route)
     args = docagent_cli.build_parser().parse_args(
         [
+            "--execution-profile",
+            "self_test",
             "--db-path",
             str(db_path),
             "--doc-id",

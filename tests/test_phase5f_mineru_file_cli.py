@@ -14,8 +14,11 @@ MINERU_FIXTURE = ROOT / "tests" / "fixtures" / "mineru_real_schema"
 
 
 def _run_cli(*args: str) -> tuple[dict, str]:
+    cli_args = list(args)
+    if "--execution-profile" not in cli_args:
+        cli_args = ["--execution-profile", "self_test", *cli_args]
     completed = subprocess.run(
-        [sys.executable, "scripts/docagent_cli.py", *args],
+        [sys.executable, "scripts/docagent_cli.py", *cli_args],
         cwd=ROOT,
         text=True,
         capture_output=True,
@@ -141,6 +144,8 @@ def test_mineru_api_file_ingestion_routes_to_document_statistics(
     monkeypatch.setattr(docagent_cli, "MinerUApiClient", FakeMinerUApiClient)
     args = docagent_cli.build_parser().parse_args(
         [
+            "--execution-profile",
+            "self_test",
             "--db-path",
             str(db_path),
             "--document-root",
@@ -210,6 +215,8 @@ def test_mineru_api_file_ingestion_replaces_incomplete_cache(
     monkeypatch.setattr(docagent_cli, "MinerUApiClient", FakeMinerUApiClient)
     args = docagent_cli.build_parser().parse_args(
         [
+            "--execution-profile",
+            "self_test",
             "--db-path",
             str(db_path),
             "--document-root",
@@ -269,6 +276,8 @@ def test_mineru_api_file_ingestion_refreshes_cached_manifest_inventory(
     monkeypatch.setattr(docagent_cli, "MinerUApiClient", UnexpectedMinerUApiClient)
     args = docagent_cli.build_parser().parse_args(
         [
+            "--execution-profile",
+            "self_test",
             "--db-path",
             str(db_path),
             "--document-root",
@@ -341,6 +350,8 @@ def test_mineru_api_file_ingestion_replaces_cache_when_parse_options_change(
     monkeypatch.setattr(docagent_cli, "MinerUApiClient", FakeMinerUApiClient)
     args = docagent_cli.build_parser().parse_args(
         [
+            "--execution-profile",
+            "self_test",
             "--db-path",
             str(db_path),
             "--document-root",

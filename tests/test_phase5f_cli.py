@@ -22,6 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_answer_output_contract_argument_builds_qwen_policy() -> None:
     args = docagent_cli.build_parser().parse_args(["--answer-policy", "base", "--answer-output-contract", "v3_refs"])
+    args = docagent_cli._apply_execution_profile(args)
 
     policy = docagent_cli._build_answer_policy(
         answer_policy=args.answer_policy,
@@ -36,6 +37,69 @@ def test_answer_output_contract_argument_builds_qwen_policy() -> None:
 
     assert policy.config.answer_output_contract == "v3_refs"
     assert docagent_cli._answer_policy_metadata(policy)["answer_output_contract"] == "v3_refs"
+
+
+def test_user_best_profile_expands_to_best_delivery_defaults() -> None:
+    args = docagent_cli.build_parser().parse_args(["--file", "sample.pdf", "--question", "What is this?"])
+
+    resolved = docagent_cli._apply_execution_profile(args)
+
+    assert resolved.execution_profile == "user_best"
+    assert resolved.parser == "mineru_api"
+    assert resolved.live_api is True
+    assert resolved.allow_llm_router is True
+    assert resolved.enable_query_planning is True
+    assert resolved.full_model_path is True
+    assert resolved.retriever_mode == "hybrid_rerank"
+    assert resolved.dense_backend == "bge"
+    assert resolved.reranker_backend == "cross_encoder"
+    assert resolved.answer_policy == "sft"
+    assert resolved.answer_output_contract == "v3_refs"
+    assert resolved.adapter_path == docagent_cli.DEFAULT_BEST_ANSWER_POLICY_ADAPTER_PATH
+
+
+def test_explicit_cli_arguments_override_user_best_profile() -> None:
+    args = docagent_cli.build_parser().parse_args(
+        [
+            "--execution-profile",
+            "user_best",
+            "--file",
+            "sample.pdf",
+            "--question",
+            "What is this?",
+            "--parser",
+            "text",
+            "--retriever-mode",
+            "bm25",
+            "--answer-policy",
+            "base",
+            "--answer-output-contract",
+            "candidate_citations",
+        ]
+    )
+
+    resolved = docagent_cli._apply_execution_profile(args)
+
+    assert resolved.parser == "text"
+    assert resolved.retriever_mode == "bm25"
+    assert resolved.answer_policy == "base"
+    assert resolved.answer_output_contract == "candidate_citations"
+    assert resolved.adapter_path is None
+
+
+def test_self_test_profile_keeps_lightweight_defaults() -> None:
+    args = docagent_cli.build_parser().parse_args(["--execution-profile", "self_test", "--doc-id", "doc1", "--question", "What is this?"])
+
+    resolved = docagent_cli._apply_execution_profile(args)
+
+    assert resolved.parser == "auto"
+    assert resolved.live_api is False
+    assert resolved.allow_llm_router is False
+    assert resolved.enable_query_planning is False
+    assert resolved.full_model_path is False
+    assert resolved.retriever_mode == "bm25"
+    assert resolved.answer_policy == "heuristic"
+    assert resolved.answer_output_contract == "candidate_citations"
 
 
 def _repository_with_document(tmp_path: Path) -> Path:
@@ -116,8 +180,11 @@ def _repository_with_document(tmp_path: Path) -> Path:
 
 
 def _run_cli(tmp_path: Path, *args: str) -> dict:
+    cli_args = list(args)
+    if "--execution-profile" not in cli_args:
+        cli_args = ["--execution-profile", "self_test", *cli_args]
     completed = subprocess.run(
-        [sys.executable, "scripts/docagent_cli.py", *args],
+        [sys.executable, "scripts/docagent_cli.py", *cli_args],
         cwd=ROOT,
         text=True,
         capture_output=True,
@@ -146,6 +213,67 @@ def test_list_documents_outputs_json_with_doc_id_and_page_count(tmp_path: Path) 
     assert payload["mode"] == "list_documents"
     assert payload["documents"][0]["doc_id"] == "doc1"
     assert payload["documents"][0]["page_count"] == 2
+
+
+def test_user_best_profile_missing_resources_returns_clear_error(tmp_path: Path) -> None:
+    db_path = _repository_with_document(tmp_path)
+
+    payload = _run_cli(
+        tmp_path,
+        "--execution-profile",
+        "user_best",
+        "--db-path",
+        str(db_path),
+        "--doc-id",
+        "doc1",
+        "--question",
+        "What is the invoice date?",
+        "--output-dir",
+        str(tmp_path / "cli"),
+    )
+
+    assert payload["status"] == "error"
+    assert payload["error"]["type"] == "user_best_resources_missing"
+    assert payload["execution_profile"] == "user_best"
+    assert payload["answer_policy_mode"] == "sft"
+    assert payload["answer_output_contract"] == "v3_refs"
+    assert any(item.startswith("adapter_path:") for item in payload["missing_resources"])
+
+
+def test_stdout_text_format_is_user_readable_without_internal_ids(tmp_path: Path) -> None:
+    db_path = _repository_with_document(tmp_path)
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/docagent_cli.py",
+            "--execution-profile",
+            "self_test",
+            "--stdout-format",
+            "text",
+            "--db-path",
+            str(db_path),
+            "--doc-id",
+            "doc1",
+            "--question",
+            "Show the text from page 1.",
+            "--output-dir",
+            str(tmp_path / "cli"),
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    output = completed.stdout
+    assert "Invoice Date" in output
+    assert "Sources:" in output
+    assert "page 1" in output
+    assert "Trace:" in output
+    assert "doc1_p001" not in output
+    assert "block_id" not in output
+    assert "image_path" not in output
 
 
 def test_retriever_initialization_failure_does_not_mark_qwen_used(monkeypatch, tmp_path: Path) -> None:

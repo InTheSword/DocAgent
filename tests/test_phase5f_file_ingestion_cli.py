@@ -15,8 +15,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _run_cli(*args: str) -> tuple[dict, str]:
+    cli_args = list(args)
+    if "--execution-profile" not in cli_args:
+        cli_args = ["--execution-profile", "self_test", *cli_args]
     completed = subprocess.run(
-        [sys.executable, "scripts/docagent_cli.py", *args],
+        [sys.executable, "scripts/docagent_cli.py", *cli_args],
         cwd=ROOT,
         text=True,
         capture_output=True,
