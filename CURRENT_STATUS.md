@@ -1,8 +1,17 @@
 ﻿# Current Status
 
-Updated: 2026-07-05
+Updated: 2026-07-06
 
 ## Phase 4D-C Accepted / Phase 5 Active
+
+The user-facing CLI default is now the `user_best` execution profile. Server
+closeout `final_delivery_user_best_profile_closeout_20260706` verified one raw
+PDF workflow with MinerU API submission, saved MinerU Markdown/content-list
+resources, LLM query rewriting, `hybrid_rerank`, BGE-M3 on CUDA, cross-encoder
+reranker on CUDA, Qwen SFT AnswerPolicy, `v3_refs`, citation/evidence mapping,
+and trace artifacts in one execution chain. The 402-record rejection-SFT
+checkpoint is the operational default for this profile. This is a delivery
+workflow verification, not a formal benchmark acceptance claim.
 
 AnswerPolicy v3 promptfix Stage 2 SFT is real-model verified as a train-only
 objective improvement, not as final workflow deployment acceptance. The
@@ -107,9 +116,9 @@ review `final_delivery_gate_temp095_rejsft402_v3refs_system_subset_20260705_revi
 verified readiness, AnswerPolicy baseline, MP-DocVQA workflow, complete
 Qwen/BGE/reranker/query-rewriter component use, manifests, safety flags, and
 observed `v3_refs` output contracts. This checkpoint is now the strongest
-current fixed-evidence/post-training SFT candidate. It is not the default
-production AnswerPolicy, does not establish formal benchmark acceptance, and
-does not unblock DPO/GRPO.
+current fixed-evidence/post-training SFT candidate and the operational default
+for the `user_best` CLI profile. It does not establish formal benchmark
+acceptance and does not unblock DPO/GRPO.
 
 One additional train-only offset1280 candidate expansion from the 402-record
 checkpoint produced 2048 candidates with schema-ok rate 0.9990, 195
