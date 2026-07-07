@@ -321,6 +321,8 @@ def test_user_best_profile_missing_resources_returns_clear_error(tmp_path: Path)
         "doc1",
         "--question",
         "What is the invoice date?",
+        "--adapter-path",
+        str(tmp_path / "missing_adapter"),
         "--output-dir",
         str(tmp_path / "cli"),
     )
