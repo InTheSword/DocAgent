@@ -227,6 +227,8 @@ def test_check_index_reports_missing_without_question(tmp_path: Path) -> None:
         tmp_path,
         "--db-path",
         str(db_path),
+        "--document-root",
+        str(tmp_path / "documents"),
         "--doc-id",
         "doc1",
         "--check-index",
