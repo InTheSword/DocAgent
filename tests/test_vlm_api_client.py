@@ -35,3 +35,25 @@ def test_load_vlm_config_reports_missing_values() -> None:
 
     assert config is None
     assert warnings == ["vlm_not_configured"]
+
+
+def test_load_vlm_config_accepts_common_aliases(tmp_path: Path) -> None:
+    env_file = tmp_path / "vlm.env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "API_TOKEN=sk-alias-secret",
+                "BASE_URL=https://alias.example.test/v1",
+                "MODEL=alias-vlm",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config, warnings = load_vlm_config(env_file=env_file, env={})
+
+    assert warnings == []
+    assert config is not None
+    assert config.api_key == "sk-alias-secret"
+    assert config.base_url == "https://alias.example.test/v1"
+    assert config.model == "alias-vlm"

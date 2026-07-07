@@ -16,6 +16,9 @@ ENV_API_KEY = "VLM_API_KEY"
 ENV_BASE_URL = "VLM_BASE_URL"
 ENV_MODEL = "VLM_MODEL"
 ENV_TIMEOUT_SECONDS = "VLM_TIMEOUT_SECONDS"
+API_KEY_ENV_ALIASES = (ENV_API_KEY, "VLM_TOKEN", "API_KEY", "API_TOKEN")
+BASE_URL_ENV_ALIASES = (ENV_BASE_URL, "BASE_URL")
+MODEL_ENV_ALIASES = (ENV_MODEL, "MODEL")
 DEFAULT_TIMEOUT_SECONDS = 60.0
 
 
@@ -72,7 +75,18 @@ def load_vlm_config(
             return None, list(dict.fromkeys(warnings))
     if model_override:
         values[ENV_MODEL] = model_override
-    missing = [name for name in (ENV_API_KEY, ENV_BASE_URL, ENV_MODEL) if not values.get(name)]
+    api_key = _first_env(values, API_KEY_ENV_ALIASES)
+    base_url = _first_env(values, BASE_URL_ENV_ALIASES)
+    model = _first_env(values, MODEL_ENV_ALIASES)
+    missing = [
+        name
+        for name, value in (
+            (ENV_API_KEY, api_key),
+            (ENV_BASE_URL, base_url),
+            (ENV_MODEL, model),
+        )
+        if not value
+    ]
     if missing:
         warnings.append("vlm_not_configured")
         return None, list(dict.fromkeys(warnings))
@@ -85,13 +99,21 @@ def load_vlm_config(
             warnings.append("vlm_timeout_invalid")
     return (
         VLMConfig(
-            api_key=str(values[ENV_API_KEY]),
-            base_url=str(values[ENV_BASE_URL]).rstrip("/"),
-            model=str(values[ENV_MODEL]),
+            api_key=str(api_key),
+            base_url=str(base_url).rstrip("/"),
+            model=str(model),
             timeout_seconds=timeout,
         ),
         list(dict.fromkeys(warnings)),
     )
+
+
+def _first_env(values: Mapping[str, str], names: tuple[str, ...]) -> str:
+    for name in names:
+        value = str(values.get(name) or "").strip()
+        if value:
+            return value
+    return ""
 
 
 class OpenAICompatibleVLMClient:
