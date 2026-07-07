@@ -166,6 +166,31 @@ Do not install MinerU CLI packages into the stable `docagent` environment.
 
 MinerU installation must not block the current Phase 2A retrieval milestone.
 
+## 5A. VLM API environment policy
+
+Optional image understanding uses an OpenAI-compatible chat-multimodal VLM API
+through `.secrets/vlm.env`. The file is ignored by Git and must not be copied
+into sync artifacts.
+
+Recommended secret file:
+
+```bash
+# .secrets/vlm.env
+VLM_API_KEY=...
+VLM_BASE_URL=https://.../v1
+VLM_MODEL=...
+VLM_TIMEOUT_SECONDS=90
+```
+
+Accepted aliases inside this VLM-specific file are `VLM_TOKEN`, `API_KEY`,
+`API_TOKEN`, `BASE_URL`, and `MODEL`. The model must support chat completion
+requests that include both a text instruction and an `image_url` payload. A
+server smoke on 2026-07-07 showed that the current configured
+`qwen-image-2.0-pro-2026-04-22` endpoint returns `InvalidParameter` for this
+request shape, so it is not a compatible VLM endpoint for DocAgent visual
+summary/review. Do not spend large VLM token budgets on repeated probes until
+the endpoint/model is corrected.
+
 ## 6. Environment and download rules
 
 Before any environment mutation:

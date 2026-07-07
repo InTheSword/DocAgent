@@ -4,7 +4,7 @@ Updated: 2026-07-06
 
 This guide describes the current local, CLI-only delivery surface for the
 Phase 5 personal-use DocAgent MVP. It is the practical entry point for running
-the implemented system without UI, cloud storage, VLM, new training, or formal
+the implemented system without UI, cloud storage, new training, or formal
 benchmark claims.
 
 For the current delivery status table and accepted evidence boundaries, see
@@ -38,6 +38,9 @@ Implemented local capabilities:
 - MinerU output preservation for ordinary `*_content_list.json`,
   `*_content_list_v2.json` fallback, Markdown/resource inventory metadata,
   table HTML, table/image resource paths, captions, and nearby OCR text
+- image evidence enhancement through native captions plus optional VLM API
+  summary/review paths; real VLM acceptance still requires a compatible
+  chat-multimodal VLM endpoint
 - deterministic document statistics and page lookup
 - deterministic extractive `document_summary`
 - deterministic persisted-evidence `structured_extraction`
@@ -72,7 +75,7 @@ Not included in the current local delivery:
 - multi-document QA beyond reserved `doc_id` / `source_document` fields
 - multi-turn memory
 - multilingual QA acceptance
-- pixel-level VLM chart/image interpretation
+- accepted pixel-level VLM chart/image interpretation with a real VLM endpoint
 - local MinerU CLI execution path
 - accepted MP-DocVQA/TAT-QA final answer benchmark
 - new SFT/GRPO training or training-quality claims
@@ -122,10 +125,27 @@ Default normal-use profile:
 The default profile expands to the delivery chain currently considered best:
 MinerU API for PDF/image input, LLM Router fallback, hybrid LLM query planning,
 `hybrid_rerank`, BGE-M3, cross-encoder reranker, Qwen3 SFT AnswerPolicy,
-`v3_refs`, and the current best AnswerPolicy v3 checkpoint. Missing real
-resources are reported as `user_best_resources_missing`; the CLI does not
-silently downgrade to a low-quality path. Explicit CLI arguments override
-profile defaults.
+`v3_refs`, optional image caption/VLM evidence enhancement, and the current
+best AnswerPolicy v3 checkpoint. Missing real resources are reported as
+`user_best_resources_missing`; the CLI does not silently downgrade to a
+low-quality path. Explicit CLI arguments override profile defaults.
+
+VLM-related defaults:
+
+```text
+--visual-summary-mode auto
+--visual-qa-mode auto
+--max-visual-summary-images 3
+--max-query-images 2
+--vlm-env-file .secrets/vlm.env
+```
+
+`self_test` uses caption-only visual preprocessing and disables query-time VLM
+review. A compatible VLM secret file should contain `VLM_API_KEY`,
+`VLM_BASE_URL`, `VLM_MODEL`, and optionally `VLM_TIMEOUT_SECONDS`. For
+compatibility the loader also accepts `VLM_TOKEN`, `API_KEY`, `API_TOKEN`,
+`BASE_URL`, and `MODEL`. The configured model must support OpenAI-compatible
+chat multimodal input with a text instruction and an `image_url` payload.
 
 Lightweight local/CI profile:
 
@@ -838,10 +858,14 @@ Interpretation:
 Images:
 
 - current baseline uses MinerU/OCR text, captions, nearby text, image metadata,
-  and page/block location;
-- no pixel-level VLM interpretation is implemented or accepted;
+  page/block location, and optional VLM-generated visual summaries;
+- VLM summary/review integration is implemented, cached per image/model, capped
+  by CLI limits, and excluded from `self_test` by default;
+- real pixel-level VLM interpretation is not accepted until a compatible VLM
+  endpoint passes server smoke;
 - if an answer requires visual pixels not present in OCR/caption/nearby text,
-  the system should return a limitation or insufficient-evidence result.
+  and VLM is unavailable or fails, the system should return a limitation or
+  insufficient-evidence result.
 
 Tables:
 

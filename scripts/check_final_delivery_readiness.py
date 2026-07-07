@@ -254,7 +254,7 @@ def _check_documentation(root: Path) -> CheckResult:
             "*_content_list_v2.json",
             "table HTML",
             "image metadata",
-            "no pixel-level VLM interpretation",
+            "real pixel-level VLM interpretation is not accepted",
             "accepted MP-DocVQA/TAT-QA final answer benchmark",
             "run_final_delivery_benchmark_gate.py",
             "new SFT/GRPO training",

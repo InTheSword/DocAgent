@@ -36,7 +36,7 @@ the acceptance claim.
 | Full GRPO workflow E2E | `scripts/smoke_phase2_real_workflow.py`, `scripts/verify_phase2b_real_e2e.py`, `scripts/run_phase4b_mpdocvqa_e2e.py` | BGE-M3, reranker, Qwen3, GRPO adapter, CUDA | Retrieval models should be released before loading Qwen when memory is tight. |
 | SFT training | `scripts/train_sft.sh`, `scripts/train_sft_smoke.sh` | Qwen3 base model, training dataset, CUDA | New training is out of scope unless explicitly approved. |
 | GRPO/RL training | `scripts/train_grpo.sh`, `scripts/train_trl_grpo.py`, `scripts/train_custom_grpo.py` | Qwen3 base model, adapter, reward code, dataset, CUDA | GRPO CPU runs are too slow for project validation. |
-| VLM visual review | future VLM modules, visual review branch | VLM model/API or GPU VLM runtime | Current status is `not_started`. |
+| VLM visual review | `docagent/integrations/vlm_api.py`, `docagent/tools/visual_summary.py`, `docagent/tools/visual_review.py`, `scripts/docagent_cli.py` | VLM model/API or GPU VLM runtime | Current code status is `implemented`; real API smoke is blocked until `.secrets/vlm.env` points to a compatible chat-multimodal VLM endpoint. |
 | Large real-model benchmark | Phase 3/4/5 server benchmark scripts | Accepted dataset artifacts plus required models | Local fixture tests are not benchmark evidence. |
 
 ## Server-Optional Components
