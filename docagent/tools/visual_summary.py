@@ -110,7 +110,9 @@ def enhance_visual_blocks(
             )
         except Exception as exc:
             result.error_count += 1
-            result.warnings.append(f"vlm_summary_failed:{type(exc).__name__}")
+            message = str(exc).replace("\n", " ")[:240]
+            suffix = f":{message}" if message else ""
+            result.warnings.append(f"vlm_summary_failed:{type(exc).__name__}{suffix}")
             continue
         cache[cache_key] = response
         changed_cache = True
@@ -168,7 +170,9 @@ def visual_observation_for_block(
             context=_visual_context(block),
         )
     except Exception as exc:
-        return _skipped_visual_result(block, question, f"vlm_failed:{type(exc).__name__}")
+        message = str(exc).replace("\n", " ")[:240]
+        suffix = f":{message}" if message else ""
+        return _skipped_visual_result(block, question, f"vlm_failed:{type(exc).__name__}{suffix}")
     answer = _first_text(response, "answer", "visual_summary", "caption")
     summary = _first_text(response, "reasoning_summary", "visual_summary")
     if not answer:

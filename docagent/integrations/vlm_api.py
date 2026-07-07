@@ -181,7 +181,9 @@ class OpenAICompatibleVLMClient:
         try:
             with urllib.request.urlopen(request, timeout=self.config.timeout_seconds) as response:
                 payload = json.loads(response.read().decode("utf-8"))
-        except (OSError, urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError) as exc:
+        except urllib.error.HTTPError as exc:
+            raise VLMApiError(_http_error_message(exc)) from exc
+        except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
             raise VLMApiError(str(exc)) from exc
         try:
             content = str(payload["choices"][0]["message"]["content"])
@@ -218,3 +220,18 @@ def _parse_json_object(text: str) -> dict[str, Any]:
         except json.JSONDecodeError:
             pass
     return {"visual_summary": stripped}
+
+
+def _http_error_message(exc: urllib.error.HTTPError) -> str:
+    body = ""
+    try:
+        body = exc.read().decode("utf-8", errors="replace")
+    except Exception:
+        body = ""
+    body = re.sub(r"(?i)(api[_-]?key|token|authorization)\"?\s*[:=]\s*\"?[^\",}\s]+", r"\1=***", body)
+    body = body.strip()
+    if len(body) > 500:
+        body = body[:500] + "...<truncated>"
+    if body:
+        return f"HTTP {exc.code}: {body}"
+    return f"HTTP {exc.code}: {exc.reason}"

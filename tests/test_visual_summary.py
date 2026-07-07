@@ -35,6 +35,16 @@ class FakeVLMClient:
         }
 
 
+class FailingVLMClient(FakeVLMClient):
+    def summarize_image(self, *, image_path: str | Path, context: str = "") -> dict:
+        self.summary_calls += 1
+        raise RuntimeError("HTTP 400: InvalidParameter")
+
+    def answer_image_question(self, *, image_path: str | Path, question: str, context: str = "") -> dict:
+        self.question_calls += 1
+        raise RuntimeError("HTTP 400: InvalidParameter")
+
+
 def _block(
     block_id: str,
     *,
@@ -120,3 +130,26 @@ def test_visual_observation_for_block_returns_tool_observation(tmp_path: Path) -
     assert result["citations"][0]["block_id"] == "image"
     assert result["structured_result"]["used_vlm"] is True
     assert client.question_calls == 1
+
+
+def test_visual_vlm_failures_report_compact_reason(tmp_path: Path) -> None:
+    (tmp_path / "images").mkdir()
+    (tmp_path / "images" / "chart.png").write_bytes(b"fake-image")
+    image = _block("image", block_type="image", image_path="images/chart.png", order=1)
+    image.metadata["visual_content_status"] = "resource_only"
+    image.metadata["requires_visual_understanding"] = True
+    client = FailingVLMClient()
+
+    result = enhance_visual_blocks([image], document_dir=tmp_path, mode="vlm", client=client)
+    observation = visual_observation_for_block(
+        image,
+        "What does the chart show?",
+        mode="force",
+        document_dir=tmp_path,
+        client=client,
+    )
+
+    assert result.error_count == 1
+    assert result.warnings == ["vlm_summary_failed:RuntimeError:HTTP 400: InvalidParameter"]
+    assert observation["status"] == "skipped"
+    assert observation["structured_result"]["skip_reason"] == "vlm_failed:RuntimeError:HTTP 400: InvalidParameter"
