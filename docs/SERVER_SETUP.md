@@ -184,12 +184,25 @@ VLM_TIMEOUT_SECONDS=90
 
 Accepted aliases inside this VLM-specific file are `VLM_TOKEN`, `API_KEY`,
 `API_TOKEN`, `BASE_URL`, and `MODEL`. The model must support chat completion
-requests that include both a text instruction and an `image_url` payload. A
-server smoke on 2026-07-07 showed that the current configured
-`qwen-image-2.0-pro-2026-04-22` endpoint returns `InvalidParameter` for this
-request shape, so it is not a compatible VLM endpoint for DocAgent visual
-summary/review. Do not spend large VLM token budgets on repeated probes until
-the endpoint/model is corrected.
+requests that include both a text instruction and an `image_url` payload.
+
+Server validation on 2026-07-07:
+
+```text
+visual_vlm_api_real_smoke_clean_20260707
+  status=success
+  model=qwen3.6-flash
+  verified=real VLM summary + force visual QA
+
+visual_vlm_cli_prepare_index_smoke_20260707
+  status=success
+  verified=CLI prepare-index persists VLM summary into EvidenceBlocks before
+    hash index build
+```
+
+Earlier `qwen-image-*` image-generation endpoints returned `InvalidParameter`
+for the text+image chat request shape and should not be used as DocAgent VLM
+summary/review endpoints.
 
 ## 6. Environment and download rules
 

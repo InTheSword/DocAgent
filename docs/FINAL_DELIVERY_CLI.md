@@ -39,8 +39,10 @@ Implemented local capabilities:
   `*_content_list_v2.json` fallback, Markdown/resource inventory metadata,
   table HTML, table/image resource paths, captions, and nearby OCR text
 - image evidence enhancement through native captions plus optional VLM API
-  summary/review paths; real VLM acceptance still requires a compatible
-  chat-multimodal VLM endpoint
+  summary/review paths; server smoke `visual_vlm_api_real_smoke_clean_20260707`
+  verified real VLM summary plus query-time visual review, and
+  `visual_vlm_cli_prepare_index_smoke_20260707` verified CLI persistence before
+  indexing
 - deterministic document statistics and page lookup
 - deterministic extractive `document_summary`
 - deterministic persisted-evidence `structured_extraction`
@@ -75,7 +77,7 @@ Not included in the current local delivery:
 - multi-document QA beyond reserved `doc_id` / `source_document` fields
 - multi-turn memory
 - multilingual QA acceptance
-- accepted pixel-level VLM chart/image interpretation with a real VLM endpoint
+- formal visual-answer benchmark acceptance
 - local MinerU CLI execution path
 - accepted MP-DocVQA/TAT-QA final answer benchmark
 - new SFT/GRPO training or training-quality claims
@@ -146,6 +148,8 @@ review. A compatible VLM secret file should contain `VLM_API_KEY`,
 compatibility the loader also accepts `VLM_TOKEN`, `API_KEY`, `API_TOKEN`,
 `BASE_URL`, and `MODEL`. The configured model must support OpenAI-compatible
 chat multimodal input with a text instruction and an `image_url` payload.
+The server-verified configuration uses `qwen3.6-flash`; earlier
+`qwen-image-*` image-generation endpoints are not compatible with this path.
 
 Lightweight local/CI profile:
 
@@ -861,8 +865,8 @@ Images:
   page/block location, and optional VLM-generated visual summaries;
 - VLM summary/review integration is implemented, cached per image/model, capped
   by CLI limits, and excluded from `self_test` by default;
-- real pixel-level VLM interpretation is not accepted until a compatible VLM
-  endpoint passes server smoke;
+- real VLM API summary/review and CLI pre-index persistence are server-verified;
+  this is not a formal visual-answer benchmark;
 - if an answer requires visual pixels not present in OCR/caption/nearby text,
   and VLM is unavailable or fails, the system should return a limitation or
   insufficient-evidence result.
