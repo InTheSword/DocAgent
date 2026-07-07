@@ -198,6 +198,13 @@ visual_vlm_cli_prepare_index_smoke_20260707
   status=success
   verified=CLI prepare-index persists VLM summary into EvidenceBlocks before
     hash index build
+
+existing_pdf_visual_vlm_full_chain_artifact_review_20260707
+  status=success
+  verified=real PDF file input with existing real MinerU artifacts containing
+    image blocks -> VLM visual summary persistence -> user_best QA path with
+    BGE-M3, reranker, Qwen SFT, v3_refs, query-time VLM visual_review, image
+    citation/evidence mapping, and trace artifacts
 ```
 
 Earlier `qwen-image-*` image-generation endpoints returned `InvalidParameter`

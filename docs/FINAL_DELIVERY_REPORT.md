@@ -69,7 +69,7 @@ multi-document QA is not a required delivery claim.
 | AnswerPolicy v3 refs CLI/Qwen integration | real_model_verified | `--answer-output-contract v3_refs` routes Qwen AnswerPolicy through `docagent_answer_v3_supporting_refs`, parses `ModelOutputV3`, and maps temporary `supporting_refs` back to internal citations through `EvidenceRefMap`. Server smoke `answer_policy_v3_refs_cli_smoke_retry_20260704` at commit `56b7726` loaded a ms-swift SFT adapter through the real CLI path, produced schema-valid v3 JSON with `supporting_refs=["E1"]`, and mapped it to citation block `c1fc1c5e040ec894_p001_b0002`; this verifies adapter/system-contract integration, not final answer-quality acceptance |
 | Final answer quality benchmark | real_model_verified | A 6-case clean small-scenario run `phase5ib_clean6_rejsft402_answer_quality_20260705` evaluated final answers with the current 402-record AnswerPolicy v3 checkpoint and full real-model workflow: 6/6 JSON-valid, 6/6 citation page hit, answer keyword hits on 4/6, and 3/6 passed cases. This is small-scenario diagnostic evidence only; no accepted MP-DocVQA/TAT-QA formal benchmark yet |
 | Production SFT/GRPO promotion | not_started | The v3 PEFT warmup, ms-swift 1-step smoke, mixed-pack 3-step smoke, rejection-SFT smoke, 400-document 480-step diagnostic, full4096 promptfix 1024-step SFT diagnostic, promptfix-based 182-record/377-record rejection-SFT continuations, high-diversity temp0.95 candidate generation, a 201-record temp0.95 continuation, a 16-step DPO smoke, a 402-record temp0.95 rejection-SFT continuation, and bounded custom GRPO probes exist. They verify training-chain execution and train-only objective improvement where present. The 377-record continuation improved heldout256 answer exact 0.5859 -> 0.6016 and restored JSON/schema/ref legality plus insufficient empty-ref behavior to 1.0; the temp0.95 continuation improved heldout256 answer exact further to 0.6055 and kept schema/ref legality at 1.0, but insufficient empty-ref behavior returned to 0.9474. The DPO smoke completed but regressed answer exact to 0.5977. The 402-record rejection-SFT continuation improved heldout256 answer exact to 0.6133, support-status match to 0.9805, and insufficient empty-ref behavior to 1.0 with schema/ref legality unchanged at 1.0; the small system-chain gate preserved full execution and `v3_refs` contract behavior. A follow-up 195-record continuation from the 402-record checkpoint regressed heldout256 to 0.6016 and is not promoted. GRPO smoke with two generations had zero reward variance, the higher-diversity GRPO probe regressed heldout256 to 0.6055, and the hard-sample GRPO probe regressed to 0.5977. The 402-record checkpoint is the default `user_best` operational checkpoint, but no formal benchmark quality claim is accepted and current DPO/GRPO recipes are closed unless a materially new reward/data strategy is introduced |
-| VLM visual evidence support | real_model_verified | Native caption attachment, VLM visual summary/review, cache metadata, CLI flags, and workflow tool-result wiring are implemented. Server smoke `visual_vlm_api_real_smoke_clean_20260707` at commit `57fa522` verified real VLM summary plus force visual QA with `qwen3.6-flash`; server smoke `visual_vlm_cli_prepare_index_smoke_20260707` verified CLI `prepare-index` writes VLM summaries back to EvidenceBlocks before index build. This is real-component integration evidence, not a formal visual-answer benchmark |
+| VLM visual evidence support | real_model_verified | Native caption attachment, VLM visual summary/review, cache metadata, CLI flags, and workflow tool-result wiring are implemented. Server smoke `visual_vlm_api_real_smoke_clean_20260707` at commit `57fa522` verified real VLM summary plus force visual QA with `qwen3.6-flash`; server smoke `visual_vlm_cli_prepare_index_smoke_20260707` verified CLI `prepare-index` writes VLM summaries back to EvidenceBlocks before index build; artifact review `existing_pdf_visual_vlm_full_chain_artifact_review_20260707` verified a real PDF file-input chain using existing real MinerU artifacts with image blocks, VLM summary persistence, `user_best` QA, BGE-M3, reranker, Qwen SFT, `v3_refs`, query-time VLM `visual_review`, image citation/evidence mapping, and trace artifacts. This is real-component integration evidence, not a formal visual-answer benchmark |
 | UI / API service / cloud storage | not_started | Delivery remains CLI-only |
 
 ## Verification Evidence
@@ -96,6 +96,7 @@ Accepted or real-component evidence currently includes:
 - `phase5ib_v3refs_clean6_tablecalc_continue384_20260705`
 - `final_delivery_gate_promptfix_adapter_v3_fullsmall_20260705`
 - `final_delivery_gate_promptfix_adapter_v3_fullsmall_20260705_contractguard_review_childsummary`
+- `existing_pdf_visual_vlm_full_chain_artifact_review_20260707`
 
 These runs validate execution-chain continuity and artifact contracts. They do
 not by themselves promote answer correctness to `benchmark_evaluated`.
@@ -153,8 +154,9 @@ acceptance or default checkpoint promotion.
   whether it blocks the reusable delivery chain.
 - Image/table evidence is available through OCR text, captions, table HTML,
   resource metadata, page/block citations, and implemented optional VLM visual
-  summaries/reviews. Real VLM summary/review is server-verified; formal
-  visual-answer benchmark acceptance remains out of scope.
+  summaries/reviews. Real VLM summary/review and one real PDF visual chain are
+  server-verified; formal visual-answer benchmark acceptance remains out of
+  scope.
 - Server-only validation remains required when a change touches live MinerU
   API, real BGE-M3, reranker, Qwen, large dataset workflow, SFT, GRPO, or VLM.
 

@@ -42,7 +42,8 @@ Implemented local capabilities:
   summary/review paths; server smoke `visual_vlm_api_real_smoke_clean_20260707`
   verified real VLM summary plus query-time visual review, and
   `visual_vlm_cli_prepare_index_smoke_20260707` verified CLI persistence before
-  indexing
+  indexing; `existing_pdf_visual_vlm_full_chain_artifact_review_20260707`
+  verified a real PDF file-input visual chain with image citations/evidence
 - deterministic document statistics and page lookup
 - deterministic extractive `document_summary`
 - deterministic persisted-evidence `structured_extraction`
@@ -865,8 +866,9 @@ Images:
   page/block location, and optional VLM-generated visual summaries;
 - VLM summary/review integration is implemented, cached per image/model, capped
   by CLI limits, and excluded from `self_test` by default;
-- real VLM API summary/review and CLI pre-index persistence are server-verified;
-  this is not a formal visual-answer benchmark;
+- real VLM API summary/review, CLI pre-index persistence, and one real PDF
+  file-input visual chain are server-verified; this is not a formal
+  visual-answer benchmark;
 - if an answer requires visual pixels not present in OCR/caption/nearby text,
   and VLM is unavailable or fails, the system should return a limitation or
   insufficient-evidence result.
