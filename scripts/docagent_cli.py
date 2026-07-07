@@ -19,8 +19,9 @@ from docagent.ingestion.document_registry import SUPPORTED_EXTENSIONS, DocumentR
 from docagent.ingestion.hashing import sha256_file
 from docagent.ingestion.service import DocumentIngestionService
 from docagent.integrations.mineru_api import MinerUApiClient, refresh_mineru_api_manifest_inventory
+from docagent.integrations.vlm_api import load_vlm_config
 from docagent.parser.mineru_backend import MinerUParserBackend
-from docagent.parser.mineru_converter import find_content_list
+from docagent.parser.mineru_converter import build_page_blocks, find_content_list
 from docagent.parser.text_backend import TextParserBackend
 from docagent.retrieval.dense_encoder import DenseEncoder, DenseEncoderConfig, HashDenseEncoder
 from docagent.retrieval.dense_index import DenseIndex
@@ -42,6 +43,8 @@ from docagent.tools.document_summary import summarize_document
 from docagent.tools.local_fact_qa import local_fact_qa
 from docagent.tools.structured_extraction import structured_extract
 from docagent.tools.table_tools import table_lookup_or_calculation
+from docagent.tools.visual_summary import enhance_visual_blocks
+from docagent.utils.jsonl import write_jsonl
 
 
 AVAILABLE_TOOLS = [
@@ -66,6 +69,7 @@ DEFAULT_OUTPUT_DIR = ROOT / "outputs" / "cli"
 DEFAULT_DOCUMENT_ROOT = ROOT / "data" / "documents"
 DEFAULT_ROUTER_LLM_ENV_FILE = ".secrets/router_llm.env"
 DEFAULT_MINERU_ENV_FILE = ".secrets/mineru.env"
+DEFAULT_VLM_ENV_FILE = ".secrets/vlm.env"
 DEFAULT_QWEN_BASE_MODEL_PATH = "/root/autodl-tmp/models/Qwen3-1.7B"
 DEFAULT_BGE_MODEL_PATH = "/root/autodl-tmp/models/bge-m3"
 DEFAULT_RERANKER_MODEL_PATH = "/root/autodl-tmp/models/bge-reranker-v2-m3"
@@ -77,6 +81,8 @@ DEFAULT_BEST_ANSWER_POLICY_ADAPTER_PATH = (
 ANSWER_POLICY_CHOICES = {"heuristic", "base", "sft", "grpo"}
 RETRIEVER_MODE_CHOICES = {"bm25", "dense", "hybrid", "hybrid_rerank"}
 EXECUTION_PROFILE_CHOICES = {"user_best", "self_test"}
+VISUAL_SUMMARY_MODE_CHOICES = {"off", "caption", "auto", "vlm"}
+VISUAL_QA_MODE_CHOICES = {"off", "auto", "force"}
 
 
 def _now_run_id() -> str:
@@ -145,6 +151,10 @@ def _apply_execution_profile(args: argparse.Namespace) -> argparse.Namespace:
         args.answer_policy = "sft" if user_best else "heuristic"
     if getattr(args, "answer_output_contract", None) is None:
         args.answer_output_contract = "v3_refs" if user_best else "candidate_citations"
+    if getattr(args, "visual_summary_mode", None) is None:
+        args.visual_summary_mode = "auto" if user_best else "caption"
+    if getattr(args, "visual_qa_mode", None) is None:
+        args.visual_qa_mode = "auto" if user_best else "off"
     if getattr(args, "adapter_path", None) is None and user_best and str(args.answer_policy) == "sft":
         args.adapter_path = DEFAULT_BEST_ANSWER_POLICY_ADAPTER_PATH
     if getattr(args, "device", None) is None:
@@ -175,6 +185,8 @@ def _missing_user_best_resources(args: argparse.Namespace) -> list[str]:
         or _resolve_optional_mineru_env_file(getattr(args, "mineru_env_file", None)) is not None
     ):
         missing.append(f"mineru_env_file:{getattr(args, 'mineru_env_file', None) or DEFAULT_MINERU_ENV_FILE}")
+    if str(getattr(args, "visual_qa_mode", "")) == "force" and not _vlm_config_available(args):
+        missing.append(f"vlm_env_file:{getattr(args, 'vlm_env_file', None) or DEFAULT_VLM_ENV_FILE}")
     return missing
 
 
@@ -195,7 +207,15 @@ def _missing_user_best_index_resources(args: argparse.Namespace) -> list[str]:
         )
     ):
         missing.append(f"mineru_env_file:{getattr(args, 'mineru_env_file', None) or DEFAULT_MINERU_ENV_FILE}")
+    if str(getattr(args, "visual_summary_mode", "")) == "vlm" and not _vlm_config_available(args):
+        missing.append(f"vlm_env_file:{getattr(args, 'vlm_env_file', None) or DEFAULT_VLM_ENV_FILE}")
     return missing
+
+
+def _vlm_config_available(args: argparse.Namespace) -> bool:
+    env_file = _resolve_optional_vlm_env_file(getattr(args, "vlm_env_file", None))
+    config, _warnings = load_vlm_config(env_file=env_file)
+    return config is not None
 
 
 def _user_best_resource_error(run_id: str, question: str, source: dict[str, Any], missing: list[str]) -> dict[str, Any]:
@@ -542,6 +562,13 @@ def _resolve_optional_mineru_env_file(value: str | None) -> Path | None:
     return default_path if default_path.is_file() else None
 
 
+def _resolve_optional_vlm_env_file(value: str | None) -> Path | None:
+    if value:
+        return _project_path(value)
+    default_path = ROOT / DEFAULT_VLM_ENV_FILE
+    return default_path if default_path.is_file() else None
+
+
 def _cached_mineru_output_ready(path: Path, *, parse_options: dict[str, Any] | None = None) -> bool:
     try:
         find_content_list(path)
@@ -781,6 +808,44 @@ def _ingest_file(
     return ingestion_result.document.doc_id, None, payload
 
 
+def _maybe_enrich_visual_blocks(
+    *,
+    repository: DocumentRepository,
+    doc_id: str,
+    document_root: Path,
+    args: argparse.Namespace,
+    vlm_env_file: Path | None,
+) -> dict[str, Any]:
+    mode = str(getattr(args, "visual_summary_mode", "off") or "off")
+    if mode == "off":
+        return {"status": "skipped", "mode": mode, "used_vlm": False}
+    blocks = repository.load_evidence_blocks(doc_id)
+    if not blocks:
+        return {"status": "skipped", "mode": mode, "reason": "no_evidence_blocks", "used_vlm": False}
+    document_dir = document_root / doc_id
+    result = enhance_visual_blocks(
+        blocks,
+        document_dir=document_dir,
+        mode=mode,
+        env_file=vlm_env_file,
+        max_images=int(getattr(args, "max_visual_summary_images", 3)),
+    )
+    payload = result.to_dict()
+    changed = bool(
+        result.native_caption_attached_count
+        or result.vlm_summary_count
+        or result.cache_hit_count
+    )
+    payload["blocks_updated"] = changed
+    if changed:
+        page_blocks = build_page_blocks(doc_id, blocks)
+        repository.save_evidence_blocks([*blocks, *page_blocks])
+        document_dir.mkdir(parents=True, exist_ok=True)
+        write_jsonl(document_dir / "evidence_blocks.jsonl", [block.to_dict() for block in blocks])
+        write_jsonl(document_dir / "page_documents.jsonl", [block.to_dict() for block in page_blocks])
+    return payload
+
+
 def _list_documents(*, db_path: Path, limit: int) -> dict[str, Any]:
     run_id = _now_run_id()
     if not db_path.is_file():
@@ -839,6 +904,8 @@ def _finalize_operation_result(*, result: dict[str, Any], output_dir: Path) -> d
         "index_built": bool(result.get("index_built", False)),
         "index_reused": bool(result.get("index_reused", False)),
         "index_status": result.get("index_status") or {},
+        "visual_enhancement": result.get("visual_enhancement") or {},
+        "used_vlm": bool(result.get("used_vlm", False)),
         "error": result.get("error") or {},
     }
     result["result_path"] = str(result_path)
@@ -1036,6 +1103,13 @@ def _run_document_index_action(
                 output_dir=output_dir,
             )
 
+        visual_enhancement = _maybe_enrich_visual_blocks(
+            repository=repository,
+            doc_id=doc_id,
+            document_root=document_root,
+            args=args,
+            vlm_env_file=_resolve_optional_vlm_env_file(getattr(args, "vlm_env_file", None)),
+        )
         dense_encoder = _dense_encoder_from_args(args)
         before = _dense_index_status(
             repository=repository,
@@ -1092,6 +1166,8 @@ def _run_document_index_action(
                 "index_status_before": before,
                 "index_status": after,
                 "built_metadata": built_metadata,
+                "visual_enhancement": visual_enhancement,
+                "used_vlm": bool(visual_enhancement.get("used_vlm")),
                 "used_training": False,
                 "validation_subset_used_for_training": False,
                 "formal_benchmark_acceptance": False,
@@ -1596,10 +1672,20 @@ def _run_local_fact_qa(
     reranker_device: str = "cpu",
     reranker_fp16: bool = False,
     answer_policy: Any,
+    visual_qa_mode: str = "off",
+    visual_review_document_dir: Path | None = None,
+    vlm_env_file: Path | None = None,
+    max_query_images: int = 2,
 ) -> dict[str, Any]:
     options: dict[str, Any] = {"dry_run": dry_run, "qid": run_id}
     if not dry_run:
         options["trace_path"] = str(db_path)
+    options["visual_review_mode"] = visual_qa_mode
+    options["max_visual_reviews"] = max(0, int(max_query_images))
+    if visual_review_document_dir is not None:
+        options["visual_review_document_dir"] = str(visual_review_document_dir)
+    if vlm_env_file is not None:
+        options["visual_review_env_file"] = str(vlm_env_file)
     query_planner_payload: dict[str, Any] = {}
     retriever = None
     retriever_payload: dict[str, Any] = {
@@ -1716,6 +1802,7 @@ def _run_local_fact_qa(
         "workflow_trace": result.get("workflow_trace") or [],
         "retriever": retriever_payload,
         "retriever_mode": retriever_payload.get("mode") or "",
+        "used_vlm": _workflow_used_vlm(result.get("workflow_trace") or []),
         "warnings": list(dict.fromkeys(query_planner_warnings + (result.get("warnings") or []))),
         "error": result.get("error") or {},
         **_answer_policy_metadata(answer_policy),
@@ -1894,6 +1981,10 @@ def _dispatch_tool(
     reranker_device: str = "cpu",
     reranker_fp16: bool = False,
     answer_policy: Any,
+    visual_qa_mode: str = "off",
+    visual_review_document_dir: Path | None = None,
+    vlm_env_file: Path | None = None,
+    max_query_images: int = 2,
 ) -> dict[str, Any]:
     task_type = str(router_plan.get("task_type") or "")
     if router_plan.get("status") == "error":
@@ -1942,6 +2033,10 @@ def _dispatch_tool(
             reranker_device=reranker_device,
             reranker_fp16=reranker_fp16,
             answer_policy=answer_policy,
+            visual_qa_mode=visual_qa_mode,
+            visual_review_document_dir=visual_review_document_dir,
+            vlm_env_file=vlm_env_file,
+            max_query_images=max_query_images,
         )
     if task_type == "document_summary":
         return _run_document_summary(repository=repository, doc_id=doc_id, question=question, dry_run=dry_run)
@@ -2023,8 +2118,10 @@ def _finalize_qa_result(
         "used_mineru_api": bool(source.get("used_mineru_api", False)),
         "used_external_api": bool(source.get("used_mineru_api", False))
         or _router_used_external_api(router_plan)
-        or _query_planner_used_external_api(result.get("query_planner") or {}),
-        "used_vlm": False,
+        or _query_planner_used_external_api(result.get("query_planner") or {})
+        or bool(result.get("used_vlm", False)),
+        "used_vlm": bool(result.get("used_vlm", False)),
+        "visual_enhancement": result.get("visual_enhancement") or {},
         "used_training": False,
         "used_full_e2e": bool(
             result.get("full_model_path")
@@ -2053,6 +2150,8 @@ def _finalize_qa_result(
         "used_qwen_answer_policy": bool(result.get("used_qwen_answer_policy", False)),
         "used_llm_router": bool(result.get("used_llm_router", False)),
         "used_llm_query_rewriter": bool(result.get("used_llm_query_rewriter", False)),
+        "used_vlm": bool(result.get("used_vlm", False)),
+        "visual_enhancement": result.get("visual_enhancement") or {},
         "trace_run_id": str(result.get("trace_run_id") or ""),
         "result_status": result.get("status"),
         "tools_used": result.get("tools_used") or [],
@@ -2087,6 +2186,18 @@ def _query_planner_used_external_api(query_planner: dict[str, Any]) -> bool:
     return str(query_planner.get("llm_status") or "") in {"used", "api_error", "invalid_output", "echoed_payload"}
 
 
+def _workflow_used_vlm(workflow_trace: list[Any]) -> bool:
+    for item in workflow_trace:
+        if not isinstance(item, dict):
+            continue
+        if bool(item.get("used_vlm")):
+            return True
+        result = item.get("result")
+        if isinstance(result, dict) and bool((result.get("structured_result") or {}).get("used_vlm")):
+            return True
+    return False
+
+
 def run_cli(args: argparse.Namespace) -> dict[str, Any]:
     args = _apply_execution_profile(args)
     db_path = _project_path(args.db_path)
@@ -2094,6 +2205,7 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
     document_root = _project_path(args.document_root)
     mineru_output_dir = _project_path(args.mineru_output_dir) if args.mineru_output_dir else None
     mineru_env_file = _resolve_optional_mineru_env_file(args.mineru_env_file)
+    vlm_env_file = _resolve_optional_vlm_env_file(getattr(args, "vlm_env_file", None))
     limit = max(0, int(args.limit))
     full_model_path = bool(getattr(args, "full_model_path", False))
     allow_llm_router = bool(args.allow_llm_router or full_model_path)
@@ -2357,6 +2469,16 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
                 used_file_ingestion=used_file_ingestion,
             )
 
+        visual_enhancement = _maybe_enrich_visual_blocks(
+            repository=repository,
+            doc_id=doc_id,
+            document_root=document_root,
+            args=args,
+            vlm_env_file=vlm_env_file,
+        )
+        source["visual_enhancement"] = visual_enhancement
+        warnings.extend(visual_enhancement.get("warnings") or [])
+
         profile = _document_profile(repository, doc_id)
         if full_model_path and router_llm_env_file is not None and not router_llm_env_file.is_file():
             result = _error_result(
@@ -2463,6 +2585,10 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
             reranker_device=str(args.reranker_device),
             reranker_fp16=bool(args.reranker_fp16),
             answer_policy=answer_policy,
+            visual_qa_mode=str(args.visual_qa_mode),
+            visual_review_document_dir=document_root / doc_id,
+            vlm_env_file=vlm_env_file,
+            max_query_images=int(args.max_query_images),
         )
 
         result = _base_result(
@@ -2495,6 +2621,8 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
         result["answer_output_contract"] = str(tool_result.get("answer_output_contract") or args.answer_output_contract)
         result["used_qwen_answer_policy"] = bool(tool_result.get("used_qwen_answer_policy", False))
         result["used_external_answer_api"] = bool(tool_result.get("used_external_answer_api", False))
+        result["visual_enhancement"] = visual_enhancement
+        result["used_vlm"] = bool(visual_enhancement.get("used_vlm") or _workflow_used_vlm(tool_result.get("workflow_trace") or []))
         result["retrieval_candidate_count"] = int(tool_result.get("retrieval_candidate_count") or len(result["supporting_evidence_ids"]))
         result["citation_count"] = int(tool_result.get("citation_count") or len(result["citations"]))
         result["trace_run_id"] = str(tool_result.get("trace_run_id") or tool_result.get("tool_run_id") or "")
@@ -2581,6 +2709,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--router-llm-threshold", type=float, default=DEFAULT_LLM_ROUTER_THRESHOLD)
     parser.add_argument("--router-llm-model")
     parser.add_argument("--router-llm-env-file")
+    parser.add_argument("--vlm-env-file", help=f"Optional VLM API env file, defaults to {DEFAULT_VLM_ENV_FILE} when present.")
+    parser.add_argument("--visual-summary-mode", choices=sorted(VISUAL_SUMMARY_MODE_CHOICES), default=None)
+    parser.add_argument("--visual-qa-mode", choices=sorted(VISUAL_QA_MODE_CHOICES), default=None)
+    parser.add_argument("--max-visual-summary-images", type=int, default=3)
+    parser.add_argument("--max-query-images", type=int, default=2)
     parser.add_argument("--enable-query-planning", action="store_true", default=None)
     parser.add_argument("--query-planner-mode", choices=["rule", "llm", "hybrid"], default=None)
     parser.add_argument("--retriever-mode", choices=sorted(RETRIEVER_MODE_CHOICES), default=None)

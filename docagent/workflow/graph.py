@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
+from pathlib import Path
+from typing import Any, Callable
 
 from docagent.models.base import AnswerPolicy
 from docagent.retrieval.base import Retriever
@@ -103,6 +104,11 @@ def run_qa_workflow(
     retriever: Retriever | None = None,
     rank_aware_context: bool = False,
     tool_results: list[dict[str, Any]] | None = None,
+    visual_review_mode: str = "off",
+    visual_review_document_dir: str | Path | None = None,
+    visual_review_env_file: Path | None = None,
+    visual_reviewer: Callable[..., dict[str, Any]] | None = None,
+    max_visual_reviews: int | None = None,
 ) -> QAState:
     if answer_policy is None:
         raise ValueError("answer_policy is required; pass HeuristicAnswerPolicy explicitly for tests or smoke runs")
@@ -163,19 +169,40 @@ def run_qa_workflow(
         },
     )
 
+    visual_review_count = 0
     for block in state.retrieved_blocks:
         if block.block_type in {"image", "figure"}:
-            result = visual_review(block, question)
+            if max_visual_reviews is not None and visual_review_count >= max_visual_reviews:
+                continue
+            visual_review_count += 1
+            reviewer = visual_reviewer or visual_review
+            result = reviewer(
+                block,
+                question,
+                mode=visual_review_mode,
+                document_dir=visual_review_document_dir,
+                env_file=visual_review_env_file,
+            )
             state.visual_results.append(result)
             _trace(
                 state,
                 trace_repository,
                 "visual_review",
                 input_summary={"block_id": block.block_id},
-                output_summary={"block_id": block.block_id, "result": result},
+                output_summary={
+                    "block_id": block.block_id,
+                    "status": result.get("status"),
+                    "used_vlm": bool((result.get("structured_result") or {}).get("used_vlm")),
+                    "result": result,
+                },
             )
 
-    all_tool_results = [*state.table_results, *state.visual_results]
+    successful_visual_results = [
+        result
+        for result in state.visual_results
+        if isinstance(result, dict) and str(result.get("status") or "") == "success"
+    ]
+    all_tool_results = [*state.table_results, *successful_visual_results]
     preferred_citation_block_ids = _citation_ids_from_tool_results(all_tool_results)
     citation_allowlist_blocks = _citation_allowlist_blocks(
         state.retrieved_blocks,
@@ -205,7 +232,7 @@ def run_qa_workflow(
             "citation_allowlist_block_ids": [block.block_id for block in citation_allowlist_blocks],
             "evidence_context_hash": evidence_context["evidence_context_hash"],
             "truncation_applied": evidence_context["truncation_applied"],
-            "tool_result_count": len(state.table_results),
+            "tool_result_count": len(all_tool_results),
         },
     )
 
@@ -249,7 +276,7 @@ def run_qa_workflow(
                 "citation_allowlist_block_ids": [block.block_id for block in citation_allowlist_blocks],
                 "evidence_context_hash": evidence_context_hash,
                 "prompt_token_count": generation.prompt_token_count,
-                "tool_result_count": len(state.table_results),
+                "tool_result_count": len(all_tool_results),
                 "truncation_applied": truncation_applied,
                 "completion_token_count": generation.completion_token_count,
                 "finish_reason": generation.finish_reason,
@@ -268,13 +295,13 @@ def run_qa_workflow(
             input_summary={
                 "policy_mode": policy_mode,
                 "evidence_ids": [block.block_id for block in state.retrieved_blocks],
-                "tool_result_count": len(state.table_results),
+                "tool_result_count": len(all_tool_results),
             },
             output_summary={
                 "policy_mode": policy_mode,
                 "prompt_version": prompt_version,
                 "task_type": state.generation_metadata["task_type"],
-                "tool_result_count": len(state.table_results),
+                "tool_result_count": len(all_tool_results),
                 "selected_block_ids": selected_block_ids,
                 "dropped_block_ids": dropped_block_ids,
                 "preferred_citation_block_ids": preferred_citation_block_ids,

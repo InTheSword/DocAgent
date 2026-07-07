@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 import traceback
 from typing import Any, Callable
 
@@ -75,6 +76,14 @@ def local_fact_qa(
             retriever=retriever,
             preserve_input_order=bool(options.get("preserve_input_order", False)),
             rank_aware_context=bool(options.get("rank_aware_context", False)),
+            visual_review_mode=str(options.get("visual_review_mode") or "off"),
+            visual_review_document_dir=Path(str(options["visual_review_document_dir"]))
+            if options.get("visual_review_document_dir")
+            else None,
+            visual_review_env_file=Path(str(options["visual_review_env_file"]))
+            if options.get("visual_review_env_file")
+            else None,
+            max_visual_reviews=_positive_int(options.get("max_visual_reviews"), 2),
         )
     except Exception as exc:
         cause_type = type(exc).__name__

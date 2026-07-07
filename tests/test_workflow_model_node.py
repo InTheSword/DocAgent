@@ -321,3 +321,97 @@ def test_workflow_prefers_tool_citation_when_model_cites_retrieved_text() -> Non
     assert state.final_answer["citation_validation"]["added_preferred_block_ids"] == ["table"]
     assert state.final_answer["citation_validation"]["requested_block_ids"] == ["text"]
     assert state.location_check["success"] is True
+
+
+def test_workflow_passes_visual_observation_to_answer_policy() -> None:
+    image_block = EvidenceBlock(
+        doc_id="doc1",
+        block_id="image",
+        block_type="image",
+        text="",
+        page_id=1,
+        image_path="images/chart.png",
+        location=EvidenceLocation(page=1, block_id="image"),
+        metadata={"visual_content_status": "resource_only", "requires_visual_understanding": True},
+    )
+
+    def fake_visual_reviewer(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "status": "success",
+            "tool": "visual_review",
+            "answer": "FY2020 reaches 45%.",
+            "reasoning_summary": "The visual observation reads the chart label.",
+            "citations": [{"block_id": "image", "text_preview": "FY2020 reaches 45%."}],
+            "structured_result": {"used_vlm": True},
+        }
+
+    state = run_qa_workflow(
+        qid="q_visual",
+        question="What does the chart show for FY2020?",
+        blocks=[image_block],
+        answer_policy=ToolAwarePolicy(),
+        answer_type_hint="visual",
+        preserve_input_order=True,
+        visual_review_mode="force",
+        visual_reviewer=fake_visual_reviewer,
+    )
+
+    assert state.visual_results[0]["structured_result"]["used_vlm"] is True
+    assert state.final_answer["answer"] == "FY2020 reaches 45%."
+    assert state.final_answer["citation_block_ids"] == ["image"]
+    trace_by_step = {item["step"]: item for item in state.trace}
+    assert trace_by_step["visual_review"]["used_vlm"] is True
+    assert trace_by_step["generate_answer"]["tool_result_count"] == 1
+
+
+def test_workflow_does_not_pass_skipped_visual_observation_to_answer_policy() -> None:
+    image_block = EvidenceBlock(
+        doc_id="doc1",
+        block_id="image",
+        block_type="image",
+        text="Existing caption only.",
+        page_id=1,
+        image_path="images/chart.png",
+        location=EvidenceLocation(page=1, block_id="image"),
+    )
+
+    class NoToolPolicy:
+        mode = "no_tool_fake"
+
+        def generate(self, **kwargs: Any) -> GenerationResult:
+            assert kwargs.get("tool_results") == []
+            parsed = {
+                "answer": "Existing caption only.",
+                "reasoning_summary": "The image block already contains usable text.",
+                "citation_block_ids": ["image"],
+                "evidence_used": [{"block_id": "image", "text_preview": "Existing caption only."}],
+            }
+            return GenerationResult(
+                raw_text='{"answer": "Existing caption only."}',
+                parsed=parsed,
+                prompt_text="prompt",
+                prompt_token_count=1,
+                completion_token_count=10,
+                finish_reason="stop",
+                latency_ms=2.0,
+                metadata={"parse_result": {"raw_json_ok": True, "schema_ok": True}},
+            )
+
+    def skipped_visual_reviewer(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        return {"status": "skipped", "structured_result": {"skip_reason": "visual_review_disabled", "used_vlm": False}}
+
+    state = run_qa_workflow(
+        qid="q_visual_skipped",
+        question="What does the image show?",
+        blocks=[image_block],
+        answer_policy=NoToolPolicy(),
+        answer_type_hint="visual",
+        preserve_input_order=True,
+        visual_review_mode="off",
+        visual_reviewer=skipped_visual_reviewer,
+    )
+
+    assert state.visual_results[0]["status"] == "skipped"
+    trace_by_step = {item["step"]: item for item in state.trace}
+    assert trace_by_step["visual_review"]["status"] == "skipped"
+    assert trace_by_step["generate_answer"]["tool_result_count"] == 0

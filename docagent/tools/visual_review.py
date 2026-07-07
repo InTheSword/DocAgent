@@ -1,18 +1,26 @@
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any
+
 from docagent.schemas import EvidenceBlock
+from docagent.tools.visual_summary import visual_observation_for_block
 
 
-def visual_review(block: EvidenceBlock, question: str) -> dict[str, str]:
-    if block.visual_summary:
-        summary = block.visual_summary
-    else:
-        summary = block.text or "Visual review is not available in the local MVP."
-    return {
-        "block_id": block.block_id,
-        "question": question,
-        "visual_summary": summary,
-        "answer_candidate": "",
-        "confidence": "low",
-    }
-
+def visual_review(
+    block: EvidenceBlock,
+    question: str,
+    *,
+    mode: str = "off",
+    document_dir: str | Path | None = None,
+    env_file: Path | None = None,
+    client: Any | None = None,
+) -> dict[str, Any]:
+    return visual_observation_for_block(
+        block,
+        question,
+        mode=mode,
+        document_dir=document_dir,
+        env_file=env_file,
+        client=client,
+    )

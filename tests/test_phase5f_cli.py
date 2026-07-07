@@ -55,6 +55,9 @@ def test_user_best_profile_expands_to_best_delivery_defaults() -> None:
     assert resolved.reranker_backend == "cross_encoder"
     assert resolved.answer_policy == "sft"
     assert resolved.answer_output_contract == "v3_refs"
+    assert resolved.visual_summary_mode == "auto"
+    assert resolved.visual_qa_mode == "auto"
+    assert resolved.max_visual_summary_images == 3
     assert resolved.adapter_path == docagent_cli.DEFAULT_BEST_ANSWER_POLICY_ADAPTER_PATH
 
 
@@ -100,6 +103,8 @@ def test_self_test_profile_keeps_lightweight_defaults() -> None:
     assert resolved.retriever_mode == "bm25"
     assert resolved.answer_policy == "heuristic"
     assert resolved.answer_output_contract == "candidate_citations"
+    assert resolved.visual_summary_mode == "caption"
+    assert resolved.visual_qa_mode == "off"
 
 
 def _repository_with_document(tmp_path: Path) -> Path:
