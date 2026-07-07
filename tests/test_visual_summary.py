@@ -30,6 +30,8 @@ class FakeVLMClient:
             "answer": "FY2020 reaches 45%.",
             "reasoning_summary": "The chart label shows 45% for FY2020.",
             "visual_summary": "The chart compares yearly percentages.",
+            "key_text": ["FY2020", "45%"],
+            "data_points": [{"label": "FY2020", "value": "45%"}],
             "confidence": 0.9,
             "support_status": "supported",
         }
@@ -129,6 +131,7 @@ def test_visual_observation_for_block_returns_tool_observation(tmp_path: Path) -
     assert result["answer"] == "FY2020 reaches 45%."
     assert result["citations"][0]["block_id"] == "image"
     assert result["structured_result"]["used_vlm"] is True
+    assert result["structured_result"]["visual_response"]["key_text"] == ["FY2020", "45%"]
     assert client.question_calls == 1
 
 

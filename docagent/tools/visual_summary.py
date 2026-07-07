@@ -342,7 +342,7 @@ def _citation(block: EvidenceBlock) -> dict[str, Any]:
             "visual_content_status": block.metadata.get("visual_content_status"),
             "requires_visual_understanding": block.metadata.get("requires_visual_understanding"),
         }.items()
-        if value not in {None, ""}
+        if _has_value(value)
     }
 
 
@@ -388,7 +388,7 @@ def _compact_visual_response(response: dict[str, Any]) -> dict[str, Any]:
             "confidence": response.get("confidence"),
             "support_status": response.get("support_status"),
         }.items()
-        if value not in {None, ""}
+        if _has_value(value)
     }
 
 
@@ -398,6 +398,14 @@ def _cache_key(image_path: Path | str, *, model: str) -> str:
     else:
         identity = hashlib.sha256(image_path.read_bytes()).hexdigest()
     return hashlib.sha256(f"{VISUAL_SUMMARY_PROMPT_VERSION}|{model}|{identity}".encode("utf-8")).hexdigest()
+
+
+def _has_value(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    return True
 
 
 def _client_model(client: Any) -> str:
