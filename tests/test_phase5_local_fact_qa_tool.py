@@ -130,6 +130,28 @@ def test_local_fact_qa_fake_workflow_success_is_json_serializable(tmp_path: Path
     json.dumps(result)
 
 
+def test_local_fact_qa_allows_zero_visual_reviews(tmp_path: Path) -> None:
+    repository = _repository_with_document(tmp_path)
+    seen: dict[str, int] = {}
+
+    def workflow(**kwargs) -> QAState:
+        seen["max_visual_reviews"] = kwargs["max_visual_reviews"]
+        return _fake_workflow(**kwargs)
+
+    result = local_fact_qa(
+        {
+            "doc_id": "doc1",
+            "question": "What is shown in the figure?",
+            "options": {"max_visual_reviews": 0},
+        },
+        document_repository=repository,
+        workflow_runner=workflow,
+    )
+
+    assert result["status"] == "success"
+    assert seen["max_visual_reviews"] == 0
+
+
 def test_local_fact_qa_exposes_candidate_schema_citations(tmp_path: Path) -> None:
     repository = _repository_with_document(tmp_path)
 

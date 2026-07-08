@@ -83,6 +83,7 @@ RETRIEVER_MODE_CHOICES = {"bm25", "dense", "hybrid", "hybrid_rerank"}
 EXECUTION_PROFILE_CHOICES = {"user_best", "self_test"}
 VISUAL_SUMMARY_MODE_CHOICES = {"off", "caption", "auto", "vlm"}
 VISUAL_QA_MODE_CHOICES = {"off", "auto", "force"}
+PROGRESS_CHOICES = {"auto", "off", "plain", "jsonl"}
 
 
 def _now_run_id() -> str:
@@ -155,6 +156,8 @@ def _apply_execution_profile(args: argparse.Namespace) -> argparse.Namespace:
         args.visual_summary_mode = "auto" if user_best else "caption"
     if getattr(args, "visual_qa_mode", None) is None:
         args.visual_qa_mode = "auto" if user_best else "off"
+    if getattr(args, "enable_evidence_recovery", None) is None:
+        args.enable_evidence_recovery = user_best
     if getattr(args, "adapter_path", None) is None and user_best and str(args.answer_policy) == "sft":
         args.adapter_path = DEFAULT_BEST_ANSWER_POLICY_ADAPTER_PATH
     if getattr(args, "device", None) is None:
@@ -257,6 +260,35 @@ def _print_text(payload: dict[str, Any]) -> None:
         print("\n".join(line.encode("ascii", errors="replace").decode("ascii") for line in lines))
 
 
+def _emit_progress(args: argparse.Namespace, stage: str, message: str = "", **fields: Any) -> None:
+    mode = str(getattr(args, "progress", "auto") or "auto")
+    if mode == "off" or (mode == "auto" and not sys.stderr.isatty()):
+        return
+    payload = {
+        "stage": stage,
+        **{key: value for key, value in fields.items() if value is not None and value != ""},
+    }
+    if message:
+        payload["message"] = message
+    if mode == "jsonl":
+        payload = {"event": "progress", **payload}
+        text = json.dumps(payload, ensure_ascii=False, default=_json_default)
+    else:
+        suffix = f" - {message}" if message else ""
+        text = f"[docagent] {stage}{suffix}"
+    try:
+        print(text, file=sys.stderr, flush=True)
+    except UnicodeEncodeError:
+        print(text.encode("ascii", errors="replace").decode("ascii"), file=sys.stderr, flush=True)
+
+
+def _progress_callback(args: argparse.Namespace):
+    def callback(stage: str, payload: dict[str, Any]) -> None:
+        _emit_progress(args, stage, **payload)
+
+    return callback
+
+
 def _format_text_output(payload: dict[str, Any]) -> str:
     status = str(payload.get("status") or "")
     answer = str(payload.get("answer") or "").strip()
@@ -292,6 +324,11 @@ def _format_text_output(payload: dict[str, Any]) -> str:
             lines.append(f"{index}. {page_text}, {block_type}{suffix}")
     if tools:
         lines.extend(["", f"Tools: {', '.join(str(tool) for tool in tools)}"])
+    recovery = payload.get("evidence_recovery") if isinstance(payload.get("evidence_recovery"), dict) else {}
+    if recovery and recovery.get("status") not in {None, "", "disabled", "not_triggered"}:
+        status = str(recovery.get("status") or "")
+        selected = recovery.get("selected_attempt_index")
+        lines.extend(["", f"Evidence recovery: {status}, selected attempt {selected}"])
     if trace_path or artifact_dir:
         lines.extend(["", f"Trace: {trace_path or artifact_dir}"])
     return "\n".join(lines)
@@ -1676,12 +1713,17 @@ def _run_local_fact_qa(
     visual_review_document_dir: Path | None = None,
     vlm_env_file: Path | None = None,
     max_query_images: int = 2,
+    enable_evidence_recovery: bool = False,
+    progress_callback=None,
 ) -> dict[str, Any]:
     options: dict[str, Any] = {"dry_run": dry_run, "qid": run_id}
     if not dry_run:
         options["trace_path"] = str(db_path)
     options["visual_review_mode"] = visual_qa_mode
     options["max_visual_reviews"] = max(0, int(max_query_images))
+    options["enable_evidence_recovery"] = bool(enable_evidence_recovery)
+    if progress_callback is not None:
+        options["progress_callback"] = progress_callback
     if visual_review_document_dir is not None:
         options["visual_review_document_dir"] = str(visual_review_document_dir)
     if vlm_env_file is not None:
@@ -1698,6 +1740,8 @@ def _run_local_fact_qa(
     query_planner_warnings: list[str] = []
     query_plan = None
     if enable_query_planning:
+        if progress_callback is not None:
+            progress_callback("plan_queries", {"mode": query_planner_mode})
         query_plan = plan_queries(
             question=question,
             task_type=str(router_plan.get("task_type") or "local_fact_qa"),
@@ -1800,6 +1844,7 @@ def _run_local_fact_qa(
         "citation_count": len(citations),
         "structured_result": result,
         "workflow_trace": result.get("workflow_trace") or [],
+        "evidence_recovery": result.get("evidence_recovery") or {},
         "retriever": retriever_payload,
         "retriever_mode": retriever_payload.get("mode") or "",
         "used_vlm": _workflow_used_vlm(result.get("workflow_trace") or []),
@@ -1985,6 +2030,8 @@ def _dispatch_tool(
     visual_review_document_dir: Path | None = None,
     vlm_env_file: Path | None = None,
     max_query_images: int = 2,
+    enable_evidence_recovery: bool = False,
+    progress_callback=None,
 ) -> dict[str, Any]:
     task_type = str(router_plan.get("task_type") or "")
     if router_plan.get("status") == "error":
@@ -2037,6 +2084,8 @@ def _dispatch_tool(
             visual_review_document_dir=visual_review_document_dir,
             vlm_env_file=vlm_env_file,
             max_query_images=max_query_images,
+            enable_evidence_recovery=enable_evidence_recovery,
+            progress_callback=progress_callback,
         )
     if task_type == "document_summary":
         return _run_document_summary(repository=repository, doc_id=doc_id, question=question, dry_run=dry_run)
@@ -2089,6 +2138,7 @@ def _finalize_qa_result(
         "tools_used": result.get("tools_used") or [],
         "reasoning_summary": result.get("reasoning_summary") or "",
         "evidence_used": result.get("evidence_used") or [],
+        "evidence_recovery": result.get("evidence_recovery") or {},
         "used_file_ingestion": bool(source.get("was_ingested", used_file_ingestion)),
         "reused_existing_document": bool(source.get("reused_existing", False)),
         "ingestion_status": source.get("ingestion_status") or "",
@@ -2159,6 +2209,7 @@ def _finalize_qa_result(
         "evidence_used": result.get("evidence_used") or [],
         "citations": result.get("citations") or [],
         "supporting_evidence_ids": result.get("supporting_evidence_ids") or [],
+        "evidence_recovery": result.get("evidence_recovery") or {},
         "error": result.get("error") or {},
     }
     if result.get("trace") is not None:
@@ -2221,6 +2272,7 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
         return _list_documents(db_path=db_path, limit=limit)
 
     run_id = _now_run_id()
+    progress_callback = _progress_callback(args)
     index_action_requested = bool(args.check_index or args.prepare_index)
     question = str(args.question or "").strip()
     source: dict[str, Any] = {}
@@ -2253,6 +2305,7 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
             used_file_ingestion=False,
         )
     if index_action_requested:
+        progress_callback("prepare_or_check_index", {"action": "prepare" if args.prepare_index else "check"})
         missing_index_resources = _missing_user_best_index_resources(args)
         if missing_index_resources:
             result = _error_result(
@@ -2356,6 +2409,7 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
         doc_id = str(args.doc_id or "").strip()
 
         if file_path is not None:
+            progress_callback("parse_or_reuse_document", {"file": str(file_path)})
             resolved_doc_id, file_warnings, _document = (
                 (None, [], None)
                 if bool(args.force_parse)
@@ -2506,6 +2560,7 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
             )
 
         router_plan = plan_route_with_optional_llm(
+            # Keep routing progress outside the router so JSON stdout stays clean.
             {
                 "doc_id": doc_id,
                 "question": question,
@@ -2521,6 +2576,7 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
             env_file=router_llm_env_file,
             model_override=str(args.router_llm_model or "") or None,
         )
+        progress_callback("route_question", {"router_source": router_plan.get("router_source"), "task_type": router_plan.get("task_type")})
         try:
             answer_policy = _build_answer_policy(
                 answer_policy=str(args.answer_policy),
@@ -2589,6 +2645,8 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
             visual_review_document_dir=document_root / doc_id,
             vlm_env_file=vlm_env_file,
             max_query_images=int(args.max_query_images),
+            enable_evidence_recovery=bool(args.enable_evidence_recovery),
+            progress_callback=progress_callback,
         )
 
         result = _base_result(
@@ -2625,6 +2683,7 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
         result["used_vlm"] = bool(visual_enhancement.get("used_vlm") or _workflow_used_vlm(tool_result.get("workflow_trace") or []))
         result["retrieval_candidate_count"] = int(tool_result.get("retrieval_candidate_count") or len(result["supporting_evidence_ids"]))
         result["citation_count"] = int(tool_result.get("citation_count") or len(result["citations"]))
+        result["evidence_recovery"] = tool_result.get("evidence_recovery") or {}
         result["trace_run_id"] = str(tool_result.get("trace_run_id") or tool_result.get("tool_run_id") or "")
         metadata_consistency = _page_metadata_consistency(repository, doc_id, document, result["citations"])
         result["metadata_consistency"] = metadata_consistency
@@ -2679,6 +2738,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--document-root", default=str(DEFAULT_DOCUMENT_ROOT))
     parser.add_argument("--execution-profile", choices=sorted(EXECUTION_PROFILE_CHOICES), default="user_best")
     parser.add_argument("--stdout-format", choices=["json", "text"], default="json")
+    parser.add_argument("--progress", choices=sorted(PROGRESS_CHOICES), default="auto")
     parser.add_argument("--parser", choices=["auto", "text", "mineru_existing", "mineru_api"], default=None)
     parser.add_argument("--mineru-output-dir", "--mineru-output", dest="mineru_output_dir")
     parser.add_argument("--live-api", action="store_true", default=None)
@@ -2714,6 +2774,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--visual-qa-mode", choices=sorted(VISUAL_QA_MODE_CHOICES), default=None)
     parser.add_argument("--max-visual-summary-images", type=int, default=3)
     parser.add_argument("--max-query-images", type=int, default=2)
+    parser.add_argument("--enable-evidence-recovery", dest="enable_evidence_recovery", action="store_true", default=None)
+    parser.add_argument("--disable-evidence-recovery", dest="enable_evidence_recovery", action="store_false")
     parser.add_argument("--enable-query-planning", action="store_true", default=None)
     parser.add_argument("--query-planner-mode", choices=["rule", "llm", "hybrid"], default=None)
     parser.add_argument("--retriever-mode", choices=sorted(RETRIEVER_MODE_CHOICES), default=None)
@@ -2765,6 +2827,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             _print_json(result)
         return 1
+    _emit_progress(args, "write_artifacts", artifact_dir=result.get("artifact_dir"), trace_path=result.get("trace_path"))
     if getattr(args, "stdout_format", "json") == "text":
         _print_text(result)
     else:

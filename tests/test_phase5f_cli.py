@@ -57,6 +57,7 @@ def test_user_best_profile_expands_to_best_delivery_defaults() -> None:
     assert resolved.answer_output_contract == "v3_refs"
     assert resolved.visual_summary_mode == "auto"
     assert resolved.visual_qa_mode == "auto"
+    assert resolved.enable_evidence_recovery is True
     assert resolved.max_visual_summary_images == 3
     assert resolved.adapter_path == docagent_cli.DEFAULT_BEST_ANSWER_POLICY_ADAPTER_PATH
 
@@ -78,6 +79,7 @@ def test_explicit_cli_arguments_override_user_best_profile() -> None:
             "base",
             "--answer-output-contract",
             "candidate_citations",
+            "--disable-evidence-recovery",
         ]
     )
 
@@ -88,6 +90,7 @@ def test_explicit_cli_arguments_override_user_best_profile() -> None:
     assert resolved.answer_policy == "base"
     assert resolved.answer_output_contract == "candidate_citations"
     assert resolved.adapter_path is None
+    assert resolved.enable_evidence_recovery is False
 
 
 def test_self_test_profile_keeps_lightweight_defaults() -> None:
@@ -105,6 +108,40 @@ def test_self_test_profile_keeps_lightweight_defaults() -> None:
     assert resolved.answer_output_contract == "candidate_citations"
     assert resolved.visual_summary_mode == "caption"
     assert resolved.visual_qa_mode == "off"
+    assert resolved.enable_evidence_recovery is False
+
+
+def test_progress_plain_writes_to_stderr_without_stdout(capsys) -> None:
+    args = SimpleNamespace(progress="plain")
+
+    docagent_cli._emit_progress(args, "retrieve_evidence", top_k=20)
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "[docagent] retrieve_evidence" in captured.err
+
+
+def test_progress_jsonl_marks_progress_event(capsys) -> None:
+    args = SimpleNamespace(progress="jsonl")
+
+    docagent_cli._emit_progress(args, "retrieve_evidence", top_k=20)
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    event = json.loads(captured.err)
+    assert event["event"] == "progress"
+    assert event["stage"] == "retrieve_evidence"
+    assert event["top_k"] == 20
+
+
+def test_progress_off_is_silent(capsys) -> None:
+    args = SimpleNamespace(progress="off")
+
+    docagent_cli._emit_progress(args, "retrieve_evidence", top_k=20)
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
 
 
 def _repository_with_document(tmp_path: Path) -> Path:
@@ -284,6 +321,45 @@ def test_prepare_index_builds_and_reuses_hash_dense_index(tmp_path: Path) -> Non
     assert second["index_ready"] is True
     assert second["index_built"] is False
     assert second["index_reused"] is True
+
+
+def test_local_fact_qa_cli_payload_preserves_evidence_recovery(tmp_path: Path, monkeypatch) -> None:
+    db_path = _repository_with_document(tmp_path)
+    conn = connect(db_path)
+    repository = DocumentRepository(conn)
+    trace_repository = TraceRepository(conn)
+
+    def fake_local_fact_qa(*args, **kwargs):
+        return {
+            "status": "success",
+            "answer": "Insufficient evidence.",
+            "citations": [],
+            "supporting_evidence_ids": [],
+            "tools_used": ["local_fact_qa"],
+            "workflow_trace": [],
+            "warnings": [],
+            "evidence_recovery": {"enabled": True, "status": "exhausted"},
+        }
+
+    monkeypatch.setattr(docagent_cli, "local_fact_qa", fake_local_fact_qa)
+    try:
+        payload = docagent_cli._run_local_fact_qa(
+            repository=repository,
+            trace_repository=trace_repository,
+            db_path=db_path,
+            document_root=tmp_path / "documents",
+            doc_id="doc1",
+            question="What is this?",
+            router_plan={},
+            dry_run=False,
+            run_id="run1",
+            answer_policy=HeuristicAnswerPolicy(),
+            enable_evidence_recovery=True,
+        )
+    finally:
+        conn.close()
+
+    assert payload["evidence_recovery"]["status"] == "exhausted"
 
 
 def test_user_best_index_check_does_not_require_answer_policy_adapter(tmp_path: Path) -> None:

@@ -1,6 +1,6 @@
 ﻿# Current Status
 
-Updated: 2026-07-06
+Updated: 2026-07-08
 
 ## Phase 4D-C Accepted / Phase 5 Active
 
@@ -12,6 +12,20 @@ reranker on CUDA, Qwen SFT AnswerPolicy, `v3_refs`, citation/evidence mapping,
 and trace artifacts in one execution chain. The 402-record rejection-SFT
 checkpoint is the operational default for this profile. This is a delivery
 workflow verification, not a formal benchmark acceptance claim.
+
+Evidence Recovery Loop and CLI Progress Feedback are implemented and
+server-verified for the `user_best` path. The recovery loop is enabled by
+default only for `user_best`; it retries insufficient or citationless
+AnswerPolicy outputs with bounded replacement windows from the ranked
+retrieval pool, never by blindly appending all fallback evidence into one
+prompt. CLI progress now supports `--progress auto|off|plain|jsonl` and writes
+only to stderr, preserving JSON stdout compatibility. Local and server targeted
+tests passed (`123 passed`). Server smoke
+`evidence_recovery_progress_user_best_smoke_final_20260708` used Qwen SFT,
+BGE-M3, cross-encoder reranker, LLM query rewriting, `v3_refs`, and verified
+recovery trace/artifact propagation plus JSONL progress events. This is
+execution-chain and UX robustness evidence, not final answer-quality benchmark
+acceptance.
 
 AnswerPolicy v3 promptfix Stage 2 SFT is real-model verified as a train-only
 objective improvement, not as final workflow deployment acceptance. The

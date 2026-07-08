@@ -44,6 +44,9 @@ def local_fact_qa(
     query = _planned_query(question, router_plan)
     trace_path = str(options.get("trace_path") or "")
     warnings = _initial_warnings(router_plan, options)
+    progress_callback = options.get("progress_callback")
+    if not callable(progress_callback):
+        progress_callback = None
 
     if bool(options.get("dry_run", False)):
         preview_blocks = blocks[:top_k]
@@ -83,7 +86,9 @@ def local_fact_qa(
             visual_review_env_file=Path(str(options["visual_review_env_file"]))
             if options.get("visual_review_env_file")
             else None,
-            max_visual_reviews=_positive_int(options.get("max_visual_reviews"), 2),
+            max_visual_reviews=_non_negative_int(options.get("max_visual_reviews"), 2),
+            enable_evidence_recovery=bool(options.get("enable_evidence_recovery", False)),
+            progress_callback=progress_callback,
         )
     except Exception as exc:
         cause_type = type(exc).__name__
@@ -112,6 +117,7 @@ def local_fact_qa(
         workflow_status=state.status,
         final_answer=state.final_answer,
         workflow_trace=state.trace,
+        evidence_recovery=state.evidence_recovery,
     )
 
 
@@ -129,10 +135,14 @@ def _success(
     workflow_status: str,
     final_answer: dict[str, Any],
     workflow_trace: list[dict[str, Any]] | None = None,
+    evidence_recovery: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     citations = _final_answer_citations(final_answer, blocks)
     evidence_used = _final_answer_evidence_used(final_answer, citations)
     reasoning_summary = str(final_answer.get("reasoning_summary") or final_answer.get("reason") or "")
+    deduped_warnings = list(dict.fromkeys(warnings))
+    if (evidence_recovery or {}).get("status") == "exhausted":
+        deduped_warnings = list(dict.fromkeys([*deduped_warnings, "evidence_recovery_exhausted"]))
     return {
         "tool_name": "local_fact_qa",
         "status": "success",
@@ -145,7 +155,7 @@ def _success(
         "supporting_evidence_ids": [block.block_id for block in blocks],
         "tools_used": ["local_fact_qa"],
         "trace_path": trace_path,
-        "warnings": list(dict.fromkeys(warnings)),
+        "warnings": deduped_warnings,
         "run_id": run_id,
         "query_used": query_used,
         "router_plan_summary": _router_plan_summary(router_plan),
@@ -153,6 +163,7 @@ def _success(
         "final_answer": final_answer,
         "citation_validation": final_answer.get("citation_validation") or {},
         "workflow_trace": workflow_trace or [],
+        "evidence_recovery": evidence_recovery or {},
     }
 
 
@@ -290,3 +301,11 @@ def _positive_int(value: Any, default: int) -> int:
     except (TypeError, ValueError):
         return default
     return parsed if parsed > 0 else default
+
+
+def _non_negative_int(value: Any, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed >= 0 else default

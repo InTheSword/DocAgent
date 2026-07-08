@@ -244,6 +244,7 @@ class QAState:
     repair_attempted: bool = False
     repair_result: dict[str, Any] | None = None
     final_answer: dict[str, Any] = field(default_factory=dict)
+    evidence_recovery: dict[str, Any] = field(default_factory=dict)
     status: str = "initialized"
     error: str | None = None
     trace: list[dict[str, Any]] = field(default_factory=list)

@@ -1,6 +1,6 @@
 # DocAgent Final Delivery CLI Guide
 
-Updated: 2026-07-06
+Updated: 2026-07-08
 
 This guide describes the current local, CLI-only delivery surface for the
 Phase 5 personal-use DocAgent MVP. It is the practical entry point for running
@@ -133,6 +133,25 @@ best AnswerPolicy v3 checkpoint. Missing real resources are reported as
 `user_best_resources_missing`; the CLI does not silently downgrade to a
 low-quality path. Explicit CLI arguments override profile defaults.
 
+`user_best` also enables the bounded evidence recovery loop. If the first
+AnswerPolicy pass returns `support_status=insufficient`, an empty answer, or
+no valid supporting citation/ref, DocAgent retries with replacement windows
+from the ranked retrieval pool instead of blindly enlarging the prompt. The
+default windows keep each AnswerPolicy call capped at the requested evidence
+limit:
+
+```text
+attempt 0: ranks 1..top_k
+attempt 1: ranks floor(top_k/2)+1 .. floor(top_k/2)+top_k
+attempt 2: ranks top_k+1 .. top_k*2
+pool_k: min(max(top_k * 2, top_k), 40)
+```
+
+The loop stops as soon as a supported answer with valid refs/citations is
+found. If all attempts fail, the result remains insufficient and the artifact
+records `evidence_recovery.status=exhausted`. Use
+`--disable-evidence-recovery` to turn this off for controlled tests.
+
 VLM-related defaults:
 
 ```text
@@ -207,6 +226,17 @@ python scripts\docagent_cli.py --file <path> --question "<question>" --stdout-fo
 Text output presents answer, brief reasoning, readable sources, and trace path.
 It suppresses internal `block_id`, `doc_id`, image paths, and trace payloads;
 the complete structured records remain in artifacts.
+
+Progress feedback is available without contaminating JSON stdout:
+
+```text
+--progress auto|off|plain|jsonl
+```
+
+Progress events are written to stderr. `auto` prints human-readable progress in
+interactive terminals and stays quiet in scripted/non-interactive runs.
+`jsonl` emits one JSON object per event with `event=progress`; `off` disables
+progress output.
 
 When an AnswerPolicy returns candidate `citation_block_ids`, DocAgent filters
 those ids to the retrieved evidence allowlist before constructing final

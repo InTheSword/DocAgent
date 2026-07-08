@@ -29,6 +29,14 @@ Phase 5 Personal-use DocAgent MVP
 -> Phase 5F Full CLI Acceptance accepted after AutoDL server smoke
 -> Final Delivery Contract local update implemented:
    answer + reasoning_summary + evidence_used + citations + trace_path
+-> Evidence Recovery Loop + CLI Progress Feedback implemented and
+   server-verified for `user_best`: insufficient/citationless answers trigger
+   bounded retrieval-window replacement attempts, progress events write to
+   stderr, JSON stdout remains compatible, and server smoke
+   `evidence_recovery_progress_user_best_smoke_final_20260708` verified Qwen
+   SFT, BGE-M3, reranker, LLM query rewriting, `v3_refs`, recovery artifacts,
+   and progress JSONL; this is execution-chain robustness evidence, not formal
+   answer-quality benchmark acceptance
 -> deterministic table_lookup and simple_calculation implemented locally
 -> raw PDF MinerU API accepted as the final raw PDF parser path; local MinerU
    CLI execution is no longer a delivery target
@@ -2779,6 +2787,10 @@ Phase 4D-B1.3 server sanity accepted
   `reasoning_summary`, `evidence_used`, normalized citations,
   deterministic `table_lookup`, deterministic `simple_calculation`, and
   MinerU API raw PDF ingestion support
++ Evidence Recovery Loop + CLI Progress Feedback implemented and
+  server-verified for `user_best` with bounded replacement windows,
+  stderr-only progress, JSON stdout compatibility, and artifacted recovery
+  summaries; formal answer-quality benchmark acceptance remains false
 + Final raw PDF MinerU API smoke accepted with run id
   `final_raw_pdf_mineru_api_cli_smoke_20260630`: live API/OCR used,
   4/4 CLI contract cases passed, citations/evidence_used present on

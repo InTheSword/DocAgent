@@ -3,8 +3,9 @@ from __future__ import annotations
 from typing import Any
 
 from docagent.models.base import GenerationResult
+from docagent.retrieval.base import RetrievalCandidate, RetrievalResult
 from docagent.schemas import EvidenceBlock, EvidenceLocation
-from docagent.workflow.graph import run_qa_workflow
+from docagent.workflow.graph import _recovery_windows, run_qa_workflow
 
 
 class FakePolicy:
@@ -126,6 +127,80 @@ class V3RefPolicy:
         )
 
 
+class RecoverOnSecondWindowPolicy:
+    mode = "recovery_fake"
+
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    def generate(self, **kwargs: Any) -> GenerationResult:
+        block_ids = [block.block_id for block in kwargs["evidence_blocks"]]
+        self.calls.append(block_ids)
+        first_block = kwargs["evidence_blocks"][0]
+        if len(self.calls) == 1:
+            parsed = {
+                "answer": "Insufficient evidence.",
+                "supporting_refs": [],
+                "support_status": "insufficient",
+                "reasoning_summary": "No provided evidence supports the answer.",
+            }
+        else:
+            parsed = {
+                "answer": "Recovered answer",
+                "supporting_refs": ["E1"],
+                "support_status": "supported",
+                "reasoning_summary": "E1 supports the answer.",
+            }
+        return GenerationResult(
+            raw_text='{"answer": "..."}',
+            parsed=parsed,
+            prompt_text="prompt",
+            prompt_token_count=1,
+            completion_token_count=10,
+            finish_reason="stop",
+            latency_ms=2.0,
+            metadata={
+                "parse_result": {"raw_json_ok": True, "schema_ok": True},
+                "evidence_ref_map": {"E1": {"source_kind": "evidence_block", "block_id": first_block.block_id}},
+            },
+        )
+
+
+class RankedFakeRetriever:
+    def __init__(self, blocks: list[EvidenceBlock]) -> None:
+        self.blocks = blocks
+        self.top_k_calls: list[int] = []
+
+    def retrieve(self, *, doc_id: str | None, question: str, top_k: int, answer_type_hint: str | None = None) -> RetrievalResult:
+        self.top_k_calls.append(top_k)
+        return RetrievalResult(
+            rewritten_query=question,
+            candidates=[RetrievalCandidate(block=block) for block in self.blocks[:top_k]],
+            metadata={"retriever_mode": "fake"},
+        )
+
+
+class AlwaysInsufficientPolicy:
+    mode = "insufficient_fake"
+
+    def generate(self, **kwargs: Any) -> GenerationResult:
+        return GenerationResult(
+            raw_text='{"answer": "Insufficient evidence."}',
+            parsed={
+                "answer": "Insufficient evidence.",
+                "supporting_refs": [],
+                "support_status": "insufficient",
+                "reasoning_summary": "No provided evidence supports the answer.",
+            },
+            prompt_text="prompt",
+            prompt_token_count=1,
+            completion_token_count=10,
+            finish_reason="stop",
+            latency_ms=2.0,
+            metadata={"parse_result": {"raw_json_ok": True, "schema_ok": True}, "evidence_ref_map": {}},
+        )
+
+
 def _blocks() -> list[EvidenceBlock]:
     return [
         EvidenceBlock(
@@ -190,6 +265,75 @@ def test_workflow_maps_model_output_v3_refs_to_citations() -> None:
     assert state.final_answer["citation_block_ids"] == ["b1"]
     assert state.final_answer["evidence_location"]["block_id"] == "b1"
     assert state.generation_metadata["evidence_ref_map"]["E1"]["block_id"] == "b1"
+
+
+def test_recovery_windows_replace_context_without_expanding_prompt() -> None:
+    assert _recovery_windows(20, 40) == [(0, 20), (10, 30), (20, 40)]
+
+
+def test_workflow_recovery_uses_rank_window_after_insufficient_answer() -> None:
+    blocks = [
+        EvidenceBlock(
+            doc_id="doc1",
+            page_id=index,
+            block_id=f"b{index}",
+            block_type="text",
+            text=f"Evidence block {index}",
+            location=EvidenceLocation(page=index, block_id=f"b{index}"),
+        )
+        for index in range(1, 41)
+    ]
+    policy = RecoverOnSecondWindowPolicy()
+    retriever = RankedFakeRetriever(blocks)
+
+    state = run_qa_workflow(
+        qid="q1",
+        question="What is the answer?",
+        blocks=blocks,
+        answer_policy=policy,
+        answer_type_hint="extractive",
+        top_k=20,
+        retriever=retriever,
+        enable_evidence_recovery=True,
+    )
+
+    assert retriever.top_k_calls == [20, 40]
+    assert policy.calls[0] == [f"b{index}" for index in range(1, 21)]
+    assert policy.calls[1] == [f"b{index}" for index in range(11, 31)]
+    assert all(len(call) <= 20 for call in policy.calls)
+    assert state.final_answer["answer"] == "Recovered answer"
+    assert state.final_answer["citation_block_ids"] == ["b11"]
+    assert state.evidence_recovery["status"] == "recovered"
+    assert state.evidence_recovery["selected_attempt_index"] == 1
+
+
+def test_workflow_recovery_exhaustion_preserves_insufficient_without_fake_citations() -> None:
+    blocks = [
+        EvidenceBlock(
+            doc_id="doc1",
+            page_id=index,
+            block_id=f"b{index}",
+            block_type="text",
+            text=f"Evidence block {index}",
+            location=EvidenceLocation(page=index, block_id=f"b{index}"),
+        )
+        for index in range(1, 16)
+    ]
+
+    state = run_qa_workflow(
+        qid="q1",
+        question="What is the answer?",
+        blocks=blocks,
+        answer_policy=AlwaysInsufficientPolicy(),
+        top_k=5,
+        retriever=RankedFakeRetriever(blocks),
+        enable_evidence_recovery=True,
+    )
+
+    assert state.final_answer["support_status"] == "insufficient"
+    assert state.final_answer["citation_block_ids"] == []
+    assert state.final_answer["citations"] == []
+    assert state.evidence_recovery["status"] == "exhausted"
 
 
 def test_workflow_can_preserve_input_evidence_order() -> None:
