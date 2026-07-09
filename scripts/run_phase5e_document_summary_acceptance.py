@@ -143,6 +143,8 @@ def _run_case(
         str(file_path),
         "--question",
         question,
+        "--execution-profile",
+        "self_test",
         "--output-dir",
         str(cli_output_dir),
         *parser_args,
