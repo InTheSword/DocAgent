@@ -1,53 +1,48 @@
 # DocAgent
 
-DocAgent is a local, CLI-first complex-document QA project. The current active
-track is the Phase 5 personal-use MVP: ingest or select a document, ask a
-question, and return an answer with a short reasoning summary, evidence used,
-citations, tools used, and local trace artifacts.
+[简体中文](README.md) | [English](README_EN.md)
 
-The current delivery is not a UI product, cloud service, VLM visual-reasoning
-system, or accepted final answer-quality benchmark.
+DocAgent 是一个以本地命令行为优先的复杂文档问答项目。当前活跃方向为 Phase 5 个人使用 MVP：导入或选择一份文档、提出问题，并返回答案、简短推理摘要、所用证据、引用、调用工具和本地追踪产物。
 
-## Current Entry Points
+当前交付物不是 UI 产品、云服务、VLM 视觉推理系统，也不是已验收的最终答案质量基准。
 
-Main CLI:
+## 当前入口
+
+主 CLI：
 
 ```powershell
 python scripts\docagent_cli.py --file <path> --question "<question>"
 python scripts\docagent_cli.py --doc-id <doc_id> --question "<question>"
 ```
 
-By default the CLI uses the `user_best` execution profile for normal use. This
-profile expects the real MinerU API token, router/query-planner LLM config,
-BGE-M3, cross-encoder reranker, Qwen3, and the current best AnswerPolicy v3
-checkpoint to be available. It fails clearly if those resources are missing.
+默认情况下，CLI 会为正常使用启用 `user_best` 执行配置。该配置要求可用的真实 MinerU API 令牌、路由器/查询规划器 LLM 配置、BGE-M3、交叉编码器重排序器、Qwen3，以及当前最优的 AnswerPolicy v3 检查点。若缺少这些资源，CLI 会明确报错。
 
-Use the lightweight profile only for local or CI checks:
+轻量配置仅用于本地或 CI 检查：
 
 ```powershell
 python scripts\docagent_cli.py --execution-profile self_test --file <path> --question "<question>"
 ```
 
-For user-readable terminal output without internal ids:
+如需面向用户的终端输出且不显示内部 ID：
 
 ```powershell
 python scripts\docagent_cli.py --file <path> --question "<question>" --stdout-format text
 ```
 
-List local documents:
+列出本地文档：
 
 ```powershell
 python scripts\docagent_cli.py --list-documents --db-path outputs\docagent.db
 ```
 
-Check or prebuild a document dense index before asking questions:
+提问前检查或预构建文档稠密索引：
 
 ```powershell
 python scripts\docagent_cli.py --doc-id <doc_id> --check-index --db-path outputs\docagent.db
 python scripts\docagent_cli.py --doc-id <doc_id> --prepare-index --db-path outputs\docagent.db
 ```
 
-Prepare local final-evaluation subsets:
+准备本地最终评测子集：
 
 ```powershell
 python scripts\prepare_final_eval_subset.py `
@@ -59,7 +54,7 @@ python scripts\prepare_final_eval_subset.py `
   --overwrite
 ```
 
-Run local subset diagnostics:
+运行本地子集诊断：
 
 ```powershell
 python scripts\run_final_eval_subset.py `
@@ -68,22 +63,18 @@ python scripts\run_final_eval_subset.py `
   --output-dir outputs\final_eval\local_subset_diagnostic
 ```
 
-Run the final-delivery benchmark gate on a prepared server:
+在准备就绪的服务器上运行最终交付基准门控：
 
 ```powershell
 python scripts\run_final_delivery_benchmark_gate.py --run-id final_delivery_gate_probe
 ```
 
-See [docs/FINAL_DELIVERY_CLI.md](docs/FINAL_DELIVERY_CLI.md) for the complete
-current CLI contract, storage paths, dataset commands, output fields, and
-limitations.
-See [docs/FINAL_DELIVERY_REPORT.md](docs/FINAL_DELIVERY_REPORT.md) for the
-current delivery status table, accepted evidence boundaries, and remaining
-not_started work.
+完整的当前 CLI 契约、存储路径、数据集命令、输出字段和限制请参阅 [docs/FINAL_DELIVERY_CLI.md](docs/FINAL_DELIVERY_CLI.md)。
+当前交付状态表、已验收证据边界和仍处于 `not_started` 状态的工作请参阅 [docs/FINAL_DELIVERY_REPORT.md](docs/FINAL_DELIVERY_REPORT.md)。
 
-## Current Output Contract
+## 当前输出契约
 
-Normal QA-style CLI output includes:
+常规问答类 CLI 输出包含：
 
 ```json
 {
@@ -96,15 +87,11 @@ Normal QA-style CLI output includes:
 }
 ```
 
-Citation records carry document and location fields such as `doc_id`, `page`,
-`block_id`, `block_type`, and preview text/table/image metadata when available.
-These detailed fields are kept in JSON artifacts. `--stdout-format text`
-prints a user-facing answer, brief reasoning, readable sources, and trace path
-without exposing internal `block_id`, `doc_id`, or resource paths.
+引用记录包含 `doc_id`、`page`、`block_id`、`block_type` 等文档和位置字段；可用时还包括预览文本、表格或图像元数据。这些详细字段保存在 JSON 产物中。`--stdout-format text` 会输出面向用户的答案、简短推理、可读来源和追踪路径，而不暴露内部的 `block_id`、`doc_id` 或资源路径。
 
-## Local Storage
+## 本地存储
 
-Default paths:
+默认路径：
 
 ```text
 outputs/docagent.db
@@ -113,57 +100,44 @@ data/documents/
 outputs/final_eval/
 ```
 
-These are local artifacts. Raw datasets, generated outputs, SQLite databases,
-document caches, secrets, model weights, and logs are not intended for Git
-commits.
+这些都是本地产物。原始数据集、生成结果、SQLite 数据库、文档缓存、密钥、模型权重和日志不应提交至 Git。
 
-## Implemented Locally
+## 已在本地实现
 
-- unified CLI and artifact contract;
-- text file ingestion;
-- existing MinerU output ingestion;
-- raw PDF MinerU API ingestion with accepted live execution smoke;
-- deterministic document statistics and page lookup;
-- deterministic extractive document summary;
-- deterministic structured extraction over persisted evidence;
-- deterministic table lookup and simple traceable calculations;
-- `local_fact_qa` workflow wrapper;
-- AnswerPolicy candidate output schema and citation allowlist filtering;
-- local TAT-QA / MP-DocVQA validation-subset preparation;
-- MP-DocVQA evidence materialization runner for MinerU API-produced evidence maps;
-- local diagnostic reporting with `summary.json` and `summary.md`;
-- local final-delivery readiness check for CLI options, output contract fields,
-  citation/evidence location fields, documentation boundaries, and deprecated
-  PM handoff cleanup.
-- final-delivery benchmark gate orchestration for readiness, AnswerPolicy
-  baseline, and MP-DocVQA full-workflow diagnostics; it is diagnostic-only and
-  does not claim benchmark acceptance.
-- read-only final-delivery benchmark gate artifact inspection for local/sync
-  manifest hashes, step statuses, and benchmark/training safety flags.
+- 统一的 CLI 和产物契约；
+- 文本文件导入；
+- 既有 MinerU 输出导入；
+- 原始 PDF 的 MinerU API 导入，且已通过实时执行冒烟验证；
+- 确定性的文档统计和页面查找；
+- 确定性的抽取式文档摘要；
+- 基于持久化证据的确定性结构化提取；
+- 确定性的表格查找和简单、可追踪的计算；
+- `local_fact_qa` 工作流包装器；
+- AnswerPolicy 候选输出模式和引用白名单过滤；
+- 本地 TAT-QA / MP-DocVQA 验证子集准备；
+- 用于 MinerU API 生成证据映射的 MP-DocVQA 证据物化运行器；
+- 带有 `summary.json` 和 `summary.md` 的本地诊断报告；
+- 本地最终交付就绪检查，用于验证 CLI 选项、输出契约字段、引用/证据位置字段、文档边界和已弃用的 PM 交接清理；
+- 面向就绪检查、AnswerPolicy 基线和 MP-DocVQA 全工作流诊断的最终交付基准门控编排；它仅用于诊断，不主张基准已验收；
+- 对最终交付基准门控产物的只读检查，用于验证本地/同步清单哈希、步骤状态及基准/训练安全标志。
 
-## Not Accepted Yet
+## 尚未验收
 
-- formal MP-DocVQA/TAT-QA final answer benchmark;
-- final Qwen answer-quality acceptance;
-- pixel-level image/chart VLM reasoning;
-- new SFT/GRPO training;
-- UI, FastAPI, Gradio, cloud storage, or multi-user service.
+- 正式 MP-DocVQA/TAT-QA 最终答案基准；
+- 最终 Qwen 答案质量验收；
+- 像素级图像/图表 VLM 推理；
+- 新的 SFT/GRPO 训练；
+- UI、FastAPI、Gradio、云存储或多用户服务。
 
-## Documentation Map
+## 文档导航
 
-- [docs/ACTIVE_PLAN.md](docs/ACTIVE_PLAN.md): current milestone and stop
-  condition.
-- [CURRENT_STATUS.md](CURRENT_STATUS.md): current verified capability status.
-- [docs/FINAL_DELIVERY_CLI.md](docs/FINAL_DELIVERY_CLI.md): current CLI
-  delivery guide.
-- [docs/FINAL_DELIVERY_REPORT.md](docs/FINAL_DELIVERY_REPORT.md): final
-  delivery status and evidence-boundary report.
-- [docs/DATASETS.md](docs/DATASETS.md): dataset roles, split policy, and
-  download constraints.
-- [AGENTS.md](AGENTS.md): repository rules for implementation and validation.
+- [docs/ACTIVE_PLAN.md](docs/ACTIVE_PLAN.md)：当前里程碑和停止条件。
+- [CURRENT_STATUS.md](CURRENT_STATUS.md)：当前已验证的能力状态。
+- [docs/FINAL_DELIVERY_CLI.md](docs/FINAL_DELIVERY_CLI.md)：当前 CLI 交付指南。
+- [docs/FINAL_DELIVERY_REPORT.md](docs/FINAL_DELIVERY_REPORT.md)：最终交付状态和证据边界报告。
+- [docs/DATASETS.md](docs/DATASETS.md)：数据集角色、划分策略和下载约束。
+- [AGENTS.md](AGENTS.md)：实现和验证的仓库规则。
 
-PM-oriented handoff documents are deprecated and are not current planning
-sources.
+面向 PM 的交接文档已弃用，并非当前规划来源。
 
-Historical Phase 1-4 implementation details remain in the phase-specific docs
-under `docs/`.
+Phase 1–4 的历史实现细节仍保留在 `docs/` 下按阶段划分的文档中。
