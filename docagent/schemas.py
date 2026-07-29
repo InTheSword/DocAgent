@@ -25,8 +25,11 @@ VALID_BLOCK_TYPES = {
 }
 
 RETRIEVAL_METADATA_TEXT_KEYS = (
+    "table_markdown",
+    "table_context",
     "table_caption",
     "table_footnote",
+    "caption_text",
     "caption",
     "image_caption",
     "chart_caption",
@@ -95,7 +98,14 @@ class EvidenceLocation:
 
 
 @dataclass
-class EvidenceBlock:
+class Chunk:
+    """Canonical DocAgent RAG chunk with retrieval and citation provenance.
+
+    MinerU content items are normalized before indexing. Deterministic
+    cross-page merging or sentence-aware splitting may change cardinality, but
+    every chunk preserves its source identifiers and page provenance.
+    """
+
     doc_id: str
     block_id: str
     block_type: str
@@ -119,16 +129,44 @@ class EvidenceBlock:
     def retrieval_text(self) -> str:
         if self.metadata.get("exclude_from_retrieval"):
             return ""
-        parts: list[Any] = []
-        section = self.metadata.get("section_title")
-        if section:
-            parts.append(section)
-        parts.extend(self.metadata.get(key) for key in RETRIEVAL_METADATA_TEXT_KEYS)
-        parts.extend([self.text or "", self.table_html or "", self.visual_summary or ""])
-        return "\n".join(_unique_retrieval_parts(parts)).strip()
+        content_parts: list[Any] = [self.metadata.get("summary")]
+        table_markdown = self.metadata.get("table_markdown")
+        content_parts.extend(
+            self.metadata.get(key)
+            for key in RETRIEVAL_METADATA_TEXT_KEYS
+            if key != "table_markdown"
+        )
+        content_parts.extend(
+            [
+                table_markdown if table_markdown else self.text or "",
+                self.visual_summary or "",
+            ]
+        )
+        if not self.text and self.table_html:
+            content_parts.append(re.sub(r"<[^>]+>", " ", self.table_html))
+        content = _unique_retrieval_parts(content_parts)
+        if not content:
+            return ""
+
+        prefix: list[str] = []
+        section_path = self.metadata.get("section_path")
+        if isinstance(section_path, list) and section_path:
+            prefix.append(f"[Section: {' > '.join(str(item) for item in section_path if str(item).strip())}]")
+        elif self.metadata.get("section_title"):
+            prefix.append(f"[Section: {self.metadata['section_title']}]")
+        content_type = str(self.metadata.get("content_type") or self.block_type).strip()
+        if content_type:
+            prefix.append(f"[Type: {content_type}]")
+        return "\n".join([*prefix, *content]).strip()
+
+    @property
+    def is_indexable(self) -> bool:
+        """Whether this chunk has usable text for sparse or dense retrieval."""
+
+        return bool(self.retrieval_text)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "EvidenceBlock":
+    def from_dict(cls, data: dict[str, Any]) -> "Chunk":
         return cls(
             doc_id=data["doc_id"],
             block_id=data["block_id"],
@@ -155,6 +193,11 @@ class EvidenceBlock:
             "location": self.location.to_dict(),
             "metadata": self.metadata,
         }
+
+
+# Backward-compatible import name. Chunk is the only retrieval-domain object;
+# EvidenceBlock remains an alias while older workflow/storage call sites migrate.
+EvidenceBlock = Chunk
 
 
 @dataclass

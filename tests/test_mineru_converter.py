@@ -7,7 +7,16 @@ import shutil
 
 import pytest
 
-from docagent.parser.mineru_converter import build_page_blocks, content_list_to_blocks, find_content_list
+from docagent.parser.mineru_converter import (
+    build_page_blocks,
+    content_list_to_chunks,
+    content_list_to_blocks,
+    find_content_list,
+    normalize_blocks,
+    validate_mineru_chunk_contract,
+)
+from docagent.parser.run_mineru_parse import content_list_to_blocks as legacy_content_list_to_blocks
+from docagent.schemas import EvidenceBlock, EvidenceLocation
 
 
 def test_mineru_content_list_to_blocks_handles_text_table_image(tmp_path: Path) -> None:
@@ -35,20 +44,345 @@ def test_mineru_content_list_to_blocks_handles_text_table_image(tmp_path: Path) 
     assert blocks[0].metadata["mineru_page_idx"] == 0
     assert blocks[0].location.bbox == [1.0, 2.0, 3.0, 4.0]
     assert blocks[1].table_html == "<table></table>"
-    assert blocks[2].metadata["img_path"] == "figures/chart.png"
+    assert blocks[2].metadata["source_resource_path"] == "figures/chart.png"
     assert blocks[2].image_path == "figures/chart.png"
-    assert blocks[2].metadata["caption"] == "Revenue chart"
-    assert blocks[2].metadata["nearby_text"] == ["FY2020 revenue was $100,000"]
+    assert blocks[2].metadata["image_caption"] == "Revenue chart"
+    assert blocks[2].metadata["nearby_text"] == "FY2020 revenue was $100,000"
     assert blocks[2].metadata["visual_content_status"] == "ocr_or_nearby_text"
     assert blocks[2].metadata["visual_text_sources"] == ["caption", "nearby_text"]
     assert blocks[2].metadata["requires_visual_understanding"] is False
     assert "FY2020 revenue was $100,000" in blocks[2].retrieval_text
     assert "normalized_resource_path" not in blocks[2].metadata
     assert "source_content_list" not in blocks[2].metadata
-    assert blocks[3].metadata["unknown_raw_type"] is True
-    assert blocks[0].metadata["next_block_id"] == blocks[1].block_id
-    assert blocks[1].metadata["previous_block_id"] == blocks[0].block_id
+    assert "unknown_raw_type" not in blocks[3].metadata
+    assert blocks[0].metadata.get("next_block_id") is None
+    assert blocks[0].metadata["next_document_block_id"] == blocks[1].block_id
+    assert blocks[1].metadata.get("previous_block_id") is None
+    assert blocks[1].metadata["previous_document_block_id"] == blocks[0].block_id
     assert [page.page_id for page in pages] == [1, 2, 3]
+
+
+def test_legacy_mineru_converter_entry_uses_the_canonical_chunk_pipeline(tmp_path: Path) -> None:
+    path = tmp_path / "sample_content_list.json"
+    path.write_text(
+        json.dumps([{"type": "text", "page_idx": 0, "text": "Canonical content."}]),
+        encoding="utf-8",
+    )
+
+    canonical = content_list_to_chunks(doc_id="doc123", content_list_path=path)
+    legacy = legacy_content_list_to_blocks("doc123", path)
+
+    assert [chunk.to_dict() for chunk in legacy] == [chunk.to_dict() for chunk in canonical]
+
+
+def test_mineru_blocks_are_identity_chunks_by_default(tmp_path: Path) -> None:
+    content = [
+        {"type": "text", "page_idx": 0, "text": "Short heading"},
+        {"type": "text", "page_idx": 0, "text": "Short paragraph"},
+    ]
+    path = tmp_path / "sample_content_list.json"
+    path.write_text(json.dumps(content), encoding="utf-8")
+
+    blocks = content_list_to_blocks(doc_id="doc123", content_list_path=path)
+
+    assert [block.text for block in blocks] == ["Short heading", "Short paragraph"]
+    assert all(block.metadata["chunk_strategy"] == "mineru_block_identity" for block in blocks)
+    assert [block.metadata["source_block_ids"] for block in blocks] == [
+        ["doc123_p001_b0001"],
+        ["doc123_p001_b0002"],
+    ]
+
+
+def test_mineru_chunks_receive_hierarchy_page_and_hash_metadata(tmp_path: Path) -> None:
+    content = [
+        {"type": "text", "page_idx": 0, "text_level": 1, "text": "Annual Report"},
+        {"type": "text", "page_idx": 0, "text": "Opening paragraph"},
+        {"type": "text", "page_idx": 1, "text_level": 2, "text": "Revenue"},
+        {"type": "text", "page_idx": 1, "text": "Revenue increased by 20%."},
+        {"type": "page_number", "page_idx": 1, "text": "7"},
+    ]
+    path = tmp_path / "sample_content_list.json"
+    path.write_text(json.dumps(content), encoding="utf-8")
+
+    first = content_list_to_blocks(doc_id="doc123", content_list_path=path)
+    second = content_list_to_blocks(doc_id="doc123", content_list_path=path)
+
+    title, opening, section, body, page_number = first
+    assert title.metadata["content_type"] == "heading"
+    assert title.metadata["heading_level"] == 1
+    assert title.metadata["heading_role"] == "document_title"
+    assert title.metadata["section_path"] == ["Annual Report"]
+    assert opening.metadata["section_path"] == ["Annual Report"]
+    assert opening.metadata["parent_heading_id"] == title.block_id
+    assert section.metadata["heading_level"] == 2
+    assert section.metadata["heading_role"] == "section_heading"
+    assert section.metadata["section_path"] == ["Annual Report", "Revenue"]
+    assert body.metadata["section_path"] == ["Annual Report", "Revenue"]
+    assert body.metadata["document_page_index"] == 1
+    assert body.metadata["document_page_number"] == 2
+    assert body.metadata["printed_page_number"] == "7"
+    assert body.metadata["global_chunk_id"] == body.block_id
+    assert len(body.metadata["content_hash"]) == 64
+    assert len(body.metadata["source_item_hash"]) == 64
+    assert body.metadata["feature_tags"] == ["content_type:body", "modality:text"]
+    assert page_number.metadata["content_type"] == "page_number"
+    assert page_number.metadata["is_boilerplate"] is True
+    assert "[Section: Annual Report > Revenue]" in body.retrieval_text
+    assert "[Type: body]" in body.retrieval_text
+    assert [block.metadata["content_hash"] for block in first] == [
+        block.metadata["content_hash"] for block in second
+    ]
+    assert validate_mineru_chunk_contract(first) == {}
+
+
+def test_cross_page_text_is_merged_before_sentence_aware_splitting(tmp_path: Path) -> None:
+    content = [
+        {
+            "id": "part-1",
+            "type": "text",
+            "page_idx": 0,
+            "text": "The analysis continues across the physical page boundary without a terminal mark",
+        },
+        {
+            "id": "part-2",
+            "type": "text",
+            "page_idx": 1,
+            "text": "and concludes with a complete sentence. A second sentence keeps the semantic unit intact.",
+        },
+    ]
+    path = tmp_path / "sample_content_list.json"
+    path.write_text(json.dumps(content), encoding="utf-8")
+
+    chunks = content_list_to_chunks(
+        doc_id="doc123",
+        content_list_path=path,
+        split_max_chars=80,
+    )
+    pages = build_page_blocks("doc123", chunks)
+
+    assert len(chunks) == 3
+    assert all(chunk.metadata["chunk_strategy"] == "cross_page_sentence_split" for chunk in chunks)
+    assert all(chunk.metadata["source_page_numbers"] == [1, 2] for chunk in chunks)
+    assert all(chunk.metadata["source_item_ids"] == ["part-1", "part-2"] for chunk in chunks)
+    assert all(chunk.metadata["document_page_number_start"] == 1 for chunk in chunks)
+    assert all(chunk.metadata["document_page_number_end"] == 2 for chunk in chunks)
+    assert all(len(chunk.text) <= 80 for chunk in chunks)
+    assert [page.page_id for page in pages] == [1, 2]
+    assert all(chunks[0].block_id in page.metadata["child_block_ids"] for page in pages)
+    assert validate_mineru_chunk_contract(chunks) == {}
+
+
+def test_cross_page_text_with_terminal_sentence_is_not_merged(tmp_path: Path) -> None:
+    path = tmp_path / "sample_content_list.json"
+    path.write_text(
+        json.dumps(
+            [
+                {"type": "text", "page_idx": 0, "text": "The first page ends here."},
+                {"type": "text", "page_idx": 1, "text": "A new paragraph starts here."},
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    chunks = content_list_to_chunks(doc_id="doc123", content_list_path=path)
+
+    assert len(chunks) == 2
+    assert all(chunk.metadata["chunk_strategy"] == "mineru_block_identity" for chunk in chunks)
+
+
+def test_short_page_text_is_not_treated_as_cross_page_continuation(tmp_path: Path) -> None:
+    path = tmp_path / "sample_content_list.json"
+    path.write_text(
+        json.dumps(
+            [
+                {"type": "text", "page_idx": 0, "text": "content for page 1"},
+                {"type": "text", "page_idx": 1, "text": "content for page 2"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    chunks = content_list_to_chunks(doc_id="doc123", content_list_path=path)
+
+    assert [chunk.page_id for chunk in chunks] == [1, 2]
+    assert all(chunk.metadata["chunk_strategy"] == "mineru_block_identity" for chunk in chunks)
+
+
+def test_page_boundary_geometry_can_confirm_cross_page_continuation(tmp_path: Path) -> None:
+    path = tmp_path / "sample_content_list.json"
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "type": "text",
+                    "page_idx": 0,
+                    "text": "这是一段位于页面底部并且在下一页继续展开的正文内容没有结束标点",
+                    "bbox": [10, 760, 590, 790],
+                },
+                {
+                    "type": "text",
+                    "page_idx": 1,
+                    "text": "下一页顶部继续给出其余内容并在这里结束。",
+                    "bbox": [10, 10, 590, 60],
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "layout.json").write_text(
+        json.dumps(
+            {
+                "pdf_info": [
+                    {"page_idx": 0, "page_size": [600, 800]},
+                    {"page_idx": 1, "page_size": [600, 800]},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    chunks = content_list_to_chunks(doc_id="doc123", content_list_path=path)
+
+    assert len(chunks) == 1
+    assert chunks[0].metadata["chunk_strategy"] == "cross_page_merge"
+    assert chunks[0].metadata["source_page_numbers"] == [1, 2]
+
+
+def test_mineru_chunks_preserve_table_layout_and_visual_relations(tmp_path: Path) -> None:
+    content = [
+        {"id": "raw-title", "type": "text", "page_idx": 0, "text_level": 1, "text": "Annual Report"},
+        {"id": "raw-body", "type": "text", "page_idx": 0, "text": "The following figure summarizes revenue."},
+        {"id": "raw-image", "type": "image", "page_idx": 0, "img_path": "figure.png"},
+        {"id": "raw-caption", "type": "caption", "page_idx": 0, "text": "Figure 1 Revenue trend"},
+        {
+            "id": "raw-table",
+            "type": "table",
+            "page_idx": 0,
+            "table_body": (
+                "<table><tr><th>Year</th><th>Revenue</th></tr>"
+                "<tr><td>2023</td><td>130</td></tr></table>"
+            ),
+        },
+        {"id": "raw-next-page", "type": "text", "page_idx": 1, "text": "Second page."},
+    ]
+    path = tmp_path / "sample_content_list.json"
+    path.write_text(json.dumps(content), encoding="utf-8")
+    (tmp_path / "layout.json").write_text(
+        json.dumps(
+            {
+                "pdf_info": [
+                    {"page_idx": 0, "page_size": [1000, 800]},
+                    {"page_idx": 1, "page_size": [1200, 900]},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    blocks = content_list_to_blocks(doc_id="doc123", content_list_path=path)
+    _title, body, image, caption, table, next_page = blocks
+
+    assert body.metadata["source_item_id"] == "raw-body"
+    assert body.metadata["page_width"] == 1000.0
+    assert body.metadata["page_height"] == 800.0
+    assert [block.metadata["page_reading_order"] for block in blocks] == [1, 2, 3, 4, 5, 1]
+    assert image.metadata["caption_block_ids"] == [caption.block_id]
+    assert caption.metadata["related_block_id"] == image.block_id
+    assert body.block_id in image.metadata["nearby_block_ids"]
+    assert table.metadata["table_headers"] == ["Year", "Revenue"]
+    assert table.metadata["table_rows"] == [["2023", "130"]]
+    assert table.metadata["row_count"] == 1
+    assert table.metadata["column_count"] == 2
+    assert table.metadata["feature_tags"] == [
+        "content_type:table",
+        "modality:table",
+        "has_table_structure",
+    ]
+    assert table.metadata["next_block_id"] is None
+    assert table.metadata["next_document_block_id"] == next_page.block_id
+    assert next_page.metadata["previous_block_id"] is None
+    assert next_page.metadata["previous_document_block_id"] == table.block_id
+    assert validate_mineru_chunk_contract(blocks) == {}
+
+
+def test_table_html_infers_td_headers_and_expands_rowspan_colspan(tmp_path: Path) -> None:
+    path = tmp_path / "sample_content_list.json"
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "type": "table",
+                    "page_idx": 0,
+                    "table_body": (
+                        '<table><tr><td rowspan="2">Model</td><td colspan="2">Score</td></tr>'
+                        "<tr><td>Dev</td><td>Test</td></tr>"
+                        "<tr><td>DocAgent</td><td>80</td><td>82</td></tr></table>"
+                    ),
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    table = content_list_to_chunks(doc_id="doc123", content_list_path=path)[0]
+
+    assert table.metadata["table_headers"] == ["Model", "Score Dev", "Score Test"]
+    assert table.metadata["table_rows"] == [["DocAgent", "80", "82"]]
+    assert table.metadata["table_markdown"].startswith("| Model | Score Dev | Score Test |")
+
+
+def test_page_aggregate_is_context_only_not_a_retrieval_chunk(tmp_path: Path) -> None:
+    path = tmp_path / "sample_content_list.json"
+    path.write_text(
+        json.dumps([{"type": "text", "page_idx": 0, "text": "Invoice date"}]),
+        encoding="utf-8",
+    )
+
+    blocks = content_list_to_blocks(doc_id="doc123", content_list_path=path)
+    pages = build_page_blocks("doc123", blocks)
+
+    assert pages[0].text
+    assert pages[0].metadata["content_type"] == "page_aggregate"
+    assert pages[0].metadata["exclude_from_retrieval"] is True
+    assert pages[0].is_indexable is False
+
+
+def test_mineru_current_textual_types_are_not_marked_unknown(tmp_path: Path) -> None:
+    content = [
+        {"type": "equation", "page_idx": 0, "text": "x = 1"},
+        {"type": "ref_text", "page_idx": 0, "text": "[1] Reference"},
+        {"type": "page_footnote", "page_idx": 0, "text": "Corresponding author"},
+    ]
+    path = tmp_path / "sample_content_list.json"
+    path.write_text(json.dumps(content), encoding="utf-8")
+
+    blocks = content_list_to_blocks(doc_id="doc123", content_list_path=path)
+
+    assert len(blocks) == 3
+    assert all("unknown_raw_type" not in block.metadata for block in blocks)
+
+
+def test_normalize_blocks_does_not_merge_mineru_chunks_by_default() -> None:
+    blocks = [
+        EvidenceBlock(
+            doc_id="doc123",
+            block_id=f"b{index}",
+            block_type="text",
+            text=text,
+            page_id=1,
+            location=EvidenceLocation(page=1, block_id=f"b{index}"),
+            metadata={
+                "chunk_strategy": "mineru_block_identity",
+                "source_block_ids": [f"b{index}"],
+            },
+        )
+        for index, text in enumerate(["Short heading", "Short paragraph"], start=1)
+    ]
+
+    normalized = normalize_blocks(blocks)
+
+    assert [block.block_id for block in normalized] == ["b1", "b2"]
+    assert [block.text for block in normalized] == ["Short heading", "Short paragraph"]
 
 
 def test_mineru_content_list_to_blocks_preserves_secondary_text_fields(tmp_path: Path) -> None:
@@ -213,14 +547,19 @@ def test_mineru_real_schema_preserves_boilerplate_chart_and_resources(tmp_path: 
     chart = blocks[2]
     assert table.block_type == "table"
     assert table.table_html.startswith("<table>")
-    assert table.metadata["table_caption"] == ["Table 1 Sample"]
+    assert table.metadata["table_caption"] == "Table 1 Sample"
+    assert table.metadata["table_markdown"].startswith("| Country | Value |")
     assert table.image_path == "mineru/images/table.jpg"
     assert table.metadata["resource_exists"] is True
     assert chart.block_type == "image"
     assert chart.image_path == "mineru/images/chart.jpg"
     assert chart.metadata["raw_mineru_type"] == "chart"
-    assert chart.metadata["sub_type"] == "bar"
+    assert chart.metadata["visual_subtype"] == "bar"
     assert chart.metadata["resource_exists"] is True
+    assert chart.visual_summary == "| Country | Value | | A | 1 |"
+    assert chart.metadata["visual_content_status"] == "vlm_summarized"
+    assert chart.metadata["visual_text_sources"] == ["visual_summary", "caption"]
+    assert chart.metadata["requires_visual_understanding"] is False
     assert [block.metadata["raw_boilerplate_type"] for block in blocks[3:]] == [True, True, True]
     assert [block.metadata["is_boilerplate"] for block in blocks[3:]] == [True, True, True]
     assert all(block.metadata["exclude_from_retrieval"] for block in blocks[3:])

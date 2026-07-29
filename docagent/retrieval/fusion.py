@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from docagent.retrieval.base import RetrievalCandidate
-from docagent.schemas import EvidenceBlock
+from docagent.schemas import Chunk
 
 
 def reciprocal_rank_fusion(
-    rankings: dict[str, list[tuple[EvidenceBlock, float]]],
+    rankings: dict[str, list[tuple[Chunk, float]]],
     *,
     rrf_k: int = 60,
 ) -> list[RetrievalCandidate]:
@@ -20,6 +20,8 @@ def reciprocal_rank_fusion(
                 candidate.bm25_score = max(candidate.bm25_score or 0.0, score)
             elif source == "dense" or source.startswith("dense:"):
                 candidate.dense_score = max(candidate.dense_score or 0.0, score)
+            elif source == "table_structured" or source.startswith("table_structured:"):
+                candidate.table_score = max(candidate.table_score or 0.0, score)
     return sorted(
         by_block_id.values(),
         key=lambda item: (-(item.rrf_score or 0.0), min(item.ranks.values()), item.block.block_id),

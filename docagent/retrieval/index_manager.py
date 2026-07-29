@@ -1,18 +1,20 @@
 from __future__ import annotations
 
-from docagent.retrieval.base import RetrievalResult
+from docagent.retrieval.base import RetrievalFilter, RetrievalResult
 from docagent.retrieval.dense_encoder import DenseEncoder
 from docagent.retrieval.dense_index import DenseIndex
 from docagent.retrieval.hybrid_retriever import HybridRetriever
 from docagent.retrieval.query_planner import QueryPlannerOutput, plan_queries
+from docagent.retrieval.query_rewrite import rewrite_query
 from docagent.retrieval.reranker import Reranker
-from docagent.schemas import EvidenceBlock
+from docagent.retrieval.table_index import TableStructuredQuery
+from docagent.schemas import Chunk
 
 
 class IndexedDocumentRetriever:
     def __init__(
         self,
-        blocks: list[EvidenceBlock],
+        blocks: list[Chunk],
         *,
         mode: str = "bm25",
         dense_encoder: DenseEncoder | None = None,
@@ -61,6 +63,10 @@ class IndexedDocumentRetriever:
         question: str,
         top_k: int,
         answer_type_hint: str | None = None,
+        filters: RetrievalFilter | None = None,
+        query_intent: str | None = None,
+        table_query: TableStructuredQuery | dict[str, object] | None = None,
+        enable_query_rewrite: bool = True,
     ) -> RetrievalResult:
         query_plan = self.query_plan
         if query_plan is None and self.enable_query_planning:
@@ -79,7 +85,13 @@ class IndexedDocumentRetriever:
         if self.mode in {"dense", "hybrid", "hybrid_rerank"}:
             if self.dense_encoder is None:
                 raise RuntimeError(f"{self.mode} retrieval requires a dense encoder")
-            query_texts = query_plan.final_queries if query_plan is not None else [question]
+            if query_plan is not None:
+                query_texts = query_plan.final_queries
+            elif not enable_query_rewrite:
+                query_texts = [question]
+            else:
+                rewrite = rewrite_query(question, answer_type_hint=answer_type_hint)
+                query_texts = [f"{question} {rewrite.rewritten_query}".strip()]
             query_embedding = self.dense_encoder.encode_queries(query_texts)
         return self.hybrid.retrieve_result(
             doc_id=doc_id,
@@ -88,4 +100,8 @@ class IndexedDocumentRetriever:
             answer_type_hint=answer_type_hint,
             query_embedding=query_embedding,
             query_plan=query_plan,
+            filters=filters,
+            query_intent=query_intent,
+            table_query=table_query,
+            enable_query_rewrite=enable_query_rewrite,
         )

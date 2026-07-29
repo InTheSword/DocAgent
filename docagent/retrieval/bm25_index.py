@@ -4,7 +4,7 @@ import math
 import re
 from collections import Counter
 
-from docagent.schemas import EvidenceBlock
+from docagent.schemas import Chunk
 
 TOKEN_RE = re.compile(r"[A-Za-z0-9_]+|[\u4e00-\u9fff]")
 
@@ -14,18 +14,18 @@ def tokenize(text: str) -> list[str]:
 
 
 class BM25Index:
-    def __init__(self, blocks: list[EvidenceBlock], k1: float = 1.5, b: float = 0.75) -> None:
-        self.blocks = blocks
+    def __init__(self, blocks: list[Chunk], k1: float = 1.5, b: float = 0.75) -> None:
+        self.blocks = [block for block in blocks if block.is_indexable]
         self.k1 = k1
         self.b = b
-        self.doc_tokens = [tokenize(block.retrieval_text) for block in blocks]
+        self.doc_tokens = [tokenize(block.retrieval_text) for block in self.blocks]
         self.doc_len = [len(tokens) for tokens in self.doc_tokens]
         self.avg_doc_len = sum(self.doc_len) / max(len(self.doc_len), 1)
         self.term_freq = [Counter(tokens) for tokens in self.doc_tokens]
         doc_freq: Counter[str] = Counter()
         for tokens in self.doc_tokens:
             doc_freq.update(set(tokens))
-        total_docs = max(len(blocks), 1)
+        total_docs = max(len(self.blocks), 1)
         self.idf = {
             term: math.log(1 + (total_docs - freq + 0.5) / (freq + 0.5))
             for term, freq in doc_freq.items()
@@ -47,8 +47,7 @@ class BM25Index:
             score += self.idf.get(term, 0.0) * numerator / denominator
         return score
 
-    def search(self, query: str, top_k: int = 5) -> list[tuple[EvidenceBlock, float]]:
+    def search(self, query: str, top_k: int = 5) -> list[tuple[Chunk, float]]:
         scored = [(block, self.score(query, idx)) for idx, block in enumerate(self.blocks)]
         scored.sort(key=lambda item: item[1], reverse=True)
         return [(block, score) for block, score in scored[:top_k] if score > 0]
-

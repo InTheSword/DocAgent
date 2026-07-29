@@ -1,19 +1,27 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from collections import Counter
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
-from docagent.schemas import EvidenceBlock, EvidenceLocation
+from docagent.schemas import Chunk, EvidenceLocation
 
 
-TEXT_TYPES = {"text", "title", "paragraph", "list"}
+TEXT_TYPES = {"text", "title", "heading", "paragraph", "list", "list_item", "caption"}
 TABLE_TYPES = {"table"}
 IMAGE_TYPES = {"image", "figure", "chart"}
-BOILERPLATE_TYPES = {"header", "footer", "page_number"}
-KNOWN_RAW_TYPES = TEXT_TYPES | TABLE_TYPES | IMAGE_TYPES | BOILERPLATE_TYPES
+BOILERPLATE_TYPES = {"header", "footer", "page_header", "page_footer", "page_number"}
+KNOWN_RAW_TYPES = (
+    TEXT_TYPES
+    | TABLE_TYPES
+    | IMAGE_TYPES
+    | BOILERPLATE_TYPES
+    | {"aside_text", "code", "equation", "index", "page_footnote", "ref_text"}
+)
 TEXTISH_KEYS = (
     "text",
     "content",
@@ -33,6 +41,7 @@ VISUAL_SUMMARY_KEYS = (
     "figure_summary",
     "chart_summary",
     "alt_text",
+    "content",
 )
 NESTED_TEXT_KEYS = ("spans", "lines", "children", "blocks", "items", "cells", "rows")
 RESOURCE_PATH_KEYS = (
@@ -46,6 +55,98 @@ RESOURCE_PATH_KEYS = (
     "table_img_url",
 )
 URL_RE = re.compile(r"^https?://", re.IGNORECASE)
+CHUNK_CONTRACT_VERSION = "docagent_chunk_v3"
+SPLITTABLE_CONTENT_TYPES = {"body", "list_item", "reference"}
+
+
+class _TableParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self._rows: list[list[tuple[str, int, int, bool]]] = []
+        self._row: list[tuple[str, int, int, bool]] | None = None
+        self._cell_parts: list[str] | None = None
+        self._cell_is_header = False
+        self._cell_rowspan = 1
+        self._cell_colspan = 1
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        if tag.lower() == "tr":
+            self._row = []
+        elif tag.lower() in {"td", "th"} and self._row is not None:
+            attributes = {str(key).casefold(): value for key, value in attrs}
+            self._cell_parts = []
+            self._cell_is_header = tag.lower() == "th"
+            self._cell_rowspan = _positive_span(attributes.get("rowspan"))
+            self._cell_colspan = _positive_span(attributes.get("colspan"))
+
+    def handle_data(self, data: str) -> None:
+        if self._cell_parts is not None:
+            self._cell_parts.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        normalized = tag.lower()
+        if normalized in {"td", "th"} and self._row is not None and self._cell_parts is not None:
+            self._row.append(
+                (
+                    _clean_text(" ".join(self._cell_parts)),
+                    self._cell_rowspan,
+                    self._cell_colspan,
+                    self._cell_is_header,
+                )
+            )
+            self._cell_parts = None
+        elif normalized == "tr" and self._row is not None:
+            if any(cell[0] for cell in self._row):
+                self._rows.append(self._row)
+            self._row = None
+
+    @property
+    def rows(self) -> list[list[str]]:
+        return _expand_table_cells(self._rows)
+
+    @property
+    def header_row_count(self) -> int:
+        explicit = 0
+        for row in self._rows:
+            if row and all(cell[3] for cell in row):
+                explicit += 1
+            else:
+                break
+        if explicit:
+            return explicit
+        if not self._rows:
+            return 0
+        first_row = self._rows[0]
+        return min(
+            2 if any(rowspan > 1 or colspan > 1 for _text, rowspan, colspan, _header in first_row) else 1,
+            len(self._rows),
+        )
+
+
+def _positive_span(value: object) -> int:
+    try:
+        return max(1, int(str(value or "1")))
+    except ValueError:
+        return 1
+
+
+def _expand_table_cells(rows: list[list[tuple[str, int, int, bool]]]) -> list[list[str]]:
+    grid: dict[tuple[int, int], str] = {}
+    width = 0
+    for row_index, row in enumerate(rows):
+        column = 0
+        for text, rowspan, colspan, _is_header in row:
+            while (row_index, column) in grid:
+                column += 1
+            for row_offset in range(rowspan):
+                for column_offset in range(colspan):
+                    grid[(row_index + row_offset, column + column_offset)] = text
+            column += colspan
+        width = max(width, column, *(index + 1 for (index_row, index) in grid if index_row == row_index))
+    return [
+        [grid.get((row_index, column), "") for column in range(width)]
+        for row_index in range(len(rows))
+    ]
 
 
 def _clean_text(value: object) -> str:
@@ -142,6 +243,86 @@ def _block_type(raw_type: str) -> str:
     return "text"
 
 
+def _content_type(item: dict[str, Any], raw_type: str, block_type: str) -> str:
+    if raw_type in {"title", "heading"} or item.get("text_level") is not None:
+        return "heading"
+    return {
+        "text": "body",
+        "paragraph": "body",
+        "list": "list_item",
+        "list_item": "list_item",
+        "caption": "caption",
+        "table": "table",
+        "image": "image",
+        "figure": "figure",
+        "chart": "chart",
+        "header": "page_header",
+        "page_header": "page_header",
+        "footer": "page_footer",
+        "page_footer": "page_footer",
+        "page_number": "page_number",
+        "page_footnote": "footnote",
+        "ref_text": "reference",
+        "equation": "equation",
+        "code": "code",
+        "aside_text": "aside",
+        "index": "index",
+    }.get(raw_type, block_type if block_type in {"table", "image"} else "unknown")
+
+
+def _heading_level(item: dict[str, Any], content_type: str) -> int | None:
+    if content_type != "heading":
+        return None
+    value = item.get("text_level", item.get("level", 1))
+    try:
+        level = int(value)
+    except (TypeError, ValueError):
+        return 1
+    return max(level, 1)
+
+
+def _stable_hash(value: object) -> str:
+    payload = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _printed_page_numbers(data: list[Any]) -> dict[int, str]:
+    result: dict[int, str] = {}
+    for item in data:
+        if not isinstance(item, dict) or _raw_type(item) != "page_number":
+            continue
+        page_idx = _page_idx(item)
+        label = _clean_text(item.get("text") or item.get("content"))
+        if page_idx is not None and label:
+            result.setdefault(page_idx, label)
+    return result
+
+
+def _summary_text(item: dict[str, Any], *, block_type: str, content_type: str) -> str | None:
+    explicit = _unique_text_parts(
+        _clean_text(item.get("summary")),
+        _clean_text(item.get("abstract")),
+        _clean_text(item.get("description")),
+    )
+    if explicit:
+        return explicit
+    if block_type == "image":
+        return _visual_summary(item) or _caption_text(item, "caption", "image_caption", "chart_caption") or None
+    if content_type == "table":
+        return _caption_text(item, "table_caption") or None
+    return None
+
+
+def _keywords(item: dict[str, Any]) -> list[str]:
+    values: list[str] = []
+    for key in ("keywords", "tags", "keyphrases"):
+        for value in _as_list(item.get(key)):
+            cleaned = _clean_text(value)
+            if cleaned:
+                values.append(cleaned)
+    return list(dict.fromkeys(values))
+
+
 def _as_list(value: object) -> list[Any]:
     if value is None:
         return []
@@ -151,6 +332,68 @@ def _as_list(value: object) -> list[Any]:
 def _table_html(item: dict[str, Any]) -> str | None:
     value = item.get("table_html") or item.get("table_body")
     return str(value) if value else None
+
+
+def _table_structure(item: dict[str, Any], table_html: str | None) -> dict[str, Any]:
+    headers = [_clean_text(value) for value in _as_list(item.get("headers")) if _clean_text(value)]
+    raw_rows = item.get("rows")
+    rows: list[list[str]] = []
+    if isinstance(raw_rows, list):
+        for row in raw_rows:
+            if isinstance(row, list):
+                cleaned = [_clean_text(cell) for cell in row]
+                if any(cleaned):
+                    rows.append(cleaned)
+    if table_html and not rows:
+        parser = _TableParser()
+        try:
+            parser.feed(table_html)
+        except Exception:
+            parser = _TableParser()
+        rows = parser.rows
+        if not headers and parser.header_row_count:
+            headers = _combine_table_headers(rows[: parser.header_row_count])
+            rows = rows[parser.header_row_count :]
+    if not headers and not rows:
+        return {}
+    width = max([len(headers), *(len(row) for row in rows)], default=0)
+    result = {
+        "table_headers": headers,
+        "table_rows": rows,
+        "row_count": len(rows),
+        "column_count": width,
+    }
+    result["table_markdown"] = _table_markdown(headers, rows)
+    return result
+
+
+def _combine_table_headers(rows: list[list[str]]) -> list[str]:
+    width = max((len(row) for row in rows), default=0)
+    headers: list[str] = []
+    for column in range(width):
+        parts: list[str] = []
+        for row in rows:
+            value = row[column] if column < len(row) else ""
+            if value and (not parts or value.casefold() != parts[-1].casefold()):
+                parts.append(value)
+        headers.append(" ".join(parts).strip() or f"column_{column + 1}")
+    return headers
+
+
+def _table_markdown(headers: list[str], rows: list[list[str]]) -> str:
+    width = max([len(headers), *(len(row) for row in rows)], default=0)
+    if width == 0:
+        return ""
+    normalized_headers = [*(headers or [f"column_{index + 1}" for index in range(width)])]
+    normalized_headers.extend([""] * (width - len(normalized_headers)))
+
+    def render(row: list[str]) -> str:
+        cells = [*row, *([""] * (width - len(row)))]
+        return "| " + " | ".join(cell.replace("|", "\\|") for cell in cells[:width]) + " |"
+
+    lines = [render(normalized_headers[:width]), "| " + " | ".join("---" for _ in range(width)) + " |"]
+    lines.extend(render(row) for row in rows)
+    return "\n".join(lines)
 
 
 def _caption_text(item: dict[str, Any], *keys: str) -> str:
@@ -227,7 +470,7 @@ def _visual_content_metadata(
         sources.append("caption")
     if _clean_text(item.get("nearby_text")):
         sources.append("nearby_text")
-    if _unique_text_parts(_clean_text(item.get("text")), _clean_text(item.get("content"))):
+    if _clean_text(item.get("text")):
         sources.append("ocr_text")
 
     if visual_summary:
@@ -300,6 +543,27 @@ def _layout_metadata(content_list_path: Path, document_dir: Path) -> dict[str, A
     }
 
 
+def _layout_page_dimensions(content_list_path: Path) -> dict[int, tuple[float, float]]:
+    layout_path = content_list_path.parent / "layout.json"
+    try:
+        data = json.loads(layout_path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return {}
+    result: dict[int, tuple[float, float]] = {}
+    for page in data.get("pdf_info") or []:
+        if not isinstance(page, dict):
+            continue
+        page_idx = _page_idx(page)
+        size = page.get("page_size")
+        if page_idx is None or not isinstance(size, list) or len(size) < 2:
+            continue
+        try:
+            result[page_idx] = (float(size[0]), float(size[1]))
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
 def _make_block(
     *,
     doc_id: str,
@@ -309,15 +573,27 @@ def _make_block(
     resource_root: Path,
     document_dir: Path,
     provenance: dict[str, Any],
-) -> EvidenceBlock | None:
+    printed_page_numbers: dict[int, str],
+    page_dimensions: dict[int, tuple[float, float]],
+) -> Chunk | None:
     raw_type = _raw_type(item)
     block_type = _block_type(raw_type)
+    content_type = _content_type(item, raw_type, block_type)
     page = _docagent_page(item)
     mineru_page_idx = _page_idx(item)
-    text = _item_text(item, raw_type, block_type)
     visual_summary = _visual_summary(item) if block_type == "image" else ""
-    boilerplate = _is_boilerplate(raw_type, text)
     table_html = _table_html(item) if block_type == "table" else None
+    table_structure = _table_structure(item, table_html) if block_type == "table" else {}
+    text = _item_text(item, raw_type, block_type)
+    table_context = text if block_type == "table" else ""
+    if block_type == "table" and table_structure.get("table_markdown"):
+        text = _unique_text_parts(
+            _caption_text(item, "table_caption"),
+            table_context,
+            str(table_structure["table_markdown"]),
+            _caption_text(item, "table_footnote"),
+        )
+    boilerplate = _is_boilerplate(raw_type, text)
     raw_image_path, raw_resource_key = _resource_path(item)
     resource_path, resource_exists, resource_is_remote = _resolve_resource_path(raw_image_path, resource_root, document_dir)
     image_path = resource_path if block_type == "image" else None
@@ -330,36 +606,80 @@ def _make_block(
     block_id = f"{doc_id}_p{safe_page:03d}_b{index:04d}"
     metadata: dict[str, Any] = {
         "parser": "mineru",
+        "chunk_strategy": "mineru_block_identity",
+        "chunk_contract_version": CHUNK_CONTRACT_VERSION,
+        "source_block_ids": [block_id],
+        "source_item_id": _source_item_id(item),
+        "source_item_ids": [value for value in [_source_item_id(item)] if value],
+        "source_item_hash": _stable_hash(item),
+        "source_item_hashes": [_stable_hash(item)],
+        "source_page_numbers": [page] if page is not None else [],
+        "document_page_number_start": page,
+        "document_page_number_end": page,
+        "global_chunk_id": block_id,
         "reading_order": index,
         "raw_item_index": index,
         "raw_mineru_type": raw_type,
+        "content_type": content_type,
+        "document_page_index": mineru_page_idx,
+        "document_page_number": page,
+        "printed_page_number": printed_page_numbers.get(mineru_page_idx) if mineru_page_idx is not None else None,
+        "section_id": None,
+        "section_path": [],
+        "heading_level": _heading_level(item, content_type),
+        "heading_role": None,
+        "parent_heading_id": None,
+        "previous_block_id": None,
+        "next_block_id": None,
+        "previous_document_block_id": None,
+        "next_document_block_id": None,
+        "continuation_of": None,
+        "continued_by": None,
+        "cross_page_group_id": None,
+        "container_id": block_id if block_type in {"table", "image"} else None,
+        "container_type": content_type,
+        "summary": _summary_text(item, block_type=block_type, content_type=content_type),
+        "keywords": _keywords(item),
+        "feature_tags": [],
         "raw_boilerplate_type": raw_type in BOILERPLATE_TYPES,
         "is_boilerplate": boilerplate,
+        "is_page_header": content_type == "page_header",
+        "is_page_footer": content_type == "page_footer",
         "exclude_from_retrieval": boilerplate,
         "mineru_provenance": provenance,
     }
+    if mineru_page_idx in page_dimensions:
+        metadata["page_width"], metadata["page_height"] = page_dimensions[mineru_page_idx]
     if raw_type not in KNOWN_RAW_TYPES:
         metadata["unknown_raw_type"] = True
     if mineru_page_idx is not None:
         metadata["mineru_page_idx"] = mineru_page_idx
     if "text_level" in item:
         metadata["text_level"] = item["text_level"]
-    for key in (
-        "table_caption",
-        "table_footnote",
-        "caption",
-        "image_caption",
-        "chart_caption",
-        "chart_footnote",
-        "nearby_text",
-        "sub_type",
-    ):
-        if key in item:
-            metadata[key] = item[key]
-    if table_html is not None:
-        metadata["table_body"] = table_html
+    if block_type == "table":
+        metadata.update(table_structure)
+        if table_context:
+            metadata["table_context"] = table_context
+        table_caption = _caption_text(item, "table_caption")
+        table_footnote = _caption_text(item, "table_footnote")
+        if table_caption:
+            metadata["table_caption"] = table_caption
+        if table_footnote:
+            metadata["table_footnote"] = table_footnote
+    elif block_type == "image":
+        image_caption = _caption_text(item, "caption", "image_caption", "chart_caption")
+        image_footnote = _caption_text(item, "chart_footnote")
+        if image_caption:
+            metadata["image_caption"] = image_caption
+        if image_footnote:
+            metadata["image_footnote"] = image_footnote
+    nearby_text = _clean_text(item.get("nearby_text"))
+    if nearby_text:
+        metadata["nearby_text"] = nearby_text
+    if item.get("sub_type") is not None:
+        metadata["visual_subtype"] = _clean_text(item.get("sub_type"))
     if raw_image_path is not None:
-        metadata["img_path"] = raw_image_path
+        metadata["source_resource_path"] = raw_image_path
         if raw_resource_key is not None:
             metadata["resource_key"] = raw_resource_key
         metadata["resource_exists"] = resource_exists
@@ -375,7 +695,7 @@ def _make_block(
         )
     )
 
-    return EvidenceBlock(
+    return Chunk(
         doc_id=doc_id,
         page_id=page,
         block_id=block_id,
@@ -389,21 +709,314 @@ def _make_block(
     )
 
 
-def _link_neighbors(blocks: list[EvidenceBlock]) -> None:
+def _source_item_id(item: dict[str, Any]) -> str | None:
+    for key in ("id", "block_id", "uuid", "content_id"):
+        value = item.get(key)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return None
+
+
+def _assign_page_reading_order(blocks: list[Chunk]) -> None:
+    counters: dict[int | None, int] = {}
+    for block in blocks:
+        counters[block.page_id] = counters.get(block.page_id, 0) + 1
+        block.metadata["page_reading_order"] = counters[block.page_id]
+
+
+def _link_neighbors(blocks: list[Chunk]) -> None:
     for index, block in enumerate(blocks):
+        block.metadata["previous_block_id"] = None
+        block.metadata["next_block_id"] = None
+        block.metadata["previous_document_block_id"] = blocks[index - 1].block_id if index > 0 else None
+        block.metadata["next_document_block_id"] = blocks[index + 1].block_id if index + 1 < len(blocks) else None
         if index > 0:
-            block.metadata["previous_block_id"] = blocks[index - 1].block_id
-        if index + 1 < len(blocks):
+            previous = blocks[index - 1]
+            if previous.page_id == block.page_id:
+                block.metadata["previous_block_id"] = previous.block_id
+        if index + 1 < len(blocks) and blocks[index + 1].page_id == block.page_id:
             block.metadata["next_block_id"] = blocks[index + 1].block_id
 
 
-def _split_large_block(block: EvidenceBlock, max_chars: int) -> list[EvidenceBlock]:
-    if len(block.text) <= max_chars or block.block_type != "text" or block.metadata.get("is_boilerplate"):
+def _link_related_blocks(blocks: list[Chunk]) -> None:
+    by_page: dict[int | None, list[Chunk]] = {}
+    for block in blocks:
+        by_page.setdefault(block.page_id, []).append(block)
+    for page_blocks in by_page.values():
+        targets = [block for block in page_blocks if block.block_type in {"table", "image"}]
+        text_context = [
+            block
+            for block in page_blocks
+            if block.metadata.get("content_type") in {"body", "heading", "list_item"}
+            and not block.metadata.get("is_boilerplate")
+        ]
+        for target in targets:
+            target_order = int(target.metadata.get("page_reading_order") or 0)
+            nearby = sorted(
+                text_context,
+                key=lambda block: (
+                    abs(int(block.metadata.get("page_reading_order") or 0) - target_order),
+                    int(block.metadata.get("page_reading_order") or 0),
+                ),
+            )[:2]
+            target.metadata["nearby_block_ids"] = [block.block_id for block in nearby]
+            target.metadata.setdefault("caption_block_ids", [])
+        for caption in [block for block in page_blocks if block.metadata.get("content_type") == "caption"]:
+            if not targets:
+                continue
+            caption_order = int(caption.metadata.get("page_reading_order") or 0)
+            target = min(
+                targets,
+                key=lambda block: (
+                    abs(int(block.metadata.get("page_reading_order") or 0) - caption_order),
+                    int(block.metadata.get("page_reading_order") or 0),
+                ),
+            )
+            target.metadata.setdefault("caption_block_ids", []).append(caption.block_id)
+            caption.metadata["related_block_id"] = target.block_id
+
+
+def _apply_heading_hierarchy(blocks: list[Chunk]) -> None:
+    stack: list[tuple[int, str, str]] = []
+    seen_heading = False
+    for block in blocks:
+        content_type = str(block.metadata.get("content_type") or "")
+        if content_type == "heading":
+            level = int(block.metadata.get("heading_level") or 1)
+            while stack and stack[-1][0] >= level:
+                stack.pop()
+            block.metadata["parent_heading_id"] = stack[-1][2] if stack else None
+            block.metadata["section_path"] = [item[1] for item in stack] + [block.text]
+            block.metadata["section_id"] = block.block_id
+            block.metadata["heading_role"] = "document_title" if not seen_heading else "section_heading"
+            seen_heading = True
+            stack.append((level, block.text, block.block_id))
+            continue
+        block.metadata["section_path"] = [item[1] for item in stack]
+        block.metadata["section_id"] = stack[-1][2] if stack else None
+        block.metadata["parent_heading_id"] = stack[-1][2] if stack else None
+
+
+def _merge_cross_page_text(blocks: list[Chunk]) -> list[Chunk]:
+    by_page: dict[int, list[Chunk]] = {}
+    for block in blocks:
+        if block.page_id is not None and not block.metadata.get("is_boilerplate"):
+            by_page.setdefault(block.page_id, []).append(block)
+
+    links: dict[str, Chunk] = {}
+    for page in sorted(by_page):
+        next_page = page + 1
+        if next_page not in by_page:
+            continue
+        left = by_page[page][-1]
+        right = by_page[next_page][0]
+        if _is_cross_page_continuation(left, right):
+            links[left.block_id] = right
+
+    if not links:
+        return blocks
+    linked_targets = {block.block_id for block in links.values()}
+    consumed: set[str] = set()
+    result: list[Chunk] = []
+    for block in blocks:
+        if block.block_id in consumed or block.block_id in linked_targets:
+            continue
+        group = [block]
+        while group[-1].block_id in links:
+            following = links[group[-1].block_id]
+            group.append(following)
+            consumed.add(following.block_id)
+        result.append(_merge_cross_page_group(group) if len(group) > 1 else block)
+    return result
+
+
+def _is_cross_page_continuation(left: Chunk, right: Chunk) -> bool:
+    if left.block_type != "text" or right.block_type != "text":
+        return False
+    if left.metadata.get("content_type") not in SPLITTABLE_CONTENT_TYPES:
+        return False
+    if right.metadata.get("content_type") != left.metadata.get("content_type"):
+        return False
+    if list(left.metadata.get("section_path") or []) != list(right.metadata.get("section_path") or []):
+        return False
+    if not left.text.strip() or not right.text.strip():
+        return False
+    if re.search(r'[。！？.!?]["”’\']?\s*$', left.text):
+        return False
+    boundary_signal = _has_page_boundary_signal(left, right)
+    continuation_signal = (
+        left.text.rstrip().endswith(("-", "‐", "‑"))
+        or _starts_with_lowercase_letter(right.text)
+    )
+    left_length = len(left.text.strip())
+    return (
+        (left_length >= 20 and boundary_signal)
+        or (left_length >= 40 and continuation_signal)
+    )
+
+
+def _has_page_boundary_signal(left: Chunk, right: Chunk) -> bool:
+    left_bbox = left.location.bbox
+    right_bbox = right.location.bbox
+    left_height = left.metadata.get("page_height")
+    right_height = right.metadata.get("page_height")
+    if not left_bbox or not right_bbox or not left_height or not right_height:
+        return False
+    return (
+        float(left_bbox[3]) >= 0.78 * float(left_height)
+        and float(right_bbox[1]) <= 0.22 * float(right_height)
+    )
+
+
+def _starts_with_lowercase_letter(text: str) -> bool:
+    first_letter = next((character for character in text.lstrip() if character.isalpha()), "")
+    return bool(first_letter and first_letter.islower())
+
+
+def _merge_cross_page_group(group: list[Chunk]) -> Chunk:
+    first, last = group[0], group[-1]
+    block_id = f"{first.block_id}_xp{int(last.page_id or first.page_id or 0):03d}"
+    source_block_ids = [
+        source_id
+        for block in group
+        for source_id in block.metadata.get("source_block_ids") or [block.block_id]
+    ]
+    source_item_ids = [
+        source_id
+        for block in group
+        for source_id in block.metadata.get("source_item_ids") or []
+    ]
+    source_item_hashes = [
+        source_hash
+        for block in group
+        for source_hash in block.metadata.get("source_item_hashes")
+        or [block.metadata.get("source_item_hash")]
+        if source_hash
+    ]
+    source_pages = list(
+        dict.fromkeys(
+            page
+            for block in group
+            for page in block.metadata.get("source_page_numbers") or [block.page_id]
+            if page is not None
+        )
+    )
+    metadata = {
+        **first.metadata,
+        "chunk_strategy": "cross_page_merge",
+        "source_block_ids": source_block_ids,
+        "source_item_id": source_item_ids[0] if source_item_ids else None,
+        "source_item_ids": source_item_ids,
+        "source_item_hash": _stable_hash(source_item_hashes),
+        "source_item_hashes": source_item_hashes,
+        "source_page_numbers": source_pages,
+        "document_page_number_start": first.page_id,
+        "document_page_number_end": last.page_id,
+        "printed_page_number_end": last.metadata.get("printed_page_number"),
+        "cross_page_group_id": block_id,
+        "continuation_of": None,
+        "continued_by": None,
+        "end_bbox": last.location.bbox,
+    }
+    return Chunk(
+        doc_id=first.doc_id,
+        page_id=first.page_id,
+        block_id=block_id,
+        block_type=first.block_type,
+        text="\n".join(block.text.strip() for block in group if block.text.strip()),
+        location=EvidenceLocation(page=first.page_id, block_id=block_id, bbox=first.location.bbox),
+        metadata=metadata,
+    )
+
+
+def _finalize_chunk_metadata(blocks: list[Chunk]) -> None:
+    for block in blocks:
+        content_type = str(block.metadata.get("content_type") or block.block_type)
+        tags = [f"content_type:{content_type}", f"modality:{block.block_type}"]
+        if block.metadata.get("is_boilerplate"):
+            tags.append("boilerplate")
+        if block.metadata.get("summary"):
+            tags.append("has_summary")
+        if block.metadata.get("table_headers") or block.metadata.get("table_rows"):
+            tags.append("has_table_structure")
+        block.metadata["global_chunk_id"] = block.block_id
+        block.metadata["feature_tags"] = tags
+        block.metadata["content_hash"] = _stable_hash(
+            {
+                "block_type": block.block_type,
+                "content_type": content_type,
+                "text": block.text,
+                "table_html": block.table_html,
+                "visual_summary": block.visual_summary,
+            }
+        )
+
+
+def validate_mineru_chunk_contract(blocks: list[Chunk]) -> dict[str, list[str]]:
+    """Return contract violations keyed by block_id without mutating chunks."""
+
+    required = (
+        "chunk_contract_version",
+        "source_block_ids",
+        "source_item_hash",
+        "source_item_hashes",
+        "source_page_numbers",
+        "global_chunk_id",
+        "reading_order",
+        "page_reading_order",
+        "content_type",
+        "document_page_index",
+        "document_page_number",
+        "document_page_number_start",
+        "document_page_number_end",
+        "section_path",
+        "feature_tags",
+        "content_hash",
+        "is_boilerplate",
+        "exclude_from_retrieval",
+    )
+    errors: dict[str, list[str]] = {}
+    seen: set[str] = set()
+    for block in blocks:
+        block_errors: list[str] = []
+        if block.block_id in seen:
+            block_errors.append("duplicate_block_id")
+        seen.add(block.block_id)
+        missing = [key for key in required if key not in block.metadata]
+        block_errors.extend(f"missing:{key}" for key in missing)
+        if block.metadata.get("chunk_contract_version") != CHUNK_CONTRACT_VERSION:
+            block_errors.append("invalid:chunk_contract_version")
+        if block.metadata.get("global_chunk_id") != block.block_id:
+            block_errors.append("invalid:global_chunk_id")
+        if block.location.block_id != block.block_id or block.location.page != block.page_id:
+            block_errors.append("invalid:location")
+        if block.metadata.get("document_page_number") != block.page_id:
+            block_errors.append("invalid:document_page_number")
+        if not isinstance(block.metadata.get("section_path"), list):
+            block_errors.append("invalid:section_path")
+        if not isinstance(block.metadata.get("source_block_ids"), list):
+            block_errors.append("invalid:source_block_ids")
+        if not re.fullmatch(r"[0-9a-f]{64}", str(block.metadata.get("source_item_hash") or "")):
+            block_errors.append("invalid:source_item_hash")
+        if not re.fullmatch(r"[0-9a-f]{64}", str(block.metadata.get("content_hash") or "")):
+            block_errors.append("invalid:content_hash")
+        if block_errors:
+            errors[block.block_id] = block_errors
+    return errors
+
+
+def _split_large_block(block: Chunk, max_chars: int) -> list[Chunk]:
+    if (
+        len(block.text) <= max_chars
+        or block.block_type != "text"
+        or block.metadata.get("content_type") not in SPLITTABLE_CONTENT_TYPES
+        or block.metadata.get("is_boilerplate")
+    ):
         return [block]
-    parts = [part.strip() for part in re.split(r"(?<=[。?!?])\s+|\n+", block.text) if part.strip()]
+    parts = _sentence_units(block.text, max_chars)
     chunks: list[str] = []
     current = ""
-    for part in parts or [block.text]:
+    for part in parts:
         if current and len(current) + 1 + len(part) > max_chars:
             chunks.append(current)
             current = part
@@ -413,32 +1026,77 @@ def _split_large_block(block: EvidenceBlock, max_chars: int) -> list[EvidenceBlo
         chunks.append(current)
     if len(chunks) <= 1:
         return [block]
-    result: list[EvidenceBlock] = []
+    result: list[Chunk] = []
+    source_block_ids = list(block.metadata.get("source_block_ids") or [block.block_id])
     for idx, text in enumerate(chunks, start=1):
         child_id = f"{block.block_id}_s{idx:03d}"
         result.append(
-            EvidenceBlock(
+            Chunk(
                 doc_id=block.doc_id,
                 page_id=block.page_id,
                 block_id=child_id,
                 block_type=block.block_type,
                 text=text,
                 location=EvidenceLocation(page=block.page_id, block_id=child_id, bbox=block.location.bbox),
-                metadata={**block.metadata, "parent_block_id": block.block_id},
+                metadata={
+                    **block.metadata,
+                    "chunk_strategy": (
+                        "cross_page_sentence_split"
+                        if block.metadata.get("cross_page_group_id")
+                        else "sentence_window_split"
+                    ),
+                    "source_block_ids": source_block_ids,
+                    "parent_block_id": block.block_id,
+                    "segment_index": idx,
+                    "segment_count": len(chunks),
+                },
             )
         )
     return result
 
 
+def _sentence_units(text: str, max_chars: int) -> list[str]:
+    sentences = [
+        part.strip()
+        for part in re.split(r"(?<=[。！？!?])(?:\s+|(?=[^\s]))|(?<=[.;])\s+|\n+", text)
+        if part.strip()
+    ]
+    result: list[str] = []
+    for sentence in sentences or [text.strip()]:
+        if len(sentence) <= max_chars:
+            result.append(sentence)
+            continue
+        clauses = [
+            part.strip()
+            for part in re.split(r"(?<=[,，;；:：])\s*|\s+", sentence)
+            if part.strip()
+        ]
+        current = ""
+        for clause in clauses or [sentence]:
+            if len(clause) > max_chars:
+                if current:
+                    result.append(current)
+                    current = ""
+                result.extend(clause[index : index + max_chars] for index in range(0, len(clause), max_chars))
+            elif current and len(current) + 1 + len(clause) > max_chars:
+                result.append(current)
+                current = clause
+            else:
+                current = f"{current} {clause}".strip()
+        if current:
+            result.append(current)
+    return result
+
+
 def normalize_blocks(
-    blocks: list[EvidenceBlock],
+    blocks: list[Chunk],
     *,
-    merge_small_chars: int = 100,
+    merge_small_chars: int = 0,
     merge_max_chars: int = 1000,
     split_max_chars: int = 1200,
-) -> list[EvidenceBlock]:
-    merged: list[EvidenceBlock] = []
-    pending: EvidenceBlock | None = None
+) -> list[Chunk]:
+    merged: list[Chunk] = []
+    pending: Chunk | None = None
 
     def flush_pending() -> None:
         nonlocal pending
@@ -448,11 +1106,14 @@ def normalize_blocks(
 
     for block in blocks:
         can_merge = (
-            block.block_type == "text"
+            merge_small_chars > 0
+            and block.block_type == "text"
+            and block.metadata.get("content_type") == "body"
             and not block.metadata.get("is_boilerplate")
             and len(block.text) < merge_small_chars
             and pending is not None
             and pending.block_type == "text"
+            and pending.metadata.get("content_type") == "body"
             and not pending.metadata.get("is_boilerplate")
             and pending.page_id == block.page_id
             and len(pending.text) + 1 + len(block.text) <= merge_max_chars
@@ -461,45 +1122,75 @@ def normalize_blocks(
             pending.text = f"{pending.text}\n{block.text}".strip()
             pending.metadata.setdefault("merged_block_ids", [pending.block_id])
             pending.metadata["merged_block_ids"].append(block.block_id)
+            pending.metadata["chunk_strategy"] = "adjacent_text_merge"
+            pending.metadata["source_block_ids"] = list(
+                dict.fromkeys(
+                    [
+                        *list(pending.metadata.get("source_block_ids") or [pending.block_id]),
+                        *list(block.metadata.get("source_block_ids") or [block.block_id]),
+                    ]
+                )
+            )
             continue
         flush_pending()
         pending = block
     flush_pending()
 
-    normalized: list[EvidenceBlock] = []
+    normalized: list[Chunk] = []
     for block in merged:
         normalized.extend(_split_large_block(block, split_max_chars))
     _link_neighbors(normalized)
     return normalized
 
 
-def build_page_blocks(doc_id: str, blocks: list[EvidenceBlock]) -> list[EvidenceBlock]:
-    by_page: dict[int, list[EvidenceBlock]] = {}
+def build_page_blocks(doc_id: str, blocks: list[Chunk]) -> list[Chunk]:
+    by_page: dict[int, list[Chunk]] = {}
     for block in blocks:
-        if block.page_id is not None and block.block_type != "page":
-            by_page.setdefault(block.page_id, []).append(block)
-    pages: list[EvidenceBlock] = []
+        if block.block_type == "page":
+            continue
+        source_pages = block.metadata.get("source_page_numbers") or [block.page_id]
+        for page in source_pages:
+            if page is not None:
+                by_page.setdefault(int(page), []).append(block)
+    pages: list[Chunk] = []
     for page, page_blocks in sorted(by_page.items()):
         page_blocks.sort(key=lambda item: int(item.metadata.get("reading_order", 0)))
         block_id = f"{doc_id}_p{page:03d}_page"
         text = "\n".join(block.retrieval_text for block in page_blocks if block.retrieval_text)
-        pages.append(
-            EvidenceBlock(
-                doc_id=doc_id,
-                page_id=page,
-                block_id=block_id,
-                block_type="page",
-                text=text,
-                location=EvidenceLocation(page=page, block_id=block_id),
-                metadata={
-                    "parser": "mineru",
-                    "child_block_ids": [block.block_id for block in page_blocks],
-                    "excluded_child_block_ids": [
-                        block.block_id for block in page_blocks if block.metadata.get("exclude_from_retrieval")
-                    ],
-                },
-            )
+        page_block = Chunk(
+            doc_id=doc_id,
+            page_id=page,
+            block_id=block_id,
+            block_type="page",
+            text=text,
+            location=EvidenceLocation(page=page, block_id=block_id),
+            metadata={
+                "parser": "mineru",
+                "chunk_contract_version": CHUNK_CONTRACT_VERSION,
+                "content_type": "page_aggregate",
+                "document_page_index": page - 1,
+                "document_page_number": page,
+                "printed_page_number": next(
+                    (
+                        block.metadata.get("printed_page_number")
+                        for block in page_blocks
+                        if block.metadata.get("printed_page_number")
+                    ),
+                    None,
+                ),
+                "section_path": [],
+                "summary": None,
+                "keywords": [],
+                "feature_tags": [],
+                "exclude_from_retrieval": True,
+                "child_block_ids": [block.block_id for block in page_blocks],
+                "excluded_child_block_ids": [
+                    block.block_id for block in page_blocks if block.metadata.get("exclude_from_retrieval")
+                ],
+            },
         )
+        _finalize_chunk_metadata([page_block])
+        pages.append(page_block)
     return pages
 
 
@@ -522,14 +1213,22 @@ def raw_content_list_stats(content_list_path: str | Path) -> dict[str, Any]:
     }
 
 
-def content_list_to_blocks(
+def content_list_to_chunks(
     *,
     doc_id: str,
     content_list_path: str | Path,
-    normalize: bool = False,
+    merge_cross_page: bool = True,
+    merge_small_chars: int = 0,
+    split_max_chars: int = 1200,
     resource_root: str | Path | None = None,
     document_dir: str | Path | None = None,
-) -> list[EvidenceBlock]:
+) -> list[Chunk]:
+    """Convert MinerU JSON into canonical retrieval Chunks.
+
+    Raw MinerU items are normalized first, then cross-page continuations are
+    merged, and only afterwards are long textual units sentence-split.
+    """
+
     path = Path(content_list_path)
     data = json.loads(path.read_text(encoding="utf-8-sig"))
     if isinstance(data, dict):
@@ -540,6 +1239,8 @@ def content_list_to_blocks(
     document_base = Path(document_dir) if document_dir is not None else _default_document_dir(path)
     provenance = _layout_metadata(path, document_base)
     provenance["content_list_file"] = _relative_posix(path, document_base)
+    printed_page_numbers = _printed_page_numbers(data)
+    page_dimensions = _layout_page_dimensions(path)
     blocks = [
         _make_block(
             doc_id=doc_id,
@@ -549,14 +1250,45 @@ def content_list_to_blocks(
             resource_root=resource_base,
             document_dir=document_base,
             provenance=provenance,
+            printed_page_numbers=printed_page_numbers,
+            page_dimensions=page_dimensions,
         )
         for index, item in enumerate(data, start=1)
         if isinstance(item, dict)
     ]
     result = [block for block in blocks if block is not None]
-    result = normalize_blocks(result) if normalize else result
+    _apply_heading_hierarchy(result)
+    if merge_cross_page:
+        result = _merge_cross_page_text(result)
+    result = normalize_blocks(
+        result,
+        merge_small_chars=merge_small_chars,
+        split_max_chars=split_max_chars,
+    )
+    _assign_page_reading_order(result)
     _link_neighbors(result)
+    _link_related_blocks(result)
+    _finalize_chunk_metadata(result)
     return result
+
+
+def content_list_to_blocks(
+    *,
+    doc_id: str,
+    content_list_path: str | Path,
+    normalize: bool = False,
+    resource_root: str | Path | None = None,
+    document_dir: str | Path | None = None,
+) -> list[Chunk]:
+    """Compatibility wrapper; new code should use content_list_to_chunks."""
+
+    return content_list_to_chunks(
+        doc_id=doc_id,
+        content_list_path=content_list_path,
+        merge_small_chars=100 if normalize else 0,
+        resource_root=resource_root,
+        document_dir=document_dir,
+    )
 
 
 def find_content_list(output_dir: str | Path) -> Path:

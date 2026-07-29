@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from docagent.retrieval.dense_index import DenseIndex
+from docagent.retrieval.dense_index import DenseIndex, evidence_hash
 from docagent.schemas import EvidenceBlock, EvidenceLocation
 
 
@@ -27,6 +27,7 @@ def test_dense_index_numpy_search_and_save_load(tmp_path) -> None:
 
     assert hits[0].block.block_id == "b1"
     assert metadata["backend"] == "numpy"
+    assert metadata["evidence_hash"] == evidence_hash(blocks)
     assert loaded.search(np.asarray([[0.1, 0.9]], dtype=np.float32), top_k=1)[0].block.block_id == "b2"
 
 
@@ -60,3 +61,23 @@ def test_dense_index_query_dimension_mismatch_fails_before_backend_search() -> N
         assert "mock-bge" in message
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_dense_index_rejects_stale_chunk_text(tmp_path) -> None:
+    blocks = [_block("b1", "invoice date")]
+    index = DenseIndex(
+        blocks=blocks,
+        embeddings=np.asarray([[1.0, 0.0]], dtype=np.float32),
+        model_id="mock-bge",
+        backend="numpy",
+    )
+    index.save(tmp_path)
+    changed = [_block("b1", "invoice due date")]
+
+    try:
+        DenseIndex.load(index_dir=tmp_path, blocks=changed)
+    except ValueError as exc:
+        assert "evidence hash" in str(exc)
+        assert "rebuild" in str(exc)
+    else:
+        raise AssertionError("expected stale dense index failure")
