@@ -47,7 +47,7 @@ docs/workplans/M1_QUERY_INTENT_ROUTING_REWRITE_PLAN.md
 | MinerU Chunk 与索引契约 | `real_model_verified` | 12 页真实 VideoTree MinerU 产物在本地与服务器均重建为 184 个 `docagent_chunk_v3` Chunk（171 个可索引、3 个跨页、12 个句界拆分），契约错误为 0，并已用真实 BGE-M3 建立索引。 |
 | 多路检索与结构化约束 | `real_model_verified` | 不经意图路由、查询规划和查询重写的真实 BGE-M3＋重排序器验证中，普通查询 Hit@5 为 18/18，表格文本 Hit@5 为 6/6，4 个结构化查询精确匹配；Metadata 仅作前置过滤。该小型回归集不是正式检索基准。 |
 | 原问题/检索查询分离与证据优先截断 | `implemented` | 查询变换只进入检索；问答保留原问题，超限时先裁减证据。新的 AnswerPolicy 联合冒烟尚未执行。 |
-| 新查询意图、路由与查询变换链 | `real_model_verified` | 两阶段契约与 CLI/检索接入已实现；701 项回归通过，真实 `qwen3.7-max-2026-05-17` 完成意图识别与 3 路静态拆解。真实 BGE-M3 联合评测尚未执行。 |
+| 新查询意图、路由与查询变换链 | `benchmark_evaluated` | 两阶段契约与 CLI/检索接入已实现；705 项回归通过。六文档冻结基线中意图准确率为 0.8404，动作 Exact Match 为 0.1596，必需路由全部命中率为 0.7128；计划查询 Hybrid+Reranker 的端到端 Recall@5/MRR@10 为 0.4000/0.5087。Gold→Chunk 映射率仅 0.6000，因此尚未验收。 |
 | 最终答案质量基准 | `not_started` | 现有诊断运行不构成正式答案质量验收。 |
 | 新的 SFT/GRPO 训练与检查点变更 | `not_started` | 需要明确批准及独立训练数据。 |
 | 正式视觉问答基准 | `not_started` | 现有视觉 API 执行证据不构成基准验收。 |
@@ -76,11 +76,11 @@ Qwen、VLM、SFT/GRPO 或大型数据集的变更，必须先按
 
 ## 下一步
 
-按 `docs/workplans/M1_QUERY_INTENT_ROUTING_REWRITE_PLAN.md` 进入 M1-E：
-复用已准备的 6 份真实 MinerU/Chunk/BGE-M3 语料产物，实现冻结样本评测程序，
-先报告意图准确率、查询动作 Exact Match 和必需路由命中率，再报告按语言和检索
-配置分组的 Recall@5 与 MRR@10。首次运行只记录基线，不根据冻结样本做个案修补；
-不启动最终答案质量评测或训练。
+审查 M1-E 首次冻结基线中的四类阻断项：查询动作标签与运行契约不一致、
+Gold evidence 到 Chunk 仅 0.6000 的映射覆盖、`clarification_required` 和
+`table_lookup` 路由缺口，以及查询变换未产生整体检索收益。下一阶段方案和验收
+阈值必须先写入当前临时计划；不得根据冻结样本增加个案 prompt、映射或路由规则，
+也不启动最终答案质量评测或训练。
 
 ## 停止条件
 

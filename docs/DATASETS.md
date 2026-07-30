@@ -122,7 +122,10 @@ data/benchmark/m1_query_routing/
 
 服务器语料准备运行 `m1_frozen_corpus_v1_20260730` 已使用 MinerU API `vlm`
 处理 6 份 PDF，并建立统一 Chunk 与真实 BGE-M3 索引，状态为
-`real_model_verified`。冻结集正式指标仍为 `not_started`；不得将首次基线结果
+`real_model_verified`。运行 `m1_query_retrieval_baseline_20260730` 已完成真实
+查询与检索首次基线，状态为 `benchmark_evaluated`：94 条查询、150 个 Gold
+evidence group、Gold→Chunk 映射率 0.6000，计划查询 Hybrid+Reranker 的端到端
+Recall@5/MRR@10 为 0.4000/0.5087。该运行尚未达到 `accepted`；不得将首次基线
 反向用于修改样本、构造样本专属规则或训练模型。
 
 ## 6. 延后数据集
