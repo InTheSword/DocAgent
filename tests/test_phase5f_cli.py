@@ -322,6 +322,43 @@ def test_prepare_index_builds_and_reuses_hash_dense_index(tmp_path: Path) -> Non
     assert second["index_built"] is False
     assert second["index_reused"] is True
 
+    conn = connect(db_path)
+    repository = DocumentRepository(conn)
+    changed_blocks = repository.load_evidence_blocks("doc1")
+    changed_blocks[0].text = f"{changed_blocks[0].text} changed"
+    repository.save_evidence_blocks(changed_blocks)
+    conn.close()
+
+    stale = _run_cli(
+        tmp_path,
+        "--db-path",
+        str(db_path),
+        "--document-root",
+        str(tmp_path / "documents"),
+        "--doc-id",
+        "doc1",
+        "--check-index",
+        "--output-dir",
+        str(tmp_path / "cli"),
+    )
+    rebuilt = _run_cli(
+        tmp_path,
+        "--db-path",
+        str(db_path),
+        "--document-root",
+        str(tmp_path / "documents"),
+        "--doc-id",
+        "doc1",
+        "--prepare-index",
+        "--output-dir",
+        str(tmp_path / "cli"),
+    )
+
+    assert stale["index_status"]["status"] == "stale"
+    assert stale["index_status"]["evidence_hash_matches"] is False
+    assert rebuilt["index_ready"] is True
+    assert rebuilt["index_built"] is True
+
 
 def test_local_fact_qa_cli_payload_preserves_evidence_recovery(tmp_path: Path, monkeypatch) -> None:
     db_path = _repository_with_document(tmp_path)
@@ -848,10 +885,14 @@ def test_document_summary_question_runs_summary_tool(tmp_path: Path) -> None:
     assert payload["status"] == "success"
     assert payload["task_type"] == "document_summary"
     assert payload["router_plan"]["selected_tools"] == ["document_summary"]
+    assert payload["query_decision"]["intent"] == "document_summary"
+    assert payload["query_plan"]["retrieval_routes"] == ["global_scan"]
     assert payload["tools_used"] == ["document_summary"]
     assert payload["summary"]["key_points"]
     assert payload["citations"]
     assert payload["error"] == {}
+    assert Path(payload["artifact_dir"], "query_decision.json").is_file()
+    assert Path(payload["artifact_dir"], "query_plan.json").is_file()
 
 
 def test_structured_extraction_dates_runs_deterministic_tool(tmp_path: Path) -> None:

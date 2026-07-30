@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from docagent.retrieval.base import RetrievalFilter, RetrievalResult
 from docagent.retrieval.dense_encoder import DenseEncoder
 from docagent.retrieval.dense_index import DenseIndex
@@ -28,7 +30,9 @@ class IndexedDocumentRetriever:
         query_planner_mode: str = "hybrid",
         query_planner_task_type: str = "",
         document_profile: dict[str, object] | None = None,
-        query_plan: QueryPlannerOutput | None = None,
+        query_plan: QueryPlannerOutput | Any | None = None,
+        filters: RetrievalFilter | None = None,
+        query_intent: str | None = None,
         query_planner_env_file=None,
         query_planner_model_override: str | None = None,
         query_planner_llm_client=None,
@@ -41,6 +45,8 @@ class IndexedDocumentRetriever:
         self.query_planner_task_type = query_planner_task_type
         self.document_profile = document_profile or {}
         self.query_plan = query_plan
+        self.filters = filters
+        self.query_intent = query_intent
         self.query_planner_env_file = query_planner_env_file
         self.query_planner_model_override = query_planner_model_override
         self.query_planner_llm_client = query_planner_llm_client
@@ -100,8 +106,8 @@ class IndexedDocumentRetriever:
             answer_type_hint=answer_type_hint,
             query_embedding=query_embedding,
             query_plan=query_plan,
-            filters=filters,
-            query_intent=query_intent,
+            filters=filters if filters is not None else self.filters,
+            query_intent=query_intent if query_intent is not None else self.query_intent,
             table_query=table_query,
             enable_query_rewrite=enable_query_rewrite,
         )

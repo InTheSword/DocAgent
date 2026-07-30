@@ -56,6 +56,12 @@ def _mineru_args(source: Path, db_path: Path, document_root: Path, output_dir: P
     ]
 
 
+def test_mineru_ocr_defaults_to_backend_auto_detection() -> None:
+    args = docagent_cli.build_parser().parse_args(["--doc-id", "doc1", "--question", "test"])
+
+    assert args.mineru_ocr is None
+
+
 def test_mineru_backend_unavailable_without_existing_output_is_structured(tmp_path: Path) -> None:
     source, db_path, document_root, output_dir = _paths(tmp_path)
 
@@ -287,6 +293,7 @@ def test_mineru_api_file_ingestion_refreshes_cached_manifest_inventory(
             "--parser",
             "mineru_api",
             "--live-api",
+            "--mineru-ocr",
             "--question",
             "How many pages are in this document?",
             "--output-dir",

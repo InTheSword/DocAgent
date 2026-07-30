@@ -20,9 +20,12 @@ python scripts\docagent_cli.py --doc-id <doc_id> --question "<question>"
 ```
 
 By default the CLI uses the `user_best` execution profile for normal use. This
-profile expects the real MinerU API token, router/query-planner LLM config,
+profile expects the real MinerU API token, query-intent/query-transformation LLM config,
 BGE-M3, cross-encoder reranker, Qwen3, and the current best AnswerPolicy v3
 checkpoint to be available. It fails clearly if those resources are missing.
+JSON results include canonical `query_decision` and `query_plan` fields.
+Transformed queries are used only for retrieval; the original question is kept
+for answer generation.
 
 Use the lightweight profile only for local or CI checks:
 
@@ -79,9 +82,8 @@ python scripts\run_final_delivery_benchmark_gate.py --run-id final_delivery_gate
 See [docs/FINAL_DELIVERY_CLI.md](docs/FINAL_DELIVERY_CLI.md) for the complete
 current CLI contract, storage paths, dataset commands, output fields, and
 limitations.
-See [docs/FINAL_DELIVERY_REPORT.md](docs/FINAL_DELIVERY_REPORT.md) for the
-current delivery status table, accepted evidence boundaries, and remaining
-not_started work.
+See [CURRENT_STATUS.md](CURRENT_STATUS.md) for current verified capabilities,
+evidence boundaries, and remaining `not_started` work.
 
 ## Current Output Contract
 
@@ -158,8 +160,8 @@ commits.
 - [CURRENT_STATUS.md](CURRENT_STATUS.md): current verified capability status.
 - [docs/FINAL_DELIVERY_CLI.md](docs/FINAL_DELIVERY_CLI.md): current CLI
   delivery guide.
-- [docs/FINAL_DELIVERY_REPORT.md](docs/FINAL_DELIVERY_REPORT.md): final
-  delivery status and evidence-boundary report.
+- [CURRENT_STATUS.md](CURRENT_STATUS.md): current verified capabilities and
+  evidence boundaries.
 - [docs/DATASETS.md](docs/DATASETS.md): dataset roles, split policy, and
   download constraints.
 - [AGENTS.md](AGENTS.md): repository rules for implementation and validation.
@@ -167,5 +169,5 @@ commits.
 PM-oriented handoff documents are deprecated and are not current planning
 sources.
 
-Historical Phase 1-4 implementation details remain in the phase-specific docs
-under `docs/`.
+Historical phase process records are removed from the working tree; use Git
+history for audit rather than treating them as current planning sources.

@@ -67,7 +67,9 @@ def test_eval_retrieval_phase2_hash_keyword(tmp_path: Path) -> None:
 
     assert summary["dense_backend"] == "hash"
     assert summary["reranker_backend"] == "keyword"
-    assert summary["modes"]["hybrid_rerank"]["recall_at_1"] == 1.0
+    assert summary["modes"]["hybrid_rerank"]["recall_at_5"] == 1.0
+    assert summary["modes"]["hybrid_rerank"]["mrr_at_5"] == 1.0
+    assert "recall_at_1" not in summary["modes"]["hybrid_rerank"]
 
 
 def test_eval_workflow_phase2_hash_keyword(tmp_path: Path) -> None:

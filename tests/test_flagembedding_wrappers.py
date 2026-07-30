@@ -127,7 +127,10 @@ def test_cross_encoder_reranker_uses_transformers_pair_scoring(monkeypatch, tmp_
 
     assert len(state["tokenizer_calls"]) == 3
     assert state["tokenizer_calls"][0]["queries"] == ["query", "query"]
-    assert state["tokenizer_calls"][0]["passages"] == ["irrelevant passage", "relevant passage"]
+    assert state["tokenizer_calls"][0]["passages"] == [
+        "[Type: text]\nirrelevant passage",
+        "[Type: text]\nrelevant passage",
+    ]
     assert state["tokenizer_calls"][0]["kwargs"]["max_length"] == 17
     assert state["tokenizer_calls"][0]["kwargs"]["return_tensors"] == "pt"
     assert state["prepare_for_model_calls"] == 0

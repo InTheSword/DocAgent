@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from docagent.ingestion.document_registry import DocumentRecord
+from docagent.retrieval.base import RetrievalCandidate, RetrievalResult
 from docagent.schemas import EvidenceBlock, EvidenceLocation, QAState
 from docagent.storage.db import connect
 from docagent.storage.repositories import DocumentRepository, TraceRepository
@@ -210,12 +211,13 @@ def test_dry_run_success_path_does_not_generate_answer(tmp_path: Path) -> None:
     assert "dry_run_no_answer_generated" in result["warnings"]
 
 
-def test_router_plan_query_rewrite_is_used_by_workflow(tmp_path: Path) -> None:
+def test_router_plan_query_rewrite_is_only_used_for_retrieval(tmp_path: Path) -> None:
     repository = _repository_with_document(tmp_path)
     captured = {}
 
     def fake_workflow(**kwargs) -> QAState:
         captured["question"] = kwargs["question"]
+        captured["retrieval_query"] = kwargs["retrieval_query"]
         return _fake_workflow(**kwargs)
 
     result = local_fact_qa(
@@ -233,9 +235,38 @@ def test_router_plan_query_rewrite_is_used_by_workflow(tmp_path: Path) -> None:
         workflow_runner=fake_workflow,
     )
 
-    assert captured["question"] == "invoice date"
+    assert captured["question"] == "Can you tell me the invoice date in this PDF?"
+    assert captured["retrieval_query"] == "invoice date"
     assert result["query_used"] == "invoice date"
     assert result["router_plan_summary"]["query_rewrite"] == "invoice date"
+
+
+def test_default_workflow_sends_rewrite_to_retriever_and_original_to_answer(tmp_path: Path) -> None:
+    repository = _repository_with_document(tmp_path)
+    block = repository.load_evidence_blocks("doc1")[0]
+    captured: dict[str, str] = {}
+
+    class RecordingRetriever:
+        def retrieve(self, *, doc_id, question, top_k, answer_type_hint=None):
+            captured["retrieval_question"] = question
+            return RetrievalResult(
+                rewritten_query=question,
+                candidates=[RetrievalCandidate(block=block, bm25_score=1.0)],
+            )
+
+    result = local_fact_qa(
+        {
+            "doc_id": "doc1",
+            "question": "Can you tell me the invoice date in this PDF?",
+            "router_plan": {"query_rewrite": "invoice date"},
+        },
+        document_repository=repository,
+        retriever=RecordingRetriever(),
+    )
+
+    assert result["status"] == "success"
+    assert result["answer"] == "March 12, 2020"
+    assert captured["retrieval_question"] == "invoice date"
 
 
 def test_default_workflow_reuses_heuristic_answer_policy(tmp_path: Path) -> None:

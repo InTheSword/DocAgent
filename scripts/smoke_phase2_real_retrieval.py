@@ -193,12 +193,15 @@ def run_smoke(args: argparse.Namespace) -> dict[str, object]:
             max_length=args.dense_max_length,
         )
     )
-    embeddings = encoder.encode_documents([block.retrieval_text for block in blocks])
-    validate_embeddings(embeddings, expected_rows=len(blocks), expected_dim=args.expected_embedding_dim)
+    indexable_blocks = [block for block in blocks if block.is_indexable]
+    if not indexable_blocks:
+        raise RuntimeError("document has no indexable chunks")
+    embeddings = encoder.encode_documents([block.retrieval_text for block in indexable_blocks])
+    validate_embeddings(embeddings, expected_rows=len(indexable_blocks), expected_dim=args.expected_embedding_dim)
     query_embedding = encoder.encode_queries([sample.question])
     validate_embeddings(query_embedding, expected_rows=1, expected_dim=args.expected_embedding_dim)
 
-    dense_index = DenseIndex.build(blocks=blocks, embeddings=embeddings, model_id=args.dense_model_id)
+    dense_index = DenseIndex.build(blocks=indexable_blocks, embeddings=embeddings, model_id=args.dense_model_id)
     if dense_index.backend != "faiss":
         raise RuntimeError(f"real retrieval smoke requires FAISS backend, got {dense_index.backend}")
     index_dir = resolve_repo_path(args.index_dir)

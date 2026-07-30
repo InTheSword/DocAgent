@@ -330,14 +330,14 @@ def test_dense_index_uses_placeholder_for_empty_retrieval_text_without_dropping_
     )
     view_blocks = normalized_retrieval_blocks(blocks)
 
-    assert encoder.document_texts == ["Invoice text", EMPTY_PAGE_DOCUMENT_TEXT]
+    assert encoder.document_texts == ["[Type: page]\nInvoice text", EMPTY_PAGE_DOCUMENT_TEXT]
     assert dense_index is not None
     assert [block.block_id for block in dense_index.blocks] == ["page_1", "page_2"]
     assert blocks[1].text == ""
     assert view_blocks[1].block_id == "page_2"
     assert view_blocks[1].doc_id == "doc_empty"
     assert view_blocks[1].page_id == 2
-    assert view_blocks[1].retrieval_text == EMPTY_PAGE_DOCUMENT_TEXT
+    assert view_blocks[1].retrieval_text == f"[Type: page]\n{EMPTY_PAGE_DOCUMENT_TEXT}"
 
 
 def test_dense_index_row_mismatch_reports_empty_page_diagnostics(tmp_path: Path) -> None:

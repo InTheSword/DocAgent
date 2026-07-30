@@ -334,31 +334,41 @@ def _retrieval_query_label(rewritten_query: str, query_plan: QueryPlannerOutput 
     return " | ".join(query_plan.final_queries)
 
 
-def _coerce_query_plan(value: QueryPlannerOutput | dict[str, object] | None) -> QueryPlannerOutput | None:
+def _coerce_query_plan(value: QueryPlannerOutput | dict[str, object] | object | None) -> QueryPlannerOutput | None:
     if value is None:
         return None
     if isinstance(value, QueryPlannerOutput):
         return value
-    final_queries = [str(item) for item in value.get("final_queries") or [] if str(item).strip()]
+    if hasattr(value, "retrieval_queries"):
+        final_queries = [
+            str(item)
+            for item in getattr(value, "retrieval_queries", ())
+            if str(item).strip()
+        ]
+        question = str(getattr(value, "original_question", ""))
+        warnings = [str(item) for item in getattr(value, "warnings", ()) if str(item).strip()]
+        mode = "m1"
+    elif isinstance(value, dict):
+        final_queries = [
+            str(item)
+            for item in (value.get("retrieval_queries") or value.get("final_queries") or [])
+            if str(item).strip()
+        ]
+        question = str(value.get("original_question") or value.get("question") or "")
+        warnings = [str(item) for item in value.get("warnings") or []]
+        mode = str(value.get("mode") or ("m1" if value.get("retrieval_queries") else "hybrid"))
+    else:
+        raise TypeError("query_plan must be QueryPlannerOutput, QueryPlan, or a mapping")
     if not final_queries:
         return None
     return QueryPlannerOutput(
-        question=str(value.get("question") or ""),
-        rule_queries=[str(item) for item in value.get("rule_queries") or [] if str(item).strip()],
-        llm_queries=[str(item) for item in value.get("llm_queries") or [] if str(item).strip()],
+        question=question,
+        rule_queries=[],
+        llm_queries=[],
         final_queries=final_queries,
-        query_sources={
-            "rule": [str(item) for item in (value.get("query_sources") or {}).get("rule") or []],
-            "llm": [str(item) for item in (value.get("query_sources") or {}).get("llm") or []],
-        },
-        mode=str(value.get("mode") or "hybrid"),
-        warnings=[str(item) for item in value.get("warnings") or []],
-        llm_status=str(value.get("llm_status") or "not_started"),
-        llm_error_type=value.get("llm_error_type") or None,
-        llm_raw_response_preview=str(value.get("llm_raw_response_preview") or ""),
-        llm_parsed_queries_preview=[str(item) for item in value.get("llm_parsed_queries_preview") or []],
-        llm_normalization_warnings=[str(item) for item in value.get("llm_normalization_warnings") or []],
-        error=dict(value.get("error") or {}),
+        query_sources={"rule": [], "llm": []},
+        mode=mode,
+        warnings=warnings,
     )
 
 

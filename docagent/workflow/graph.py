@@ -199,6 +199,7 @@ def run_qa_workflow(
     question: str,
     blocks: list[EvidenceBlock],
     *,
+    retrieval_query: str | None = None,
     answer_policy: AnswerPolicy | None = None,
     top_k: int = 5,
     answer_type_hint: str | None = None,
@@ -223,6 +224,7 @@ def run_qa_workflow(
         raise ValueError("answer_policy is required; pass HeuristicAnswerPolicy explicitly for tests or smoke runs")
     policy_mode = getattr(answer_policy, "mode", "unknown")
     state = QAState(qid=qid, question=question, doc_id=doc_id, answer_type=answer_type_hint)
+    active_retrieval_query = retrieval_query or question
     state.table_results = list(tool_results or [])
     if trace_repository is not None:
         state.run_id = trace_repository.create_run(
@@ -236,7 +238,7 @@ def run_qa_workflow(
     def retrieve_blocks(retrieval_top_k: int, step_name: str) -> tuple[list[EvidenceBlock], dict[str, Any]]:
         _emit_progress(progress_callback, "retrieve_evidence", top_k=retrieval_top_k, step=step_name)
         if preserve_input_order:
-            rewrite = rewrite_query(question, answer_type_hint=answer_type_hint)
+            rewrite = rewrite_query(active_retrieval_query, answer_type_hint=answer_type_hint)
             retrieved = list(blocks[:retrieval_top_k])
             metadata: dict[str, Any] = {
                 "query": rewrite.rewritten_query,
@@ -249,7 +251,7 @@ def run_qa_workflow(
         elif retriever is not None:
             retrieval_result = retriever.retrieve(
                 doc_id=doc_id,
-                question=question,
+                question=active_retrieval_query,
                 top_k=retrieval_top_k,
                 answer_type_hint=answer_type_hint,
             )
@@ -268,7 +270,7 @@ def run_qa_workflow(
         else:
             legacy_retriever = HybridRetriever(blocks)
             rewritten_query, hits = legacy_retriever.retrieve(
-                question,
+                active_retrieval_query,
                 top_k=retrieval_top_k,
                 answer_type_hint=answer_type_hint,
             )
@@ -289,7 +291,12 @@ def run_qa_workflow(
             state,
             trace_repository,
             step_name,
-            input_summary={"question": question, "top_k": retrieval_top_k, "answer_type": answer_type_hint},
+            input_summary={
+                "question": active_retrieval_query,
+                "original_question": question,
+                "top_k": retrieval_top_k,
+                "answer_type": answer_type_hint,
+            },
             output_summary=metadata,
         )
         return retrieved, metadata

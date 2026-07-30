@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
+
 from docagent.ingestion.hashing import doc_id_from_sha256, sha256_file
 from docagent.ingestion.service import DocumentIngestionService
 from docagent.parser.mineru_backend import MinerUParserBackend
@@ -109,3 +111,48 @@ def test_document_ingestion_preserves_mineru_table_image_url_for_citation(tmp_pa
     assert "$100,000" in citation["text_preview"]
     assert quality["image_reference_count"] == 1
     assert quality["missing_image_reference_count"] == 0
+
+
+def test_document_ingestion_dense_index_skips_chunks_without_retrieval_text(tmp_path: Path) -> None:
+    source = tmp_path / "sample.pdf"
+    source.write_bytes(b"%PDF-1.4\n/Type /Page\nsample")
+    doc_id = doc_id_from_sha256(sha256_file(source))
+    mineru_dir = tmp_path / "documents" / doc_id / "mineru"
+    mineru_dir.mkdir(parents=True)
+    (mineru_dir / "sample_content_list.json").write_text(
+        json.dumps(
+            [
+                {"type": "text", "page_idx": 0, "text": "Invoice date"},
+                {
+                    "type": "image",
+                    "page_idx": 0,
+                    "image_url": "https://mineru.example/assets/chart.png",
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeDenseEncoder:
+        model_id = "fake-dense"
+
+        def __init__(self) -> None:
+            self.texts: list[str] = []
+
+        def encode_documents(self, texts: list[str]) -> np.ndarray:
+            self.texts = list(texts)
+            return np.ones((len(texts), 2), dtype=np.float32)
+
+    encoder = FakeDenseEncoder()
+    service = DocumentIngestionService(document_root=tmp_path / "documents")
+
+    result = service.ingest(
+        file_path=source,
+        parser_backend=MinerUParserBackend(mode="parse_existing"),
+        build_index=True,
+        dense_encoder=encoder,
+    )
+
+    assert encoder.texts == ["[Type: body]\nInvoice date"]
+    assert result.dense_index_metadata["block_ids"] == [result.blocks[0].block_id]
+    assert result.to_dict()["indexable_chunk_count"] == 1

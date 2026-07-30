@@ -88,7 +88,7 @@ def test_mineru_api_client_reads_token_and_writes_sanitized_manifest(tmp_path: P
         timeout_seconds=5,
     )
 
-    assert fake.post_payloads[0]["files"] == [{"name": "sample.pdf", "data_id": "sample_data", "is_ocr": False}]
+    assert fake.post_payloads[0]["files"] == [{"name": "sample.pdf", "data_id": "sample_data"}]
     assert fake.post_payloads[0]["model_version"] == "vlm"
     assert "is_ocr" not in fake.post_payloads[0]
     assert fake.put_calls[0][0] == "https://upload.example/signed"
@@ -98,8 +98,8 @@ def test_mineru_api_client_reads_token_and_writes_sanitized_manifest(tmp_path: P
     assert "upload.example" not in manifest_text
     assert "download.example" not in manifest_text
     assert manifest["batch_result"]["extract_result"][0]["full_zip_url"] == "<redacted>"
-    assert manifest["parse_options"]["is_ocr"] is False
-    assert manifest["submission_payload"]["files"][0]["is_ocr"] is False
+    assert manifest["parse_options"]["is_ocr"] is None
+    assert "is_ocr" not in manifest["submission_payload"]["files"][0]
     assert manifest["output_inventory"]["category_counts"]["ordinary_content_list"] == 1
     assert manifest["output_inventory"]["category_counts"]["result_archive"] == 1
     assert (tmp_path / "mineru" / "sample_content_list.json").is_file()
@@ -324,7 +324,7 @@ def test_mineru_api_client_reuses_successful_existing_output(tmp_path: Path, mon
         "source_sha256": "placeholder",
         "parse_options": {
             "model_version": "vlm",
-            "is_ocr": False,
+            "is_ocr": None,
             "enable_table": True,
             "enable_formula": True,
             "language": "en",

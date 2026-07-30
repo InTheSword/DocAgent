@@ -428,7 +428,7 @@ def test_hybrid_retriever_uses_query_plan_for_multi_query_bm25() -> None:
     assert result.metadata["query_planner"]["final_queries"] == plan.final_queries
 
 
-def test_cli_query_planner_disabled_by_default(tmp_path: Path) -> None:
+def test_cli_uses_m1_query_plan_by_default(tmp_path: Path) -> None:
     db_path = _repository_with_document(tmp_path)
 
     payload = _run_cli(
@@ -443,12 +443,14 @@ def test_cli_query_planner_disabled_by_default(tmp_path: Path) -> None:
         str(tmp_path / "cli"),
     )
 
-    assert "query_planner" not in payload
+    assert payload["query_plan"]["original_question"] == "What is the invoice date?"
+    assert payload["query_plan"]["transformation_source"] == "fallback"
+    assert payload["query_planner"]["mode"] == "m1"
     summary = json.loads(Path(payload["artifact_dir"], "summary.json").read_text(encoding="utf-8"))
-    assert summary["used_query_planning"] is False
+    assert summary["used_query_planning"] is True
 
 
-def test_cli_hybrid_query_planner_records_rule_fallback_when_llm_unconfigured(tmp_path: Path) -> None:
+def test_legacy_query_planning_flags_keep_m1_fallback_contract(tmp_path: Path) -> None:
     db_path = _repository_with_document(tmp_path)
 
     payload = _run_cli(
@@ -467,14 +469,14 @@ def test_cli_hybrid_query_planner_records_rule_fallback_when_llm_unconfigured(tm
     )
 
     assert payload["query_planner"]["enabled"] is True
-    assert payload["query_planner"]["mode"] == "hybrid"
+    assert payload["query_planner"]["mode"] == "m1"
     assert payload["query_planner"]["rule_queries"]
     assert payload["query_planner"]["final_queries"]
-    assert payload["query_planner"]["llm_status"] == "not_configured"
-    assert "query_planning_enabled" in payload["warnings"]
+    assert payload["query_planner"]["llm_status"] == "fallback"
+    assert "query_transformer_llm_unavailable" in payload["warnings"]
     summary = json.loads(Path(payload["artifact_dir"], "summary.json").read_text(encoding="utf-8"))
     assert summary["used_query_planning"] is True
-    assert summary["query_planner_mode"] == "hybrid"
+    assert summary["query_planner_mode"] == "m1"
 
 
 def test_phase5c3_query_rewriter_smoke_cases_cover_required_categories() -> None:

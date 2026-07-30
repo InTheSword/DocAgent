@@ -8,8 +8,13 @@ from typing import Any
 
 from docagent.ingestion.hashing import sha256_file
 from docagent.integrations.mineru_api import build_mineru_output_inventory
-from docagent.parser.mineru_converter import find_content_list, raw_content_list_stats
-from docagent.schemas import EvidenceBlock
+from docagent.parser.mineru_converter import (
+    KNOWN_RAW_TYPES,
+    find_content_list,
+    raw_content_list_stats,
+    validate_mineru_chunk_contract,
+)
+from docagent.schemas import Chunk
 
 
 def _relative_posix(path: Path, document_dir: Path) -> str:
@@ -74,6 +79,7 @@ def _layout_info(mineru_output_dir: Path, document_dir: Path) -> dict[str, Any]:
 
 def _source_manifest(document_dir: Path, mineru_output_dir: Path) -> dict[str, Any]:
     for path in (
+        mineru_output_dir / "mineru_api_manifest.json",
         document_dir / "mineru_source_manifest.json",
         mineru_output_dir / "source_manifest.json",
         mineru_output_dir.parent / "source_manifest.json",
@@ -91,34 +97,45 @@ def _origin_pdf(mineru_output_dir: Path) -> Path | None:
     return candidates[0] if candidates else None
 
 
-def _block_id_unique(blocks: list[EvidenceBlock]) -> bool:
+def _block_id_unique(blocks: list[Chunk]) -> bool:
     block_ids = [block.block_id for block in blocks]
     return len(block_ids) == len(set(block_ids))
 
 
-def _reading_order_contiguous(blocks: list[EvidenceBlock]) -> bool:
+def _reading_order_contiguous(blocks: list[Chunk]) -> bool:
     values = [block.metadata.get("reading_order") for block in blocks]
     if any(not isinstance(value, int) for value in values):
         return False
     return sorted(values) == list(range(1, len(values) + 1))
 
 
-def _adjacency_valid(blocks: list[EvidenceBlock]) -> bool:
+def _reading_order_valid(blocks: list[Chunk]) -> bool:
+    values = [block.metadata.get("reading_order") for block in blocks]
+    if any(not isinstance(value, int) for value in values):
+        return False
+    return values == sorted(values) and len(values) == len(set(values))
+
+
+def _adjacency_valid(blocks: list[Chunk]) -> bool:
     by_id = {block.block_id: block for block in blocks}
     if len(by_id) != len(blocks):
         return False
     for index, block in enumerate(blocks):
         prev_id = block.metadata.get("previous_block_id")
         next_id = block.metadata.get("next_block_id")
-        if index == 0:
-            if prev_id is not None:
-                return False
-        elif prev_id != blocks[index - 1].block_id:
+        document_prev_id = block.metadata.get("previous_document_block_id")
+        document_next_id = block.metadata.get("next_document_block_id")
+        expected_prev = blocks[index - 1] if index > 0 else None
+        expected_next = blocks[index + 1] if index + 1 < len(blocks) else None
+        if document_prev_id != (expected_prev.block_id if expected_prev else None):
             return False
-        if index + 1 == len(blocks):
-            if next_id is not None:
-                return False
-        elif next_id != blocks[index + 1].block_id:
+        if document_next_id != (expected_next.block_id if expected_next else None):
+            return False
+        same_page_prev = expected_prev if expected_prev and expected_prev.page_id == block.page_id else None
+        same_page_next = expected_next if expected_next and expected_next.page_id == block.page_id else None
+        if prev_id != (same_page_prev.block_id if same_page_prev else None):
+            return False
+        if next_id != (same_page_next.block_id if same_page_next else None):
             return False
         if prev_id is not None and prev_id not in by_id:
             return False
@@ -127,7 +144,7 @@ def _adjacency_valid(blocks: list[EvidenceBlock]) -> bool:
     return True
 
 
-def _missing_main_content_count(blocks: list[EvidenceBlock]) -> int:
+def _missing_main_content_count(blocks: list[Chunk]) -> int:
     count = 0
     for block in blocks:
         if block.block_type == "table" and not (block.text or block.table_html):
@@ -139,16 +156,24 @@ def _missing_main_content_count(blocks: list[EvidenceBlock]) -> int:
     return count
 
 
-def _missing_retrieval_content_count(blocks: list[EvidenceBlock]) -> int:
+def _missing_retrieval_content_count(blocks: list[Chunk]) -> int:
     return _missing_main_content_count([block for block in blocks if not block.metadata.get("exclude_from_retrieval")])
 
 
-def _empty_boilerplate_block_ids(blocks: list[EvidenceBlock]) -> list[str]:
+def _empty_boilerplate_block_ids(blocks: list[Chunk]) -> list[str]:
     return [
         block.block_id
         for block in blocks
         if block.metadata.get("is_boilerplate") and not (block.text or block.table_html or block.image_path)
     ]
+
+
+def _is_traceable_chunk(block: Chunk) -> bool:
+    return (
+        block.page_id is not None
+        and block.location.page == block.page_id
+        and block.location.block_id == block.block_id
+    )
 
 
 def _raw_keys(content_list_path: Path) -> set[str]:
@@ -172,8 +197,8 @@ def build_structure_quality_report(
     source_pdf: str | Path,
     mineru_output_dir: str | Path,
     document_dir: str | Path,
-    blocks: list[EvidenceBlock],
-    page_blocks: list[EvidenceBlock],
+    blocks: list[Chunk],
+    page_blocks: list[Chunk],
 ) -> dict[str, Any]:
     source_path = Path(source_pdf)
     mineru_dir = Path(mineru_output_dir)
@@ -206,32 +231,76 @@ def build_structure_quality_report(
         warnings.append("missing_image_references")
 
     raw_distribution = raw_stats["raw_type_distribution"]
-    known_types = {"text", "title", "paragraph", "list", "table", "image", "figure", "chart", "header", "footer", "page_number"}
-    unknown_raw_types = sorted(raw_type for raw_type in raw_distribution if raw_type not in known_types)
+    unknown_raw_types = sorted(raw_type for raw_type in raw_distribution if raw_type not in KNOWN_RAW_TYPES)
     if unknown_raw_types:
         warnings.append("unknown_raw_types_present")
 
     block_id_unique = _block_id_unique(blocks)
     adjacency_valid = _adjacency_valid(blocks)
     reading_order_contiguous = _reading_order_contiguous(blocks)
+    reading_order_valid = _reading_order_valid(blocks)
     if not block_id_unique:
         warnings.append("duplicate_block_ids")
     if not adjacency_valid:
         warnings.append("invalid_previous_next_links")
-    if not reading_order_contiguous:
-        warnings.append("non_contiguous_reading_order")
+    if not reading_order_valid:
+        warnings.append("invalid_reading_order")
 
     image_ref_count = sum(1 for block in blocks if block.image_path)
     table_count = sum(1 for block in blocks if block.block_type == "table")
     chart_count = sum(1 for block in blocks if block.metadata.get("raw_mineru_type") == "chart")
     boilerplate_count = sum(1 for block in blocks if block.metadata.get("is_boilerplate"))
     table_html_count = sum(1 for block in blocks if block.table_html)
+    structured_table_count = sum(
+        1
+        for block in blocks
+        if block.block_type == "table"
+        and (block.metadata.get("table_headers") or block.metadata.get("table_rows"))
+    )
+    visual_relation_count = sum(
+        1
+        for block in blocks
+        if block.block_type == "image"
+        and (block.metadata.get("caption_block_ids") or block.metadata.get("nearby_block_ids"))
+    )
     missing_bbox_count = sum(1 for block in blocks if block.location.bbox is None)
     missing_content_count = _missing_main_content_count(blocks)
     missing_retrieval_content_count = _missing_retrieval_content_count(blocks)
     empty_boilerplate_block_ids = _empty_boilerplate_block_ids(blocks)
+    indexable_chunks = [block for block in blocks if block.is_indexable]
+    non_indexable_chunks = [block for block in blocks if not block.is_indexable]
+    eligible_chunks = [block for block in blocks if not block.metadata.get("exclude_from_retrieval")]
+    empty_retrieval_chunks = [block for block in eligible_chunks if not block.retrieval_text]
+    untraceable_chunks = [block for block in indexable_chunks if not _is_traceable_chunk(block)]
+    if untraceable_chunks:
+        warnings.append("untraceable_indexable_chunks")
+    chunk_strategy_counts = Counter(
+        str(block.metadata.get("chunk_strategy") or "unspecified")
+        for block in blocks
+    )
+    cross_page_chunk_count = sum(
+        len(block.metadata.get("source_page_numbers") or []) > 1
+        for block in blocks
+    )
+    sentence_split_chunk_count = sum(
+        str(block.metadata.get("chunk_strategy") or "") in {
+            "sentence_window_split",
+            "cross_page_sentence_split",
+        }
+        for block in blocks
+    )
+    chunk_contract_errors = validate_mineru_chunk_contract(blocks)
+    if chunk_contract_errors:
+        warnings.append("invalid_chunk_contract")
 
-    failed = not blocks or not block_id_unique or not adjacency_valid or bool(missing_image_blocks)
+    failed = (
+        not blocks
+        or not block_id_unique
+        or not adjacency_valid
+        or bool(chunk_contract_errors)
+        or bool(missing_image_blocks)
+        or bool(untraceable_chunks)
+    )
     status = "failed" if failed else "passed_with_warnings" if warnings else "passed"
     consumed_fields = {
         "type",
@@ -262,6 +331,17 @@ def build_structure_quality_report(
         "table_img_url",
         "sub_type",
         "text_level",
+        "id",
+        "uuid",
+        "content_id",
+        "headers",
+        "rows",
+        "summary",
+        "abstract",
+        "description",
+        "keywords",
+        "tags",
+        "keyphrases",
     }
 
     return {
@@ -269,8 +349,9 @@ def build_structure_quality_report(
         "source_pdf": source_info,
         "mineru_origin_pdf": origin_info,
         "same_binary": same_binary,
-        "batch_id": manifest.get("mineru_batch_id"),
-        "mineru_model": manifest.get("mineru_model_version"),
+        "batch_id": manifest.get("mineru_batch_id") or manifest.get("batch_id"),
+        "mineru_model": manifest.get("mineru_model_version") or manifest.get("model_version"),
+        "mineru_manifest_path": manifest.get("manifest_path"),
         "mineru_backend": layout["mineru_backend"],
         "mineru_version": layout["mineru_version"],
         "mineru_ocr_enable": layout["mineru_ocr_enable"],
@@ -298,6 +379,27 @@ def build_structure_quality_report(
         "mineru_output_table_html_artifact_count": inventory_categories.get("table_html_artifact", 0),
         "raw_block_count": raw_stats["raw_block_count"],
         "converted_block_count": len(blocks),
+        "indexable_chunk_count": len(indexable_chunks),
+        "non_indexable_chunk_count": len(non_indexable_chunks),
+        "empty_retrieval_chunk_count": len(empty_retrieval_chunks),
+        "empty_retrieval_chunk_rate": (
+            len(empty_retrieval_chunks) / len(eligible_chunks)
+            if eligible_chunks
+            else 0.0
+        ),
+        "traceable_chunk_count": len(indexable_chunks) - len(untraceable_chunks),
+        "traceability_rate": (
+            (len(indexable_chunks) - len(untraceable_chunks)) / len(indexable_chunks)
+            if indexable_chunks
+            else 0.0
+        ),
+        "untraceable_chunk_ids": [block.block_id for block in untraceable_chunks],
+        "chunk_strategy_counts": dict(sorted(chunk_strategy_counts.items())),
+        "cross_page_chunk_count": cross_page_chunk_count,
+        "sentence_split_chunk_count": sentence_split_chunk_count,
+        "chunk_contract_valid": not chunk_contract_errors,
+        "chunk_contract_error_count": sum(len(items) for items in chunk_contract_errors.values()),
+        "chunk_contract_errors": chunk_contract_errors,
         "page_document_count": len(page_blocks),
         "raw_type_distribution": raw_distribution,
         "converted_type_distribution": dict(sorted(Counter(block.block_type for block in blocks).items())),
@@ -309,13 +411,16 @@ def build_structure_quality_report(
         "missing_retrieval_content_count": missing_retrieval_content_count,
         "block_id_unique": block_id_unique,
         "reading_order_contiguous": reading_order_contiguous,
+        "reading_order_valid": reading_order_valid,
         "adjacency_valid": adjacency_valid,
         "boilerplate_count": boilerplate_count,
         "empty_boilerplate_count": len(empty_boilerplate_block_ids),
         "empty_boilerplate_block_ids": empty_boilerplate_block_ids,
         "table_count": table_count,
         "table_html_count": table_html_count,
+        "structured_table_count": structured_table_count,
         "chart_count": chart_count,
+        "visual_relation_count": visual_relation_count,
         "image_reference_count": image_ref_count,
         "missing_image_reference_count": len(missing_image_blocks),
         "missing_image_reference_block_ids": missing_image_blocks,

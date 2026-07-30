@@ -41,7 +41,7 @@ def local_fact_qa(
         return _error(doc_id, question, "no_evidence_blocks", f"No evidence blocks found for document: {doc_id}")
 
     top_k = _positive_int(options.get("top_k"), DEFAULT_TOP_K)
-    query = _planned_query(question, router_plan)
+    retrieval_query = _planned_query(question, router_plan)
     trace_path = str(options.get("trace_path") or "")
     warnings = _initial_warnings(router_plan, options)
     progress_callback = options.get("progress_callback")
@@ -57,7 +57,7 @@ def local_fact_qa(
             blocks=preview_blocks,
             trace_path=trace_path,
             run_id="",
-            query_used=query,
+            query_used=retrieval_query,
             router_plan=router_plan,
             warnings=[*warnings, "dry_run_no_answer_generated"],
             workflow_status="dry_run",
@@ -70,7 +70,8 @@ def local_fact_qa(
         state = workflow_runner(
             qid=str(options.get("qid") or f"local_fact_qa_{doc_id}"),
             doc_id=doc_id,
-            question=query,
+            question=question,
+            retrieval_query=retrieval_query,
             blocks=blocks,
             answer_policy=policy,
             top_k=top_k,
@@ -111,7 +112,7 @@ def local_fact_qa(
         blocks=state.retrieved_blocks,
         trace_path=trace_path,
         run_id=state.run_id or "",
-        query_used=query,
+        query_used=retrieval_query,
         router_plan=router_plan,
         warnings=warnings,
         workflow_status=state.status,

@@ -15,7 +15,7 @@ python scripts\docagent_cli.py --file <path> --question "<question>"
 python scripts\docagent_cli.py --doc-id <doc_id> --question "<question>"
 ```
 
-默认情况下，CLI 会为正常使用启用 `user_best` 执行配置。该配置要求可用的真实 MinerU API 令牌、路由器/查询规划器 LLM 配置、BGE-M3、交叉编码器重排序器、Qwen3，以及当前最优的 AnswerPolicy v3 检查点。若缺少这些资源，CLI 会明确报错。
+默认情况下，CLI 会为正常使用启用 `user_best` 执行配置。该配置要求可用的真实 MinerU API 令牌、查询意图/查询变换 LLM 配置、BGE-M3、交叉编码器重排序器、Qwen3，以及当前最优的 AnswerPolicy v3 检查点。若缺少这些资源，CLI 会明确报错。JSON 结果同时包含规范化的 `query_decision` 和 `query_plan`；变换后的查询只用于检索，原问题仍用于回答。
 
 轻量配置仅用于本地或 CI 检查：
 
@@ -70,7 +70,7 @@ python scripts\run_final_delivery_benchmark_gate.py --run-id final_delivery_gate
 ```
 
 完整的当前 CLI 契约、存储路径、数据集命令、输出字段和限制请参阅 [docs/FINAL_DELIVERY_CLI.md](docs/FINAL_DELIVERY_CLI.md)。
-当前交付状态表、已验收证据边界和仍处于 `not_started` 状态的工作请参阅 [docs/FINAL_DELIVERY_REPORT.md](docs/FINAL_DELIVERY_REPORT.md)。
+当前已验证能力、证据边界和仍处于 `not_started` 状态的工作请参阅 [CURRENT_STATUS.md](CURRENT_STATUS.md)。
 
 ## 当前输出契约
 
@@ -134,10 +134,10 @@ outputs/final_eval/
 - [docs/ACTIVE_PLAN.md](docs/ACTIVE_PLAN.md)：当前里程碑和停止条件。
 - [CURRENT_STATUS.md](CURRENT_STATUS.md)：当前已验证的能力状态。
 - [docs/FINAL_DELIVERY_CLI.md](docs/FINAL_DELIVERY_CLI.md)：当前 CLI 交付指南。
-- [docs/FINAL_DELIVERY_REPORT.md](docs/FINAL_DELIVERY_REPORT.md)：最终交付状态和证据边界报告。
+- [CURRENT_STATUS.md](CURRENT_STATUS.md)：当前已验证能力和证据边界。
 - [docs/DATASETS.md](docs/DATASETS.md)：数据集角色、划分策略和下载约束。
 - [AGENTS.md](AGENTS.md)：实现和验证的仓库规则。
 
 面向 PM 的交接文档已弃用，并非当前规划来源。
 
-Phase 1–4 的历史实现细节仍保留在 `docs/` 下按阶段划分的文档中。
+历史阶段过程记录已从工作树中清除；需要审计时请查看 Git 历史，而不是将其作为当前规划来源。

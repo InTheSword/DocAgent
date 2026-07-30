@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 
 from docagent.ingestion.document_registry import DocumentRecord
+from docagent.query.pipeline import QueryPipelineOutput
+from docagent.query.schemas import QueryDecision, QueryPlan
 from docagent.router.llm_client import load_router_llm_config
 from docagent.router.llm_router import plan_route_with_optional_llm
 from docagent.schemas import EvidenceBlock, EvidenceLocation
@@ -382,31 +384,8 @@ def test_visual_boundary_does_not_call_llm() -> None:
     assert "visual_understanding_unsupported" in result["warnings"]
 
 
-def test_cli_without_allow_llm_router_passes_rule_only_option(tmp_path: Path, monkeypatch) -> None:
+def test_cli_explicit_statistics_bypasses_query_pipeline(tmp_path: Path) -> None:
     db_path = _repository_with_document(tmp_path)
-    captured: dict = {}
-
-    def fake_plan_route(payload: dict, **kwargs) -> dict:
-        captured["payload"] = payload
-        captured["kwargs"] = kwargs
-        return {
-            "task_type": "document_statistics",
-            "selected_tools": ["count_pages"],
-            "requires_retrieval": False,
-            "requires_full_scan": False,
-            "requires_table_tool": False,
-            "requires_calculation": False,
-            "requires_visual_understanding": False,
-            "target_evidence_types": ["metadata"],
-            "query_rewrite": "",
-            "confidence": 0.95,
-            "reason": "fake rule plan",
-            "fallback_used": False,
-            "warnings": [],
-            "router_source": "rule",
-        }
-
-    monkeypatch.setattr(docagent_cli, "plan_route_with_optional_llm", fake_plan_route)
     args = docagent_cli.build_parser().parse_args(
         [
             "--execution-profile",
@@ -425,8 +404,8 @@ def test_cli_without_allow_llm_router_passes_rule_only_option(tmp_path: Path, mo
     result = docagent_cli.run_cli(args)
 
     assert result["status"] == "success"
-    assert captured["payload"]["options"]["allow_external_llm_router"] is False
-    assert result["router_plan"]["router_source"] == "rule"
+    assert result["router_plan"]["router_source"] == "deterministic_operation"
+    assert "query_decision" not in result
 
 
 def test_cli_allow_llm_router_records_router_source(tmp_path: Path, monkeypatch) -> None:
@@ -435,28 +414,35 @@ def test_cli_allow_llm_router_records_router_source(tmp_path: Path, monkeypatch)
     env_file.write_text("DOCAGENT_ROUTER_LLM_API_KEY=fake\n", encoding="utf-8")
     captured: dict = {}
 
-    def fake_plan_route(payload: dict, **kwargs) -> dict:
-        captured["payload"] = payload
+    def fake_query_pipeline(**kwargs) -> QueryPipelineOutput:
         captured["kwargs"] = kwargs
-        return {
-            "task_type": "document_statistics",
-            "selected_tools": ["count_pages"],
-            "requires_retrieval": False,
-            "requires_full_scan": False,
-            "requires_table_tool": False,
-            "requires_calculation": False,
-            "requires_visual_understanding": False,
-            "target_evidence_types": ["metadata"],
-            "query_rewrite": "",
-            "confidence": 0.9,
-            "reason": "fake llm fallback plan",
-            "fallback_used": True,
-            "warnings": ["llm_router_used"],
-            "router_source": "llm_fallback",
-            "llm_router": {"status": "used"},
-        }
+        decision = QueryDecision(
+            original_question=kwargs["question"],
+            intent="semantic_fact",
+            confidence=0.9,
+            requires_retrieval=True,
+            allowed_actions=("none", "rewrite"),
+            retrieval_routes=("dense", "sparse"),
+            source="llm",
+        )
+        plan = QueryPlan(
+            original_question=kwargs["question"],
+            intent=decision.intent,
+            actions=("none",),
+            retrieval_queries=(kwargs["question"],),
+            retrieval_routes=decision.retrieval_routes,
+            transformation_source="llm",
+        )
+        return QueryPipelineOutput(
+            decision=decision,
+            plan=plan,
+            trace={
+                "intent_router": {"status": "used"},
+                "query_transformer": {"status": "used"},
+            },
+        )
 
-    monkeypatch.setattr(docagent_cli, "plan_route_with_optional_llm", fake_plan_route)
+    monkeypatch.setattr(docagent_cli, "run_query_pipeline", fake_query_pipeline)
     args = docagent_cli.build_parser().parse_args(
         [
             "--execution-profile",
@@ -482,10 +468,10 @@ def test_cli_allow_llm_router_records_router_source(tmp_path: Path, monkeypatch)
     result = docagent_cli.run_cli(args)
 
     assert result["status"] == "success"
-    assert captured["payload"]["options"]["allow_external_llm_router"] is True
-    assert captured["kwargs"]["threshold"] == 0.8
+    assert captured["kwargs"]["use_llm"] is True
     assert captured["kwargs"]["env_file"] == env_file
     assert captured["kwargs"]["model_override"] == "fake-model"
-    assert result["router_plan"]["router_source"] == "llm_fallback"
+    assert result["router_plan"]["router_source"] == "query_pipeline"
+    assert result["query_decision"]["intent"] == "semantic_fact"
     summary = json.loads(Path(result["artifact_dir"], "summary.json").read_text(encoding="utf-8"))
     assert summary["used_external_api"] is True

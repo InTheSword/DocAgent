@@ -4,15 +4,15 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from docagent.parser.mineru_converter import content_list_to_blocks
-from docagent.schemas import EvidenceBlock
+from docagent.parser.mineru_converter import content_list_to_chunks
+from docagent.schemas import Chunk
 
 
 @dataclass
 class TextParserBackend:
     backend_name: str = "text"
 
-    def parse(self, *, file_path: Path, doc_id: str, output_dir: Path) -> list[EvidenceBlock]:
+    def parse(self, *, file_path: Path, doc_id: str, output_dir: Path) -> list[Chunk]:
         if file_path.suffix.lower() != ".txt":
             raise ValueError(f"text parser only supports .txt files: {file_path.suffix}")
 
@@ -49,7 +49,7 @@ class TextParserBackend:
             encoding="utf-8",
         )
 
-        blocks = content_list_to_blocks(
+        blocks = content_list_to_chunks(
             doc_id=doc_id,
             content_list_path=content_list_path,
             document_dir=output_dir.parent,

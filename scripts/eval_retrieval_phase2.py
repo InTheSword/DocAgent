@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 import time
 from pathlib import Path
@@ -35,13 +36,11 @@ def summarize(details: list[dict], *, top_k: int) -> dict:
     return {
         "num_samples": len(details),
         "top_k": top_k,
-        "recall_at_1": recall_at_k(rankings, gold_ids, k=1),
-        "recall_at_3": recall_at_k(rankings, gold_ids, k=min(3, top_k)),
         "recall_at_5": recall_at_k(rankings, gold_ids, k=min(5, top_k)),
         "mrr_at_5": mrr_at_k(rankings, gold_ids, k=min(5, top_k)),
         "num_misses": sum(1 for item in details if not item["hit"]),
         "mean_latency_ms": sum(latencies) / max(len(latencies), 1),
-        "p95_latency_ms": sorted(latencies)[int(len(latencies) * 0.95) - 1] if latencies else 0.0,
+        "p95_latency_ms": sorted(latencies)[math.ceil(len(latencies) * 0.95) - 1] if latencies else 0.0,
     }
 
 
@@ -53,10 +52,13 @@ def build_dense_index(
 ) -> DenseIndex:
     if dense_encoder is None:
         raise RuntimeError("dense modes require --dense-model-path")
-    embeddings = dense_encoder.encode_documents([block.retrieval_text for block in blocks])
-    if embeddings.shape[0] != len(blocks):
+    indexable_blocks = [block for block in blocks if block.is_indexable]
+    if not indexable_blocks:
+        raise RuntimeError("document has no indexable chunks")
+    embeddings = dense_encoder.encode_documents([block.retrieval_text for block in indexable_blocks])
+    if embeddings.shape[0] != len(indexable_blocks):
         raise RuntimeError("dense encoder returned a different number of embeddings than blocks")
-    return DenseIndex.build(blocks=blocks, embeddings=embeddings, model_id=model_id)
+    return DenseIndex.build(blocks=indexable_blocks, embeddings=embeddings, model_id=model_id)
 
 
 def evaluate_mode(

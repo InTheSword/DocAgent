@@ -10,8 +10,8 @@ from docagent.ingestion.quality import build_structure_quality_report
 from docagent.parser.base import ParserBackend
 from docagent.parser.mineru_converter import build_page_blocks
 from docagent.retrieval.dense_encoder import DenseEncoder
-from docagent.retrieval.dense_index import DenseIndex
-from docagent.schemas import EvidenceBlock
+from docagent.retrieval.dense_index import DenseIndex, evidence_hash
+from docagent.schemas import Chunk
 from docagent.storage.repositories import DocumentRepository
 from docagent.utils.jsonl import write_jsonl
 
@@ -19,8 +19,8 @@ from docagent.utils.jsonl import write_jsonl
 @dataclass
 class IngestionResult:
     document: DocumentRecord
-    blocks: list[EvidenceBlock]
-    page_blocks: list[EvidenceBlock]
+    blocks: list[Chunk]
+    page_blocks: list[Chunk]
     dense_index_metadata: dict[str, object] | None = None
     structure_quality: dict[str, object] | None = None
 
@@ -32,6 +32,7 @@ class IngestionResult:
             "index_status": self.document.index_status,
             "page_count": self.document.page_count,
             "block_count": len(self.blocks),
+            "indexable_chunk_count": sum(1 for block in self.blocks if block.is_indexable),
             "block_type_counts": dict(sorted(block_type_counts.items())),
             "dense_index": self.dense_index_metadata,
             "structure_quality": {
@@ -98,8 +99,8 @@ class DocumentIngestionService:
         else:
             from docagent.utils.jsonl import read_jsonl
 
-            blocks = [EvidenceBlock.from_dict(record_data) for record_data in read_jsonl(blocks_path)]
-            page_blocks = [EvidenceBlock.from_dict(record_data) for record_data in read_jsonl(pages_path)] if pages_path.exists() else []
+            blocks = [Chunk.from_dict(record_data) for record_data in read_jsonl(blocks_path)]
+            page_blocks = [Chunk.from_dict(record_data) for record_data in read_jsonl(pages_path)] if pages_path.exists() else []
 
         record.page_count = len({block.page_id for block in blocks if block.page_id is not None})
         record.parser_backend = parser_backend.backend_name
@@ -111,13 +112,34 @@ class DocumentIngestionService:
             if dense_encoder is None:
                 raise RuntimeError("--build-index requires a dense encoder")
             index_metadata_path = document_dir / "index_metadata.json"
-            if force_index or not index_metadata_path.exists():
+            indexable_blocks = [block for block in blocks if block.is_indexable]
+            if not indexable_blocks:
+                raise RuntimeError("document has no indexable chunks")
+            existing_metadata = (
+                json.loads(index_metadata_path.read_text(encoding="utf-8"))
+                if index_metadata_path.exists()
+                else {}
+            )
+            index_is_current = (
+                not force_index
+                and bool(existing_metadata)
+                and str(existing_metadata.get("model_id") or "") == dense_encoder.model_id
+                and list(existing_metadata.get("block_ids") or [])
+                == [block.block_id for block in indexable_blocks]
+                and str(existing_metadata.get("evidence_hash") or "") == evidence_hash(indexable_blocks)
+                and Path(str(existing_metadata.get("embeddings_path") or "")).is_file()
+            )
+            if not index_is_current:
                 record.index_status = "indexing"
                 self._save_document(record)
                 try:
-                    texts = [block.retrieval_text for block in blocks]
+                    texts = [block.retrieval_text for block in indexable_blocks]
                     embeddings = dense_encoder.encode_documents(texts)
-                    index = DenseIndex.build(blocks=blocks, embeddings=embeddings, model_id=dense_encoder.model_id)
+                    index = DenseIndex.build(
+                        blocks=indexable_blocks,
+                        embeddings=embeddings,
+                        model_id=dense_encoder.model_id,
+                    )
                     dense_metadata = index.save(document_dir)
                     index_metadata_path.write_text(json.dumps(dense_metadata, ensure_ascii=False, indent=2), encoding="utf-8")
                 except Exception:
@@ -125,7 +147,7 @@ class DocumentIngestionService:
                     self._save_document(record)
                     raise
             else:
-                dense_metadata = json.loads(index_metadata_path.read_text(encoding="utf-8"))
+                dense_metadata = existing_metadata
             record.index_status = "ready"
         else:
             record.index_status = "not_started"

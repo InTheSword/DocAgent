@@ -47,8 +47,15 @@ def dense_index_for_blocks(blocks, dense_encoder: DenseEncoder | None, retriever
         return None
     if dense_encoder is None:
         raise RuntimeError(f"{retriever_mode} requires dense encoder")
-    embeddings = dense_encoder.encode_documents([block.retrieval_text for block in blocks])
-    return DenseIndex.build(blocks=blocks, embeddings=np.asarray(embeddings, dtype=np.float32), model_id=dense_encoder.model_id)
+    indexable_blocks = [block for block in blocks if block.is_indexable]
+    if not indexable_blocks:
+        raise RuntimeError("document has no indexable chunks")
+    embeddings = dense_encoder.encode_documents([block.retrieval_text for block in indexable_blocks])
+    return DenseIndex.build(
+        blocks=indexable_blocks,
+        embeddings=np.asarray(embeddings, dtype=np.float32),
+        model_id=dense_encoder.model_id,
+    )
 
 
 def main() -> None:

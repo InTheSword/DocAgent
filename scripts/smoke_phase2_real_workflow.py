@@ -162,9 +162,12 @@ def build_real_retriever(
             max_length=dense_max_length,
         )
     )
-    embeddings = encoder.encode_documents([block.retrieval_text for block in blocks])
-    validate_embeddings(embeddings, expected_rows=len(blocks), expected_dim=expected_embedding_dim)
-    dense_index = DenseIndex.build(blocks=blocks, embeddings=embeddings, model_id=dense_model_id)
+    indexable_blocks = [block for block in blocks if block.is_indexable]
+    if not indexable_blocks:
+        raise RuntimeError("document has no indexable chunks")
+    embeddings = encoder.encode_documents([block.retrieval_text for block in indexable_blocks])
+    validate_embeddings(embeddings, expected_rows=len(indexable_blocks), expected_dim=expected_embedding_dim)
+    dense_index = DenseIndex.build(blocks=indexable_blocks, embeddings=embeddings, model_id=dense_model_id)
     if dense_index.backend != "faiss":
         raise RuntimeError(f"real workflow smoke requires FAISS backend, got {dense_index.backend}")
     reranker = CrossEncoderReranker(

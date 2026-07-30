@@ -6,8 +6,8 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 
-from docagent.parser.mineru_converter import content_list_to_blocks, find_content_list
-from docagent.schemas import EvidenceBlock
+from docagent.parser.mineru_converter import content_list_to_chunks, find_content_list
+from docagent.schemas import Chunk
 
 
 @dataclass
@@ -17,14 +17,14 @@ class MinerUParserBackend:
     timeout_seconds: int = 600
     backend_name: str = "mineru"
 
-    def parse(self, *, file_path: Path, doc_id: str, output_dir: Path) -> list[EvidenceBlock]:
+    def parse(self, *, file_path: Path, doc_id: str, output_dir: Path) -> list[Chunk]:
         output_dir.mkdir(parents=True, exist_ok=True)
         if self.mode == "local_cli":
             self._run_local_cli(file_path=file_path, output_dir=output_dir)
         elif self.mode != "parse_existing":
             raise ValueError(f"unsupported MinerU parser mode: {self.mode}")
         content_list = find_content_list(output_dir)
-        return content_list_to_blocks(doc_id=doc_id, content_list_path=content_list, document_dir=output_dir.parent)
+        return content_list_to_chunks(doc_id=doc_id, content_list_path=content_list, document_dir=output_dir.parent)
 
     def _run_local_cli(self, *, file_path: Path, output_dir: Path) -> None:
         command = [self.command, "-p", str(file_path), "-o", str(output_dir)]

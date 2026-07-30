@@ -67,9 +67,17 @@ def test_mineru_existing_artifacts_are_portable_after_document_dir_move(tmp_path
     assert any(block.metadata.get("is_boilerplate") for block in blocks)
     for index, block in enumerate(blocks):
         if index > 0:
-            assert block.metadata["previous_block_id"] == blocks[index - 1].block_id
+            previous = blocks[index - 1]
+            assert block.metadata["previous_document_block_id"] == previous.block_id
+            assert block.metadata["previous_block_id"] == (
+                previous.block_id if previous.page_id == block.page_id else None
+            )
         if index + 1 < len(blocks):
-            assert block.metadata["next_block_id"] == blocks[index + 1].block_id
+            following = blocks[index + 1]
+            assert block.metadata["next_document_block_id"] == following.block_id
+            assert block.metadata["next_block_id"] == (
+                following.block_id if following.page_id == block.page_id else None
+            )
 
     persisted_text = "\n".join(
         [

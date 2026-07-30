@@ -25,7 +25,6 @@ REQUIRED_FILES = (
     "CURRENT_STATUS.md",
     "docs/ACTIVE_PLAN.md",
     "docs/FINAL_DELIVERY_CLI.md",
-    "docs/FINAL_DELIVERY_REPORT.md",
     "docs/SERVER_SETUP.md",
     "docs/DATASETS.md",
     "scripts/docagent_cli.py",
@@ -239,45 +238,43 @@ def _check_documentation(root: Path) -> CheckResult:
     snippets = {
         "README.md": [
             "docs/FINAL_DELIVERY_CLI.md",
-            "docs/FINAL_DELIVERY_REPORT.md",
+            "CURRENT_STATUS.md",
             '"answer"',
             '"reasoning_summary"',
             '"evidence_used"',
             '"citations"',
             '"tools_used"',
             '"trace_path"',
-            "raw PDF MinerU API ingestion",
+            "原始 PDF 的 MinerU API 导入",
         ],
-        "docs/FINAL_DELIVERY_CLI.md": [
-            "CLI-only delivery surface",
-            "MinerU API ingestion",
-            "*_content_list_v2.json",
-            "table HTML",
-            "image metadata",
-            "formal visual-answer benchmark acceptance",
-            "accepted MP-DocVQA/TAT-QA final answer benchmark",
-            "run_final_delivery_benchmark_gate.py",
-            "new SFT/GRPO training",
-        ],
-        "docs/FINAL_DELIVERY_REPORT.md": [
-            "Final answer quality benchmark",
-            "not_started",
-            "final delivery benchmark gate",
-            "validation subsets are used for diagnostics only",
-            "used as training data",
-            "real_model_verified",
-            "accepted",
-        ],
-        "AGENTS.md": [
-            "keep work anchored to the current delivery and functional goal",
-            "make case-specific repairs",
-            "use validation subsets as training data",
-        ],
-        "docs/SERVER_SETUP.md": [
-            "preserve the interactive terminal",
-            "Do not use `set -e`, shell `exit`",
-        ],
-    }
+    "docs/FINAL_DELIVERY_CLI.md": [
+        "仅限 CLI 的交付界面",
+        "MinerU API 导入",
+        "*_content_list_v2.json",
+        "表格 HTML",
+        "图像元数据",
+        "正式视觉问答基准验收",
+        "已验收的 MP-DocVQA/TAT-QA 最终答案基准",
+        "run_final_delivery_benchmark_gate.py",
+        "新的 SFT/GRPO 训练",
+    ],
+    "CURRENT_STATUS.md": [
+        "最终答案质量基准",
+        "not_started",
+        "验证子集仅用于诊断",
+        "real_model_verified",
+        "accepted",
+    ],
+    "AGENTS.md": [
+        "工作始终锚定当前交付和功能目标",
+        "不得为单个验证行、PDF 页、表格值、答案字符串或问题措辞做个案修复",
+        "不得将验证子集用作训练数据",
+    ],
+    "docs/SERVER_SETUP.md": [
+        "保持交互终端",
+        "不得使用 `set -e`、shell `exit`",
+    ],
+}
     failures: list[str] = []
     checked: dict[str, int] = {}
     for relative_path, required_snippets in snippets.items():

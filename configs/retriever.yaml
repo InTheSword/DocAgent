@@ -9,6 +9,5 @@ dense:
   model_name: BAAI/bge-m3
 reranker:
   enabled: false
-  model_name: BAAI/bge-reranker-base
+  model_name: BAAI/bge-reranker-v2-m3
 final_top_k: 5
-

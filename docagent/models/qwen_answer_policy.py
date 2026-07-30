@@ -64,18 +64,20 @@ class QwenAnswerPolicy:
         start = time.perf_counter()
         tokenizer, model = self._load()
         prompt_compiler = compile_answer_prompt_v3 if self.config.answer_output_contract == "v3_refs" else compile_answer_prompt
-        bundle = prompt_compiler(
-            question=question,
-            evidence_blocks=evidence_blocks,
-            tool_results=tool_results,
-            answer_type=answer_type,
-            append_no_think=self.config.append_no_think,
-            max_chars_per_block=self.config.max_chars_per_block,
-            max_total_chars=self.config.max_total_chars,
-            rank_aware_context=self.config.rank_aware_context,
+        bundle, prompt_text, cap_truncated = self._compile_prompt_with_budget(
+            tokenizer,
+            prompt_compiler,
+            {
+                "question": question,
+                "evidence_blocks": evidence_blocks,
+                "tool_results": tool_results,
+                "answer_type": answer_type,
+                "append_no_think": self.config.append_no_think,
+                "max_chars_per_block": self.config.max_chars_per_block,
+                "max_total_chars": self.config.max_total_chars,
+                "rank_aware_context": self.config.rank_aware_context,
+            },
         )
-        prompt_text = self._render_prompt(tokenizer, bundle.messages)
-        prompt_text, cap_truncated = self._cap_prompt(tokenizer, prompt_text)
         prompt_token_count = self._count_tokens(tokenizer, prompt_text)
 
         try:
@@ -219,14 +221,53 @@ class QwenAnswerPolicy:
         except Exception:
             return None
 
-    def _cap_prompt(self, tokenizer: Any, prompt_text: str) -> tuple[str, bool]:
+    def _compile_prompt_with_budget(
+        self,
+        tokenizer: Any,
+        prompt_compiler: Any,
+        compiler_kwargs: dict[str, Any],
+    ) -> tuple[Any, str, bool]:
+        bundle = prompt_compiler(**compiler_kwargs)
+        prompt_text = self._render_prompt(tokenizer, bundle.messages)
         limit = self.config.max_prompt_tokens
         if limit is None or limit <= 0:
-            return prompt_text, False
-        try:
-            ids = tokenizer(prompt_text, add_special_tokens=False)["input_ids"]
-            if len(ids) <= limit:
-                return prompt_text, False
-            return tokenizer.decode(ids[-limit:], skip_special_tokens=True), True
-        except Exception:
-            return prompt_text, False
+            return bundle, prompt_text, False
+        token_count = self._count_tokens(tokenizer, prompt_text)
+        if token_count is None or token_count <= limit:
+            return bundle, prompt_text, False
+
+        evidence_blocks = list(compiler_kwargs.get("evidence_blocks") or [])
+        configured_budget = compiler_kwargs.get("max_total_chars")
+        if configured_budget is None:
+            high = sum(
+                min(
+                    len(block.retrieval_text),
+                    int(compiler_kwargs.get("max_chars_per_block") or len(block.retrieval_text)),
+                )
+                for block in evidence_blocks
+            )
+        else:
+            high = max(int(configured_budget), 0)
+
+        best: tuple[Any, str] | None = None
+        low = 0
+        while low <= high:
+            candidate_budget = (low + high) // 2
+            candidate_kwargs = {**compiler_kwargs, "max_total_chars": candidate_budget}
+            candidate_bundle = prompt_compiler(**candidate_kwargs)
+            candidate_text = self._render_prompt(tokenizer, candidate_bundle.messages)
+            candidate_tokens = self._count_tokens(tokenizer, candidate_text)
+            if candidate_tokens is None:
+                return bundle, prompt_text, False
+            if candidate_tokens <= limit:
+                best = (candidate_bundle, candidate_text)
+                low = candidate_budget + 1
+            else:
+                high = candidate_budget - 1
+
+        if best is None:
+            raise GenerationError(
+                "max_prompt_tokens is too small for the required instructions and question; "
+                "increase the model context budget"
+            )
+        return best[0], best[1], True

@@ -13,6 +13,7 @@ data/benchmark/*.jsonl
 data/benchmark/**/*.json
 data/benchmark/**/*.parquet
 data/benchmark/**/*.crdownload
+data/benchmark/m1_query_routing/
 data/documents/
 data/real_documents/
 outputs/*

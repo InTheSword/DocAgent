@@ -3,6 +3,10 @@
 > 目的：补充 `DocAgent_Phase2_RealDocument_HybridRetrieval_MVP.md`。  
 > 原则：不扩大 Phase 2 的总体范围，只补齐避免“PDF 全量转文本 + 固定切片”所必须的结构化处理能力。  
 > 优先级：先形成可用闭环，再优化复杂版面、跨页表格和视觉理解效果。
+>
+> 术语更新（2026-07-29）：当前实现以 `Chunk` 为唯一检索领域对象；
+> `EvidenceBlock` 只保留为历史持久化和代码兼容名称。当前实现状态以
+> `docs/ACTIVE_PLAN.md` 与 `CURRENT_STATUS.md` 为准。
 
 ---
 

@@ -101,8 +101,15 @@ def main() -> None:
                     f"dense index is missing for doc_id={args.doc_id}: {index_metadata}. "
                     "Run scripts/ingest_document.py with --build-index, or pass --build-index-if-missing."
                 )
-            embeddings = dense_encoder.encode_documents([block.retrieval_text for block in blocks])
-            dense_index = DenseIndex.build(blocks=blocks, embeddings=embeddings, model_id=dense_encoder.model_id)
+            indexable_blocks = [block for block in blocks if block.is_indexable]
+            if not indexable_blocks:
+                raise RuntimeError("document has no indexable chunks")
+            embeddings = dense_encoder.encode_documents([block.retrieval_text for block in indexable_blocks])
+            dense_index = DenseIndex.build(
+                blocks=indexable_blocks,
+                embeddings=embeddings,
+                model_id=dense_encoder.model_id,
+            )
             metadata = dense_index.save(index_dir)
             model_index_metadata = index_dir / f"index_metadata_{dense_encoder.model_id.replace('/', '_')}.json"
             model_index_metadata.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")

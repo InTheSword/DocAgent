@@ -23,12 +23,14 @@ from docagent.integrations.vlm_api import load_vlm_config
 from docagent.parser.mineru_backend import MinerUParserBackend
 from docagent.parser.mineru_converter import build_page_blocks, find_content_list
 from docagent.parser.text_backend import TextParserBackend
+from docagent.query.pipeline import QueryPipelineOutput, run_query_pipeline
+from docagent.query.schemas import QueryPlan
 from docagent.retrieval.dense_encoder import DenseEncoder, DenseEncoderConfig, HashDenseEncoder
-from docagent.retrieval.dense_index import DenseIndex
+from docagent.retrieval.dense_index import DenseIndex, evidence_hash
 from docagent.retrieval.index_manager import IndexedDocumentRetriever
 from docagent.retrieval.query_planner import plan_queries
 from docagent.retrieval.reranker import CrossEncoderReranker, CrossEncoderRerankerConfig, KeywordOverlapReranker
-from docagent.router.llm_router import DEFAULT_LLM_ROUTER_THRESHOLD, plan_route_with_optional_llm
+from docagent.router.llm_router import DEFAULT_LLM_ROUTER_THRESHOLD
 from docagent.storage.db import connect
 from docagent.storage.repositories import DocumentRepository, TraceRepository
 from docagent.tools.document_tools import (
@@ -383,6 +385,27 @@ def _router_execution(router_plan: dict[str, Any]) -> dict[str, Any]:
     warnings = [str(item) for item in router_plan.get("warnings") or []]
     llm_router = router_plan.get("llm_router") if isinstance(router_plan.get("llm_router"), dict) else {}
     router_source = str(router_plan.get("router_source") or "")
+    if router_source == "query_pipeline":
+        pipeline_trace = (
+            router_plan.get("query_pipeline_trace")
+            if isinstance(router_plan.get("query_pipeline_trace"), dict)
+            else {}
+        )
+        intent_trace = (
+            pipeline_trace.get("intent_router")
+            if isinstance(pipeline_trace.get("intent_router"), dict)
+            else {}
+        )
+        status = str(intent_trace.get("status") or "")
+        return {
+            "router_source": router_source,
+            "llm_router_status": status,
+            "llm_router_skip_reason": "" if status == "used" else status,
+            "llm_router_attempted": status not in {"", "fallback"},
+            "used_llm_router": status == "used",
+            "rule_confidence": router_plan.get("confidence"),
+            "final_task_type": str(router_plan.get("task_type") or ""),
+        }
     llm_status = str(llm_router.get("status") or ("used" if router_source == "llm_fallback" else "skipped"))
     skip_reason = ""
     if router_source == "rule":
@@ -488,6 +511,17 @@ def _document_profile(repository: DocumentRepository, doc_id: str) -> dict[str, 
     block_result = count_blocks(repository, doc_id)
     table_result = count_tables(repository, doc_id)
     image_result = count_images(repository, doc_id)
+    rows = repository.conn.execute(
+        """
+        SELECT text
+        FROM evidence_blocks
+        WHERE doc_id = ? AND block_type != 'page' AND COALESCE(text, '') != ''
+        ORDER BY page_id ASC, block_id ASC
+        LIMIT 20
+        """,
+        (doc_id,),
+    ).fetchall()
+    language_sample = " ".join(str(row[0] or "") for row in rows)
     return {
         "page_count": page_result.get("page_count") if page_result.get("status") == "success" else None,
         "block_count": block_result.get("block_count") if block_result.get("status") == "success" else None,
@@ -496,6 +530,136 @@ def _document_profile(repository: DocumentRepository, doc_id: str) -> dict[str, 
         "has_ocr": bool((block_result.get("block_count") or 0) > 0),
         "has_tables": bool((table_result.get("table_count") or 0) > 0),
         "has_images": bool((image_result.get("image_count") or 0) > 0),
+        "dominant_language": _dominant_language(language_sample),
+    }
+
+
+def _dominant_language(text: str) -> str:
+    cjk_count = len(re.findall(r"[\u4e00-\u9fff]", text))
+    latin_count = len(re.findall(r"[A-Za-z]", text))
+    if cjk_count == 0 and latin_count == 0:
+        return "unknown"
+    return "zh" if cjk_count * 2 >= latin_count else "en"
+
+
+def _deterministic_operation_plan(question: str) -> dict[str, Any] | None:
+    """Recognize only explicit non-RAG document operations."""
+
+    normalized = " ".join(question.strip().casefold().split())
+    statistics: list[str] = []
+    if re.search(r"\b(?:how many|number of|count|page count)\b.*\bpages?\b|(?:多少页|页数)", normalized):
+        statistics.append("count_pages")
+    if re.search(r"\b(?:how many|number of|count|table count)\b.*\btables?\b|(?:多少.*表|表格数量)", normalized):
+        statistics.append("count_tables")
+    if re.search(
+        r"\b(?:how many|number of|count|image count|figure count)\b.*\b(?:images?|figures?)\b|"
+        r"(?:多少.*(?:图片|图像|图表)|(?:图片|图像|图表)数量)",
+        normalized,
+    ):
+        statistics.append("count_images")
+    if re.search(r"\b(?:how many|number of|count)\b.*\b(?:ocr\s+)?blocks?\b|(?:多少.*块|块数量)", normalized):
+        statistics.append("count_blocks")
+    if statistics:
+        return _legacy_operation_plan("document_statistics", statistics, ["metadata"])
+
+    page_lookup = re.search(
+        r"\b(?:show|display|read|text from|what is on)\b.*\bpage\s*\d+\b|"
+        r"\blist\s+(?:all\s+)?pages\b|(?:显示|读取|查看).*(?:第\s*\d+\s*页|页码)",
+        normalized,
+    )
+    if page_lookup:
+        selected = ["list_pages"] if re.search(r"\blist\s+(?:all\s+)?pages\b|列出.*页", normalized) else ["get_page_text"]
+        return _legacy_operation_plan("page_lookup", selected, ["page", "text"])
+
+    structured_match = re.search(
+        r"\b(?:extract|list|show)\s+all\b.*\b(?:tables?|figures?|images?|dates?|sections?|headings?)\b|"
+        r"\blist\s+(?:section\s+)?headings\b|\b(?:document\s+)?outline\b|"
+        r"(?:提取|列出|显示)所有.*(?:表格|图片|图像|日期|章节|标题)|文档大纲",
+        normalized,
+    )
+    if structured_match:
+        if re.search(r"\btables?\b|表格", normalized):
+            tools, evidence_types = ["extract_all_tables"], ["table"]
+        elif re.search(r"\b(?:figures?|images?)\b|(?:图片|图像)", normalized):
+            tools, evidence_types = ["extract_all_images"], ["image"]
+        elif re.search(r"\bdates?\b|日期", normalized):
+            tools, evidence_types = ["extract_all_dates"], ["text"]
+        elif re.search(r"\b(?:sections?|headings?)\b|(?:章节|标题)", normalized):
+            tools, evidence_types = ["list_sections"], ["text"]
+        else:
+            tools, evidence_types = ["document_outline"], ["text"]
+        return _legacy_operation_plan("structured_extraction", tools, evidence_types)
+    return None
+
+
+def _legacy_operation_plan(task_type: str, selected_tools: list[str], evidence_types: list[str]) -> dict[str, Any]:
+    return {
+        "task_type": task_type,
+        "selected_tools": selected_tools,
+        "requires_retrieval": False,
+        "requires_full_scan": task_type == "structured_extraction",
+        "requires_table_tool": any("table" in tool for tool in selected_tools),
+        "requires_calculation": False,
+        "requires_visual_understanding": False,
+        "target_evidence_types": evidence_types,
+        "query_rewrite": "",
+        "confidence": 1.0,
+        "reason": "Matched an explicit deterministic document operation.",
+        "fallback_used": False,
+        "warnings": [],
+        "router_source": "deterministic_operation",
+    }
+
+
+def _query_pipeline_router_view(output: QueryPipelineOutput) -> dict[str, Any]:
+    decision = output.decision
+    plan = output.plan
+    if decision.intent == "document_summary":
+        task_type, selected_tools = "document_summary", ["document_summary"]
+    elif decision.intent in {"table_lookup", "table_analysis"}:
+        task_type = "table_lookup_or_calculation"
+        selected_tools = ["table_lookup"]
+        if decision.intent == "table_analysis":
+            selected_tools.append("simple_calculation")
+    elif decision.intent in {"no_retrieval", "clarification_required"}:
+        task_type, selected_tools = decision.intent, []
+    else:
+        task_type, selected_tools = "local_fact_qa", ["local_fact_qa"]
+    return {
+        "task_type": task_type,
+        "selected_tools": selected_tools,
+        "requires_retrieval": decision.requires_retrieval,
+        "requires_full_scan": decision.intent == "document_summary",
+        "requires_table_tool": decision.intent in {"table_lookup", "table_analysis"},
+        "requires_calculation": decision.intent == "table_analysis",
+        "requires_visual_understanding": decision.intent == "visual_lookup",
+        "target_evidence_types": list(decision.metadata_filter.content_types),
+        "query_rewrite": plan.retrieval_queries[0] if plan.retrieval_queries else "",
+        "confidence": decision.confidence,
+        "reason": decision.reason,
+        "fallback_used": decision.source != "llm",
+        "warnings": list(dict.fromkeys((*decision.warnings, *plan.warnings))),
+        "router_source": "query_pipeline",
+        "query_pipeline_trace": output.trace,
+    }
+
+
+def _legacy_query_planner_view(plan: QueryPlan) -> dict[str, Any]:
+    used_llm = plan.transformation_source == "llm"
+    queries = list(plan.retrieval_queries)
+    return {
+        "enabled": True,
+        "question": plan.original_question,
+        "rule_queries": [] if used_llm else queries,
+        "llm_queries": queries if used_llm else [],
+        "final_queries": queries,
+        "query_sources": {
+            "rule": [] if used_llm else queries,
+            "llm": queries if used_llm else [],
+        },
+        "mode": "m1",
+        "warnings": list(plan.warnings),
+        "llm_status": "used" if used_llm else plan.transformation_source,
     }
 
 
@@ -669,7 +833,7 @@ def _run_mineru_api_to_document_cache(
     data_id: str | None,
     model_version: str,
     language: str,
-    is_ocr: bool,
+    is_ocr: bool | None,
     enable_table: bool,
     enable_formula: bool,
     timeout_seconds: float,
@@ -773,7 +937,7 @@ def _ingest_file(
     mineru_model_version: str,
     mineru_data_id: str | None,
     mineru_language: str,
-    mineru_ocr: bool,
+    mineru_ocr: bool | None,
     mineru_enable_table: bool,
     mineru_enable_formula: bool,
     mineru_api_timeout_seconds: float,
@@ -992,12 +1156,25 @@ def _dense_index_status(
     faiss_path_value = metadata.get("faiss_path")
     faiss_path = Path(str(faiss_path_value)) if faiss_path_value else None
     metadata_block_ids = [str(item) for item in metadata.get("block_ids") or []]
-    block_ids = [block.block_id for block in blocks]
+    indexable_blocks = [block for block in blocks if block.is_indexable]
+    block_ids = [block.block_id for block in indexable_blocks]
     model_id_matches = str(metadata.get("model_id") or "") == dense_encoder.model_id
     embeddings_exists = bool(metadata.get("embeddings_path")) and embeddings_path.exists()
     faiss_exists = faiss_path is None or faiss_path.exists()
     block_ids_match = bool(block_ids) and metadata_block_ids == block_ids
-    index_ready = bool(metadata_exists and model_id_matches and embeddings_exists and faiss_exists and block_ids_match)
+    current_evidence_hash = evidence_hash(indexable_blocks) if indexable_blocks else ""
+    evidence_hash_matches = (
+        bool(current_evidence_hash)
+        and str(metadata.get("evidence_hash") or "") == current_evidence_hash
+    )
+    index_ready = bool(
+        metadata_exists
+        and model_id_matches
+        and embeddings_exists
+        and faiss_exists
+        and block_ids_match
+        and evidence_hash_matches
+    )
     if index_ready:
         status = "ready"
     elif not metadata_exists:
@@ -1019,8 +1196,10 @@ def _dense_index_status(
         "metadata_model_id": str(metadata.get("model_id") or ""),
         "model_id_matches": model_id_matches,
         "block_count": len(blocks),
+        "indexable_block_count": len(indexable_blocks),
         "metadata_block_count": len(metadata_block_ids),
         "block_ids_match": block_ids_match,
+        "evidence_hash_matches": evidence_hash_matches,
         "embeddings_path": str(embeddings_path) if metadata.get("embeddings_path") else "",
         "embeddings_exists": embeddings_exists,
         "faiss_path": str(faiss_path) if faiss_path is not None else "",
@@ -1097,7 +1276,7 @@ def _run_document_index_action(
                 mineru_model_version=str(args.mineru_model_version),
                 mineru_data_id=str(args.mineru_data_id) if args.mineru_data_id else None,
                 mineru_language=str(args.mineru_language),
-                mineru_ocr=bool(args.mineru_ocr),
+                mineru_ocr=args.mineru_ocr,
                 mineru_enable_table=not bool(args.disable_mineru_table),
                 mineru_enable_formula=not bool(args.disable_mineru_formula),
                 mineru_api_timeout_seconds=float(args.mineru_api_timeout_seconds),
@@ -1512,8 +1691,15 @@ def _build_dense_index_for_blocks(
     blocks: list[Any],
     dense_encoder: Any,
 ) -> tuple[DenseIndex, dict[str, Any]]:
-    embeddings = dense_encoder.encode_documents([block.retrieval_text for block in blocks])
-    dense_index = DenseIndex.build(blocks=blocks, embeddings=embeddings, model_id=dense_encoder.model_id)
+    indexable_blocks = [block for block in blocks if block.is_indexable]
+    if not indexable_blocks:
+        raise RuntimeError("document has no indexable chunks")
+    embeddings = dense_encoder.encode_documents([block.retrieval_text for block in indexable_blocks])
+    dense_index = DenseIndex.build(
+        blocks=indexable_blocks,
+        embeddings=embeddings,
+        model_id=dense_encoder.model_id,
+    )
     metadata = dense_index.save(index_dir)
     model_index_metadata = index_dir / f"index_metadata_{_safe_model_id(dense_encoder.model_id)}.json"
     model_index_metadata.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1609,17 +1795,17 @@ def _build_indexed_retriever(
             )
             dense_metadata.update(built_metadata)
         else:
-            dense_index = DenseIndex.load(index_dir=index_dir, blocks=blocks, metadata_path=index_metadata)
-            if dense_index.model_id != dense_encoder.model_id:
+            try:
+                dense_index = DenseIndex.load(index_dir=index_dir, blocks=blocks, metadata_path=index_metadata)
+            except ValueError as exc:
                 if not build_dense_index_if_missing:
                     raise RuntimeError(
-                        "dense index model_id does not match requested encoder: "
-                        f"index_model_id={dense_index.model_id}, requested_model_id={dense_encoder.model_id}"
-                    )
+                        f"dense index is stale for doc_id={doc_id}: {exc}"
+                    ) from exc
                 dense_metadata.update(
                     {
                         "stale_index_metadata_path": str(index_metadata),
-                        "stale_index_model_id": dense_index.model_id,
+                        "stale_index_reason": str(exc),
                     }
                 )
                 dense_index, built_metadata = _build_dense_index_for_blocks(
@@ -1631,8 +1817,29 @@ def _build_indexed_retriever(
                 )
                 dense_metadata.update(built_metadata)
             else:
-                dense_metadata["index_built"] = False
-                dense_metadata["index_metadata_path"] = str(index_metadata)
+                if dense_index.model_id != dense_encoder.model_id:
+                    if not build_dense_index_if_missing:
+                        raise RuntimeError(
+                            "dense index model_id does not match requested encoder: "
+                            f"index_model_id={dense_index.model_id}, requested_model_id={dense_encoder.model_id}"
+                        )
+                    dense_metadata.update(
+                        {
+                            "stale_index_metadata_path": str(index_metadata),
+                            "stale_index_model_id": dense_index.model_id,
+                        }
+                    )
+                    dense_index, built_metadata = _build_dense_index_for_blocks(
+                        repository=repository,
+                        doc_id=doc_id,
+                        index_dir=index_dir,
+                        blocks=blocks,
+                        dense_encoder=dense_encoder,
+                    )
+                    dense_metadata.update(built_metadata)
+                else:
+                    dense_metadata["index_built"] = False
+                    dense_metadata["index_metadata_path"] = str(index_metadata)
         dense_metadata.update(
             {
                 "backend": dense_backend,
@@ -1670,6 +1877,17 @@ def _build_indexed_retriever(
         dense_index=dense_index,
         reranker=reranker,
         query_plan=query_plan,
+        filters=(
+            query_plan.metadata_filter.to_retrieval_filter()
+            if isinstance(query_plan, QueryPlan)
+            else None
+        ),
+        query_intent=(
+            "table"
+            if isinstance(query_plan, QueryPlan)
+            and query_plan.intent in {"table_lookup", "table_analysis"}
+            else (query_plan.intent if isinstance(query_plan, QueryPlan) else None)
+        ),
     )
     metadata = {
         "mode": mode,
@@ -1693,6 +1911,7 @@ def _run_local_fact_qa(
     router_plan: dict[str, Any],
     dry_run: bool,
     run_id: str,
+    query_plan: QueryPlan | None = None,
     enable_query_planning: bool = False,
     query_planner_mode: str = "hybrid",
     document_profile: dict[str, Any] | None = None,
@@ -1738,11 +1957,14 @@ def _run_local_fact_qa(
         "initialization_status": "not_started",
     }
     query_planner_warnings: list[str] = []
-    query_plan = None
-    if enable_query_planning:
+    active_query_plan: Any = query_plan
+    if query_plan is not None:
+        query_planner_payload = _legacy_query_planner_view(query_plan)
+        query_planner_warnings = list(query_plan.warnings)
+    elif enable_query_planning:
         if progress_callback is not None:
             progress_callback("plan_queries", {"mode": query_planner_mode})
-        query_plan = plan_queries(
+        active_query_plan = plan_queries(
             question=question,
             task_type=str(router_plan.get("task_type") or "local_fact_qa"),
             document_profile=document_profile or {},
@@ -1750,9 +1972,9 @@ def _run_local_fact_qa(
             env_file=query_planner_env_file,
             model_override=query_planner_model,
         )
-        query_planner_payload = {"enabled": True, **query_plan.to_dict()}
-        query_planner_warnings = ["query_planning_enabled", *query_plan.warnings]
-    if not dry_run and (enable_query_planning or retriever_mode != "bm25"):
+        query_planner_payload = {"enabled": True, **active_query_plan.to_dict()}
+        query_planner_warnings = ["query_planning_enabled", *active_query_plan.warnings]
+    if not dry_run and (active_query_plan is not None or retriever_mode != "bm25"):
         retriever_payload = {
             "mode": retriever_mode,
             "requested_mode": retriever_mode,
@@ -1775,7 +1997,7 @@ def _run_local_fact_qa(
                 reranker_model_path=reranker_model_path,
                 reranker_device=reranker_device,
                 reranker_fp16=reranker_fp16,
-                query_plan=query_plan,
+                query_plan=active_query_plan,
             )
             retriever_payload["requested_mode"] = retriever_mode
             retriever_payload["initialization_status"] = "success"
@@ -1816,7 +2038,7 @@ def _run_local_fact_qa(
             return payload
     elif dry_run:
         retriever_payload = {
-            "mode": retriever_mode if enable_query_planning else "dry_run_input_order",
+            "mode": retriever_mode if active_query_plan is not None else "dry_run_input_order",
             "requested_mode": retriever_mode,
             "uses_dense": False,
             "uses_reranker": False,
@@ -2010,6 +2232,7 @@ def _dispatch_tool(
     router_plan: dict[str, Any],
     dry_run: bool,
     run_id: str,
+    query_plan: QueryPlan | None = None,
     enable_query_planning: bool = False,
     query_planner_mode: str = "hybrid",
     document_profile: dict[str, Any] | None = None,
@@ -2064,6 +2287,7 @@ def _dispatch_tool(
             router_plan=router_plan,
             dry_run=dry_run,
             run_id=run_id,
+            query_plan=query_plan,
             enable_query_planning=enable_query_planning,
             query_planner_mode=query_planner_mode,
             document_profile=document_profile,
@@ -2105,6 +2329,28 @@ def _dispatch_tool(
             router_plan=router_plan,
             dry_run=dry_run,
         )
+    if task_type == "no_retrieval":
+        return {
+            "status": "success",
+            "answer": "你好，我可以帮助你查询当前文档。" if re.search(r"[\u4e00-\u9fff]", question) else "I can help you query the current document.",
+            "citations": [],
+            "supporting_evidence_ids": [],
+            "tools_used": [],
+            "structured_result": {"task_type": "no_retrieval"},
+            "warnings": [],
+            "error": {},
+        }
+    if task_type == "clarification_required":
+        return {
+            "status": "success",
+            "answer": "请补充要查询的对象、范围或条件。" if re.search(r"[\u4e00-\u9fff]", question) else "Please specify the object, scope, or condition to query.",
+            "citations": [],
+            "supporting_evidence_ids": [],
+            "tools_used": [],
+            "structured_result": {"task_type": "clarification_required"},
+            "warnings": ["clarification_required"],
+            "error": {},
+        }
     return _unsupported_task(task_type)
 
 
@@ -2120,6 +2366,8 @@ def _finalize_qa_result(
     artifact_dir = output_dir / run_id
     artifact_dir.mkdir(parents=True, exist_ok=True)
     router_plan_path = artifact_dir / "router_plan.json"
+    query_decision_path = artifact_dir / "query_decision.json"
+    query_plan_path = artifact_dir / "query_plan.json"
     result_path = artifact_dir / "result.json"
     summary_path = artifact_dir / "summary.json"
     trace_path = artifact_dir / "trace.json"
@@ -2155,6 +2403,9 @@ def _finalize_qa_result(
         "used_llm_query_rewriter": bool(result.get("used_llm_query_rewriter", False)),
         "llm_query_rewriter_status": str(result.get("llm_query_rewriter_status") or ""),
         "query_count": len((result.get("query_planner") or {}).get("final_queries") or []),
+        "query_intent": str((result.get("query_decision") or {}).get("intent") or ""),
+        "query_actions": list((result.get("query_plan") or {}).get("actions") or []),
+        "retrieval_routes": list((result.get("query_plan") or {}).get("retrieval_routes") or []),
         "answer_policy_mode": str(result.get("answer_policy_mode") or ""),
         "used_qwen_answer_policy": bool(result.get("used_qwen_answer_policy", False)),
         "used_external_answer_api": bool(result.get("used_external_answer_api", False)),
@@ -2193,6 +2444,9 @@ def _finalize_qa_result(
         "router_execution": result.get("router_execution") or {},
         "query_planner": result.get("query_planner") or {},
         "query_planner_execution": result.get("query_planner_execution") or {},
+        "query_decision": result.get("query_decision") or {},
+        "query_plan": result.get("query_plan") or {},
+        "query_pipeline_trace": result.get("query_pipeline_trace") or {},
         "retriever": result.get("retriever") or {},
         "retriever_mode": str(result.get("retriever_mode") or ""),
         "workflow_trace": result.get("workflow_trace") or [],
@@ -2216,6 +2470,10 @@ def _finalize_qa_result(
         trace["document_summary"] = result.get("trace")
 
     _write_json(router_plan_path, router_plan)
+    if result.get("query_decision") is not None:
+        _write_json(query_decision_path, result.get("query_decision") or {})
+    if result.get("query_plan") is not None:
+        _write_json(query_plan_path, result.get("query_plan") or {})
     _write_json(summary_path, summary)
     _write_json(trace_path, trace)
     _write_json(result_path, result)
@@ -2223,6 +2481,14 @@ def _finalize_qa_result(
 
 
 def _router_used_external_api(router_plan: dict[str, Any]) -> bool:
+    if router_plan.get("router_source") == "query_pipeline":
+        trace = router_plan.get("query_pipeline_trace")
+        if not isinstance(trace, dict):
+            return False
+        return any(
+            isinstance(stage, dict) and str(stage.get("status") or "") in {"used", "validation_failed"}
+            for stage in (trace.get("intent_router"), trace.get("query_transformer"))
+        )
     if router_plan.get("router_source") == "llm_fallback":
         return True
     llm_router = router_plan.get("llm_router")
@@ -2434,7 +2700,7 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
                     mineru_model_version=str(args.mineru_model_version),
                     mineru_data_id=str(args.mineru_data_id) if args.mineru_data_id else None,
                     mineru_language=str(args.mineru_language),
-                    mineru_ocr=bool(args.mineru_ocr),
+                    mineru_ocr=args.mineru_ocr,
                     mineru_enable_table=not bool(args.disable_mineru_table),
                     mineru_enable_formula=not bool(args.disable_mineru_formula),
                     mineru_api_timeout_seconds=float(args.mineru_api_timeout_seconds),
@@ -2559,23 +2825,17 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
                 used_file_ingestion=used_file_ingestion,
             )
 
-        router_plan = plan_route_with_optional_llm(
-            # Keep routing progress outside the router so JSON stdout stays clean.
-            {
-                "doc_id": doc_id,
-                "question": question,
-                "document_profile": profile,
-                "available_tools": AVAILABLE_TOOLS,
-                "options": {
-                    "allow_external_llm_router": allow_llm_router,
-                    "prefer_deterministic_tools": True,
-                    "max_tool_calls": 4,
-                },
-            },
-            threshold=float(args.router_llm_threshold),
-            env_file=router_llm_env_file,
-            model_override=str(args.router_llm_model or "") or None,
-        )
+        query_pipeline_output: QueryPipelineOutput | None = None
+        router_plan = _deterministic_operation_plan(question)
+        if router_plan is None:
+            query_pipeline_output = run_query_pipeline(
+                question=question,
+                document_profile=profile,
+                env_file=router_llm_env_file,
+                model_override=str(args.router_llm_model or "") or None,
+                use_llm=allow_llm_router,
+            )
+            router_plan = _query_pipeline_router_view(query_pipeline_output)
         progress_callback("route_question", {"router_source": router_plan.get("router_source"), "task_type": router_plan.get("task_type")})
         try:
             answer_policy = _build_answer_policy(
@@ -2608,6 +2868,10 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
             result["used_external_answer_api"] = False
             result["router_execution"] = _router_execution(router_plan)
             result["query_planner_execution"] = {}
+            if query_pipeline_output is not None:
+                result["query_decision"] = query_pipeline_output.decision.to_dict()
+                result["query_plan"] = query_pipeline_output.plan.to_dict()
+                result["query_pipeline_trace"] = query_pipeline_output.trace
             return _finalize_qa_result(
                 result=result,
                 output_dir=output_dir,
@@ -2625,6 +2889,7 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
             router_plan=router_plan,
             dry_run=bool(args.dry_run),
             run_id=run_id,
+            query_plan=query_pipeline_output.plan if query_pipeline_output is not None else None,
             enable_query_planning=enable_query_planning,
             query_planner_mode=query_planner_mode,
             document_profile=profile,
@@ -2670,11 +2935,24 @@ def run_cli(args: argparse.Namespace) -> dict[str, Any]:
         result["full_model_path"] = full_model_path
         result["router_execution"] = router_execution
         result["query_planner_execution"] = query_planner_execution
+        if query_pipeline_output is not None:
+            result["query_decision"] = query_pipeline_output.decision.to_dict()
+            result["query_plan"] = query_pipeline_output.plan.to_dict()
+            result["query_pipeline_trace"] = query_pipeline_output.trace
         result["used_llm_router"] = bool(router_execution.get("used_llm_router"))
         result["llm_router_status"] = str(router_execution.get("llm_router_status") or "")
         result["llm_router_skip_reason"] = str(router_execution.get("llm_router_skip_reason") or "")
         result["used_llm_query_rewriter"] = bool(query_planner_execution.get("used_llm_query_rewriter"))
         result["llm_query_rewriter_status"] = str(query_planner_execution.get("llm_query_rewriter_status") or "")
+        if query_pipeline_output is not None:
+            transformer_status = str(
+                (query_pipeline_output.trace.get("query_transformer") or {}).get("status") or ""
+            )
+            result["used_llm_query_rewriter"] = (
+                transformer_status == "used"
+                and query_pipeline_output.plan.actions != ("none",)
+            )
+            result["llm_query_rewriter_status"] = transformer_status
         result["answer_policy_mode"] = str(tool_result.get("answer_policy_mode") or args.answer_policy)
         result["answer_output_contract"] = str(tool_result.get("answer_output_contract") or args.answer_output_contract)
         result["used_qwen_answer_policy"] = bool(tool_result.get("used_qwen_answer_policy", False))
@@ -2746,7 +3024,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mineru-model-version", default="vlm")
     parser.add_argument("--mineru-data-id")
     parser.add_argument("--mineru-language", default="en")
-    parser.add_argument("--mineru-ocr", dest="mineru_ocr", action="store_true", default=True)
+    parser.add_argument("--mineru-ocr", dest="mineru_ocr", action="store_true", default=None)
     parser.add_argument("--no-mineru-ocr", dest="mineru_ocr", action="store_false")
     parser.add_argument("--disable-mineru-table", action="store_true")
     parser.add_argument("--disable-mineru-formula", action="store_true")

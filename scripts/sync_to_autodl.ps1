@@ -1,6 +1,6 @@
 param(
     [string]$HostName = "connect.cqa1.seetacloud.com",
-    [int]$Port = 13566,
+    [int]$Port = 41511,
     [string]$User = "root",
     [string]$RemoteDir = "/root/autodl-tmp/docagent",
     [string]$LocalDir = "D:\Projects\docagent"
@@ -23,6 +23,9 @@ try {
     tar --exclude "data/raw" `
         --exclude "data/processed" `
         --exclude "outputs" `
+        --exclude ".secrets" `
+        --exclude ".git" `
+        --exclude ".ipynb_checkpoints" `
         --exclude "__pycache__" `
         --exclude ".pytest_cache" `
         -cf $archive .

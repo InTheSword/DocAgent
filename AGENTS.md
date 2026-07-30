@@ -1,64 +1,128 @@
-# DocAgent Codex Instructions
+# AGENTS.md
 
-> Repository-level rules for Codex.  
-> Keep this file concise. Project architecture and implementation details belong in `docs/`.
+用于减少常见 LLM 编码错误的行为准则；必要时与项目专属规则合并使用。
 
-## 1. Mandatory reading
+**取舍：** 这些准则更偏向谨慎而非速度。对于简单任务，可酌情处理。
 
-Before every task, read only:
+## 1. 编码前先思考
+
+**不要臆测，不要掩饰困惑，要明确说明取舍。**
+
+实现前：
+
+- 明确陈述假设；如有不确定，先提问。
+- 若存在多种解释，列出它们，不要悄然选择其一。
+- 若有更简单的方案，说明它；必要时提出反对意见。
+- 若需求不清楚，停止操作，说明不清楚之处并提问。
+
+## 2. 简单优先
+
+**用解决问题的最少代码。不要做推测性的扩展。**
+
+- 不实现请求之外的功能。
+- 不为一次性用途增加抽象。
+- 不增加未被请求的“灵活性”或“可配置性”。
+- 不为不可能发生的场景加入错误处理。
+- 若写了 200 行而 50 行即可完成，应重写得更简单。
+
+自问：“资深工程师会认为这过度复杂吗？”若答案是会，则简化。
+
+## 3. 手术式修改
+
+**只改必须改的内容；只清理自己造成的问题。**
+
+修改现有代码时：
+
+- 不“改进”相邻代码、注释或格式。
+- 不重构未损坏的部分。
+- 遵循既有风格，即便自己倾向另一种风格。
+- 若发现无关的死代码，只说明，不删除。
+
+当改动造成孤儿内容时：
+
+- 删除本次改动造成的未使用导入、变量和函数。
+- 除非用户要求，否则不删除既有死代码。
+
+判断标准：每一处改动都应能直接追溯到用户请求。
+
+## 4. 以目标驱动执行
+
+**定义可验证的成功标准，并循环推进到验证完成。**
+
+将任务转化为可验证目标：
+
+- “增加校验” → “为无效输入编写测试，然后使其通过”。
+- “修复缺陷” → “编写可复现缺陷的测试，然后使其通过”。
+- “重构 X” → “确保改动前后测试均通过”。
+
+多步骤任务应给出简短计划：
+
+```text
+1. [步骤] → 验证：[检查]
+2. [步骤] → 验证：[检查]
+3. [步骤] → 验证：[检查]
+```
+
+强成功标准使我们能独立循环推进；弱标准（如“让它能用”）会不断需要澄清。
+
+---
+
+**这些准则生效的标志：** diff 中不必要的改动更少、重写更少，并且在误改前先澄清需求。
+
+--- project-doc ---
+
+# DocAgent Codex 指令
+
+> 仓库级 Codex 规则。
+> 保持本文件简洁；项目架构和实现细节应放在 `docs/` 中。
+
+## 1. 必读内容
+
+每次任务开始前，只阅读：
 
 1. `AGENTS.md`
 2. `docs/ACTIVE_PLAN.md`
-3. source code and tests directly related to the task
+3. 与任务直接相关的源码和测试
 
-Do not scan every document by default.
+默认不要扫描全部文档。
 
-## 2. Conditional document routing
+## 2. 按需阅读文档
 
-Read additional documents only when the task requires them.
+仅在任务需要时读取额外文档。
 
-| Document | Read when |
+| 文档 | 何时阅读 |
 |---|---|
-| `docs/IMPLEMENTATION_PLAN.md` | deciding project scope, changing milestones, or updating the roadmap |
-| `docs/SERVER_SETUP.md` | running or proposing server work, checking environments, installing packages, downloading models, or running real models/tools |
-| `docs/GPU_SERVER_BOUNDARY.md` | classifying whether implementation, tests, evaluation, or artifacts require GPU/server resources |
-| `docs/DATASETS.md` | downloading, converting, splitting, rebuilding, or evaluating datasets |
-| `docs/PHASE3_ACTIVE_PLAN.md` | checking detailed Phase 3 implementation notes or updating the Phase 3 working record |
-| `docs/PHASE2_ACTIVE_PLAN.md` | checking archived Phase 2 status or legacy Phase 2 stop conditions |
-| `docs/design/phase2/PHASE2_REAL_DOCUMENT_HYBRID_RETRIEVAL_MVP.zh-CN.md` | implementing document registration, EvidenceBlock persistence, BGE-M3, FAISS, RRF, reranker, retrieval integration, SQLite document/index storage, or Phase 2 CLI/evaluation |
-| `docs/design/phase2/PHASE2_STRUCTURED_PDF_PARSING_SUPPLEMENT.zh-CN.md` | implementing MinerU conversion, heading hierarchy, section paths, boilerplate filtering, table/image structure, context expansion, cross-page relations, or parsing-quality checks |
-| `docs/DocAgent 技术文档 3.0.pdf` | architecture intent is unclear, a new phase is being designed, or implementation may diverge from the original blueprint |
-| `CURRENT_STATUS.md` | checking verified current capabilities or updating accepted status |
-| `DECISIONS.md` | revisiting a durable architecture, dependency, or scope decision |
+| `docs/SERVER_SETUP.md` | 执行或提出服务器工作、检查环境、安装软件包、下载模型，或运行真实模型/工具时 |
+| `docs/GPU_SERVER_BOUNDARY.md` | 判定实现、测试、评估或产物是否需要 GPU/服务器资源时 |
+| `docs/DATASETS.md` | 下载、转换、划分、重建或评估数据集时 |
+| `docs/design/phase2/PHASE2_REAL_DOCUMENT_HYBRID_RETRIEVAL_MVP.zh-CN.md` | 实现文档注册、EvidenceBlock 持久化、BGE-M3、FAISS、RRF、重排器、检索集成、SQLite 文档/索引存储，或 Phase 2 CLI/评估时 |
+| `docs/design/phase2/PHASE2_STRUCTURED_PDF_PARSING_SUPPLEMENT.zh-CN.md` | 实现 MinerU 转换、标题层级、章节路径、页眉页脚过滤、表格/图像结构、上下文扩展、跨页关系，或解析质量检查时 |
+| `docs/DocAgent 技术文档 3.0.pdf` | 架构意图不明确、正在设计新阶段，或实现可能偏离原始蓝图时 |
+| `CURRENT_STATUS.md` | 检查已验证的当前能力或更新已接受状态时 |
+| `DECISIONS.md` | 重新审视持久性的架构、依赖或范围决策时 |
 
-The detailed design files explain **how** a Phase 2 module should work.  
-`docs/ACTIVE_PLAN.md` defines **what must be done now**.
+详细设计文件说明 Phase 2 模块**如何**工作；`docs/ACTIVE_PLAN.md` 定义**现在必须完成什么**。
 
-PM-oriented handoff documents, including `docs/PROJECT_HANDOFF_PM.md`, are
-deprecated and are not active planning sources. Do not read or update them
-unless the user explicitly asks.
+## 3. 事实来源优先级
 
-## 3. Source-of-truth priority
-
-When information conflicts, use:
+信息冲突时，按以下顺序处理：
 
 ```text
-1. explicit current user instruction
+1. 用户明确的当前指令
 2. AGENTS.md
 3. docs/ACTIVE_PLAN.md
-4. verified current code, tests, and server artifacts
-5. relevant detailed design document
+4. 已验证的当前代码、测试和服务器产物
+5. 相关详细设计文档
 6. CURRENT_STATUS.md / DECISIONS.md
-7. docs/IMPLEMENTATION_PLAN.md
-8. docs/DocAgent 技术文档 3.0.pdf
-9. historical reports or old conversation notes
+7. docs/DocAgent 技术文档 3.0.pdf
+8. 历史报告或旧对话记录
 ```
 
-A planned capability is not an implemented capability.
+计划中的能力不等于已实现能力。
 
-## 4. Status vocabulary
+## 4. 状态词汇
 
-Use only:
+只能使用：
 
 ```text
 not_started
@@ -74,7 +138,7 @@ blocked
 blocked_by_missing_mineru_output
 ```
 
-Examples:
+示例：
 
 ```text
 hash dense backend → mock_verified
@@ -84,174 +148,153 @@ real BGE-M3 server smoke → real_model_verified
 formal real-model ablation → benchmark_evaluated
 ```
 
-Mock verification must never be reported as real-component completion.
+不得把 mock 验证报告为真实组件完成。
 
-## 5. Single-milestone rule
+## 5. 单一里程碑规则
 
-Only implement the milestone in:
+只实现以下文件中规定的里程碑：
 
 ```text
 docs/ACTIVE_PLAN.md
 ```
 
-Before a non-trivial change, briefly state:
+进行非简单改动前，简要说明：
 
-1. current gap;
-2. relevant existing code;
-3. files to modify;
-4. dependencies;
-5. acceptance test;
-6. out-of-scope work;
-7. GPU/server validation boundary;
-8. stop condition.
+1. 当前缺口；
+2. 相关现有代码；
+3. 将修改的文件；
+4. 依赖项；
+5. 验收测试；
+6. 范围外工作；
+7. GPU/服务器验证边界；
+8. 停止条件。
 
-Do not enter another milestone without explicit user approval.
+未经用户明确批准，不得进入下一个里程碑。
 
-## 6. Scope-control rules
+### 5.1 大范围实现的临时计划约束
 
-Required:
+进行跨模块、改变执行链或修改公共契约的大范围实现前，必须：
 
-- reuse existing abstractions before adding new ones;
-- prefer the smallest change that enables real-component verification;
-- stop when the active plan says to stop;
-- wait for server output when the next action depends on server state.
-- keep work anchored to the current delivery and functional goal, not to
-  open-ended diagnostics, score chasing, or curiosity-driven local analysis.
-- when an audit or evaluation finds an issue, first decide whether it blocks
-  the deliverable execution chain. If it does not, record the limitation and
-  move back to the next delivery task.
+1. 在 `docs/workplans/` 下创建该阶段的临时实施计划；
+2. 在 `docs/ACTIVE_PLAN.md` 中登记该文件为当前实施依据；
+3. 在计划中写明现状缺口、已确定方案、模块边界、接口契约、文件范围、
+   依赖、验收测试、资源边界、迁移策略和停止条件；
+4. 实现过程以该计划为准，不得依赖历史对话补全关键设计；
+5. 若方案、范围或验收标准发生变化，必须先更新计划和变更记录，再继续改代码；
+6. 实现完成并验收后，将稳定结论更新到对应项目文档，再移除
+   `docs/ACTIVE_PLAN.md` 对临时计划的引用；临时计划保留或归档，不作为长期事实来源。
 
-Do not:
+小型、局部且不改变契约的修复不要求单独建立临时计划。
 
-- optimize hash dense or keyword reranker after wiring smoke passes;
-- add another fallback backend without explicit approval;
-- run formal Recall/MRR or answer metrics with mock backends;
-- treat synthetic MinerU output as real PDF parsing;
-- modify SFT/GRPO checkpoints, reward, training split, or Phase 1 AnswerPolicy unless explicitly requested;
-- start TAT-QA, VLM, Demo, or a new training phase while the active milestone is incomplete;
-- mix unrelated refactors or style changes into the milestone commit.
-- keep repeating diagnosis on the same small sample set after the functional
-  cause and delivery impact are understood;
-- make case-specific repairs for one validation row, PDF page, table value,
-  answer string, or question wording just to improve a local metric;
-- use validation subsets as training data or as a source for sample-specific
-  prompt/tool rules.
+## 6. 范围控制规则
 
-Generic fixes are allowed only when they improve reusable behavior such as:
+必须：
 
-- parser output preservation and conversion;
-- EvidenceBlock, retrieval, evidence collection, citation, or artifact
-  contracts;
-- table/calculation behavior expressed as general rules;
-- full workflow continuity from input document to final answer output.
+- 在新增抽象前复用现有抽象；
+- 选择能实现真实组件验证的最小改动；
+- 活跃计划要求停止时即停止；
+- 下一步依赖服务器状态时等待服务器输出；
+- 工作始终锚定当前交付和功能目标，而不是无边界的诊断、分数追逐或出于好奇的本地分析；
+- 审计或评估发现问题时，先判断它是否阻断交付执行链；若不阻断，记录限制后回到下一项交付任务。
 
-## 7. Testing policy
+不得：
 
-Use the minimum sufficient validation:
+- 在接线冒烟验证通过后继续优化 hash dense 或 keyword reranker；
+- 未经明确批准增加另一套回退后端；
+- 使用 mock 后端进行正式 Recall/MRR 或答案指标评估；
+- 把合成 MinerU 输出当作真实 PDF 解析；
+- 未经明确请求修改 SFT/GRPO 检查点、奖励、训练划分或 Phase 1 AnswerPolicy；
+- 活跃里程碑未完成时启动 TAT-QA、VLM、Demo 或新的训练阶段；
+- 在里程碑提交中混入无关重构或样式修改；
+- 在同一小样本集上反复诊断，而功能原因和交付影响已经明确；
+- 不得为单个验证行、PDF 页、表格值、答案字符串或问题措辞做个案修复，只为提高本地指标；
+- 不得将验证子集用作训练数据，或将其作为样本专属 prompt/工具规则的来源。
 
-```text
-targeted unit tests
-+ existing regression tests
-+ one mock/fixture smoke if needed
-+ one real server smoke
-+ formal evaluation only after real smoke
-```
+仅当通用修复能改善以下可复用行为时才允许：
 
-Do not increase test count as a goal by itself.
+- 解析器输出保留和转换；
+- EvidenceBlock、检索、证据收集、引用或产物契约；
+- 以通用规则表达的表格/计算行为；
+- 从输入文档到最终答案输出的完整工作流连续性。
 
-Before implementing or validating a feature, classify the work as local-only,
-server-optional, or server-required using `docs/GPU_SERVER_BOUNDARY.md`.
-Product requests may omit this boundary; Codex owns the classification during
-implementation and validation.
+## 7. 测试政策
 
-If the feature touches real BGE-M3, reranker, Qwen, SFT, GRPO, VLM, online
-MinerU, or large real-model evaluation, add or reuse a real server validation
-path and compact artifact contract. Local mocks, fixtures, hash dense,
-keyword reranker, heuristic AnswerPolicy, and dry-run tests are not sufficient
-for real-component acceptance.
-
-If the feature is deterministic, API-only, CLI glue, SQLite/JSON contract work,
-or another non-GPU function, implement and verify locally with targeted and
-regression tests unless the active plan explicitly requires server smoke.
-
-When a failure occurs, classify it first:
+采用最小充分验证：
 
 ```text
-code defect
-missing dependency
-missing model/artifact
-server configuration
-incorrect command
-unsupported case
-non-blocking quality issue
+针对性单元测试
++ 既有回归测试
++ 必要时的一次 mock/fixture 冒烟
++ 一次真实服务器冒烟
++ 仅在真实冒烟后进行正式评估
 ```
 
-Fix only issues that block the active milestone.
+不要把增加测试数量当作目标。
 
-## 8. Server boundary
+实现或验证功能前，使用 `docs/GPU_SERVER_BOUNDARY.md` 将工作划分为仅本地、服务器可选或服务器必需。产品请求可能未说明此边界；实施和验证期间由 Codex 负责判定。
 
-Codex operates both the local workspace and the configured AutoDL server.
-For server-required work, use direct SSH execution by default instead of asking
-the user to paste commands or shuttle result files. Manual command blocks are
-only a fallback when SSH is unavailable, explicitly requested, or a genuinely
-interactive user-side action is required. Direct SSH access does not remove the
-need for path, package, model, dataset, and GPU preflights.
+若功能涉及真实 BGE-M3、重排器、Qwen、SFT、GRPO、VLM、在线 MinerU 或大型真实模型评估，必须增加或复用真实服务器验证路径及紧凑产物契约。本地 mocks、fixtures、hash dense、keyword reranker、启发式 AnswerPolicy 和 dry-run 测试不足以接受真实组件。
 
-Before running or proposing server commands, read:
+若功能为确定性逻辑、API-only、CLI 胶水、SQLite/JSON 契约或其他非 GPU 功能，则除非活跃计划明确要求服务器冒烟，否则在本地通过针对性与回归测试实现和验证。
+
+发生失败时，先归类为：
+
+```text
+代码缺陷
+缺少依赖
+缺少模型/产物
+服务器配置
+错误命令
+不支持的场景
+不阻断的质量问题
+```
+
+仅修复阻断活跃里程碑的问题。
+
+## 8. 服务器边界
+
+Codex 同时操作本地工作区和已配置的 AutoDL 服务器。对于服务器必需的工作，默认使用直接 SSH 执行，不要求用户粘贴命令或搬运结果文件。仅在 SSH 不可用、用户明确要求，或确需用户侧交互时才使用手动命令块。直接 SSH 不免除路径、软件包、模型、数据集和 GPU 预检。
+
+执行或提出服务器命令前，先阅读：
 
 ```text
 docs/SERVER_SETUP.md
 ```
 
-Do not silently:
+不得静默：
 
-- install or replace Torch/CUDA;
-- install MinerU;
-- download large models or datasets;
-- modify the stable `docagent` environment.
+- 安装或替换 Torch/CUDA；
+- 安装 MinerU；
+- 下载大型模型或数据集；
+- 修改稳定的 `docagent` 环境。
 
-Large installation or download requires explicit user approval.
+大型安装或下载必须获得用户明确批准。
 
-AutoDL no-card mode may produce:
+AutoDL 无卡模式可能出现：
 
 ```text
 torch.cuda.is_available() == False
 ```
 
-This is not, by itself, an environment error.
+这本身不代表环境错误。
 
-## 9. Server execution and result protocol
+## 9. 服务器执行与结果协议
 
-Use direct SSH as the default server execution path. Do the server work, inspect
-the resulting compact artifacts over SSH, and summarize the result. Provide a
-user-pasted command group only as an exception: SSH unavailable, explicit user
-request, or required user-side interactive handling.
+默认使用直接 SSH 作为服务器执行路径。执行服务器工作，通过 SSH 检查产生的紧凑产物，并汇总结果。用户粘贴的命令组仅作为例外：SSH 不可用、用户明确要求，或需要用户侧交互。
 
-Server actions must:
+服务器操作必须：
 
-- use the correct project directory and Conda environment;
-- contain no unresolved placeholders;
-- check required paths and packages first;
-- write long output to files;
-- request only the minimum result needed.
-- source `/etc/network_turbo` before server-side Git network operations when
-  available;
-- define a two-layer evidence contract when terminal JSON may be insufficient:
-  compact terminal JSON for status routing, plus named result/sync files for
-  optional follow-up triage.
+- 使用正确的项目目录和 Conda 环境；
+- 不包含未解析的占位符；
+- 先检查所需路径和软件包；
+- 将长输出写入文件；
+- 只请求最少的结果；
+- 服务器端 Git 网络操作时，如存在则先 `source /etc/network_turbo`；
+- 当终端 JSON 不足时定义双层证据契约：用于状态路由的紧凑终端 JSON，以及可选后续排查的具名结果/同步文件。
 
-Fallback command groups, when unavoidable, must preserve the user's interactive
-terminal session and must not deliberately terminate the shell or parent
-terminal when a step fails.
+不得不提供用户粘贴的回退命令时，它必须保持交互终端，并且在内部步骤失败时不得故意终止、替换或关闭用户的 shell。不得使用 `nohup`、`setsid`、后台 `&`、`tmux`、`kill`、`pkill` 或 `exec`。不得使用 `set -e`、shell `exit`、`trap ... EXIT`，也不得在内联 Python 中用 `raise SystemExit` / `sys.exit(...)` 作为外层失败传播。应将子进程返回码和异常收集为紧凑 JSON。
 
-Do not use `nohup`, `setsid`, background `&`, `tmux`, `kill`, `pkill`, or
-`exec` in fallback commands that the user directly pastes into the server
-terminal. Also do not use `set -e`, shell `exit`, `trap ... EXIT`, or inline
-Python `raise SystemExit` / `sys.exit(...)` as outer-wrapper failure
-propagation in those fallback commands. Capture subprocess return codes and
-exceptions into compact JSON instead.
-
-Success response:
+成功响应：
 
 ```json
 {
@@ -262,7 +305,7 @@ Success response:
 }
 ```
 
-Failure response:
+失败响应：
 
 ```json
 {
@@ -274,64 +317,50 @@ Failure response:
 }
 ```
 
-Do not routinely request full terminal logs, prompts, EvidenceBlocks, traces, or generations.
+不要例行请求完整终端日志、提示符、EvidenceBlocks、trace 或生成内容。
 
-For new server tasks, prefer a curated sync bundle under
-`outputs/sync/<run_id>/` with compact `result.json`, `manifest.json`,
-`summary.json`, `summary.md`, previews, failure samples, and log tails. Do not
-sync raw datasets, full output trees, model weights, databases, complete logs,
-or secrets.
+新服务器任务优先在 `outputs/sync/<run_id>/` 下建立精选同步包，其中包含紧凑的 `result.json`、`manifest.json`、`summary.json`、`summary.md`、预览、失败样本与日志尾部。不得同步原始数据集、完整输出树、模型权重、数据库、完整日志或密钥。
 
-Treat terminal JSON as the first triage layer, not the whole evidence record.
-Do not ask for extra files by default. If Codex has SSH access and compact JSON
-is insufficient to classify a failure, inspect the named sync/result files or
-run a small read-only server inspection command before doing a deep local code
-audit. If SSH is unavailable, request only the specific named files or compact
-inspection output needed to classify the failure.
+将终端 JSON 视为第一层排查信息，而非全部证据记录。默认不要请求额外文件。若 Codex 有 SSH 且紧凑 JSON 不足以归类失败，应检查具名同步/结果文件，或运行小型只读服务器检查命令，再进行深入本地代码审计。若 SSH 不可用，仅请求归类失败所需的特定具名文件或紧凑检查输出。
 
-## 10. Completion rule
+## 10. 完成规则
 
-A real component may be marked `accepted` only after:
+真实组件只有在满足以下条件后才能标记为 `accepted`：
 
 ```text
-implementation
-+ targeted tests
-+ regression tests
-+ server dependency available
-+ real component smoke
-+ required artifact saved
-+ status updated
+实现
++ 针对性测试
++ 回归测试
++ 服务器依赖可用
++ 真实组件冒烟
++ 已保存所需产物
++ 已更新状态
 ```
 
-If only mocks pass, use `mock_verified`.  
-If code exists but the real dependency is unavailable, use `implemented`.  
-If an external dependency prevents progress, use `blocked`.
+若仅 mocks 通过，使用 `mock_verified`；若代码存在但真实依赖不可用，使用 `implemented`；若外部依赖阻断进展，使用 `blocked`。
 
-## 11. Documentation updates
+## 11. 文档更新
 
-Update only when relevant:
+仅在相关时更新：
 
-- `PHASE3_ACTIVE_PLAN.md`: active milestone state or next action changes;
-- `CURRENT_STATUS.md`: a real component is verified or a milestone is accepted;
-- `DECISIONS.md`: a durable architecture or dependency decision changes;
-- `IMPLEMENTATION_PLAN.md`: roadmap or phase status changes;
-- `SERVER_SETUP.md`: stable server facts change;
-- `GPU_SERVER_BOUNDARY.md`: GPU/server validation boundary or sync-artifact policy changes;
-- `DATASETS.md`: dataset source, split, or role changes;
-- `AGENTS.md`: repository-wide rules change.
+- `CURRENT_STATUS.md`：真实组件已验证或里程碑已接受；
+- `DECISIONS.md`：持久的架构或依赖决策变化；
+- `SERVER_SETUP.md`：稳定的服务器事实变化；
+- `GPU_SERVER_BOUNDARY.md`：GPU/服务器验证边界或同步产物策略变化；
+- `DATASETS.md`：数据集来源、划分或角色变化；
+- `AGENTS.md`：仓库级规则变化。
 
-Do not update PM-oriented handoff documents unless explicitly requested.
-Do not store temporary logs in planning documents.
+不要更新 PM 导向的交接文档，除非用户明确要求。不要在规划文档中存放临时日志。
 
-## 12. Communication style
+## 12. 沟通风格
 
-Report:
+报告内容应包括：
 
-1. conclusion;
-2. milestone status;
-3. changed files;
-4. tests performed;
-5. one next action;
-6. stop condition.
+1. 结论；
+2. 里程碑状态；
+3. 修改的文件；
+4. 执行的测试；
+5. 一个下一步动作；
+6. 停止条件。
 
-Avoid repeating the full project history or suggesting unrelated expansion.
+避免重复完整项目历史，或建议无关扩展。

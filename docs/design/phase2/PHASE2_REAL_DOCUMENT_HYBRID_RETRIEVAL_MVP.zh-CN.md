@@ -3,6 +3,10 @@
 > 用途：供 Codex 继续推进 DocAgent 项目。  
 > 前置状态：Phase 1 已完成，Qwen3 Base / SFT / GRPO Answer Policy 已接入 LangGraph，结构化输出、位置校验、有界修复和 SQLite Trace 已跑通。  
 > 核心原则：**优先补齐真实文档问答主链，先让系统成型，再优化检索与模型效果。**
+>
+> 术语更新（2026-07-29）：当前实现以 `Chunk` 为唯一检索领域对象；
+> `EvidenceBlock` 只保留为历史持久化和代码兼容名称。当前实现状态以
+> `docs/ACTIVE_PLAN.md` 与 `CURRENT_STATUS.md` 为准。
 
 ---
 
@@ -389,11 +393,11 @@ content_list / middle JSON
 
 ## 7. Page-level 与 Block-level
 
-### Block-level
+### 块级
 
 用于检索和最终引用。
 
-### Page-level
+### 页级
 
 每页按 reading order 聚合：
 
@@ -851,7 +855,7 @@ examples/phase2/
 
 ## 18. 测试要求
 
-### MinerU Converter
+### MinerU 转换器
 
 覆盖：
 
@@ -864,7 +868,7 @@ examples/phase2/
 
 单元测试不得启动真实 MinerU。
 
-### Dense / FAISS
+### 稠密检索 / FAISS
 
 覆盖：
 
@@ -876,7 +880,7 @@ examples/phase2/
 - 空索引；
 - 重复 block_id。
 
-### RRF
+### RRF（倒数排名融合）
 
 覆盖：
 
@@ -888,7 +892,7 @@ examples/phase2/
 - 去重；
 - deterministic。
 
-### Reranker
+### 重排器
 
 覆盖：
 
@@ -899,7 +903,7 @@ examples/phase2/
 - disabled；
 - 错误路径。
 
-### Ingestion
+### 导入
 
 覆盖：
 
@@ -911,7 +915,7 @@ examples/phase2/
 - 状态迁移；
 - 失败恢复。
 
-### Mock E2E
+### 模拟端到端流程
 
 ```text
 fake document
@@ -970,7 +974,7 @@ CPU：BM25 + FAISS
 12. 完成 ingest/query/inspect CLI；
 13. 运行 MP-DocVQA 消融；
 14. 完成 3 份真实文档 smoke；
-15. 更新 README / CURRENT_STATUS / DECISIONS / IMPLEMENTATION_PLAN / 项目实施进展。
+15. 更新 README、`docs/ACTIVE_PLAN.md`、CURRENT_STATUS 和 DECISIONS。
 
 ---
 

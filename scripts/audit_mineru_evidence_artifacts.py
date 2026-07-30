@@ -319,7 +319,7 @@ def converted_evidence_stats(
             "error": {"type": type(exc).__name__, "message": compact(str(exc))[:240]},
         }
     gold_text = "\n".join(
-        block.retrieval_text
+        block.text
         for block in page_blocks
         if block.page_id is not None and int(block.page_id) in gold_pages
     )
@@ -415,7 +415,7 @@ def db_page_stats(
         return {"db_available": repository is not None, "block_count": 0}
     blocks = repository.load_evidence_blocks(ingested_doc_id, include_page_blocks=True)
     page_texts = [
-        block.retrieval_text
+        block.text
         for block in blocks
         if block.block_type == "page" and block.page_id is not None and int(block.page_id) in gold_pages
     ]

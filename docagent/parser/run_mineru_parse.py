@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json
 import shutil
 import subprocess
 from pathlib import Path
 
-from docagent.schemas import EvidenceBlock, EvidenceLocation
+from docagent.parser.mineru_converter import content_list_to_chunks
+from docagent.schemas import Chunk
 
 
 def run_mineru(input_path: str | Path, output_dir: str | Path, command: str = "mineru") -> Path:
@@ -18,30 +18,10 @@ def run_mineru(input_path: str | Path, output_dir: str | Path, command: str = "m
     return output_dir
 
 
-def content_list_to_blocks(doc_id: str, content_list_path: str | Path) -> list[EvidenceBlock]:
-    path = Path(content_list_path)
-    data = json.loads(path.read_text(encoding="utf-8"))
-    blocks: list[EvidenceBlock] = []
-    for idx, item in enumerate(data):
-        block_type = item.get("type", "text")
-        if block_type in {"chart", "figure"}:
-            block_type = "image"
-        if block_type not in {"text", "table", "image"}:
-            continue
-        page = item.get("page_idx")
-        block_id = f"{doc_id}_p{page if page is not None else 0}_b{idx}"
-        blocks.append(
-            EvidenceBlock(
-                doc_id=doc_id,
-                page_id=page,
-                block_id=block_id,
-                block_type=block_type,
-                text=item.get("text") or item.get("content") or "",
-                table_html=item.get("table_body"),
-                image_path=item.get("image_path"),
-                location=EvidenceLocation(page=page, block_id=block_id, bbox=item.get("bbox")),
-                metadata={"parser": "mineru"},
-            )
-        )
-    return blocks
+def content_list_to_blocks(doc_id: str, content_list_path: str | Path) -> list[Chunk]:
+    """Compatibility entry point backed by the canonical MinerU-to-Chunk pipeline."""
 
+    return content_list_to_chunks(
+        doc_id=doc_id,
+        content_list_path=content_list_path,
+    )

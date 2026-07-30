@@ -128,3 +128,55 @@ class OpenAICompatibleRouterClient:
             return str(payload["choices"][0]["message"]["content"])
         except (KeyError, IndexError, TypeError) as exc:
             raise RouterLLMError("Router LLM response did not contain message content.") from exc
+
+
+def parse_json_object(raw_output: str) -> dict[str, Any] | None:
+    """Parse a JSON object even when a model wraps it in prose or a code fence."""
+
+    text = str(raw_output or "").strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        extracted = _extract_first_json_object(text)
+        if extracted is None:
+            return None
+        try:
+            payload = json.loads(extracted)
+        except json.JSONDecodeError:
+            return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _extract_first_json_object(text: str) -> str | None:
+    start = text.find("{")
+    if start < 0:
+        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for index in range(start, len(text)):
+        char = text[index]
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : index + 1]
+    return None
