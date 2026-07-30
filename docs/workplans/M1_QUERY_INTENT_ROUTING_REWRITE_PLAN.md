@@ -1,7 +1,7 @@
 # M1 查询意图、路由与查询变换实施计划
 
 > 文件性质：当前阶段临时实施依据
-> 计划版本：1.3
+> 计划版本：1.4
 > 状态：`implemented`
 > 建立日期：2026-07-30
 > 适用范围：从用户查询输入到检索请求输出，不包含最终答案生成
@@ -534,6 +534,68 @@ MinerU 解析产物、检索 Chunk 和真实稠密索引。因此：
   6 份文档的 MinerU 转换、Chunk 重建和真实索引构建；
 - 当前代码同步不受该派生产物缺失阻断，但不得把同步完成报告为正式检索评测就绪。
 
+### M1-E 冻结语料准备产物契约
+
+本次冻结语料准备使用固定运行标识：
+
+```text
+m1_frozen_corpus_v1_20260730
+```
+
+每篇文档的规范产物继续由现有内容寻址注册流程保存：
+
+```text
+data/documents/<doc_id>/
+  source/original.pdf
+  mineru/
+    mineru_api_manifest.json
+    mineru_result.zip
+    <MinerU 原始解析文件>
+  evidence_blocks.jsonl
+  page_documents.jsonl
+  structure_quality.json
+  ingestion_report.json
+  dense_embeddings.npy
+  dense_index.faiss
+  index_metadata.json
+```
+
+其中 `evidence_blocks.jsonl` 是历史兼容文件名，文件内对象必须是统一
+`docagent_chunk_v3` Chunk；不得把它解释为 MinerU 原始块。完整 MinerU、Chunk、
+嵌入和索引产物只保留在服务器，不同步到本地。
+
+本批次的运行记录统一放置：
+
+```text
+outputs/m1_frozen_corpus_v1_20260730/
+  docagent.db
+  document_manifest.json
+  per_document_results.jsonl
+  logs/
+
+outputs/sync/m1_frozen_corpus_v1_20260730/
+  result.json
+  manifest.json
+  summary.json
+  summary.md
+  failures_sample.jsonl
+  log_tail.txt
+```
+
+`document_manifest.json` 必须记录文档文件名、语言、SHA256、`doc_id`、规范文档目录、
+MinerU 模型与解析选项、Chunk 数量、可索引 Chunk 数量、结构质量状态、稠密模型、
+索引维度和各阶段状态，不记录令牌、签名下载地址或完整文档内容。
+
+本批次解析配置固定为：
+
+- `model_version=vlm`；
+- 表格与公式识别开启；
+- 不强制 OCR，由 MinerU VLM 自动处理；
+- 中文文档使用 `language=ch`，英文文档使用 `language=en`；
+- Dense 模型使用 `/root/autodl-tmp/models/bge-m3`；
+- GPU 设备使用服务器预检确认的首个可见 CUDA 设备；
+- 对来源 SHA256、解析选项和现有成功 manifest 一致的缓存不重复调用 API。
+
 载入后、实现评测脚本前只进行只读预检：
 
 - 三个文件均存在；
@@ -628,7 +690,7 @@ GPU 启动时机：
 - 多 Agent 分工；
 - AnswerPolicy 微调、SFT、DPO 或 GRPO；
 - 最终答案忠实度、相关性或引用支持度评测；
-- Chunk、MinerU 转换和索引重建；
+- 除上述 6 份 M1-E 冻结文档语料准备外，不进行其他 Chunk、MinerU 转换和索引重建；
 - 新的 VLM 图表理解实现；
 - UI 或服务化部署；
 - 迁移 SQLite 到 Milvus。
@@ -657,6 +719,7 @@ M1-E，不以临时自造样本替代冻结评测集。
 | 2026-07-30 | 1.1 | 冻结 Qwen3.7-Max 快照与角色提示词；冻结统一多语言 BGE-M3 方案 | 明确现有 API 配置及中英文检索边界 | LLM 调用、提示词、检索评测 |
 | 2026-07-30 | 1.2 | 固定冻结样本双端目录和 GPU 启动时机 | 样本已生成，需要安全载入并避免提前占用显卡 | 数据放置、资源调度、M1-E |
 | 2026-07-30 | 1.3 | `preserved_terms` 中非原文声明项改为忽略并记录警告；数字、年份、缩写和引号内容仍由代码强制保护 | 首次真实 API 冒烟表明模型可能同时返回语义标签；为此回退整份有效查询计划过于严格 | 查询变换输出归一化 |
+| 2026-07-30 | 1.4 | 增加 6 份冻结评测文档的 MinerU、Chunk、真实稠密索引与运行记录契约 | 冻结样本已就绪，需要在 M1-E 正式评测前建立可追溯且互不混淆的语料产物 | 服务器数据目录、运行记录、GPU 语料准备 |
 
 ## 13. 外部技术依据
 
