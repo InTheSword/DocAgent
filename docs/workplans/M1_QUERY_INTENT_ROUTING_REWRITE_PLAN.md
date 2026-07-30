@@ -1,7 +1,7 @@
 # M1 查询意图、路由与查询变换实施计划
 
 > 文件性质：当前阶段临时实施依据
-> 计划版本：1.4
+> 计划版本：1.5
 > 状态：`implemented`
 > 建立日期：2026-07-30
 > 适用范围：从用户查询输入到检索请求输出，不包含最终答案生成
@@ -500,6 +500,87 @@ VLM 图片理解实现
 首次运行先记录基线，不在看到冻结集结果后为单个样本增加规则。正式阈值在基线
 产物可用后另行写入本计划，再进行验收比较。
 
+M1-E 使用单一评测入口：
+
+```text
+scripts/eval_m1_query_retrieval.py
+```
+
+评测分为两个可恢复阶段，但属于同一次冻结运行：
+
+1. `query`：真实 Qwen 意图识别和查询变换，逐条写入 checkpoint；
+2. `retrieval`：加载六文档已有 Chunk/索引，执行原问题与计划查询的四配置对比。
+
+查询侧主指标：
+
+- 意图准确率；
+- 查询动作严格有序 Exact Match；
+- 查询动作集合 Exact Match；
+- 必需检索路径全部命中率与路径 micro recall；
+- `must_preserve` 术语完整保留率；
+- LLM、fallback、短路和校验失败计数。
+
+冻结标签允许 `none + preserve_terms`，而当前 `QueryPlan` 契约只允许单独的 `none`。
+首次基线必须按现状严格计分并在限制中单列该契约差异，不得在运行前修改冻结样本
+或为提高动作分数而放宽实现契约。
+
+Gold evidence 映射规则：
+
+- 只使用 `verbatim_content`、`physical_pages` 和 `evidence_type`；
+- 先在指定物理页和兼容内容类型中做 Unicode/空白/Markdown 归一化后的包含匹配；
+- 仅在包含匹配失败时使用统一阈值的页内字符覆盖 fallback；
+- 每个证据组映射为一个或多个 Chunk ID，并保存匹配方法和分数；
+- 未映射证据组必须进入失败样本，不能从指标分母静默删除；
+- 同时报告映射覆盖率、仅已映射组检索指标和包含未映射组为零分的端到端指标。
+
+检索侧固定比较：
+
+```text
+query_variant = original | planned
+retriever = bm25 | dense | hybrid | hybrid_rerank
+Recall@5
+MRR@10
+```
+
+`original` 与 `planned` 使用相同的预测 Metadata Filter 和表格意图约束，二者只在
+检索查询文本上不同，以便观察查询变换的下游影响。四种检索器均使用相同 Chunk；
+Dense/Hybrid/Hybrid+Reranker 使用已保存的真实 BGE-M3 索引，
+Hybrid+Reranker 使用真实 `bge-reranker-v2-m3`。不使用 hash dense 或 keyword
+reranker 生成正式指标。
+
+完整运行目录：
+
+```text
+outputs/m1_query_retrieval_baseline_20260730/
+  query_predictions.jsonl
+  gold_chunk_mapping.jsonl
+  retrieval_details.jsonl
+  metrics.json
+  result.json
+  manifest.json
+  summary.json
+  summary.md
+  failures.jsonl
+  logs/
+```
+
+精选同步包：
+
+```text
+outputs/sync/m1_query_retrieval_baseline_20260730/
+  result.json
+  manifest.json
+  summary.json
+  summary.md
+  preview.json
+  failures_sample.jsonl
+  log_tail.txt
+  stderr_tail.txt
+```
+
+完整输出只保留在服务器。同步包不得包含完整问题、完整模型输出、原文证据、
+Chunk 正文、密钥、数据库或模型权重。
+
 冻结评测文件统一放置在以下对应目录：
 
 ```text
@@ -720,6 +801,7 @@ M1-E，不以临时自造样本替代冻结评测集。
 | 2026-07-30 | 1.2 | 固定冻结样本双端目录和 GPU 启动时机 | 样本已生成，需要安全载入并避免提前占用显卡 | 数据放置、资源调度、M1-E |
 | 2026-07-30 | 1.3 | `preserved_terms` 中非原文声明项改为忽略并记录警告；数字、年份、缩写和引号内容仍由代码强制保护 | 首次真实 API 冒烟表明模型可能同时返回语义标签；为此回退整份有效查询计划过于严格 | 查询变换输出归一化 |
 | 2026-07-30 | 1.4 | 增加 6 份冻结评测文档的 MinerU、Chunk、真实稠密索引与运行记录契约 | 冻结样本已就绪，需要在 M1-E 正式评测前建立可追溯且互不混淆的语料产物 | 服务器数据目录、运行记录、GPU 语料准备 |
+| 2026-07-30 | 1.5 | 固定 M1-E runner、证据组映射、原问题/计划查询对照、四检索配置、指标和产物契约 | 运行首次正式基线前必须区分样本契约差异、证据映射失败和真实检索失败 | M1-E 评测实现与服务器基线 |
 
 ## 13. 外部技术依据
 
