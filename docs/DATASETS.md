@@ -104,7 +104,28 @@ Phase 2B 应使用小型公开冒烟集：
 ScenarioSet 用于功能验证，不用于训练。Git 中只保存安全元数据、哈希、预期证据
 和报告。
 
-## 5. 延后数据集
+## 5. M1 查询意图与检索冻结集
+
+本地与服务器分别保留未跟踪目录：
+
+```text
+data/benchmark/m1_query_routing/
+  frozen_query_samples.jsonl
+  sample_summary.md
+  generation_issues.md
+```
+
+冻结集包含 94 条样本：86 条绑定 6 份真实 PDF，8 条为不绑定文档的
+`no_retrieval` 或 `clarification_required` 路由样本。中文文档只使用中文查询，
+英文文档只使用英文查询；`gold_evidence_groups` 保存可与原文 Chunk 核对的证据
+文本，不作为训练目标。
+
+服务器语料准备运行 `m1_frozen_corpus_v1_20260730` 已使用 MinerU API `vlm`
+处理 6 份 PDF，并建立统一 Chunk 与真实 BGE-M3 索引，状态为
+`real_model_verified`。冻结集正式指标仍为 `not_started`；不得将首次基线结果
+反向用于修改样本、构造样本专属规则或训练模型。
+
+## 6. 延后数据集
 
 ### TAT-QA
 
@@ -151,7 +172,7 @@ benchmark_status = not_started
 
 在明确启动视觉推理/VLM 工作前不得添加 InfographicVQA。
 
-## 6. 划分与泄漏策略
+## 7. 划分与泄漏策略
 
 所有基准划分必须保持文档级。同一 `doc_id` 不得跨 train/dev/test。推理和修复绝不
 能接收：
@@ -168,7 +189,7 @@ benchmark_status = not_started
 端到端成功
 ```
 
-## 7. 数据质量要求
+## 8. 数据质量要求
 
 未来添加任何数据集时，记录：
 
@@ -183,7 +204,7 @@ benchmark_status = not_started
 
 不得将 schema/规则验证通过率描述为人工质量批准。
 
-## 8. 下载策略
+## 9. 下载策略
 
 默认行为：
 

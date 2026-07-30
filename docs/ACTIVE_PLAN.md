@@ -68,17 +68,19 @@ docs/workplans/M1_QUERY_INTENT_ROUTING_REWRITE_PLAN.md
 
 ## 验证边界
 
-本维护里程碑属于 `local_only`。未来凡涉及 MinerU API、BGE-M3、重排序器、
+M1-A 至 M1-D 的确定性实现属于 `local_only`；M1-E 的 MinerU 语料准备和真实
+BGE-M3/重排序器评测属于 `server_required`。凡涉及 MinerU API、BGE-M3、重排序器、
 Qwen、VLM、SFT/GRPO 或大型数据集的变更，必须先按
 `docs/GPU_SERVER_BOUNDARY.md` 分类；执行服务器操作前必须阅读
 `docs/SERVER_SETUP.md`。
 
 ## 下一步
 
-按 `docs/workplans/M1_QUERY_INTENT_ROUTING_REWRITE_PLAN.md` 从 M1-A 开始：
-先冻结 `QueryDecision`、`QueryPlan` 和 Metadata Filter 契约，再进入意图路由、
-查询变换和检索集成。保持原问题只进入问答、变换查询只进入检索；不启动正式
-答案质量评测或训练。
+按 `docs/workplans/M1_QUERY_INTENT_ROUTING_REWRITE_PLAN.md` 进入 M1-E：
+复用已准备的 6 份真实 MinerU/Chunk/BGE-M3 语料产物，实现冻结样本评测程序，
+先报告意图准确率、查询动作 Exact Match 和必需路由命中率，再报告按语言和检索
+配置分组的 Recall@5 与 MRR@10。首次运行只记录基线，不根据冻结样本做个案修补；
+不启动最终答案质量评测或训练。
 
 ## 停止条件
 

@@ -14,6 +14,7 @@ DocAgent 是本地、CLI 优先的个人使用文档问答 MVP。它接收文件
 | 范围 | 状态 | 已验证边界 |
 |---|---|---|
 | M1 查询意图与查询变换 | `real_model_verified` | RAG 问答主链已迁移为两阶段 `QueryDecision -> QueryPlan`；真实 `qwen3.7-max-2026-05-17` 冒烟完成意图识别和 3 路静态拆解。显式统计、整页读取和全量结构导出仍走确定性操作；新的真实 BGE-M3 联合评测尚未执行。 |
+| M1 冻结评测语料准备 | `real_model_verified` | 6 份真实 PDF 已由 MinerU API `vlm` 解析为 1,222 个 `docagent_chunk_v3` Chunk，其中 1,016 个进入真实 BGE-M3 1024 维 FAISS 索引；6/6 索引按 Chunk 哈希重新加载通过，Chunk 契约错误为 0。该状态只证明评测语料与索引就绪，不代表已完成 Recall/MRR 基准。 |
 | Phase 5 CLI、导入与输出契约 | `accepted` | 文件和 `doc_id` 路径提供稳定的答案/证据/引用/追踪契约。 |
 | 原始 PDF MinerU API 路径 | `accepted` | 实时 API 冒烟建立了导入和引用契约。 |
 | 混合检索与模型回答工作流 | `real_model_verified` | 真实 BGE-M3、交叉编码器重排序器、Qwen AnswerPolicy、LLM 查询规划与持久化检索追踪均有服务器冒烟证据。 |
@@ -69,6 +70,13 @@ DocAgent 是本地、CLI 优先的个人使用文档问答 MVP。它接收文件
   `qwen3.7-max-2026-05-17` 分别以 `intent_router` 和
   `query_transformer` 角色执行；识别 `complex_analysis`，生成 3 条静态
   拆解查询，两个阶段均通过 Schema 校验。该记录不包含 BGE-M3 联合检索评测。
+- 服务器 `outputs/sync/m1_frozen_corpus_v1_20260730/`：基于提交
+  `a37a148` 对 6 份冻结评测 PDF 执行真实 MinerU API `vlm` 解析、统一 Chunk
+  转换和真实 BGE-M3 索引构建。共 119 页、1,222 个 Chunk、1,016 个可索引
+  Chunk、30 个结构化表格、114 个图片引用、8 个跨页 Chunk 和 21 个句界拆分
+  Chunk；6/6 文档来源哈希、Chunk 契约、索引 Chunk 哈希、嵌入数量与 1024 维
+  索引加载检查通过。质量报告保留 origin PDF 二进制差异及部分阅读顺序告警，
+  但未触发失败条件。该记录不包含冻结集 Recall/MRR 或 reranker 指标。
 
 ## 不构成以下主张
 
