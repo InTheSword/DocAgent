@@ -3,8 +3,10 @@ from __future__ import annotations
 from docagent.retrieval.base import RetrievalFilter
 from docagent.retrieval.dense_encoder import HashDenseEncoder
 from docagent.retrieval.dense_index import DenseIndex
+from docagent.retrieval.hybrid_retriever import HybridRetriever
 from docagent.retrieval.index_manager import IndexedDocumentRetriever
 from docagent.retrieval.metadata_filter import infer_metadata_filter
+from docagent.query.schemas import QueryPlan
 from docagent.schemas import EvidenceBlock, EvidenceLocation
 
 
@@ -163,7 +165,53 @@ def test_hybrid_retrieval_uses_metadata_only_as_a_candidate_prefilter() -> None:
     assert {item.block.block_id for item in result.candidates} == {"b3", "b4", "b5"}
     assert all("metadata" not in item.sources for item in result.candidates)
     assert result.metadata["retrieval_routes"] == ["bm25", "dense"]
+    assert result.metadata["executed_routes"] == ["metadata_filter", "dense", "sparse"]
     assert result.metadata["metadata_filter_source"] == "inferred"
+
+
+def test_multi_query_reranker_uses_original_question_and_records_executed_routes() -> None:
+    blocks = _corpus()[:2]
+    encoder = HashDenseEncoder()
+    dense_index = DenseIndex.build(
+        blocks=blocks,
+        embeddings=encoder.encode_documents([block.retrieval_text for block in blocks]),
+        model_id=encoder.model_id,
+    )
+
+    class CapturingReranker:
+        def __init__(self) -> None:
+            self.query: str | None = None
+
+        def score(self, *, query, candidates):
+            self.query = query
+            return candidates
+
+    reranker = CapturingReranker()
+    question = "How does the method improve efficiency?"
+    plan = QueryPlan(
+        original_question=question,
+        intent="complex_analysis",
+        actions=("decompose",),
+        retrieval_queries=("method design", "efficiency results"),
+        retrieval_routes=("multi_query", "dense", "sparse"),
+        transformation_source="llm",
+    )
+    result = HybridRetriever(
+        blocks,
+        dense_index=dense_index,
+        reranker=reranker,
+        mode="hybrid_rerank",
+    ).retrieve_result(
+        doc_id="doc",
+        question=question,
+        top_k=2,
+        query_embedding=encoder.encode_queries(list(plan.retrieval_queries)),
+        query_plan=plan,
+        enable_query_rewrite=False,
+    )
+
+    assert reranker.query == question
+    assert result.metadata["executed_routes"] == ["multi_query", "dense", "sparse"]
 
 
 def test_explicit_block_filter_is_applied_before_all_candidate_routes() -> None:

@@ -17,16 +17,23 @@ from docagent.router.llm_client import (
 QUERY_TRANSFORMER_ROLE = "query_transformer"
 QUERY_TRANSFORMER_PROMPT_VERSION = "m1-query-transformer-v1"
 QUERY_TRANSFORMER_SYSTEM_PROMPT = """You are the query_transformer for a PDF RAG system.
-Transform a query only within the supplied allowed_actions. Never answer the question,
-change its intent, choose tools, add unsupported facts, or provide chain-of-thought.
+
+## Task
+Transform a query only within the supplied allowed_actions. Never answer the question, change its intent, choose tools, add unsupported facts, or provide chain-of-thought.
+
+## Output Format
 Return one JSON object with exactly:
 {"actions": ["..."], "retrieval_queries": ["..."], "preserved_terms": ["..."]}
-Use none when the original query is already suitable. rewrite returns one equivalent
-retrieval query. expand returns a few complementary formulations. decompose returns
-subqueries with distinct evidence responsibilities. Preserve all entities, numbers,
-years, comparison directions, quoted text, method names, and explicit locations.
-Return at most 4 retrieval queries. Keep the document/query language unless the
-document profile explicitly indicates a different dominant language."""
+
+## Rules
+- Allowed actions: none, rewrite, expand, decompose.
+- Use 'none' when the original query is already suitable. 
+- 'rewrite' returns one equivalent retrieval query. 
+- 'expand' returns a few complementary formulations. 
+- 'decompose' returns subqueries with distinct evidence responsibilities. 
+- Preserve all entities, numbers, years, comparison directions, quoted text, method names, and explicit locations.
+- Return at most 4 retrieval queries. 
+- Keep the document/query language unless the document profile explicitly indicates a different dominant language."""
 
 _QUOTED_TERM_RE = re.compile(r'"([^"]+)"|“([^”]+)”|‘([^’]+)’|\'([^\']+)\'')
 _NUMBER_RE = re.compile(r"(?<!\w)\d+(?:\.\d+)?%?(?!\w)")

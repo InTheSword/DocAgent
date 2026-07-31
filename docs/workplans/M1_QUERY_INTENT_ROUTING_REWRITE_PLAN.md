@@ -1,7 +1,7 @@
 # M1 查询意图、路由与查询变换实施计划
 
 > 文件性质：当前阶段临时实施依据
-> 计划版本：1.6
+> 计划版本：1.7
 > 状态：`benchmark_evaluated`
 > 建立日期：2026-07-30
 > 适用范围：从用户查询输入到检索请求输出，不包含最终答案生成
@@ -640,6 +640,81 @@ generation_issues.md
 当前 M1 的代码同步、数据预检和后续评测统一在上述独立 worktree 中执行。主检出目录
 `/root/autodl-tmp/docagent` 保留为旧分支工作区，不作为本阶段命令执行目录。
 
+### M1-F1：高价值失败修复（评测合同与多查询重排）
+
+首次基线暴露的样本合同、workflow 覆盖和重排查询错误会污染后续优化结论，必须先于
+提示词规则调优、RRF 权重调优和动态复杂查询循环修复。本批只处理能够由通用规则
+验证的基础问题，不根据冻结样本增加个案规则。
+
+#### 当前缺口
+
+1. `query_actions` 同时混合互斥变换动作与 `preserve_terms` 约束，旧 Exact Match
+   将合同不兼容计为模型错误；
+2. `expected_routes` 是规划标签，不等于运行时实际执行路径，旧路由分数不能证明
+   检索链真正执行；
+3. 旧评测把表格、视觉和文档摘要样本强制送入通用文本检索四配置，主指标包含并未
+   执行对应生产 workflow 的代理结果；
+4. Gold→Chunk 自动映射尚未经复核，却被直接用作检索 qrels；
+5. 多查询召回后，重排器只使用 `active_queries[0]`，最终排序可能偏向第一个子查询，
+   而不是原始用户问题。
+
+#### 已确定方案与接口契约
+
+1. 查询动作评测拆成：
+   - `transform_action_*`：仅比较 `none/rewrite/expand/decompose/request_clarification`；
+   - `must_preserve_*`：继续单独衡量受保护术语；
+   - 旧动作 EM 保留为 `legacy_action_*` 诊断字段，不再作为主结论。
+2. 查询侧增加 `expected_workflow/predicted_workflow` 与 workflow accuracy。旧
+   `expected_routes` 分数保留为 legacy 标签诊断，不宣称为执行路径指标。
+3. 检索结果增加 `executed_routes`：用统一路由名记录实际执行的 `sparse`、
+   `dense`、`metadata_filter`、`multi_query` 和 `table_structured`。保留既有
+   `retrieval_routes` 字段兼容旧调用方。
+4. M1 通用检索主指标只覆盖当前真实走文本检索链的 `semantic_fact`、
+   `navigation` 和 `complex_analysis`。`table_*`、`visual_lookup`、
+   `document_summary`、`no_retrieval` 与 `clarification_required` 按 workflow
+   统计为未被本 runner 专用评测覆盖，不用代理结果混入主均值。
+5. `gold_chunk_mapping.jsonl` 明确标记为自动生成的 qrel candidate，summary 标记
+   检索指标为 provisional。只有绑定 Chunk 合同版本并经复核的 Chunk qrels 才能
+   用于正式检索验收；本批不改写冻结样本。
+6. 多查询的 BM25/Dense 仍负责扩大候选召回，CrossEncoder 重排统一使用原始用户
+   问题作为相关性目标。本批不改变 RRF 权重、不自动添加额外查询。
+
+#### 文件范围
+
+- `scripts/eval_m1_query_retrieval.py`
+- `docagent/retrieval/hybrid_retriever.py`
+- `tests/test_m1_query_retrieval_eval.py`
+- 与多查询重排直接相关的一项检索测试
+- 本计划与 `docs/ACTIVE_PLAN.md`
+
+不修改用户已手工调整的 `intent_router` 和 `query_transformer` 提示词。
+
+#### 验收测试
+
+1. `none + preserve_terms` 与 `none` 的变换动作比较能够命中，但 legacy EM 仍能
+   如实显示原始标签不同；
+2. workflow 指标不再使用路由标签模拟执行成功；
+3. 通用检索样本筛选排除表格、视觉和摘要 workflow，并报告各 workflow 覆盖数；
+4. 自动 Gold 映射产物明确为未复核 candidate；
+5. 多查询 Hybrid+Reranker 测试证明 reranker 收到原始问题，而不是第一条子查询；
+6. 查询、检索和 CLI 相关既有回归通过。
+
+#### 资源边界、迁移和停止条件
+
+- 合同、执行记录、评测筛选和重排接线属于 `local_only`，先在本地完成确定性测试；
+- 六文档真实 Qwen/BGE-M3/reranker 重跑属于 `server_required`，需要 GPU 服务器；
+- 旧产物保持可读，新 runner 通过版本号和新增字段区分，不回写历史运行；
+- 本批本地验证完成后停止并报告服务器重跑要求，不自动进入提示词规则、RRF、
+  表格专用评测、VLM 或动态 Agentic loop。
+
+#### 本地验证结果（2026-07-31）
+
+- M1-F1 合同与检索接线已实现；
+- 查询、检索、表格索引、模型包装器和 CLI 相关回归共 112 项通过；
+- 当前仅达到本批确定性逻辑的 `mock_verified`；
+- runner v2 尚未在六文档真实 Qwen/BGE-M3/reranker 环境重跑，因此 M1 整体仍沿用
+  既有 `benchmark_evaluated` 状态，不得用 v1 分数评价 v2 修复收益。
+
 2026-07-30 服务器预检确认冻结样本的 6 份原始 PDF 已存在，但尚未生成对应的
 MinerU 解析产物、检索 Chunk 和真实稠密索引。因此：
 
@@ -836,6 +911,7 @@ M1-E，不以临时自造样本替代冻结评测集。
 | 2026-07-30 | 1.4 | 增加 6 份冻结评测文档的 MinerU、Chunk、真实稠密索引与运行记录契约 | 冻结样本已就绪，需要在 M1-E 正式评测前建立可追溯且互不混淆的语料产物 | 服务器数据目录、运行记录、GPU 语料准备 |
 | 2026-07-30 | 1.5 | 固定 M1-E runner、证据组映射、原问题/计划查询对照、四检索配置、指标和产物契约 | 运行首次正式基线前必须区分样本契约差异、证据映射失败和真实检索失败 | M1-E 评测实现与服务器基线 |
 | 2026-07-30 | 1.6 | 记录首次六文档真实冻结基线，并保持未验收状态 | 基线已完成，但查询动作契约、部分意图/路由和 Gold→Chunk 映射仍有明显缺口 | M1-E 结果与下一步边界 |
+| 2026-07-31 | 1.7 | 增加 M1-F1：拆分动作/约束指标，区分规划与执行路径，按真实 workflow 限定通用检索主指标，标记自动 qrel candidate，并修复多查询重排目标 | 首次基线中的合同污染和重排接线错误会使后续调优结论失真，需按价值优先修复 | M1 评测器、检索执行元数据与多查询重排 |
 
 ## 13. 外部技术依据
 

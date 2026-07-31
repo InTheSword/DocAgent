@@ -30,9 +30,26 @@ from docagent.schemas import Chunk
 from docagent.utils.jsonl import read_jsonl, write_jsonl
 
 
-RUNNER_VERSION = "m1-query-retrieval-eval-v1"
+RUNNER_VERSION = "m1-query-retrieval-eval-v2"
 RETRIEVAL_MODES = ("bm25", "dense", "hybrid", "hybrid_rerank")
 QUERY_VARIANTS = ("original", "planned")
+TRANSFORM_ACTIONS = frozenset(
+    {"none", "rewrite", "expand", "decompose", "request_clarification"}
+)
+GENERIC_RETRIEVAL_INTENTS = frozenset(
+    {"semantic_fact", "navigation", "complex_analysis"}
+)
+INTENT_WORKFLOWS = {
+    "semantic_fact": "text_retrieval",
+    "navigation": "text_retrieval",
+    "complex_analysis": "complex_text_retrieval",
+    "table_lookup": "table_retrieval",
+    "table_analysis": "table_retrieval",
+    "visual_lookup": "visual_retrieval",
+    "document_summary": "document_summary",
+    "no_retrieval": "no_retrieval",
+    "clarification_required": "clarification",
+}
 REQUIRED_SAMPLE_FIELDS = {
     "sample_id",
     "document_file",
@@ -92,6 +109,39 @@ def validate_samples(samples: list[dict[str, Any]]) -> None:
                 raise ValueError(f"{sample_id} contains invalid physical_pages")
 
 
+def _transform_actions(actions: Iterable[object]) -> list[str]:
+    normalized = [str(action) for action in actions if str(action) in TRANSFORM_ACTIONS]
+    return normalized or ["none"]
+
+
+def _workflow_for_intent(intent: object) -> str:
+    return INTENT_WORKFLOWS.get(str(intent), "unknown")
+
+
+def _generic_retrieval_samples(samples: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        sample
+        for sample in samples
+        if sample.get("document_file") and sample.get("intent") in GENERIC_RETRIEVAL_INTENTS
+    ]
+
+
+def _workflow_coverage(samples: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    counts = Counter(
+        _workflow_for_intent(sample.get("intent"))
+        for sample in samples
+        if sample.get("document_file")
+    )
+    return {
+        workflow: {
+            "sample_count": count,
+            "evaluated_by_generic_retrieval_runner": workflow
+            in {"text_retrieval", "complex_text_retrieval"},
+        }
+        for workflow, count in sorted(counts.items())
+    }
+
+
 def load_corpus(
     manifest_path: Path,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, list[Chunk]]]:
@@ -148,6 +198,7 @@ def map_gold_evidence(
                     "mapped_group_count": 0,
                     "group_count": 0,
                     "all_groups_mapped": True,
+                    "qrels_reviewed": False,
                 }
             )
             continue
@@ -167,6 +218,7 @@ def map_gold_evidence(
                 "mapped_group_count": mapped_count,
                 "group_count": len(groups),
                 "all_groups_mapped": mapped_count == len(groups),
+                "qrels_reviewed": False,
             }
         )
     return mapped_rows
@@ -231,6 +283,8 @@ def _mapped_group(
         "mapped_block_ids": sorted(set(block_ids)),
         "match_method": method,
         "match_score": round(float(score), 4),
+        "qrel_candidate_status": "unreviewed" if block_ids else "unmapped",
+        "mapping_origin": "automatic_source_alignment",
     }
 
 
@@ -342,8 +396,8 @@ def run_query_stage(
                     "total": len(samples),
                     "sample_id": sample_id,
                     "intent_match": prediction["intent_match"],
-                    "action_exact_match": prediction["action_exact_match"],
-                    "required_routes_hit": prediction["required_routes_hit"],
+                    "transform_action_exact_match": prediction["transform_action_exact_match"],
+                    "workflow_match": prediction["workflow_match"],
                 },
                 ensure_ascii=False,
             ),
@@ -363,8 +417,12 @@ def _query_prediction(
     plan = dict(output["query_plan"])
     expected_actions = list(sample["query_actions"])
     predicted_actions = list(plan["actions"])
+    expected_transform_actions = _transform_actions(expected_actions)
+    predicted_transform_actions = _transform_actions(predicted_actions)
     expected_routes = list(sample["expected_routes"])
     predicted_routes = list(plan["retrieval_routes"])
+    expected_workflow = _workflow_for_intent(sample["intent"])
+    predicted_workflow = _workflow_for_intent(decision["intent"])
     query_text = " ".join([*plan.get("retrieval_queries", []), *plan.get("preserved_terms", [])])
     preserved = [
         term
@@ -379,13 +437,20 @@ def _query_prediction(
         "predicted_intent": decision["intent"],
         "expected_actions": expected_actions,
         "predicted_actions": predicted_actions,
+        "expected_transform_actions": expected_transform_actions,
+        "predicted_transform_actions": predicted_transform_actions,
         "expected_routes": expected_routes,
         "predicted_routes": predicted_routes,
+        "expected_workflow": expected_workflow,
+        "predicted_workflow": predicted_workflow,
         "must_preserve_count": len(sample["must_preserve"]),
         "preserved_count": len(preserved),
         "intent_match": decision["intent"] == sample["intent"],
-        "action_exact_match": predicted_actions == expected_actions,
-        "action_set_match": set(predicted_actions) == set(expected_actions),
+        "transform_action_exact_match": predicted_transform_actions == expected_transform_actions,
+        "transform_action_set_match": set(predicted_transform_actions) == set(expected_transform_actions),
+        "legacy_action_exact_match": predicted_actions == expected_actions,
+        "legacy_action_set_match": set(predicted_actions) == set(expected_actions),
+        "workflow_match": predicted_workflow == expected_workflow,
         "required_routes_hit": set(expected_routes).issubset(predicted_routes),
         "route_hit_count": len(set(expected_routes).intersection(predicted_routes)),
         "must_preserve_all": len(preserved) == len(sample["must_preserve"]),
@@ -413,10 +478,25 @@ def _query_metric_group(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "sample_count": len(rows),
         "intent_accuracy": _rate(sum(bool(row["intent_match"]) for row in rows), len(rows)),
-        "action_exact_match": _rate(sum(bool(row["action_exact_match"]) for row in rows), len(rows)),
-        "action_set_exact_match": _rate(sum(bool(row["action_set_match"]) for row in rows), len(rows)),
-        "required_routes_all_hit_rate": _rate(sum(bool(row["required_routes_hit"]) for row in rows), len(rows)),
-        "route_micro_recall": _rate(sum(int(row["route_hit_count"]) for row in rows), expected_route_count),
+        "workflow_accuracy": _rate(sum(bool(row["workflow_match"]) for row in rows), len(rows)),
+        "transform_action_exact_match": _rate(
+            sum(bool(row["transform_action_exact_match"]) for row in rows), len(rows)
+        ),
+        "transform_action_set_exact_match": _rate(
+            sum(bool(row["transform_action_set_match"]) for row in rows), len(rows)
+        ),
+        "legacy_action_exact_match": _rate(
+            sum(bool(row["legacy_action_exact_match"]) for row in rows), len(rows)
+        ),
+        "legacy_action_set_exact_match": _rate(
+            sum(bool(row["legacy_action_set_match"]) for row in rows), len(rows)
+        ),
+        "legacy_required_routes_all_hit_rate": _rate(
+            sum(bool(row["required_routes_hit"]) for row in rows), len(rows)
+        ),
+        "legacy_route_micro_recall": _rate(
+            sum(int(row["route_hit_count"]) for row in rows), expected_route_count
+        ),
         "must_preserve_all_rate": _rate(sum(bool(row["must_preserve_all"]) for row in rows), len(rows)),
         "must_preserve_micro_recall": _rate(sum(int(row["preserved_count"]) for row in rows), must_preserve_count),
         "decision_sources": dict(sorted(Counter(str(row["decision_source"]) for row in rows).items())),
@@ -461,7 +541,7 @@ def run_retrieval_stage(
     )
     prediction_by_id = {str(item["sample_id"]): item for item in predictions}
     mapping_by_id = {str(item["sample_id"]): item for item in mappings}
-    document_samples = [sample for sample in samples if sample.get("document_file")]
+    document_samples = _generic_retrieval_samples(samples)
     query_texts: list[str] = []
     for sample in document_samples:
         prediction = prediction_by_id[str(sample["sample_id"])]
@@ -511,6 +591,7 @@ def run_retrieval_stage(
                 if variant == "planned" and not plan.retrieval_queries:
                     ranking: list[str] = []
                     ranking_pages: list[int | None] = []
+                    executed_routes: list[str] = []
                 else:
                     result = retrievers[(doc_id, mode)].retrieve_result(
                         doc_id=doc_id,
@@ -524,6 +605,7 @@ def run_retrieval_stage(
                     )
                     ranking = [candidate.block.block_id for candidate in result.candidates]
                     ranking_pages = [candidate.block.page_id for candidate in result.candidates]
+                    executed_routes = list(result.metadata.get("executed_routes") or [])
                 detail = retrieval_detail(
                     sample=sample,
                     mapping=mapping,
@@ -531,6 +613,8 @@ def run_retrieval_stage(
                     variant=variant,
                     ranking=ranking,
                     ranking_pages=ranking_pages,
+                    planned_routes=list(plan.retrieval_routes) if variant == "planned" else [],
+                    executed_routes=executed_routes,
                     latency_ms=(time.perf_counter() - started) * 1000,
                 )
                 details.append(detail)
@@ -560,6 +644,8 @@ def retrieval_detail(
     variant: str,
     ranking: list[str],
     ranking_pages: list[int | None],
+    planned_routes: list[str],
+    executed_routes: list[str],
     latency_ms: float,
 ) -> dict[str, Any]:
     groups = list(mapping["groups"])
@@ -590,8 +676,14 @@ def retrieval_detail(
         "doc_id": mapping["doc_id"],
         "language": sample["language"],
         "intent": sample["intent"],
+        "workflow": _workflow_for_intent(sample["intent"]),
         "query_variant": variant,
         "retriever_mode": mode,
+        "planned_routes": planned_routes,
+        "executed_routes": executed_routes,
+        "planned_routes_all_executed": set(planned_routes).issubset(executed_routes),
+        "planned_route_count": len(set(planned_routes)),
+        "executed_planned_route_count": len(set(planned_routes).intersection(executed_routes)),
         "ranking": ranking,
         "ranking_pages": ranking_pages,
         "group_count": len(groups),
@@ -647,6 +739,8 @@ def _retrieval_metric_group(rows: list[dict[str, Any]]) -> dict[str, Any]:
     mapped_count = sum(int(row["mapped_group_count"]) for row in rows)
     covered_count = sum(int(row["covered_group_count_at_5"]) for row in rows)
     covered_mapped_count = sum(int(row["covered_mapped_group_count_at_5"]) for row in rows)
+    route_rows = [row for row in rows if int(row.get("planned_route_count") or 0) > 0]
+    planned_route_count = sum(int(row["planned_route_count"]) for row in route_rows)
     latencies = sorted(float(row["latency_ms"]) for row in rows)
     return {
         "sample_count": len(rows),
@@ -657,6 +751,13 @@ def _retrieval_metric_group(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "recall_at_5_mapped_only": _rate(covered_mapped_count, mapped_count),
         "mrr_at_10": _mean(float(row["reciprocal_rank_at_10"]) for row in rows),
         "hit_rate_at_5": _rate(sum(bool(row["hit_at_5"]) for row in rows), len(rows)),
+        "planned_routes_all_executed_rate": _rate(
+            sum(bool(row["planned_routes_all_executed"]) for row in route_rows), len(route_rows)
+        ),
+        "planned_route_micro_realization": _rate(
+            sum(int(row["executed_planned_route_count"]) for row in route_rows),
+            planned_route_count,
+        ),
         "mean_latency_ms": _mean(latencies),
         "p95_latency_ms": latencies[math.ceil(len(latencies) * 0.95) - 1] if latencies else 0.0,
     }
@@ -671,7 +772,12 @@ def build_failures(
     for row in predictions:
         failed = [
             key
-            for key in ("intent_match", "action_exact_match", "required_routes_hit", "must_preserve_all")
+            for key in (
+                "intent_match",
+                "workflow_match",
+                "transform_action_exact_match",
+                "must_preserve_all",
+            )
             if not row[key]
         ]
         if failed:
@@ -698,6 +804,19 @@ def build_failures(
                     "group_count": row["group_count"],
                 }
             )
+        if (
+            row["query_variant"] == "planned"
+            and row["retriever_mode"] == "hybrid_rerank"
+            and not row["planned_routes_all_executed"]
+        ):
+            failures.append(
+                {
+                    "type": "planned_route_not_executed",
+                    "sample_id": row["sample_id"],
+                    "planned_routes": row["planned_routes"],
+                    "executed_routes": row["executed_routes"],
+                }
+            )
     return failures
 
 
@@ -714,14 +833,34 @@ def finalize_outputs(
     retrieval_report = retrieval_metrics(details)
     failures = build_failures(predictions, mappings, details)
     mapping_groups = [group for row in mappings for group in row["groups"]]
+    workflow_coverage = _workflow_coverage(samples)
+    generic_samples = _generic_retrieval_samples(samples)
+    generic_sample_ids = {str(sample["sample_id"]) for sample in generic_samples}
+    generic_mapping_groups = [
+        group
+        for row in mappings
+        if str(row["sample_id"]) in generic_sample_ids
+        for group in row["groups"]
+    ]
+    generic_retrieval_sample_count = len(generic_samples)
     metrics = {
         "sample_count": len(samples),
         "document_bound_sample_count": sum(bool(sample.get("document_file")) for sample in samples),
+        "generic_retrieval_sample_count": generic_retrieval_sample_count,
+        "workflow_coverage": workflow_coverage,
         "gold_group_count": len(mapping_groups),
         "mapped_gold_group_count": sum(bool(group["mapped_block_ids"]) for group in mapping_groups),
         "gold_mapping_rate": _rate(
             sum(bool(group["mapped_block_ids"]) for group in mapping_groups),
             len(mapping_groups),
+        ),
+        "generic_retrieval_gold_group_count": len(generic_mapping_groups),
+        "generic_retrieval_mapped_gold_group_count": sum(
+            bool(group["mapped_block_ids"]) for group in generic_mapping_groups
+        ),
+        "generic_retrieval_gold_mapping_rate": _rate(
+            sum(bool(group["mapped_block_ids"]) for group in generic_mapping_groups),
+            len(generic_mapping_groups),
         ),
         "query": query_report,
         "retrieval": retrieval_report,
@@ -732,6 +871,8 @@ def finalize_outputs(
         "status": "success",
         "benchmark_status": "benchmark_evaluated",
         "formal_answer_quality_evaluation": False,
+        "chunk_qrels_reviewed": False,
+        "retrieval_metrics_provisional": True,
         "used_training": False,
         "validation_subset_used_for_training": False,
         "used_external_llm_api": True,
@@ -743,9 +884,10 @@ def finalize_outputs(
         "top_k": args.top_k,
         "metrics": metrics,
         "limitations": [
-            "This is the first frozen baseline; no acceptance threshold was set before the run.",
-            "Frozen labels allow none + preserve_terms while the current QueryPlan contract does not.",
-            "Unmapped gold evidence groups remain in the end-to-end Recall@5 denominator.",
+            "Automatic source-to-chunk alignments are unreviewed qrel candidates, so retrieval metrics are provisional.",
+            "Legacy action and route-label metrics are diagnostics; transform actions, preservation, workflow dispatch, and executed routes are reported separately.",
+            "Generic retrieval metrics only cover semantic_fact, navigation, and the current static complex_analysis text workflow.",
+            "Table, visual, summary, no-retrieval, and clarification workflows require separate evaluators.",
             "The evaluation covers retrieval and query planning, not final answer quality.",
         ],
     }
@@ -772,11 +914,13 @@ def finalize_outputs(
         "metrics": {
             "sample_count": len(samples),
             "gold_mapping_rate": metrics["gold_mapping_rate"],
+            "generic_retrieval_gold_mapping_rate": metrics["generic_retrieval_gold_mapping_rate"],
             "intent_accuracy": query_report["overall"]["intent_accuracy"],
-            "action_exact_match": query_report["overall"]["action_exact_match"],
-            "required_routes_all_hit_rate": query_report["overall"]["required_routes_all_hit_rate"],
+            "workflow_accuracy": query_report["overall"]["workflow_accuracy"],
+            "transform_action_exact_match": query_report["overall"]["transform_action_exact_match"],
             "planned_hybrid_rerank_recall_at_5": retrieval_report["overall"]["planned"]["hybrid_rerank"]["recall_at_5_end_to_end"],
             "planned_hybrid_rerank_mrr_at_10": retrieval_report["overall"]["planned"]["hybrid_rerank"]["mrr_at_10"],
+            "planned_hybrid_rerank_route_realization": retrieval_report["overall"]["planned"]["hybrid_rerank"]["planned_route_micro_realization"],
         },
     }
     (output_dir / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -793,10 +937,15 @@ def _summary_markdown(summary: dict[str, Any]) -> str:
         "",
         f"- status: `{summary['status']}`",
         f"- samples: {summary['metrics']['sample_count']}",
-        f"- gold mapping rate: {summary['metrics']['gold_mapping_rate']:.4f}",
+        f"- generic retrieval samples: {summary['metrics']['generic_retrieval_sample_count']}",
+        f"- gold mapping rate (all workflows): {summary['metrics']['gold_mapping_rate']:.4f}",
+        f"- gold mapping rate (generic retrieval scope): {summary['metrics']['generic_retrieval_gold_mapping_rate']:.4f}",
+        "- chunk qrels reviewed: `false` (metrics are provisional)",
         f"- intent accuracy: {query['intent_accuracy']:.4f}",
-        f"- action ordered EM: {query['action_exact_match']:.4f}",
-        f"- required routes all-hit: {query['required_routes_all_hit_rate']:.4f}",
+        f"- workflow accuracy: {query['workflow_accuracy']:.4f}",
+        f"- transform action ordered EM: {query['transform_action_exact_match']:.4f}",
+        f"- legacy action ordered EM: {query['legacy_action_exact_match']:.4f}",
+        f"- legacy required-route labels all-hit: {query['legacy_required_routes_all_hit_rate']:.4f}",
         "",
         "| Variant | Retriever | Recall@5 (E2E) | Recall@5 (mapped) | MRR@10 | Hit@5 |",
         "|---|---|---:|---:|---:|---:|",
@@ -809,7 +958,13 @@ def _summary_markdown(summary: dict[str, Any]) -> str:
                 f"{row['recall_at_5_mapped_only']:.4f} | {row['mrr_at_10']:.4f} | "
                 f"{row['hit_rate_at_5']:.4f} |"
             )
-    lines.extend(["", "No final-answer quality metric or training was run."])
+    lines.extend(
+        [
+            "",
+            "Table, visual, summary, no-retrieval, and clarification workflows are not included in the generic retrieval aggregate.",
+            "No final-answer quality metric or training was run.",
+        ]
+    )
     return "\n".join(lines) + "\n"
 
 

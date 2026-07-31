@@ -237,7 +237,8 @@ class HybridRetriever:
 
         if active_mode == "hybrid_rerank":
             rerank_start = time.perf_counter()
-            candidates = self.reranker.score(query=active_queries[0] if active_queries else query, candidates=candidates)
+            rerank_query = question if planner_output is not None else query
+            candidates = self.reranker.score(query=rerank_query, candidates=candidates)
             timings["rerank"] = (time.perf_counter() - rerank_start) * 1000
 
         metadata = self._metadata(
@@ -288,6 +289,12 @@ class HybridRetriever:
                 mode,
                 table_query is not None and not table_query.is_empty,
             ),
+            "executed_routes": self._executed_routes(
+                mode,
+                query_plan=query_plan,
+                metadata_filter=metadata_filter,
+                table_structured=table_query is not None and not table_query.is_empty,
+            ),
             "bm25_top_n": self.bm25_top_n,
             "dense_top_n": self.dense_top_n,
             "fusion_top_n": self.fusion_top_n,
@@ -319,6 +326,31 @@ class HybridRetriever:
             "hybrid": ["bm25", "dense"],
             "hybrid_rerank": ["bm25", "dense"],
         }.get(mode, [mode])
+        if table_structured:
+            routes.append("table_structured")
+        return routes
+
+    @staticmethod
+    def _executed_routes(
+        mode: str,
+        *,
+        query_plan: QueryPlannerOutput | None,
+        metadata_filter: RetrievalFilter | None,
+        table_structured: bool,
+    ) -> list[str]:
+        routes: list[str] = []
+        if metadata_filter is not None and not metadata_filter.is_empty:
+            routes.append("metadata_filter")
+        if query_plan is not None and len(query_plan.final_queries) > 1:
+            routes.append("multi_query")
+        routes.extend(
+            {
+                "bm25": ["sparse"],
+                "dense": ["dense"],
+                "hybrid": ["dense", "sparse"],
+                "hybrid_rerank": ["dense", "sparse"],
+            }.get(mode, [mode])
+        )
         if table_structured:
             routes.append("table_structured")
         return routes

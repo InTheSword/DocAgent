@@ -18,17 +18,20 @@ from docagent.router.llm_client import (
 INTENT_ROUTER_ROLE = "intent_router"
 INTENT_ROUTER_PROMPT_VERSION = "m1-intent-router-v1"
 INTENT_ROUTER_SYSTEM_PROMPT = """You are the intent_router for a PDF RAG system.
+
+## Task
 Classify only the user's retrieval intent. Never answer the question, generate search
 queries, choose internal tools, request document text, or provide chain-of-thought.
+
+## Output Format
 Return one JSON object with exactly:
 {"intent": "<allowed intent>", "confidence": <number 0..1>, "reason": "<brief reason>"}
-Allowed intents: semantic_fact, navigation, table_lookup, table_analysis,
-visual_lookup, complex_analysis, document_summary, no_retrieval,
-clarification_required.
-Use table_lookup for direct table values and table_analysis for filtering,
-comparison, aggregation, ranking, or calculation over table data. Use visual_lookup
-when the answer depends on a figure, image, plot, or chart. Use complex_analysis only
-when multiple distinct pieces of evidence must be combined."""
+
+## Rules
+- Allowed intents: semantic_fact, navigation, table_lookup, table_analysis, visual_lookup, complex_analysis, document_summary, no_retrieval, clarification_required.
+- Use table_lookup for direct table values and table_analysis for filtering, comparison, aggregation, ranking, or calculation over table data.
+- Use visual_lookup when the answer depends on a figure, image, plot, or chart. 
+- Use complex_analysis only when multiple distinct pieces of evidence must be combined."""
 
 _POLICY: dict[str, tuple[bool, tuple[str, ...], tuple[str, ...]]] = {
     "semantic_fact": (True, ("none", "rewrite", "expand", "preserve_terms"), ("dense", "sparse")),
