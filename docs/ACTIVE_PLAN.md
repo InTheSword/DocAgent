@@ -47,7 +47,7 @@ docs/workplans/M1_QUERY_INTENT_ROUTING_REWRITE_PLAN.md
 | MinerU Chunk 与索引契约 | `real_model_verified` | 12 页真实 VideoTree MinerU 产物在本地与服务器均重建为 184 个 `docagent_chunk_v3` Chunk（171 个可索引、3 个跨页、12 个句界拆分），契约错误为 0，并已用真实 BGE-M3 建立索引。 |
 | 多路检索与结构化约束 | `real_model_verified` | 不经意图路由、查询规划和查询重写的真实 BGE-M3＋重排序器验证中，普通查询 Hit@5 为 18/18，表格文本 Hit@5 为 6/6，4 个结构化查询精确匹配；Metadata 仅作前置过滤。该小型回归集不是正式检索基准。 |
 | 原问题/检索查询分离与证据优先截断 | `implemented` | 查询变换只进入检索；问答保留原问题，超限时先裁减证据。新的 AnswerPolicy 联合冒烟尚未执行。 |
-| 新查询意图、路由与查询变换链 | `benchmark_evaluated` | M1-F1 已拆分动作/约束指标、限定通用检索 workflow、增加实际执行路由并修复多查询重排目标，112 项相关本地回归通过；runner v2 尚未完成六文档真实重跑。既有 v1 六文档基线仅用于失败定位，Gold→Chunk 自动映射率为 0.6000，尚未验收。 |
+| 新查询意图、路由与查询变换链 | `benchmark_evaluated` | M1-F1 runner v2 已在提交 `2d880e8` 上完成六文档真实评测：意图/workflow accuracy 为 0.8511/0.8617，变换动作 EM 为 0.4362；54 条通用检索中，原问题 Hybrid Recall@5/MRR@10 为 0.4314/0.5230，计划 Hybrid 为 0.4314/0.4380，计划 Hybrid+Reranker 为 0.3529/0.5016。Gold→Chunk qrel candidate 未经复核，尚未验收。 |
 | 最终答案质量基准 | `not_started` | 现有诊断运行不构成正式答案质量验收。 |
 | 新的 SFT/GRPO 训练与检查点变更 | `not_started` | 需要明确批准及独立训练数据。 |
 | 正式视觉问答基准 | `not_started` | 现有视觉 API 执行证据不构成基准验收。 |
@@ -76,11 +76,11 @@ Qwen、VLM、SFT/GRPO 或大型数据集的变更，必须先按
 
 ## 下一步
 
-执行临时计划 1.7 的 M1-F1：先修复查询动作/约束评测合同、规划路由与实际执行
-路径混淆、通用检索指标混入非文本 workflow，以及多查询重排只使用第一条子查询的
-接线错误。自动 Gold→Chunk 结果只作为 qrel candidate，不作为已复核正式 qrels。
-本批本地验证后停止；六文档真实 Qwen/BGE-M3/reranker 重跑需在 GPU 服务器进行。
-不得根据冻结样本增加个案 prompt、映射或路由规则，也不启动最终答案质量评测或训练。
+M1-F1 已完成并保持 `benchmark_evaluated`。下一批优先处理 QueryTransformer
+`allowed_actions` 契约失败，再处理 clarification/complex 意图边界；新的方案、开发集
+和验收标准必须先写入临时计划后实施。不得用当前冻结测试集调查询融合或 reranker
+阈值，不得根据冻结样本增加个案 prompt、映射或路由规则，也不启动最终答案质量
+评测或训练。
 
 ## 停止条件
 

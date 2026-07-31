@@ -1,7 +1,7 @@
 # M1 查询意图、路由与查询变换实施计划
 
 > 文件性质：当前阶段临时实施依据
-> 计划版本：1.7
+> 计划版本：1.8
 > 状态：`benchmark_evaluated`
 > 建立日期：2026-07-30
 > 适用范围：从用户查询输入到检索请求输出，不包含最终答案生成
@@ -715,6 +715,50 @@ generation_issues.md
 - runner v2 尚未在六文档真实 Qwen/BGE-M3/reranker 环境重跑，因此 M1 整体仍沿用
   既有 `benchmark_evaluated` 状态，不得用 v1 分数评价 v2 修复收益。
 
+#### 六文档真实验证结果（2026-07-31）
+
+服务器 worktree 在执行 `source /etc/network_turbo` 后快进到提交 `2d880e8`，
+112 项相关回归通过。runner v2 使用真实 `qwen3.7-max-2026-05-17`、BGE-M3、
+bge-reranker-v2-m3 和 6 份冻结文档完成运行：
+
+```text
+outputs/m1_query_retrieval_v2_20260731/
+outputs/sync/m1_query_retrieval_v2_20260731/
+```
+
+运行范围与主要结果：
+
+- 查询样本 94 条；通用文本检索主指标只覆盖 54 条
+  `semantic_fact/navigation/complex_analysis`；
+- 意图准确率 0.8511，workflow accuracy 0.8617；
+- 变换动作 Exact Match 0.4362；旧混合动作标签 EM 0.0957，仅保留作诊断；
+- `must_preserve` micro recall 0.5545；
+- 11 条 QueryTransformer 输出选择了意图不允许的 action，触发统一 fallback；
+- 全 workflow Gold→Chunk 自动映射率仍为 0.6000，54 条通用检索范围内为
+  0.5882；两者都只是未复核 qrel candidate；
+- 原问题 Hybrid 的 provisional E2E Recall@5/MRR@10 为 0.4314/0.5230；
+- 计划查询 Hybrid 为 0.4314/0.4380，Recall 没有改善且 MRR 下降 0.0850；
+- 计划查询 Hybrid+Reranker 为 0.3529/0.5016；相对计划 Hybrid，MRR 提升
+  0.0636，但 Recall@5 下降 0.0784；
+- 计划路由 micro realization 为 0.8702；11 条缺少实际 metadata filter，3 条
+  计划声明的 table text/structured 路由没有由当前通用 runner 执行；
+- 精简同步包约 52 KB，7/7 文件大小与 SHA256 核验通过，不含密钥、全文、模型、
+  数据库或完整日志。
+
+本批修复证明评测口径和重排查询接线已按计划生效，但没有证明查询变换或重排产生
+整体正收益。M1-F1 状态为 `benchmark_evaluated`，仍不满足 `accepted`。
+
+后续问题按处理价值排序，但不在 M1-F1 自动实施：
+
+1. 修复 QueryTransformer action 与 `allowed_actions` 的契约稳定性，消除 11 条
+   可复现 validation fallback，并继续把术语保护作为独立约束；
+2. 修复 `clarification_required` 0/4 和 `complex_analysis` 10/18 的通用意图边界；
+3. 在独立开发集验证原问题锚点、条件变换和多查询融合，不用冻结测试集调权重；
+4. 按意图分析重排策略，尤其是 navigation/complex 的 Recall 退化；任何融合阈值
+   必须在开发集确定后再冻结测试；
+5. 另建表格、视觉和摘要 workflow 评测，并复核 Chunk qrels；不得重新把代理文本
+   检索分数混入通用检索主指标。
+
 2026-07-30 服务器预检确认冻结样本的 6 份原始 PDF 已存在，但尚未生成对应的
 MinerU 解析产物、检索 Chunk 和真实稠密索引。因此：
 
@@ -912,6 +956,7 @@ M1-E，不以临时自造样本替代冻结评测集。
 | 2026-07-30 | 1.5 | 固定 M1-E runner、证据组映射、原问题/计划查询对照、四检索配置、指标和产物契约 | 运行首次正式基线前必须区分样本契约差异、证据映射失败和真实检索失败 | M1-E 评测实现与服务器基线 |
 | 2026-07-30 | 1.6 | 记录首次六文档真实冻结基线，并保持未验收状态 | 基线已完成，但查询动作契约、部分意图/路由和 Gold→Chunk 映射仍有明显缺口 | M1-E 结果与下一步边界 |
 | 2026-07-31 | 1.7 | 增加 M1-F1：拆分动作/约束指标，区分规划与执行路径，按真实 workflow 限定通用检索主指标，标记自动 qrel candidate，并修复多查询重排目标 | 首次基线中的合同污染和重排接线错误会使后续调优结论失真，需按价值优先修复 | M1 评测器、检索执行元数据与多查询重排 |
+| 2026-07-31 | 1.8 | 记录 M1-F1 六文档 runner v2 真实验证与下一批问题优先级，保持未验收 | 修复后的评测口径已生效，但查询变换和重排仍无整体正收益，需防止用冻结测试集直接调参 | M1-F1 验证结论与停止边界 |
 
 ## 13. 外部技术依据
 

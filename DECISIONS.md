@@ -80,6 +80,11 @@ CDC、Demo 和新产品阶段均需要明确的范围决策。
   关系查询；两类结果按 Chunk 合并。当前只接收上游显式意图与结构化查询，不在
   检索器内部推测表格意图。
 - 查询重写和查询扩展只改变检索查询；AnswerPolicy 始终接收用户原问题。
+- 多查询只用于扩大 BM25/Dense 候选召回；CrossEncoder 重排以原始用户问题作为
+  最终相关性目标，不以任一子查询替代用户问题。
+- `QueryPlan.retrieval_routes` 表示规划能力，检索 trace 另以 `executed_routes`
+  记录实际执行的 sparse、dense、metadata filter、multi-query 和结构化表格路径；
+  不再用规划标签命中率代替执行路径验证。
 - 中英文统一使用 BGE-M3 与 bge-reranker-v2-m3；查询变换默认保持文档和问题
   语言，不对中文查询无条件生成英文扩展。只有冻结评测证明持续语言差距时才
   另立语言专用模型方案。
