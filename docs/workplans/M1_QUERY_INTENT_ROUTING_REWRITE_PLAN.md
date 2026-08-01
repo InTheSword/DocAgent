@@ -1,7 +1,7 @@
 # M1 查询意图、路由与查询变换实施计划
 
 > 文件性质：当前阶段临时实施依据
-> 计划版本：2.2
+> 计划版本：2.3
 > 状态：`benchmark_evaluated`
 > 建立日期：2026-07-30
 > 适用范围：从用户查询输入到检索请求输出，不包含最终答案生成
@@ -905,6 +905,61 @@ M1-F2 把“简单正文事实”硬编码为 Hybrid 但不重排，将查询复
 - M1-F3 状态为 `real_model_verified`。本批没有重跑冻结 benchmark，不宣称重排已对全部
   workflow 带来正收益。
 
+### M1-F4：M1-F2/F3 修正后 workflow 评测
+
+#### 当前缺口
+
+1. runner v2 可生成四种检索器的原始对照，但没有把 `QueryPlan.retriever_mode`
+   对应的生产策略结果单独汇总；
+2. M1-F2 的严格三字段 Router 输出、单一 Transformer 策略、纠错重试和有界
+   fallback 尚未在 94 条冻结样本上重新统计；
+3. M1-F3 恢复普通正文事实重排后，尚未分离报告 Hybrid→Hybrid+Reranker
+   对 Top-5 召回、首个 Gold 排名、命中得失和延迟的影响。
+
+#### 冻结评测合同
+
+1. 继续使用 94 条 `frozen_query_samples.jsonl`、6 份既有 MinerU Chunk 和真实
+   BGE-M3 索引；不修改样本、Gold 映射规则、Prompt、候选规模、RRF 或重排器参数。
+2. 查询侧报告：
+   - intent accuracy 与 workflow accuracy；
+   - transform action Exact Match 与 must-preserve recall；
+   - 单一变换策略合法率、retriever mode accuracy；
+   - Router/Transformer 的 `used/used_after_retry/validation_failed/fallback/short_circuited`
+     计数及平均尝试次数。
+3. 检索侧保留 `original|planned × bm25|dense|hybrid|hybrid_rerank` 原始指标，
+   并新增：
+   - `planned` 查询按预测 `retriever_mode` 选中的 policy-selected 指标；
+   - 按 `semantic_fact/navigation/complex_analysis` 分组的 Hybrid 与
+     Hybrid+Reranker 对照；
+   - Recall@5、MRR@10、Hit@5、平均/p95 延迟差值；
+   - Top-5 命中 `gained/lost/unchanged` 以及首个 Gold 排名
+     `improved/equal/worsened` 计数。
+4. 自动 Gold→Chunk 映射仍是未复核 qrel candidate；检索分数保持 provisional。
+   本次状态最高为 `benchmark_evaluated`，不以分数高低决定程序是否成功。
+
+#### 文件范围、验收与产物
+
+- 仅修改 `scripts/eval_m1_query_retrieval.py`、`tests/test_m1_query_retrieval_eval.py`、
+  本计划与相关状态文档；
+- 本地使用合成 detail/prediction 验证新指标的配对、差值、转移计数和
+  policy-selected 选择，并运行相关回归；
+- 服务器使用真实 `qwen3.7-max-2026-05-17`、BGE-M3 与
+  `bge-reranker-v2-m3` 执行一次新运行；
+- 固定运行 ID 为 `m1_f2_f3_workflow_eval_20260801`，完整产物仅留服务器，
+  精选包保存到 `outputs/sync/m1_f2_f3_workflow_eval_20260801/`；
+- 评测成功条件：94 条查询侧记录完整、通用文本 workflow 检索详情完整、
+  新增指标可重现且紧凑产物校验通过；不要求指标必须超过 v2。
+
+#### 资源边界与停止条件
+
+- 评测程序和单测属于 `local_only`；六文档真实 API/模型评测属于
+  `server_required`；
+- 不调用 MinerU、不重建 Chunk、不下载或安装依赖；
+- 若发现评测程序的通用缺陷，先更新本计划再修复；质量分数不作为本批继续
+  调优的授权；
+- 完成紧凑产物核验、结果记录和项目状态更新后停止，不进入 Prompt/RRF/
+  Reranker 调参、专用表格/视觉评测或答案质量评测。
+
 2026-07-30 服务器预检确认冻结样本的 6 份原始 PDF 已存在，但尚未生成对应的
 MinerU 解析产物、检索 Chunk 和真实稠密索引。因此：
 
@@ -1107,6 +1162,7 @@ M1-E，不以临时自造样本替代冻结评测集。
 | 2026-08-01 | 2.0 | 记录 M1-F2 本地/服务器回归、真实 Qwen API 与真实 BGE-M3/reranker 条件化接线结果，并停止在 `real_model_verified` | 当前执行契约已获真实组件证据，但未使用冻结集调优或重跑正式 benchmark | M1-F2 验证结论、状态与停止边界 |
 | 2026-08-01 | 2.1 | 增加 M1-F3：普通正文事实默认恢复 Hybrid+Reranker，专用 workflow 保留有依据的绕过 | M1-F2 错误将查询复杂度与是否精排绑定，且与已有按意图分析证据不符 | 确定性 workflow 策略、检索模式接线与定向测试 |
 | 2026-08-01 | 2.2 | 记录 M1-F3 本地回归与真实 BGE-M3/reranker 事实查询冒烟，并停止在 `real_model_verified` | 修正后的执行模式已获真实组件接线证据，但尚未进行正式分类评测 | M1-F3 验证结论、状态与停止边界 |
+| 2026-08-01 | 2.3 | 增加 M1-F4：构建并执行 M1-F2/F3 修正后的 workflow 评测 | 现有 runner 缺少结构化输出/重试/fallback、policy-selected 及按意图重排转移指标 | M1 runner、定向测试、真实 API/GPU 评测与紧凑产物 |
 
 ## 13. 外部技术依据
 

@@ -30,7 +30,7 @@ from docagent.schemas import Chunk
 from docagent.utils.jsonl import read_jsonl, write_jsonl
 
 
-RUNNER_VERSION = "m1-query-retrieval-eval-v2"
+RUNNER_VERSION = "m1-query-retrieval-eval-v3"
 RETRIEVAL_MODES = ("bm25", "dense", "hybrid", "hybrid_rerank")
 QUERY_VARIANTS = ("original", "planned")
 TRANSFORM_ACTIONS = frozenset(
@@ -49,6 +49,17 @@ INTENT_WORKFLOWS = {
     "document_summary": "document_summary",
     "no_retrieval": "no_retrieval",
     "clarification_required": "clarification",
+}
+INTENT_RETRIEVER_MODES = {
+    "semantic_fact": "hybrid_rerank",
+    "navigation": "bm25",
+    "complex_analysis": "hybrid_rerank",
+    "table_lookup": "bm25",
+    "table_analysis": "bm25",
+    "visual_lookup": "hybrid",
+    "document_summary": "none",
+    "no_retrieval": "none",
+    "clarification_required": "none",
 }
 REQUIRED_SAMPLE_FIELDS = {
     "sample_id",
@@ -116,6 +127,10 @@ def _transform_actions(actions: Iterable[object]) -> list[str]:
 
 def _workflow_for_intent(intent: object) -> str:
     return INTENT_WORKFLOWS.get(str(intent), "unknown")
+
+
+def _retriever_mode_for_intent(intent: object) -> str:
+    return INTENT_RETRIEVER_MODES.get(str(intent), "unknown")
 
 
 def _generic_retrieval_samples(samples: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -423,6 +438,22 @@ def _query_prediction(
     predicted_routes = list(plan["retrieval_routes"])
     expected_workflow = _workflow_for_intent(sample["intent"])
     predicted_workflow = _workflow_for_intent(decision["intent"])
+    expected_retriever_mode = _retriever_mode_for_intent(sample["intent"])
+    predicted_retriever_mode = str(plan.get("retriever_mode") or "unknown")
+    strategy_actions = [
+        str(action) for action in predicted_actions if str(action) in TRANSFORM_ACTIONS
+    ]
+    if decision.get("intent") == "no_retrieval":
+        single_strategy_legal = not predicted_actions
+    elif decision.get("intent") == "clarification_required":
+        single_strategy_legal = strategy_actions == ["request_clarification"]
+    else:
+        single_strategy_legal = (
+            len(strategy_actions) == 1 and len(strategy_actions) == len(predicted_actions)
+        )
+    trace = dict(output.get("trace") or {})
+    router_trace = dict(trace.get("intent_router") or {})
+    transformer_trace = dict(trace.get("query_transformer") or {})
     query_text = " ".join([*plan.get("retrieval_queries", []), *plan.get("preserved_terms", [])])
     preserved = [
         term
@@ -443,6 +474,8 @@ def _query_prediction(
         "predicted_routes": predicted_routes,
         "expected_workflow": expected_workflow,
         "predicted_workflow": predicted_workflow,
+        "expected_retriever_mode": expected_retriever_mode,
+        "predicted_retriever_mode": predicted_retriever_mode,
         "must_preserve_count": len(sample["must_preserve"]),
         "preserved_count": len(preserved),
         "intent_match": decision["intent"] == sample["intent"],
@@ -451,11 +484,21 @@ def _query_prediction(
         "legacy_action_exact_match": predicted_actions == expected_actions,
         "legacy_action_set_match": set(predicted_actions) == set(expected_actions),
         "workflow_match": predicted_workflow == expected_workflow,
+        "retriever_mode_match": predicted_retriever_mode == expected_retriever_mode,
+        "single_transform_strategy_legal": single_strategy_legal,
         "required_routes_hit": set(expected_routes).issubset(predicted_routes),
         "route_hit_count": len(set(expected_routes).intersection(predicted_routes)),
         "must_preserve_all": len(preserved) == len(sample["must_preserve"]),
         "decision_source": decision.get("source"),
         "transformation_source": plan.get("transformation_source"),
+        "router_status": str(router_trace.get("status") or "unknown"),
+        "router_attempt_count": int(router_trace.get("attempt_count") or 0),
+        "router_validation_error_count": len(router_trace.get("validation_errors") or []),
+        "transformer_status": str(transformer_trace.get("status") or "unknown"),
+        "transformer_attempt_count": int(transformer_trace.get("attempt_count") or 0),
+        "transformer_validation_error_count": len(
+            transformer_trace.get("validation_errors") or []
+        ),
         "query_decision": decision,
         "query_plan": plan,
         "trace": output["trace"],
@@ -479,6 +522,12 @@ def _query_metric_group(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "sample_count": len(rows),
         "intent_accuracy": _rate(sum(bool(row["intent_match"]) for row in rows), len(rows)),
         "workflow_accuracy": _rate(sum(bool(row["workflow_match"]) for row in rows), len(rows)),
+        "retriever_mode_accuracy": _rate(
+            sum(bool(row.get("retriever_mode_match")) for row in rows), len(rows)
+        ),
+        "single_transform_strategy_legal_rate": _rate(
+            sum(bool(row.get("single_transform_strategy_legal")) for row in rows), len(rows)
+        ),
         "transform_action_exact_match": _rate(
             sum(bool(row["transform_action_exact_match"]) for row in rows), len(rows)
         ),
@@ -502,6 +551,30 @@ def _query_metric_group(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "decision_sources": dict(sorted(Counter(str(row["decision_source"]) for row in rows).items())),
         "transformation_sources": dict(
             sorted(Counter(str(row["transformation_source"]) for row in rows).items())
+        ),
+        "router_statuses": dict(
+            sorted(Counter(str(row.get("router_status") or "unknown") for row in rows).items())
+        ),
+        "transformer_statuses": dict(
+            sorted(
+                Counter(str(row.get("transformer_status") or "unknown") for row in rows).items()
+            )
+        ),
+        "router_retry_count": sum(int(row.get("router_attempt_count") or 0) > 1 for row in rows),
+        "transformer_retry_count": sum(
+            int(row.get("transformer_attempt_count") or 0) > 1 for row in rows
+        ),
+        "router_validation_error_count": sum(
+            int(row.get("router_validation_error_count") or 0) for row in rows
+        ),
+        "transformer_validation_error_count": sum(
+            int(row.get("transformer_validation_error_count") or 0) for row in rows
+        ),
+        "mean_router_attempt_count": _mean(
+            int(row.get("router_attempt_count") or 0) for row in rows
+        ),
+        "mean_transformer_attempt_count": _mean(
+            int(row.get("transformer_attempt_count") or 0) for row in rows
         ),
     }
 
@@ -763,6 +836,122 @@ def _retrieval_metric_group(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _policy_selected_retrieval_metrics(
+    details: list[dict[str, Any]],
+    predictions: list[dict[str, Any]],
+) -> dict[str, Any]:
+    planned_rows = [row for row in details if row["query_variant"] == "planned"]
+    eligible_sample_ids = {str(row["sample_id"]) for row in planned_rows}
+    planned_mode_by_id = {
+        str(row["sample_id"]): str(row["query_plan"].get("retriever_mode") or "none")
+        for row in predictions
+    }
+    selected = [
+        row
+        for row in planned_rows
+        if row["retriever_mode"] == planned_mode_by_id.get(str(row["sample_id"]))
+    ]
+    return {
+        "query_variant": "planned",
+        "eligible_sample_count": len(eligible_sample_ids),
+        "selected_sample_count": len(selected),
+        "selection_coverage": _rate(len(selected), len(eligible_sample_ids)),
+        "mode_counts": dict(sorted(Counter(str(row["retriever_mode"]) for row in selected).items())),
+        "overall": _retrieval_metric_group(selected),
+        "by_intent": _group_metrics(selected, "intent", _retrieval_metric_group),
+    }
+
+
+def _reranker_ablation(details: list[dict[str, Any]]) -> dict[str, Any]:
+    planned_rows = [row for row in details if row["query_variant"] == "planned"]
+    by_sample: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
+    for row in planned_rows:
+        by_sample[str(row["sample_id"])][str(row["retriever_mode"])] = row
+    pairs = [
+        (rows["hybrid"], rows["hybrid_rerank"])
+        for rows in by_sample.values()
+        if "hybrid" in rows and "hybrid_rerank" in rows
+    ]
+    grouped: dict[str, list[tuple[dict[str, Any], dict[str, Any]]]] = defaultdict(list)
+    for pair in pairs:
+        grouped[str(pair[0]["intent"])].append(pair)
+    return {
+        "query_variant": "planned",
+        "overall": _reranker_ablation_group(pairs),
+        "by_intent": {
+            intent: _reranker_ablation_group(grouped[intent]) for intent in sorted(grouped)
+        },
+    }
+
+
+def _reranker_ablation_group(
+    pairs: list[tuple[dict[str, Any], dict[str, Any]]],
+) -> dict[str, Any]:
+    hybrid_rows = [pair[0] for pair in pairs]
+    reranked_rows = [pair[1] for pair in pairs]
+    hybrid_metrics = _retrieval_metric_group(hybrid_rows)
+    reranked_metrics = _retrieval_metric_group(reranked_rows)
+    hit_transitions = Counter()
+    rank_transitions = Counter()
+    for hybrid, reranked in pairs:
+        hybrid_hit = bool(hybrid["hit_at_5"])
+        reranked_hit = bool(reranked["hit_at_5"])
+        if not hybrid_hit and reranked_hit:
+            hit_transitions["gained"] += 1
+        elif hybrid_hit and not reranked_hit:
+            hit_transitions["lost"] += 1
+        elif hybrid_hit:
+            hit_transitions["unchanged_hit"] += 1
+        else:
+            hit_transitions["unchanged_miss"] += 1
+
+        hybrid_rank = float(hybrid["reciprocal_rank_at_10"])
+        reranked_rank = float(reranked["reciprocal_rank_at_10"])
+        if reranked_rank > hybrid_rank:
+            rank_transitions["improved"] += 1
+        elif reranked_rank < hybrid_rank:
+            rank_transitions["worsened"] += 1
+        else:
+            rank_transitions["equal"] += 1
+
+    return {
+        "sample_count": len(pairs),
+        "hybrid": hybrid_metrics,
+        "hybrid_rerank": reranked_metrics,
+        "recall_at_5_delta": _rounded_delta(
+            reranked_metrics["recall_at_5_end_to_end"],
+            hybrid_metrics["recall_at_5_end_to_end"],
+        ),
+        "mapped_recall_at_5_delta": _rounded_delta(
+            reranked_metrics["recall_at_5_mapped_only"],
+            hybrid_metrics["recall_at_5_mapped_only"],
+        ),
+        "mrr_at_10_delta": _rounded_delta(
+            reranked_metrics["mrr_at_10"], hybrid_metrics["mrr_at_10"]
+        ),
+        "hit_rate_at_5_delta": _rounded_delta(
+            reranked_metrics["hit_rate_at_5"], hybrid_metrics["hit_rate_at_5"]
+        ),
+        "mean_latency_ms_delta": _rounded_delta(
+            reranked_metrics["mean_latency_ms"], hybrid_metrics["mean_latency_ms"]
+        ),
+        "p95_latency_ms_delta": _rounded_delta(
+            reranked_metrics["p95_latency_ms"], hybrid_metrics["p95_latency_ms"]
+        ),
+        "hit_transitions": {
+            key: int(hit_transitions[key])
+            for key in ("gained", "lost", "unchanged_hit", "unchanged_miss")
+        },
+        "rank_transitions": {
+            key: int(rank_transitions[key]) for key in ("improved", "equal", "worsened")
+        },
+    }
+
+
+def _rounded_delta(after: float, before: float) -> float:
+    return round(float(after) - float(before), 6)
+
+
 def build_failures(
     predictions: list[dict[str, Any]],
     mappings: list[dict[str, Any]],
@@ -777,8 +966,10 @@ def build_failures(
                 "workflow_match",
                 "transform_action_exact_match",
                 "must_preserve_all",
+                "retriever_mode_match",
+                "single_transform_strategy_legal",
             )
-            if not row[key]
+            if not row.get(key)
         ]
         if failed:
             failures.append({"type": "query_contract", "sample_id": row["sample_id"], "failed_checks": failed})
@@ -831,6 +1022,8 @@ def finalize_outputs(
 ) -> dict[str, Any]:
     query_report = query_metrics(predictions)
     retrieval_report = retrieval_metrics(details)
+    policy_selected_report = _policy_selected_retrieval_metrics(details, predictions)
+    reranker_ablation_report = _reranker_ablation(details)
     failures = build_failures(predictions, mappings, details)
     mapping_groups = [group for row in mappings for group in row["groups"]]
     workflow_coverage = _workflow_coverage(samples)
@@ -864,6 +1057,8 @@ def finalize_outputs(
         ),
         "query": query_report,
         "retrieval": retrieval_report,
+        "policy_selected_retrieval": policy_selected_report,
+        "reranker_ablation": reranker_ablation_report,
     }
     summary = {
         "run_id": args.run_id,
@@ -887,6 +1082,7 @@ def finalize_outputs(
             "Automatic source-to-chunk alignments are unreviewed qrel candidates, so retrieval metrics are provisional.",
             "Legacy action and route-label metrics are diagnostics; transform actions, preservation, workflow dispatch, and executed routes are reported separately.",
             "Generic retrieval metrics only cover semantic_fact, navigation, and the current static complex_analysis text workflow.",
+            "Policy-selected retrieval uses each predicted QueryPlan.retriever_mode and does not replace the four fixed-mode ablations.",
             "Table, visual, summary, no-retrieval, and clarification workflows require separate evaluators.",
             "The evaluation covers retrieval and query planning, not final answer quality.",
         ],
@@ -918,6 +1114,10 @@ def finalize_outputs(
             "intent_accuracy": query_report["overall"]["intent_accuracy"],
             "workflow_accuracy": query_report["overall"]["workflow_accuracy"],
             "transform_action_exact_match": query_report["overall"]["transform_action_exact_match"],
+            "retriever_mode_accuracy": query_report["overall"]["retriever_mode_accuracy"],
+            "single_transform_strategy_legal_rate": query_report["overall"]["single_transform_strategy_legal_rate"],
+            "policy_selected_recall_at_5": policy_selected_report["overall"]["recall_at_5_end_to_end"],
+            "policy_selected_mrr_at_10": policy_selected_report["overall"]["mrr_at_10"],
             "planned_hybrid_rerank_recall_at_5": retrieval_report["overall"]["planned"]["hybrid_rerank"]["recall_at_5_end_to_end"],
             "planned_hybrid_rerank_mrr_at_10": retrieval_report["overall"]["planned"]["hybrid_rerank"]["mrr_at_10"],
             "planned_hybrid_rerank_route_realization": retrieval_report["overall"]["planned"]["hybrid_rerank"]["planned_route_micro_realization"],
@@ -932,6 +1132,8 @@ def finalize_outputs(
 def _summary_markdown(summary: dict[str, Any]) -> str:
     query = summary["metrics"]["query"]["overall"]
     retrieval = summary["metrics"]["retrieval"]["overall"]
+    policy_selected = summary["metrics"]["policy_selected_retrieval"]
+    reranker_ablation = summary["metrics"]["reranker_ablation"]
     lines = [
         "# M1 Query and Retrieval Frozen Baseline",
         "",
@@ -943,9 +1145,13 @@ def _summary_markdown(summary: dict[str, Any]) -> str:
         "- chunk qrels reviewed: `false` (metrics are provisional)",
         f"- intent accuracy: {query['intent_accuracy']:.4f}",
         f"- workflow accuracy: {query['workflow_accuracy']:.4f}",
+        f"- retriever mode accuracy: {query['retriever_mode_accuracy']:.4f}",
+        f"- single transform strategy legal rate: {query['single_transform_strategy_legal_rate']:.4f}",
         f"- transform action ordered EM: {query['transform_action_exact_match']:.4f}",
         f"- legacy action ordered EM: {query['legacy_action_exact_match']:.4f}",
         f"- legacy required-route labels all-hit: {query['legacy_required_routes_all_hit_rate']:.4f}",
+        f"- router statuses: `{json.dumps(query['router_statuses'], ensure_ascii=False, sort_keys=True)}`",
+        f"- transformer statuses: `{json.dumps(query['transformer_statuses'], ensure_ascii=False, sort_keys=True)}`",
         "",
         "| Variant | Retriever | Recall@5 (E2E) | Recall@5 (mapped) | MRR@10 | Hit@5 |",
         "|---|---|---:|---:|---:|---:|",
@@ -958,6 +1164,29 @@ def _summary_markdown(summary: dict[str, Any]) -> str:
                 f"{row['recall_at_5_mapped_only']:.4f} | {row['mrr_at_10']:.4f} | "
                 f"{row['hit_rate_at_5']:.4f} |"
             )
+    lines.extend(
+        [
+            "",
+            "## Policy-selected planned retrieval",
+            "",
+            f"- selected/eligible samples: {policy_selected['selected_sample_count']}/{policy_selected['eligible_sample_count']}",
+            f"- mode counts: `{json.dumps(policy_selected['mode_counts'], ensure_ascii=False, sort_keys=True)}`",
+            f"- Recall@5 (E2E): {policy_selected['overall']['recall_at_5_end_to_end']:.4f}",
+            f"- MRR@10: {policy_selected['overall']['mrr_at_10']:.4f}",
+            "",
+            "## Planned-query reranker ablation",
+            "",
+            "| Intent | Samples | Recall@5 delta | MRR@10 delta | Hit gained | Hit lost | Rank improved | Rank worsened | Mean latency delta (ms) |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for intent, row in reranker_ablation["by_intent"].items():
+        lines.append(
+            f"| {intent} | {row['sample_count']} | {row['recall_at_5_delta']:.4f} | "
+            f"{row['mrr_at_10_delta']:.4f} | {row['hit_transitions']['gained']} | "
+            f"{row['hit_transitions']['lost']} | {row['rank_transitions']['improved']} | "
+            f"{row['rank_transitions']['worsened']} | {row['mean_latency_ms_delta']:.3f} |"
+        )
     lines.extend(
         [
             "",

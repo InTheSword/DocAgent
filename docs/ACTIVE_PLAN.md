@@ -76,11 +76,10 @@ Qwen、VLM、SFT/GRPO 或大型数据集的变更，必须先按
 
 ## 当前里程碑
 
-M1-F3 已完成并达到 `real_model_verified`：普通正文事实查询默认使用
-Hybrid+Reranker；精确导航、纯表格结构化、纯视觉、摘要和控制路径保留有依据的
-绕过。本地 99 项相关回归通过，服务器真实事实查询使用 BGE-M3 和
-`bge-reranker-v2-m3` 返回 3 个候选且 3/3 具有重排分数。本批没有重跑冻结基准，
-当前停止在正式 workflow 评测之前。
+M1-F4 正在构建并执行 M1-F2/F3 修正后的 workflow 评测。本批复用 94 条
+冻结查询、6 份既有 MinerU Chunk 与真实 BGE-M3 索引，补充严格输出/重试/fallback、
+retriever mode accuracy、policy-selected 检索和按意图 Reranker 得失指标。不修改
+冻结样本、Prompt、RRF、候选规模或重排参数。
 
 后续若要评估新契约的整体收益，必须先在临时计划中定义独立开发集与冻结测试重跑
 规则；不得用当前冻结测试集调 prompt、查询融合、reranker 阈值或候选规模，也不
