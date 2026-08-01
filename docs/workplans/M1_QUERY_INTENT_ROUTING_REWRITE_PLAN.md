@@ -1,7 +1,7 @@
 # M1 查询意图、路由与查询变换实施计划
 
 > 文件性质：当前阶段临时实施依据
-> 计划版本：2.3
+> 计划版本：2.4
 > 状态：`benchmark_evaluated`
 > 建立日期：2026-07-30
 > 适用范围：从用户查询输入到检索请求输出，不包含最终答案生成
@@ -960,6 +960,20 @@ M1-F2 把“简单正文事实”硬编码为 Hybrid 但不重排，将查询复
 - 完成紧凑产物核验、结果记录和项目状态更新后停止，不进入 Prompt/RRF/
   Reranker 调参、专用表格/视觉评测或答案质量评测。
 
+#### 评测后报告合同修正
+
+首次 v3 运行完成后发现两个不改变原始预测或检索结果的报告程序问题：
+
+1. v3 CLI 默认 run/output/sync 路径仍指向 v1 baseline，存在省略参数时覆盖历史
+   产物的风险；默认值统一改为 `m1_f2_f3_workflow_eval_20260801`。
+2. `transformation_source=fallback` 包含正常的 `not_needed` 确定性路径；汇总新增
+   `router_fallback_count` 和排除 `not_needed/short_circuited` 后的
+   `transformer_fallback_count`，同时单列 not-needed/short-circuit 计数。
+
+修正后只基于已保存的 94 条 prediction、94 条 mapping 和 432 条 retrieval
+detail 重算 summary/result/manifest/sync pack，不重复调用 LLM API、BGE-M3 或
+Reranker。
+
 2026-07-30 服务器预检确认冻结样本的 6 份原始 PDF 已存在，但尚未生成对应的
 MinerU 解析产物、检索 Chunk 和真实稠密索引。因此：
 
@@ -1163,6 +1177,7 @@ M1-E，不以临时自造样本替代冻结评测集。
 | 2026-08-01 | 2.1 | 增加 M1-F3：普通正文事实默认恢复 Hybrid+Reranker，专用 workflow 保留有依据的绕过 | M1-F2 错误将查询复杂度与是否精排绑定，且与已有按意图分析证据不符 | 确定性 workflow 策略、检索模式接线与定向测试 |
 | 2026-08-01 | 2.2 | 记录 M1-F3 本地回归与真实 BGE-M3/reranker 事实查询冒烟，并停止在 `real_model_verified` | 修正后的执行模式已获真实组件接线证据，但尚未进行正式分类评测 | M1-F3 验证结论、状态与停止边界 |
 | 2026-08-01 | 2.3 | 增加 M1-F4：构建并执行 M1-F2/F3 修正后的 workflow 评测 | 现有 runner 缺少结构化输出/重试/fallback、policy-selected 及按意图重排转移指标 | M1 runner、定向测试、真实 API/GPU 评测与紧凑产物 |
+| 2026-08-01 | 2.4 | 修正 v3 默认产物路径与 Transformer fallback 报告语义 | 首次运行暴露默认路径可覆盖历史 baseline，且 not-needed 路径可被误读为模型回退 | runner CLI 默认值、查询诊断指标与无模型报告重算 |
 
 ## 13. 外部技术依据
 

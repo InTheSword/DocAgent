@@ -570,6 +570,21 @@ def _query_metric_group(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "transformer_validation_error_count": sum(
             int(row.get("transformer_validation_error_count") or 0) for row in rows
         ),
+        "router_fallback_count": sum(
+            str(row.get("decision_source") or "") == "fallback" for row in rows
+        ),
+        "transformer_fallback_count": sum(
+            str(row.get("transformation_source") or "") == "fallback"
+            and str(row.get("transformer_status") or "")
+            not in {"not_needed", "short_circuited"}
+            for row in rows
+        ),
+        "transformer_not_needed_count": sum(
+            str(row.get("transformer_status") or "") == "not_needed" for row in rows
+        ),
+        "transformer_short_circuit_count": sum(
+            str(row.get("transformer_status") or "") == "short_circuited" for row in rows
+        ),
         "mean_router_attempt_count": _mean(
             int(row.get("router_attempt_count") or 0) for row in rows
         ),
@@ -1135,7 +1150,7 @@ def _summary_markdown(summary: dict[str, Any]) -> str:
     policy_selected = summary["metrics"]["policy_selected_retrieval"]
     reranker_ablation = summary["metrics"]["reranker_ablation"]
     lines = [
-        "# M1 Query and Retrieval Frozen Baseline",
+        "# M1 Query and Retrieval Evaluation",
         "",
         f"- status: `{summary['status']}`",
         f"- samples: {summary['metrics']['sample_count']}",
@@ -1152,6 +1167,8 @@ def _summary_markdown(summary: dict[str, Any]) -> str:
         f"- legacy required-route labels all-hit: {query['legacy_required_routes_all_hit_rate']:.4f}",
         f"- router statuses: `{json.dumps(query['router_statuses'], ensure_ascii=False, sort_keys=True)}`",
         f"- transformer statuses: `{json.dumps(query['transformer_statuses'], ensure_ascii=False, sort_keys=True)}`",
+        f"- router/transformer runtime fallback count: {query['router_fallback_count']}/{query['transformer_fallback_count']}",
+        f"- transformer not-needed/short-circuit count: {query['transformer_not_needed_count']}/{query['transformer_short_circuit_count']}",
         "",
         "| Variant | Retriever | Recall@5 (E2E) | Recall@5 (mapped) | MRR@10 | Hit@5 |",
         "|---|---|---:|---:|---:|---:|",
@@ -1310,16 +1327,16 @@ def _sha256(path: Path) -> str:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Evaluate the frozen M1 query and retrieval baseline.")
-    parser.add_argument("--run-id", default="m1_query_retrieval_baseline_20260730")
+    parser = argparse.ArgumentParser(description="Evaluate the frozen M1 query and retrieval workflow.")
+    parser.add_argument("--run-id", default="m1_f2_f3_workflow_eval_20260801")
     parser.add_argument("--stage", choices=("query", "retrieval", "all"), default="all")
     parser.add_argument("--samples", default="data/benchmark/m1_query_routing/frozen_query_samples.jsonl")
     parser.add_argument(
         "--corpus-manifest",
         default="outputs/m1_frozen_corpus_v1_20260730/document_manifest.json",
     )
-    parser.add_argument("--output-dir", default="outputs/m1_query_retrieval_baseline_20260730")
-    parser.add_argument("--sync-dir", default="outputs/sync/m1_query_retrieval_baseline_20260730")
+    parser.add_argument("--output-dir", default="outputs/m1_f2_f3_workflow_eval_20260801")
+    parser.add_argument("--sync-dir", default="outputs/sync/m1_f2_f3_workflow_eval_20260801")
     parser.add_argument("--router-env-file", default=".secrets/router_llm.env")
     parser.add_argument("--router-model", default="qwen3.7-max-2026-05-17")
     parser.add_argument("--dense-model-path", default="/root/autodl-tmp/models/bge-m3")

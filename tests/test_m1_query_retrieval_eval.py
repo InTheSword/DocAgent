@@ -15,6 +15,7 @@ from scripts.eval_m1_query_retrieval import (
     _retrieval_metric_group,
     finalize_outputs,
     map_gold_evidence,
+    parse_args,
     validate_samples,
 )
 
@@ -90,6 +91,16 @@ def _detail(
 def test_validate_samples_rejects_duplicate_ids() -> None:
     with pytest.raises(ValueError, match="duplicate"):
         validate_samples([_sample(), _sample()])
+
+
+def test_v3_cli_defaults_do_not_target_historical_baseline(monkeypatch) -> None:
+    monkeypatch.setattr("sys.argv", ["eval_m1_query_retrieval.py"])
+
+    args = parse_args()
+
+    assert args.run_id == "m1_f2_f3_workflow_eval_20260801"
+    assert args.output_dir == "outputs/m1_f2_f3_workflow_eval_20260801"
+    assert args.sync_dir == "outputs/sync/m1_f2_f3_workflow_eval_20260801"
 
 
 def test_gold_mapping_uses_page_and_verbatim_content() -> None:
@@ -234,6 +245,9 @@ def test_query_metrics_keep_ordered_and_set_action_em_separate() -> None:
     assert metrics["router_statuses"] == {"used_after_retry": 1}
     assert metrics["router_retry_count"] == 1
     assert metrics["router_validation_error_count"] == 1
+    assert metrics["router_fallback_count"] == 0
+    assert metrics["transformer_fallback_count"] == 0
+    assert metrics["transformer_not_needed_count"] == 0
 
 
 def test_retrieval_metrics_keep_unmapped_groups_in_e2e_denominator() -> None:
