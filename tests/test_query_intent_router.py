@@ -135,11 +135,12 @@ class SequencedLLMClient(FakeLLMClient):
 @pytest.mark.parametrize(
     ("task_type", "evidence_types", "multi_step", "intent", "retriever_mode"),
     [
-        ("fact_lookup", ["text"], False, "semantic_fact", "hybrid"),
+        ("fact_lookup", ["text"], False, "semantic_fact", "hybrid_rerank"),
         ("navigation", ["text"], False, "navigation", "bm25"),
         ("fact_lookup", ["table"], False, "table_lookup", "bm25"),
         ("analysis", ["table"], False, "table_analysis", "bm25"),
         ("fact_lookup", ["visual"], False, "visual_lookup", "hybrid"),
+        ("fact_lookup", ["text", "visual"], False, "complex_analysis", "hybrid_rerank"),
         ("analysis", ["text", "table"], True, "complex_analysis", "hybrid_rerank"),
         ("document_summary", ["text"], False, "document_summary", "none"),
         ("no_retrieval", [], False, "no_retrieval", "none"),
@@ -195,6 +196,7 @@ def test_intent_router_falls_back_on_invalid_output() -> None:
 
     assert result.decision.intent == "semantic_fact"
     assert result.decision.source == "fallback"
+    assert result.decision.retriever_mode == "hybrid_rerank"
     assert result.diagnostics["status"] == "validation_failed"
     assert result.diagnostics["attempt_count"] == 2
     assert "intent_router_validation_failed" in result.decision.warnings
@@ -244,9 +246,11 @@ def test_table_and_visual_profile_mismatch_remove_impossible_constraints() -> No
     )
 
     assert table_result.decision.retrieval_routes == ("dense", "sparse")
+    assert table_result.decision.retriever_mode == "hybrid_rerank"
     assert table_result.decision.metadata_filter.content_types == ()
     assert "table_intent_document_has_no_tables" in table_result.decision.warnings
     assert visual_result.decision.retrieval_routes == ("dense", "sparse")
+    assert visual_result.decision.retriever_mode == "hybrid_rerank"
     assert visual_result.decision.metadata_filter.content_types == ()
     assert "visual_intent_document_has_no_images" in visual_result.decision.warnings
 

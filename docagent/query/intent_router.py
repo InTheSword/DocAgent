@@ -286,16 +286,14 @@ def _build_decision(
         routes = tuple(route for route in routes if route not in {"table_text", "table_structured"})
         if not any(route in routes for route in {"dense", "sparse", "visual"}):
             routes = (*routes, "dense", "sparse")
-        if retriever_mode == "bm25":
-            retriever_mode = "hybrid"
+        retriever_mode = "hybrid_rerank"
         metadata = _without_content_constraints(metadata)
         active_warnings.append("table_intent_document_has_no_tables")
     if "visual" in evidence_types and profile.get("has_images") is False:
         routes = tuple(route for route in routes if route != "visual")
         if not any(route in routes for route in {"dense", "sparse", "table_text"}):
             routes = (*routes, "dense", "sparse")
-        if retriever_mode == "bm25":
-            retriever_mode = "hybrid"
+        retriever_mode = "hybrid_rerank"
         metadata = _without_content_constraints(metadata)
         active_warnings.append("visual_intent_document_has_no_images")
 
@@ -363,7 +361,7 @@ def _execution_policy(
 
     if task_type == "navigation" or evidence == {"table"}:
         retriever_mode = "bm25"
-    elif (task_type == "analysis" or multi_step) and "text" in evidence:
+    elif "text" in evidence:
         retriever_mode = "hybrid_rerank"
     else:
         retriever_mode = "hybrid"

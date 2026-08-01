@@ -38,7 +38,7 @@ def _decision(question: str, *, intent: str = "semantic_fact") -> QueryDecision:
         retrieval_routes=("multi_query", "dense", "sparse"),
         task_type="analysis" if intent == "complex_analysis" else "fact_lookup",
         multi_step=intent == "complex_analysis",
-        retriever_mode="hybrid_rerank" if intent == "complex_analysis" else "hybrid",
+        retriever_mode="hybrid_rerank",
         source="llm",
     )
 

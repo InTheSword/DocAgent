@@ -33,6 +33,9 @@ def test_query_policy_only_downgrades_configured_retrieval_capability() -> None:
     assert docagent_cli._resolve_retriever_mode(
         requested_mode="bm25", planned_mode="hybrid_rerank"
     ) == "bm25"
+    assert docagent_cli._resolve_retriever_mode(
+        requested_mode="hybrid", planned_mode="hybrid_rerank"
+    ) == "hybrid"
 
 
 def test_answer_output_contract_argument_builds_qwen_policy() -> None:
@@ -628,7 +631,7 @@ def test_doc_id_local_fact_qa_dry_run_returns_unified_json(tmp_path: Path) -> No
     assert payload["supporting_evidence_ids"]
 
 
-def test_simple_fact_query_downgrades_configured_reranker_to_hybrid(tmp_path: Path) -> None:
+def test_simple_fact_query_uses_configured_reranker(tmp_path: Path) -> None:
     db_path = _repository_with_document(tmp_path)
 
     payload = _run_cli(
@@ -654,21 +657,21 @@ def test_simple_fact_query_downgrades_configured_reranker_to_hybrid(tmp_path: Pa
 
     assert payload["status"] == "success"
     assert payload["task_type"] == "local_fact_qa"
-    assert payload["retriever_mode"] == "hybrid"
+    assert payload["retriever_mode"] == "hybrid_rerank"
     assert payload["retriever"]["uses_dense"] is True
-    assert payload["retriever"]["uses_reranker"] is False
+    assert payload["retriever"]["uses_reranker"] is True
     assert payload["retriever"]["dense"]["backend"] == "hash"
-    assert payload["retriever"]["reranker"] == {}
+    assert payload["retriever"]["reranker"]["backend"] == "keyword"
     assert payload["retriever"]["requested_mode"] == "hybrid_rerank"
-    assert payload["retriever"]["planned_mode"] == "hybrid"
+    assert payload["retriever"]["planned_mode"] == "hybrid_rerank"
     assert any(step.get("step") == "retrieve_evidence" for step in payload["workflow_trace"])
 
     summary = json.loads(Path(payload["artifact_dir"], "summary.json").read_text(encoding="utf-8"))
-    assert summary["retriever_mode"] == "hybrid"
+    assert summary["retriever_mode"] == "hybrid_rerank"
     assert summary["used_dense_retrieval"] is True
-    assert summary["used_reranker"] is False
+    assert summary["used_reranker"] is True
     trace = json.loads(Path(payload["artifact_dir"], "trace.json").read_text(encoding="utf-8"))
-    assert trace["retriever"]["mode"] == "hybrid"
+    assert trace["retriever"]["mode"] == "hybrid_rerank"
     assert any(step.get("step") == "retrieve_evidence" for step in trace["workflow_trace"])
 
 
