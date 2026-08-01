@@ -19,6 +19,18 @@ QUERY_INTENTS = frozenset(
         "clarification_required",
     }
 )
+QUERY_TASK_TYPES = frozenset(
+    {
+        "fact_lookup",
+        "navigation",
+        "analysis",
+        "document_summary",
+        "no_retrieval",
+        "clarification",
+    }
+)
+QUERY_EVIDENCE_TYPES = frozenset({"text", "table", "visual"})
+QUERY_RETRIEVER_MODES = frozenset({"none", "bm25", "dense", "hybrid", "hybrid_rerank"})
 QUERY_ACTIONS = frozenset(
     {
         "none",
@@ -62,11 +74,15 @@ METADATA_FILTER_FIELDS = frozenset(
 QUERY_DECISION_FIELDS = frozenset(
     {
         "original_question",
+        "task_type",
+        "evidence_types",
+        "multi_step",
         "intent",
         "confidence",
         "requires_retrieval",
         "allowed_actions",
         "retrieval_routes",
+        "retriever_mode",
         "metadata_filter",
         "reason",
         "source",
@@ -80,6 +96,7 @@ QUERY_PLAN_FIELDS = frozenset(
         "actions",
         "retrieval_queries",
         "retrieval_routes",
+        "retriever_mode",
         "metadata_filter",
         "preserved_terms",
         "transformation_source",
@@ -166,6 +183,10 @@ class QueryDecision:
     requires_retrieval: bool
     allowed_actions: tuple[str, ...]
     retrieval_routes: tuple[str, ...]
+    task_type: str = "fact_lookup"
+    evidence_types: tuple[str, ...] = ("text",)
+    multi_step: bool = False
+    retriever_mode: str = "hybrid"
     metadata_filter: QueryMetadataFilter = field(default_factory=QueryMetadataFilter)
     reason: str = ""
     source: str = "fallback"
@@ -174,6 +195,11 @@ class QueryDecision:
     def __post_init__(self) -> None:
         _validate_question(self.original_question)
         _validate_enum(self.intent, QUERY_INTENTS, "intent")
+        _validate_enum(self.task_type, QUERY_TASK_TYPES, "task type")
+        _validate_enum_values(self.evidence_types, QUERY_EVIDENCE_TYPES, "evidence types")
+        _validate_enum(self.retriever_mode, QUERY_RETRIEVER_MODES, "retriever mode")
+        if not isinstance(self.multi_step, bool):
+            raise ValueError("multi_step must be boolean")
         if isinstance(self.confidence, bool) or not isinstance(self.confidence, (int, float)):
             raise ValueError("confidence must be a number from 0 to 1")
         if not 0.0 <= float(self.confidence) <= 1.0:
@@ -188,11 +214,15 @@ class QueryDecision:
     def to_dict(self) -> dict[str, Any]:
         return {
             "original_question": self.original_question,
+            "task_type": self.task_type,
+            "evidence_types": list(self.evidence_types),
+            "multi_step": self.multi_step,
             "intent": self.intent,
             "confidence": float(self.confidence),
             "requires_retrieval": self.requires_retrieval,
             "allowed_actions": list(self.allowed_actions),
             "retrieval_routes": list(self.retrieval_routes),
+            "retriever_mode": self.retriever_mode,
             "metadata_filter": self.metadata_filter.to_dict(),
             "reason": self.reason,
             "source": self.source,
@@ -205,11 +235,15 @@ class QueryDecision:
         _reject_unknown_fields(payload, QUERY_DECISION_FIELDS, "QueryDecision")
         return cls(
             original_question=str(payload.get("original_question") or ""),
+            task_type=str(payload.get("task_type") or "fact_lookup"),
+            evidence_types=_string_tuple(payload.get("evidence_types") or ["text"]),
+            multi_step=payload.get("multi_step", False),
             intent=str(payload.get("intent") or ""),
             confidence=_strict_float(payload.get("confidence")),
             requires_retrieval=payload.get("requires_retrieval"),
             allowed_actions=_string_tuple(payload.get("allowed_actions")),
             retrieval_routes=_string_tuple(payload.get("retrieval_routes")),
+            retriever_mode=str(payload.get("retriever_mode") or "hybrid"),
             metadata_filter=QueryMetadataFilter.from_mapping(payload.get("metadata_filter")),
             reason=str(payload.get("reason") or ""),
             source=str(payload.get("source") or "fallback"),
@@ -224,6 +258,7 @@ class QueryPlan:
     actions: tuple[str, ...]
     retrieval_queries: tuple[str, ...]
     retrieval_routes: tuple[str, ...]
+    retriever_mode: str = "hybrid"
     metadata_filter: QueryMetadataFilter = field(default_factory=QueryMetadataFilter)
     preserved_terms: tuple[str, ...] = ()
     transformation_source: str = "fallback"
@@ -234,6 +269,7 @@ class QueryPlan:
         _validate_enum(self.intent, QUERY_INTENTS, "intent")
         _validate_enum_values(self.actions, QUERY_ACTIONS, "actions")
         _validate_enum_values(self.retrieval_routes, RETRIEVAL_ROUTES, "retrieval routes")
+        _validate_enum(self.retriever_mode, QUERY_RETRIEVER_MODES, "retriever mode")
         if len(self.retrieval_queries) > 4:
             raise ValueError("retrieval_queries cannot contain more than 4 queries")
         if any(not isinstance(query, str) or not query.strip() for query in self.retrieval_queries):
@@ -258,6 +294,7 @@ class QueryPlan:
             "actions": list(self.actions),
             "retrieval_queries": list(self.retrieval_queries),
             "retrieval_routes": list(self.retrieval_routes),
+            "retriever_mode": self.retriever_mode,
             "metadata_filter": self.metadata_filter.to_dict(),
             "preserved_terms": list(self.preserved_terms),
             "transformation_source": self.transformation_source,
@@ -274,6 +311,7 @@ class QueryPlan:
             actions=_string_tuple(payload.get("actions")),
             retrieval_queries=_string_tuple(payload.get("retrieval_queries")),
             retrieval_routes=_string_tuple(payload.get("retrieval_routes")),
+            retriever_mode=str(payload.get("retriever_mode") or "hybrid"),
             metadata_filter=QueryMetadataFilter.from_mapping(payload.get("metadata_filter")),
             preserved_terms=_string_tuple(payload.get("preserved_terms")),
             transformation_source=str(payload.get("transformation_source") or "fallback"),

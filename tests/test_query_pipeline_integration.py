@@ -24,15 +24,14 @@ def test_query_pipeline_separates_original_question_from_retrieval_queries() -> 
     question = "Why do Sections 3 and 4 report different results?"
     fake = SequencedLLMClient(
         [
-            {"intent": "complex_analysis", "confidence": 0.91, "reason": "multi-evidence"},
+            {"task_type": "analysis", "evidence_types": ["text"], "multi_step": True},
             {
-                "actions": ["decompose", "preserve_terms"],
+                "strategy": "decompose",
                 "retrieval_queries": [
                     "Section 3 reported results",
                     "Section 4 reported results",
                     "reasons for different results in Sections 3 and 4",
                 ],
-                "preserved_terms": ["3", "4"],
             },
         ]
     )

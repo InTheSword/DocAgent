@@ -122,22 +122,40 @@ class FakeLLMClient:
         return json.dumps(self.payload, ensure_ascii=False)
 
 
+class SequencedLLMClient(FakeLLMClient):
+    def __init__(self, payloads: list[dict[str, object]]) -> None:
+        super().__init__({})
+        self.payloads = list(payloads)
+
+    def complete(self, *, system_prompt: str, user_payload: dict[str, object]) -> str:
+        self.calls.append({"system_prompt": system_prompt, "user_payload": user_payload})
+        return json.dumps(self.payloads.pop(0), ensure_ascii=False)
+
+
 @pytest.mark.parametrize(
-    "intent",
+    ("task_type", "evidence_types", "multi_step", "intent", "retriever_mode"),
     [
-        "semantic_fact",
-        "navigation",
-        "table_lookup",
-        "table_analysis",
-        "visual_lookup",
-        "complex_analysis",
-        "document_summary",
-        "no_retrieval",
-        "clarification_required",
+        ("fact_lookup", ["text"], False, "semantic_fact", "hybrid"),
+        ("navigation", ["text"], False, "navigation", "bm25"),
+        ("fact_lookup", ["table"], False, "table_lookup", "bm25"),
+        ("analysis", ["table"], False, "table_analysis", "bm25"),
+        ("fact_lookup", ["visual"], False, "visual_lookup", "hybrid"),
+        ("analysis", ["text", "table"], True, "complex_analysis", "hybrid_rerank"),
+        ("document_summary", ["text"], False, "document_summary", "none"),
+        ("no_retrieval", [], False, "no_retrieval", "none"),
+        ("clarification", [], False, "clarification_required", "none"),
     ],
 )
-def test_llm_intent_router_supports_all_frozen_intents(intent: str) -> None:
-    fake = FakeLLMClient({"intent": intent, "confidence": 0.81, "reason": "brief"})
+def test_llm_intent_router_derives_compatible_intents_and_workflows(
+    task_type: str,
+    evidence_types: list[str],
+    multi_step: bool,
+    intent: str,
+    retriever_mode: str,
+) -> None:
+    fake = FakeLLMClient(
+        {"task_type": task_type, "evidence_types": evidence_types, "multi_step": multi_step}
+    )
 
     result = route_query_intent(
         question="What information is needed?",
@@ -146,12 +164,17 @@ def test_llm_intent_router_supports_all_frozen_intents(intent: str) -> None:
     )
 
     assert result.decision.intent == intent
+    assert result.decision.task_type == task_type
+    assert result.decision.evidence_types == tuple(evidence_types)
+    assert result.decision.multi_step is multi_step
+    assert result.decision.retriever_mode == retriever_mode
     assert result.decision.source == "llm"
     assert result.diagnostics == {
         "role": "intent_router",
-        "prompt_version": "m1-intent-router-v1",
+        "prompt_version": "m1-intent-router-v2",
         "model_id": "qwen3.7-max-2026-05-17",
         "status": "used",
+        "attempt_count": 1,
         "validation_errors": [],
         "error": {},
     }
@@ -160,7 +183,9 @@ def test_llm_intent_router_supports_all_frozen_intents(intent: str) -> None:
 
 
 def test_intent_router_falls_back_on_invalid_output() -> None:
-    fake = FakeLLMClient({"intent": "made_up", "confidence": 1.5, "reason": "invalid"})
+    fake = FakeLLMClient(
+        {"task_type": "made_up", "evidence_types": ["text"], "multi_step": False}
+    )
 
     result = route_query_intent(
         question="What method does the paper propose?",
@@ -171,19 +196,51 @@ def test_intent_router_falls_back_on_invalid_output() -> None:
     assert result.decision.intent == "semantic_fact"
     assert result.decision.source == "fallback"
     assert result.diagnostics["status"] == "validation_failed"
+    assert result.diagnostics["attempt_count"] == 2
     assert "intent_router_validation_failed" in result.decision.warnings
+
+
+def test_intent_router_retries_once_and_accepts_a_corrected_contract() -> None:
+    fake = SequencedLLMClient(
+        [
+            {
+                "task_type": "fact_lookup",
+                "evidence_types": ["text"],
+                "multi_step": False,
+                "confidence": 0.9,
+            },
+            {"task_type": "analysis", "evidence_types": ["text", "table"], "multi_step": True},
+        ]
+    )
+
+    result = route_query_intent(
+        question="Compare the narrative and table results.",
+        document_profile={"has_tables": True},
+        llm_client=fake,
+    )
+
+    assert result.decision.intent == "complex_analysis"
+    assert result.decision.evidence_types == ("text", "table")
+    assert result.diagnostics["status"] == "used_after_retry"
+    assert result.diagnostics["attempt_count"] == 2
+    assert "unknown intent router fields" in result.diagnostics["validation_errors"][0]
+    assert "previous_output_error" in fake.calls[1]["user_payload"]
 
 
 def test_table_and_visual_profile_mismatch_remove_impossible_constraints() -> None:
     table_result = route_query_intent(
         question="What is shown in Table 2?",
         document_profile={"has_tables": False, "has_images": True},
-        llm_client=FakeLLMClient({"intent": "table_lookup", "confidence": 0.9, "reason": "table"}),
+        llm_client=FakeLLMClient(
+            {"task_type": "fact_lookup", "evidence_types": ["table"], "multi_step": False}
+        ),
     )
     visual_result = route_query_intent(
         question="What is shown in Figure 2?",
         document_profile={"has_tables": True, "has_images": False},
-        llm_client=FakeLLMClient({"intent": "visual_lookup", "confidence": 0.9, "reason": "visual"}),
+        llm_client=FakeLLMClient(
+            {"task_type": "fact_lookup", "evidence_types": ["visual"], "multi_step": False}
+        ),
     )
 
     assert table_result.decision.retrieval_routes == ("dense", "sparse")

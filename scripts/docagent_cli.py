@@ -178,12 +178,6 @@ def _missing_user_best_resources(args: argparse.Namespace) -> list[str]:
         adapter_path = str(getattr(args, "adapter_path", "") or "")
         if not adapter_path or not _project_path(adapter_path).exists():
             missing.append(f"adapter_path:{adapter_path or '<empty>'}")
-    if str(getattr(args, "retriever_mode", "")) in {"dense", "hybrid", "hybrid_rerank"} and str(getattr(args, "dense_backend", "")) == "bge":
-        if not _project_path(args.dense_model_path).exists():
-            missing.append(f"dense_model_path:{args.dense_model_path}")
-    if str(getattr(args, "retriever_mode", "")) == "hybrid_rerank" and str(getattr(args, "reranker_backend", "")) == "cross_encoder":
-        if not _project_path(args.reranker_model_path).exists():
-            missing.append(f"reranker_model_path:{args.reranker_model_path}")
     if str(getattr(args, "parser", "")) == "mineru_api" and not (
         os.environ.get("MINERU_TOKEN")
         or os.environ.get("API_TOKEN")
@@ -633,7 +627,7 @@ def _query_pipeline_router_view(output: QueryPipelineOutput) -> dict[str, Any]:
         "requires_table_tool": decision.intent in {"table_lookup", "table_analysis"},
         "requires_calculation": decision.intent == "table_analysis",
         "requires_visual_understanding": decision.intent == "visual_lookup",
-        "target_evidence_types": list(decision.metadata_filter.content_types),
+        "target_evidence_types": list(decision.evidence_types),
         "query_rewrite": plan.retrieval_queries[0] if plan.retrieval_queries else "",
         "confidence": decision.confidence,
         "reason": decision.reason,
@@ -661,6 +655,20 @@ def _legacy_query_planner_view(plan: QueryPlan) -> dict[str, Any]:
         "warnings": list(plan.warnings),
         "llm_status": "used" if used_llm else plan.transformation_source,
     }
+
+
+def _resolve_retriever_mode(*, requested_mode: str, planned_mode: str) -> str:
+    """Apply the query policy without enabling a capability the caller did not request."""
+
+    requested = requested_mode if requested_mode in RETRIEVER_MODE_CHOICES else "bm25"
+    planned = planned_mode if planned_mode in RETRIEVER_MODE_CHOICES else requested
+    if planned == "bm25" or requested == "bm25":
+        return "bm25"
+    if requested == "dense":
+        return "dense"
+    if requested == "hybrid":
+        return "hybrid"
+    return planned
 
 
 def _find_document_by_sha(repository: DocumentRepository, sha256: str) -> dict[str, Any] | None:
@@ -1974,12 +1982,22 @@ def _run_local_fact_qa(
         )
         query_planner_payload = {"enabled": True, **active_query_plan.to_dict()}
         query_planner_warnings = ["query_planning_enabled", *active_query_plan.warnings]
-    if not dry_run and (active_query_plan is not None or retriever_mode != "bm25"):
+    planned_retriever_mode = (
+        active_query_plan.retriever_mode
+        if isinstance(active_query_plan, QueryPlan)
+        else retriever_mode
+    )
+    effective_retriever_mode = _resolve_retriever_mode(
+        requested_mode=retriever_mode,
+        planned_mode=planned_retriever_mode,
+    )
+    if not dry_run and (active_query_plan is not None or effective_retriever_mode != "bm25"):
         retriever_payload = {
-            "mode": retriever_mode,
+            "mode": effective_retriever_mode,
             "requested_mode": retriever_mode,
-            "uses_dense": retriever_mode in {"dense", "hybrid", "hybrid_rerank"},
-            "uses_reranker": retriever_mode == "hybrid_rerank",
+            "planned_mode": planned_retriever_mode,
+            "uses_dense": effective_retriever_mode in {"dense", "hybrid", "hybrid_rerank"},
+            "uses_reranker": effective_retriever_mode == "hybrid_rerank",
             "initialization_status": "started",
         }
         try:
@@ -1987,7 +2005,7 @@ def _run_local_fact_qa(
                 repository=repository,
                 doc_id=doc_id,
                 document_root=document_root,
-                mode=retriever_mode,
+                mode=effective_retriever_mode,
                 dense_backend=dense_backend,
                 dense_model_path=dense_model_path,
                 dense_device=dense_device,
@@ -2000,12 +2018,14 @@ def _run_local_fact_qa(
                 query_plan=active_query_plan,
             )
             retriever_payload["requested_mode"] = retriever_mode
+            retriever_payload["planned_mode"] = planned_retriever_mode
             retriever_payload["initialization_status"] = "success"
         except Exception as exc:
             retriever_error = {"type": type(exc).__name__, "message": str(exc)}
             failed_payload = {
                 **retriever_payload,
                 "requested_mode": retriever_mode,
+                "planned_mode": planned_retriever_mode,
                 "initialization_status": "failed",
                 "initialization_error": retriever_error,
             }
@@ -2038,8 +2058,9 @@ def _run_local_fact_qa(
             return payload
     elif dry_run:
         retriever_payload = {
-            "mode": retriever_mode if active_query_plan is not None else "dry_run_input_order",
+            "mode": effective_retriever_mode if active_query_plan is not None else "dry_run_input_order",
             "requested_mode": retriever_mode,
+            "planned_mode": planned_retriever_mode,
             "uses_dense": False,
             "uses_reranker": False,
             "initialization_status": "dry_run",

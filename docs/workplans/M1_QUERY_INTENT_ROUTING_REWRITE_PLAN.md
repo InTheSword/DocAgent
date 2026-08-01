@@ -79,9 +79,16 @@ RAG 查询意图。
 
 ## 3. 已确定的方案
 
-### 3.1 查询意图是领域概念，工具是执行细节
+### 3.1 查询决策采用正交字段，旧 intent 仅作兼容标签
 
-新的公开查询意图固定为：
+M1-F2 起，LLM 不再从一个混合枚举中直接选择最终 `intent`。查询决策拆为三个
+正交字段：
+
+- `task_type`：`fact_lookup/navigation/analysis/document_summary/no_retrieval/clarification`；
+- `evidence_types`：从 `text/table/visual` 选择一个或多个必要证据模态；
+- `multi_step`：是否需要多个具有独立信息职责的检索子问题。
+
+现有公开查询意图继续保留为兼容标签，并由上述字段确定性派生：
 
 | 意图 | 含义 |
 |---|---|
@@ -95,29 +102,31 @@ RAG 查询意图。
 | `no_retrieval` | 无需文档检索 |
 | `clarification_required` | 缺少关键对象、范围或条件 |
 
-`selected_tools` 不再属于新的查询决策契约。实际调用哪个现有执行器，由查询计划
-到运行时的适配层决定。
+原有硬分类同时混合任务、证据模态、复杂度和控制状态，无法正确表达“表格加正文的
+多步分析”等组合查询，不再作为 LLM 的首要判断空间。`selected_tools` 不属于新的
+查询决策契约。实际调用哪个现有执行器，由查询计划到运行时的适配层决定。
 
 ### 3.2 查询变换动作固定为受限集合
 
-查询动作固定为：
+LLM 只选择一个互斥的查询变换策略：
 
 - `none`
 - `rewrite`
 - `expand`
 - `decompose`
-- `preserve_terms`
-- `request_clarification`
+- `request_clarification` 仅由澄清短路路径确定性产生，不交给查询变换 LLM 选择
 
-LLM 只能从该集合选择。不同意图允许的动作由代码中的策略表约束，不能由提示词
-自由创造新动作。
+`preserve_terms` 不再是变换动作。实体、数字、年份、引文和缩写的保护由代码从原始
+问题确定性提取并校验。LLM 只能从当前请求提供的策略白名单中选择一个值，不能组合
+策略或创造新动作。
 
 ### 3.3 采用两阶段决策
 
 第一阶段是意图路由：
 
 - 输入只包含原始问题和轻量文档画像；
-- 输出意图、置信度、是否需要检索、候选执行路径和显式元数据约束；
+- 只输出 `task_type/evidence_types/multi_step`；
+- 检索必要性、兼容 intent、候选执行路径、元数据约束和执行模式由代码派生；
 - 不读取 PDF 正文、Chunk 或检索结果；
 - 不生成答案。
 
@@ -126,7 +135,7 @@ LLM 只能从该集合选择。不同意图允许的动作由代码中的策略�
 - 输入原始问题、第一阶段意图和允许动作；
 - 由 LLM 判断使用 `none`、`rewrite`、`expand` 或 `decompose`；
 - 仅在需要查询变换的路径调用；
-- 输出一个或多个检索查询；
+- 只输出一个 `strategy` 和一个或多个 `retrieval_queries`；
 - 不允许改变原问题中的实体、数字、时间、比较关系和输出目标。
 
 内部使用结构化 JSON 是合理的，因为这是机器间契约；最终面向用户的答案仍为
@@ -149,16 +158,16 @@ qwen3.7-max-2026-05-17
 
 | 角色 | 只负责 | 禁止行为 | 主要输出 |
 |---|---|---|---|
-| `intent_router` | 查询意图、检索必要性、候选路径与显式约束 | 回答问题、生成检索查询、读取正文、选择内部工具 | `QueryDecision` |
+| `intent_router` | 查询任务、必要证据模态与是否多步 | 回答问题、生成检索查询、读取正文、选择内部工具、输出置信度或理由 | `task_type/evidence_types/multi_step` |
 | `query_transformer` | 在允许动作内选择 `none/rewrite/expand/decompose` 并生成检索查询 | 改变原始需求、回答问题、创建新意图、选择执行工具 | `QueryPlan` 的变换字段 |
 
 两个角色不得共用一份模糊的“Router/Planner”提示词。提示词需要分别版本化，并在
 trace 中记录 `role`、`prompt_version`、`model_id` 和校验结果，不记录完整思维链。
 
-官方资料显示该快照属于 Qwen3.7-Max 系列并只支持思考模式；不同官方页面对
-Qwen3.7-Max 的严格结构化输出支持标注存在差异。因此实现不得只依赖
-`response_format=json_object` 保证正确性：可以继续请求 JSON，但必须保留本地
-JSON 提取、Schema 校验和最小回退，并通过该精确快照的真实 API 冒烟确认行为。
+官方结构化输出文档列明 Qwen3.7-Max 系列支持 JSON Mode。实现继续请求
+`response_format=json_object`，但 JSON 可解析不等于字段语义正确，因此必须叠加
+精确字段校验、枚举与组合约束、至多一次纠错重试和确定性回退，并通过当前精确快照
+的真实 API 冒烟确认行为。
 
 主要查询意图和查询变换使用上述外部 LLM API。确定性逻辑只负责：
 
@@ -205,6 +214,11 @@ JSON 提取、Schema 校验和最小回退，并通过该精确快照的真实 A
 | `clarification_required` | `clarification` |
 
 Metadata 始终作为召回前约束。它不产生独立候选集，也不参与 RRF。
+
+检索与重排按 workflow 条件执行：navigation 默认 Metadata 前置过滤加 BM25；简单
+正文事实默认 Hybrid 但不重排；复杂/多步正文分析才默认 Hybrid+Reranker；表格、
+视觉、摘要、无需检索和澄清路径不强制套用通用 Hybrid+Reranker。运行时显式配置是
+能力上限，查询计划只能降级，不能静默启用未配置的真实模型。
 
 ### 3.6 多语言查询与嵌入模型决策
 
@@ -279,11 +293,15 @@ Sparse retrieval: current BM25 implementation
 ```json
 {
   "original_question": "用户原始问题",
+  "task_type": "fact_lookup",
+  "evidence_types": ["text"],
+  "multi_step": false,
   "intent": "semantic_fact",
   "confidence": 0.0,
   "requires_retrieval": true,
   "allowed_actions": ["none", "rewrite", "expand", "preserve_terms"],
   "retrieval_routes": ["dense", "sparse"],
+  "retriever_mode": "hybrid",
   "metadata_filter": {
     "physical_pages": [],
     "printed_pages": [],
@@ -299,9 +317,9 @@ Sparse retrieval: current BM25 implementation
 要求：
 
 - `original_question` 必须逐字保留；
-- `intent`、动作和路径必须来自枚举；
-- `confidence` 只用于诊断和回退，不直接当作评测正确性；
-- `reason` 只允许简短说明，不保存思维链；
+- `task_type/evidence_types/multi_step` 是 LLM 决策的唯一字段，必须严格符合 Schema；
+- `intent`、动作、路径和 `retriever_mode` 由代码派生并来自枚举；
+- `confidence/reason` 只为读取旧产物和 CLI 兼容保留，新 LLM 不再生成这两个字段；
 - `metadata_filter` 只保存能从问题或文档画像可靠获得的约束。
 
 ### 4.2 QueryPlan
@@ -313,6 +331,7 @@ Sparse retrieval: current BM25 implementation
   "actions": ["rewrite", "preserve_terms"],
   "retrieval_queries": ["检索查询"],
   "retrieval_routes": ["dense", "sparse"],
+  "retriever_mode": "hybrid",
   "metadata_filter": {},
   "preserved_terms": [],
   "transformation_source": "llm",
@@ -759,6 +778,73 @@ outputs/sync/m1_query_retrieval_v2_20260731/
 5. 另建表格、视觉和摘要 workflow 评测，并复核 Chunk qrels；不得重新把代理文本
    检索分数混入通用检索主指标。
 
+### M1-F2：正交查询决策、受约束变换与条件化检索
+
+#### 当前缺口
+
+1. 单一 `intent` 混合任务、证据模态、复杂度和控制状态，组合查询表达能力不足；
+2. 查询变换输出允许多动作，且把 `preserve_terms` 当作动作，模型容易违反
+   `allowed_actions`；
+3. Router 输出 `confidence/reason`，但后续执行不需要这些主观字段；
+4. JSON Mode 之后只有一次本地校验，非法语义输出立即退回规则，没有有界纠错机会；
+5. CLI 的 `user_best` 默认对所有通用问答初始化 Hybrid+Reranker，未落实按 workflow
+   选择检索与重排。
+
+#### 已确定方案与接口契约
+
+1. Router LLM 精确输出：
+   `{"task_type":"...","evidence_types":["..."],"multi_step":false}`；禁止输出
+   置信度、理由、工具、路由、检索查询或额外字段。
+2. `task_type`、`evidence_types` 与 `multi_step` 经过严格类型、枚举和组合校验；旧
+   `intent`、`requires_retrieval`、`allowed_actions`、`retrieval_routes`、
+   `retriever_mode` 由确定性策略生成，保持既有产物和评测兼容。
+3. Transformer LLM 精确输出：
+   `{"strategy":"none|rewrite|expand|decompose","retrieval_queries":[...]}`；一次只允许
+   一个策略。保护术语完全由代码提取和校验，不由模型声明。
+4. 两个角色均使用 JSON Mode、严格字段拒绝、组合约束、至多一次携带精简校验错误的
+   纠错重试；两次均失败才使用既有有界回退。trace 只记录状态、尝试次数和错误类别，
+   不记录完整 prompt、原始生成或思维链。
+5. 条件化策略固定为：navigation→BM25；简单正文事实与视觉文本召回→Hybrid；
+   complex/multi-step 正文分析→Hybrid+Reranker；表格专用工具、摘要、no retrieval、
+   clarification 不强制初始化通用 Hybrid+Reranker。调用方显式 `retriever_mode` 是能力
+   上限，计划只允许降级。
+6. 本批只验证通用契约与执行选择，不用冻结六文档测试集调 prompt、融合权重、阈值或
+   reranker 候选规模。
+
+#### 文件范围
+
+- `docagent/query/schemas.py`
+- `docagent/query/intent_router.py`
+- `docagent/query/query_transformer.py`
+- `docagent/query/pipeline.py`（仅必要 trace 接线）
+- `scripts/docagent_cli.py`（仅检索模式降级适配）
+- 上述模块的定向测试
+- 本计划、`docs/ACTIVE_PLAN.md`，验收后更新稳定状态文档
+
+不修改 Dense/BM25/RRF/重排序算法、Chunk、表格关系索引、AnswerPolicy、VLM、SFT
+或 GRPO。
+
+#### 验收测试
+
+1. 中英文简单事实、定位、表格、视觉、混合证据、复杂分析、摘要、无需检索和澄清
+   通用样例均能表达为正交字段并派生兼容 intent/workflow；
+2. Router 与 Transformer 拒绝额外字段、未知枚举、非法组合、空查询、超量查询和
+   受保护术语丢失；首次非法、第二次合法时成功，连续非法时有界回退；
+3. Transformer 不再输出或接收 `preserved_terms`，也不会产生组合 action；
+4. navigation 不初始化 Dense/Reranker，简单事实不初始化 Reranker，complex/multi-step
+   在运行时允许时使用 Hybrid+Reranker；显式 BM25 配置不会被计划升级；
+5. 查询、检索和 CLI 相关回归通过；服务器真实 Qwen API 冒烟确认两个角色输出合法，
+   真实 BGE-M3/reranker 冒烟确认条件化初始化与执行元数据。
+
+#### 资源边界、迁移和停止条件
+
+- Prompt、Schema、校验、重试和模式选择属于 `local_only`；真实 Qwen API 属于
+  `server_optional`，真实 BGE-M3/reranker 联合接线属于 `server_required`；
+- 旧 `intent/confidence/reason` 和历史 `preserve_terms` 仍可从旧产物读取，但新 LLM
+  不再输出；删除兼容字段留待独立迁移，不在本批扩大范围；
+- 本批只使用人工编写的通用契约/冒烟样例开发。完成本地回归和一次服务器真实冒烟后
+  更新状态并停止，不自动运行冻结基准或进入动态 Agentic loop。
+
 2026-07-30 服务器预检确认冻结样本的 6 份原始 PDF 已存在，但尚未生成对应的
 MinerU 解析产物、检索 Chunk 和真实稠密索引。因此：
 
@@ -957,6 +1043,7 @@ M1-E，不以临时自造样本替代冻结评测集。
 | 2026-07-30 | 1.6 | 记录首次六文档真实冻结基线，并保持未验收状态 | 基线已完成，但查询动作契约、部分意图/路由和 Gold→Chunk 映射仍有明显缺口 | M1-E 结果与下一步边界 |
 | 2026-07-31 | 1.7 | 增加 M1-F1：拆分动作/约束指标，区分规划与执行路径，按真实 workflow 限定通用检索主指标，标记自动 qrel candidate，并修复多查询重排目标 | 首次基线中的合同污染和重排接线错误会使后续调优结论失真，需按价值优先修复 | M1 评测器、检索执行元数据与多查询重排 |
 | 2026-07-31 | 1.8 | 记录 M1-F1 六文档 runner v2 真实验证与下一批问题优先级，保持未验收 | 修复后的评测口径已生效，但查询变换和重排仍无整体正收益，需防止用冻结测试集直接调参 | M1-F1 验证结论与停止边界 |
+| 2026-08-01 | 1.9 | 增加 M1-F2：正交查询决策、单策略查询变换、JSON Mode 加严格校验/一次纠错重试，以及按 workflow 降级检索和重排 | 修复混合硬分类、11 条 action 合同失败、冗余 LLM 输出和全局 Hybrid+Reranker 执行 | 查询 Schema、两个 LLM 角色、CLI 检索模式适配与定向验证 |
 
 ## 13. 外部技术依据
 

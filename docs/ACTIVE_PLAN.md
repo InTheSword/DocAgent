@@ -74,13 +74,15 @@ Qwen、VLM、SFT/GRPO 或大型数据集的变更，必须先按
 `docs/GPU_SERVER_BOUNDARY.md` 分类；执行服务器操作前必须阅读
 `docs/SERVER_SETUP.md`。
 
-## 下一步
+## 当前里程碑
 
-M1-F1 已完成并保持 `benchmark_evaluated`。下一批优先处理 QueryTransformer
-`allowed_actions` 契约失败，再处理 clarification/complex 意图边界；新的方案、开发集
-和验收标准必须先写入临时计划后实施。不得用当前冻结测试集调查询融合或 reranker
-阈值，不得根据冻结样本增加个案 prompt、映射或路由规则，也不启动最终答案质量
-评测或训练。
+执行临时计划 1.9 的 M1-F2：将 LLM 查询判断迁移为正交任务/证据/复杂度字段，将
+查询变换收敛为单一策略，增加结构化输出的严格校验和一次有界纠错重试，并让 CLI
+按 workflow 对已配置的检索能力进行降级选择。先完成本地契约与回归测试，再同步
+服务器进行一次真实 Qwen API 及 BGE-M3/reranker 接线冒烟。
+
+不得用当前冻结测试集调 prompt、查询融合、reranker 阈值或候选规模，不得根据冻结
+样本增加个案规则，也不启动最终答案质量评测或训练。
 
 ## 停止条件
 
