@@ -1036,7 +1036,10 @@ def finalize_outputs(
     details: list[dict[str, Any]],
     output_dir: Path,
 ) -> dict[str, Any]:
-    git_commit = _git_commit()
+    report_git_commit = _git_commit()
+    evaluation_git_commit = str(
+        getattr(args, "evaluation_git_commit", "") or report_git_commit
+    )
     query_report = query_metrics(predictions)
     retrieval_report = retrieval_metrics(details)
     policy_selected_report = _policy_selected_retrieval_metrics(details, predictions)
@@ -1080,7 +1083,9 @@ def finalize_outputs(
     summary = {
         "run_id": args.run_id,
         "runner_version": RUNNER_VERSION,
-        "git_commit": git_commit,
+        "git_commit": report_git_commit,
+        "evaluation_git_commit": evaluation_git_commit,
+        "report_git_commit": report_git_commit,
         "status": "success",
         "benchmark_status": "benchmark_evaluated",
         "formal_answer_quality_evaluation": False,
@@ -1112,7 +1117,9 @@ def finalize_outputs(
     result = {
         "command": "eval_m1_query_retrieval",
         "status": "success",
-        "git_commit": git_commit,
+        "git_commit": report_git_commit,
+        "evaluation_git_commit": evaluation_git_commit,
+        "report_git_commit": report_git_commit,
         "artifact_paths": [
             str(output_dir / name)
             for name in (
@@ -1143,7 +1150,12 @@ def finalize_outputs(
         },
     }
     (output_dir / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-    _write_manifest(output_dir, args.run_id, git_commit)
+    _write_manifest(
+        output_dir,
+        args.run_id,
+        evaluation_git_commit=evaluation_git_commit,
+        report_git_commit=report_git_commit,
+    )
     _write_sync_pack(output_dir, args.sync_dir, summary, result, failures)
     return result
 
@@ -1218,7 +1230,13 @@ def _summary_markdown(summary: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _write_manifest(output_dir: Path, run_id: str, git_commit: str) -> None:
+def _write_manifest(
+    output_dir: Path,
+    run_id: str,
+    *,
+    evaluation_git_commit: str,
+    report_git_commit: str,
+) -> None:
     names = [
         "query_predictions.jsonl",
         "gold_chunk_mapping.jsonl",
@@ -1232,7 +1250,9 @@ def _write_manifest(output_dir: Path, run_id: str, git_commit: str) -> None:
     payload = {
         "run_id": run_id,
         "runner_version": RUNNER_VERSION,
-        "git_commit": git_commit,
+        "git_commit": report_git_commit,
+        "evaluation_git_commit": evaluation_git_commit,
+        "report_git_commit": report_git_commit,
         "files": [
             {"path": name, "size": (output_dir / name).stat().st_size, "sha256": _sha256(output_dir / name)}
             for name in names
@@ -1277,6 +1297,8 @@ def _write_sync_pack(
         "run_id": summary["run_id"],
         "runner_version": RUNNER_VERSION,
         "git_commit": summary["git_commit"],
+        "evaluation_git_commit": summary["evaluation_git_commit"],
+        "report_git_commit": summary["report_git_commit"],
         "files": [
             {"path": name, "size": (sync_dir / name).stat().st_size, "sha256": _sha256(sync_dir / name)}
             for name in names
@@ -1355,6 +1377,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reranker-model-path", default="/root/autodl-tmp/models/bge-reranker-v2-m3")
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--top-k", type=int, default=10)
+    parser.add_argument("--evaluation-git-commit", default="")
     parser.add_argument("--no-resume", action="store_true")
     return parser.parse_args()
 

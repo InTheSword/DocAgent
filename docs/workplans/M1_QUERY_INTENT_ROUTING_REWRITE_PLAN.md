@@ -1,7 +1,7 @@
 # M1 查询意图、路由与查询变换实施计划
 
 > 文件性质：当前阶段临时实施依据
-> 计划版本：2.5
+> 计划版本：2.6
 > 状态：`benchmark_evaluated`
 > 建立日期：2026-07-30
 > 适用范围：从用户查询输入到检索请求输出，不包含最终答案生成
@@ -969,8 +969,9 @@ M1-F2 把“简单正文事实”硬编码为 Hybrid 但不重排，将查询复
 2. `transformation_source=fallback` 包含正常的 `not_needed` 确定性路径；汇总新增
    `router_fallback_count` 和排除 `not_needed/short_circuited` 后的
    `transformer_fallback_count`，同时单列 not-needed/short-circuit 计数。
-3. summary/result/full manifest/sync manifest 必须写入实际 Git commit，使指标、
-   原始 detail 与代码版本可追溯。
+3. summary/result/full manifest/sync manifest 必须分别写入
+   `evaluation_git_commit` 与 `report_git_commit`：前者绑定生成原始 prediction/detail
+   的代码，后者绑定报告生成代码。兼容 `git_commit` 等于报告版本。
 
 修正后只基于已保存的 94 条 prediction、94 条 mapping 和 432 条 retrieval
 detail 重算 summary/result/manifest/sync pack，不重复调用 LLM API、BGE-M3 或
@@ -1181,6 +1182,7 @@ M1-E，不以临时自造样本替代冻结评测集。
 | 2026-08-01 | 2.3 | 增加 M1-F4：构建并执行 M1-F2/F3 修正后的 workflow 评测 | 现有 runner 缺少结构化输出/重试/fallback、policy-selected 及按意图重排转移指标 | M1 runner、定向测试、真实 API/GPU 评测与紧凑产物 |
 | 2026-08-01 | 2.4 | 修正 v3 默认产物路径与 Transformer fallback 报告语义 | 首次运行暴露默认路径可覆盖历史 baseline，且 not-needed 路径可被误读为模型回退 | runner CLI 默认值、查询诊断指标与无模型报告重算 |
 | 2026-08-01 | 2.5 | 为 v3 summary/result/full manifest/sync manifest 增加 Git commit | 紧凑产物已有文件哈希，但缺少代码版本会破坏重现性 | runner 产物可追溯合同与无模型报告重算 |
+| 2026-08-01 | 2.6 | 将评测执行 commit 与报告生成 commit 分开记录 | 原始 API/GPU 运行后只修正了报告程序，单一当前 commit 会误表达原始运行版本 | runner 参数、summary/result 与两层 manifest 可追溯字段 |
 
 ## 13. 外部技术依据
 

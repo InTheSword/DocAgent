@@ -101,6 +101,7 @@ def test_v3_cli_defaults_do_not_target_historical_baseline(monkeypatch) -> None:
     assert args.run_id == "m1_f2_f3_workflow_eval_20260801"
     assert args.output_dir == "outputs/m1_f2_f3_workflow_eval_20260801"
     assert args.sync_dir == "outputs/sync/m1_f2_f3_workflow_eval_20260801"
+    assert args.evaluation_git_commit == ""
 
 
 def test_gold_mapping_uses_page_and_verbatim_content() -> None:
@@ -362,6 +363,7 @@ def test_finalize_outputs_writes_v3_policy_and_ablation_contract(tmp_path) -> No
         reranker_model_path="reranker-model",
         top_k=10,
         sync_dir=str(sync_dir),
+        evaluation_git_commit="evaluation-commit",
     )
 
     result = finalize_outputs(
@@ -381,9 +383,13 @@ def test_finalize_outputs_writes_v3_policy_and_ablation_contract(tmp_path) -> No
     assert summary["runner_version"] == "m1-query-retrieval-eval-v3"
     assert summary["git_commit"]
     assert result["git_commit"] == summary["git_commit"]
+    assert summary["evaluation_git_commit"] == "evaluation-commit"
+    assert summary["report_git_commit"] == summary["git_commit"]
     assert summary["metrics"]["policy_selected_retrieval"]["selected_sample_count"] == 1
     assert summary["metrics"]["reranker_ablation"]["overall"]["hit_transitions"]["gained"] == 1
     full_manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
     sync_manifest = json.loads((sync_dir / "manifest.json").read_text(encoding="utf-8"))
     assert full_manifest["git_commit"] == summary["git_commit"]
     assert sync_manifest["git_commit"] == summary["git_commit"]
+    assert full_manifest["evaluation_git_commit"] == "evaluation-commit"
+    assert sync_manifest["report_git_commit"] == summary["report_git_commit"]
