@@ -1,6 +1,6 @@
 # 当前状态
 
-更新日期：2026-07-31
+更新日期：2026-08-01
 
 本文档是项目已验证能力的精简索引。`docs/ACTIVE_PLAN.md` 定义下一步允许
 开展的工作；已被替代的任务日志与过程报告保留在 Git 历史中。
@@ -13,7 +13,7 @@ DocAgent 是本地、CLI 优先的个人使用文档问答 MVP。它接收文件
 
 | 范围 | 状态 | 已验证边界 |
 |---|---|---|
-| M1 查询意图与查询变换 | `benchmark_evaluated` | runner v2 已拆分变换动作/术语保护、限定真实通用检索 workflow、记录实际执行路由并让多查询重排使用原问题。94 条查询的意图/workflow accuracy 为 0.8511/0.8617，变换动作 EM 为 0.4362；54 条通用检索中计划 Hybrid Recall@5/MRR@10 为 0.4314/0.4380，Hybrid+Reranker 为 0.3529/0.5016。自动 Chunk qrels 未经复核，查询变换和重排仍无整体正收益，因此尚未验收。 |
+| M1 查询意图与查询变换 | `real_model_verified` | M1-F2 已将 LLM 输出收敛为正交的 `task_type/evidence_types/multi_step` 与单一变换策略，叠加 JSON Mode、严格 Schema、一次纠错重试和有界回退；8 条独立中英文真实 Qwen API 冒烟 8/8 合法、8/8 通用预期匹配、0 重试、0 回退。真实接线证明 navigation→BM25、简单事实→BGE-M3 Hybrid、复杂分析→BGE-M3 Hybrid+Reranker。F1 冻结 runner 指标基于旧契约，未用于本批调优，当前契约尚未重新进行正式 benchmark。 |
 | M1 冻结评测语料准备 | `real_model_verified` | 6 份真实 PDF 已由 MinerU API `vlm` 解析为 1,222 个 `docagent_chunk_v3` Chunk，其中 1,016 个进入真实 BGE-M3 1024 维 FAISS 索引；6/6 索引按 Chunk 哈希重新加载通过，Chunk 契约错误为 0。该状态只证明评测语料与索引就绪，不代表已完成 Recall/MRR 基准。 |
 | Phase 5 CLI、导入与输出契约 | `accepted` | 文件和 `doc_id` 路径提供稳定的答案/证据/引用/追踪契约。 |
 | 原始 PDF MinerU API 路径 | `accepted` | 实时 API 冒烟建立了导入和引用契约。 |
@@ -94,6 +94,13 @@ DocAgent 是本地、CLI 优先的个人使用文档问答 MVP。它接收文件
   Gold→Chunk 自动映射率为 0.6000/0.5882，均未复核为正式 qrels。同步包约
   52 KB，7/7 文件大小与 SHA256 核验通过且不含敏感或大型内容。该结果属于
   `benchmark_evaluated`，未建立验收通过主张。
+- 服务器 `outputs/sync/m1_f2_query_policy_smoke_20260801/`：基于提交
+  `d2b52b6` 完成 244 项服务器回归、8 条独立中英文真实
+  `qwen3.7-max-2026-05-17` 查询决策/变换冒烟及三种真实检索策略接线。
+  Qwen 输出合法率和通用预期匹配率均为 1.0，未发生纠错重试或 fallback；
+  navigation 未加载 Dense/Reranker，简单事实只加载 BGE-M3，复杂分析加载
+  BGE-M3 与 bge-reranker-v2-m3。同步包 6 个文件、约 7.4 KB，大小和 SHA256
+  全部核验通过。该记录为 `real_model_verified`，没有重跑或调优冻结基准。
 
 ## 不构成以下主张
 

@@ -845,6 +845,21 @@ outputs/sync/m1_query_retrieval_v2_20260731/
 - 本批只使用人工编写的通用契约/冒烟样例开发。完成本地回归和一次服务器真实冒烟后
   更新状态并停止，不自动运行冻结基准或进入动态 Agentic loop。
 
+#### 验证结果（2026-08-01）
+
+- 本地和服务器相同的查询、检索、表格、CLI 与兼容层回归均为 244 项通过；
+- 服务器 worktree 在执行 `source /etc/network_turbo` 后快进到提交 `d2b52b6`；
+- 真实 `qwen3.7-max-2026-05-17` 使用 8 条独立编写的中英文通用冒烟样例：8/8
+  输出合法、8/8 匹配预期正交字段、0 次纠错重试、0 次 fallback；
+- navigation 实际使用 BM25，未加载 Dense/Reranker；简单事实实际使用 BGE-M3
+  Hybrid，未加载 Reranker；复杂分析实际使用 BGE-M3 Hybrid 与
+  bge-reranker-v2-m3；三路均返回候选并记录实际执行路径；
+- 精简证据保存在服务器
+  `outputs/sync/m1_f2_query_policy_smoke_20260801/`，6 个文件共约 7.4 KB，全部
+  SHA256 校验通过，不含密钥、全文、数据库或模型；
+- 本批状态为 `real_model_verified`。没有重跑冻结六文档 benchmark，因此不宣称
+  新契约已经获得正式检索指标正收益或达到 `accepted`。
+
 2026-07-30 服务器预检确认冻结样本的 6 份原始 PDF 已存在，但尚未生成对应的
 MinerU 解析产物、检索 Chunk 和真实稠密索引。因此：
 
@@ -1044,6 +1059,7 @@ M1-E，不以临时自造样本替代冻结评测集。
 | 2026-07-31 | 1.7 | 增加 M1-F1：拆分动作/约束指标，区分规划与执行路径，按真实 workflow 限定通用检索主指标，标记自动 qrel candidate，并修复多查询重排目标 | 首次基线中的合同污染和重排接线错误会使后续调优结论失真，需按价值优先修复 | M1 评测器、检索执行元数据与多查询重排 |
 | 2026-07-31 | 1.8 | 记录 M1-F1 六文档 runner v2 真实验证与下一批问题优先级，保持未验收 | 修复后的评测口径已生效，但查询变换和重排仍无整体正收益，需防止用冻结测试集直接调参 | M1-F1 验证结论与停止边界 |
 | 2026-08-01 | 1.9 | 增加 M1-F2：正交查询决策、单策略查询变换、JSON Mode 加严格校验/一次纠错重试，以及按 workflow 降级检索和重排 | 修复混合硬分类、11 条 action 合同失败、冗余 LLM 输出和全局 Hybrid+Reranker 执行 | 查询 Schema、两个 LLM 角色、CLI 检索模式适配与定向验证 |
+| 2026-08-01 | 2.0 | 记录 M1-F2 本地/服务器回归、真实 Qwen API 与真实 BGE-M3/reranker 条件化接线结果，并停止在 `real_model_verified` | 当前执行契约已获真实组件证据，但未使用冻结集调优或重跑正式 benchmark | M1-F2 验证结论、状态与停止边界 |
 
 ## 13. 外部技术依据
 
@@ -1055,3 +1071,10 @@ M1-E，不以临时自造样本替代冻结评测集。
   <https://huggingface.co/BAAI/bge-m3>
 - BAAI BGE Reranker v2 M3 官方模型卡：
   <https://huggingface.co/BAAI/bge-reranker-v2-m3>
+- LangGraph Agentic RAG 官方示例（条件检索、相关性判断、查询重写与生成边）：
+  <https://docs.langchain.com/oss/javascript/langgraph/agentic-rag>
+- Anthropic Contextual Retrieval（BM25、Embedding 与可选 Reranking 的组合）：
+  <https://www.anthropic.com/news/contextual-retrieval>
+- Elasticsearch RRF 与 Ranking 官方文档（多检索器融合和二阶段重排）：
+  <https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion>
+  <https://www.elastic.co/docs/solutions/search/ranking>

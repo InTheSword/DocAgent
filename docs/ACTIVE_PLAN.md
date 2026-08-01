@@ -47,7 +47,7 @@ docs/workplans/M1_QUERY_INTENT_ROUTING_REWRITE_PLAN.md
 | MinerU Chunk 与索引契约 | `real_model_verified` | 12 页真实 VideoTree MinerU 产物在本地与服务器均重建为 184 个 `docagent_chunk_v3` Chunk（171 个可索引、3 个跨页、12 个句界拆分），契约错误为 0，并已用真实 BGE-M3 建立索引。 |
 | 多路检索与结构化约束 | `real_model_verified` | 不经意图路由、查询规划和查询重写的真实 BGE-M3＋重排序器验证中，普通查询 Hit@5 为 18/18，表格文本 Hit@5 为 6/6，4 个结构化查询精确匹配；Metadata 仅作前置过滤。该小型回归集不是正式检索基准。 |
 | 原问题/检索查询分离与证据优先截断 | `implemented` | 查询变换只进入检索；问答保留原问题，超限时先裁减证据。新的 AnswerPolicy 联合冒烟尚未执行。 |
-| 新查询意图、路由与查询变换链 | `benchmark_evaluated` | M1-F1 runner v2 已在提交 `2d880e8` 上完成六文档真实评测：意图/workflow accuracy 为 0.8511/0.8617，变换动作 EM 为 0.4362；54 条通用检索中，原问题 Hybrid Recall@5/MRR@10 为 0.4314/0.5230，计划 Hybrid 为 0.4314/0.4380，计划 Hybrid+Reranker 为 0.3529/0.5016。Gold→Chunk qrel candidate 未经复核，尚未验收。 |
+| 新查询意图、路由与查询变换链 | `real_model_verified` | M1-F2 当前契约已改为正交任务/证据/复杂度字段、单一变换策略、JSON Mode＋严格校验＋一次纠错重试，并按 workflow 选择 BM25/Hybrid/Hybrid+Reranker。提交 `d2b52b6` 的真实 Qwen API 与 BGE-M3/reranker 接线冒烟通过；F1 冻结指标属于旧契约，当前契约尚未重新 benchmark。 |
 | 最终答案质量基准 | `not_started` | 现有诊断运行不构成正式答案质量验收。 |
 | 新的 SFT/GRPO 训练与检查点变更 | `not_started` | 需要明确批准及独立训练数据。 |
 | 正式视觉问答基准 | `not_started` | 现有视觉 API 执行证据不构成基准验收。 |
@@ -76,13 +76,13 @@ Qwen、VLM、SFT/GRPO 或大型数据集的变更，必须先按
 
 ## 当前里程碑
 
-执行临时计划 1.9 的 M1-F2：将 LLM 查询判断迁移为正交任务/证据/复杂度字段，将
-查询变换收敛为单一策略，增加结构化输出的严格校验和一次有界纠错重试，并让 CLI
-按 workflow 对已配置的检索能力进行降级选择。先完成本地契约与回归测试，再同步
-服务器进行一次真实 Qwen API 及 BGE-M3/reranker 接线冒烟。
+M1-F2 已完成并达到 `real_model_verified`：本地与服务器 244 项回归通过，真实 Qwen
+API 的 8 条独立中英文冒烟全部合法且无回退，真实 BGE-M3/reranker 接线证明三种
+workflow 能按计划选择不同检索模式。当前停止，不自动重跑冻结基准或进入下一批。
 
-不得用当前冻结测试集调 prompt、查询融合、reranker 阈值或候选规模，不得根据冻结
-样本增加个案规则，也不启动最终答案质量评测或训练。
+后续若要评估新契约的整体收益，必须先在临时计划中定义独立开发集与冻结测试重跑
+规则；不得用当前冻结测试集调 prompt、查询融合、reranker 阈值或候选规模，也不
+启动最终答案质量评测或训练。
 
 ## 停止条件
 

@@ -1,6 +1,6 @@
 # 长期决策
 
-更新日期：2026-07-30
+更新日期：2026-08-01
 
 本文档记录约束后续工作的当前选择。它不是按时间排序的任务日志，也不重复
 实现状态；状态请查看 `CURRENT_STATUS.md`。已被替代的讨论和实验细节可在 Git
@@ -62,14 +62,18 @@ CDC、Demo 和新产品阶段均需要明确的范围决策。
 
 ## 查询、工具与上下文
 
-- 查询意图固定为 `semantic_fact`、`navigation`、`table_lookup`、
-  `table_analysis`、`visual_lookup`、`complex_analysis`、
-  `document_summary`、`no_retrieval` 和 `clarification_required`。内部工具名
-  不属于查询意图契约。
-- 意图路由与查询变换使用不同角色提示词和输出 Schema。查询动作只允许
-  `none/rewrite/expand/decompose/preserve_terms/request_clarification`，
-  检索查询最多 4 条；当前复杂查询只做一次静态拆解，不声称具备循环式
-  Agentic RAG。
+- LLM 查询判断使用正交字段：`task_type` 表示事实查找、定位、分析、摘要或
+  控制状态，`evidence_types` 可同时选择 text/table/visual，`multi_step` 表示
+  是否需要独立子问题。旧 `semantic_fact/navigation/table_lookup/...` intent 仅由
+  代码确定性派生，用于现有 CLI、评测和产物兼容；内部工具名不属于 LLM 契约。
+- 意图路由与查询变换使用不同版本化角色提示词和精确输出 Schema。Router LLM
+  只输出 `task_type/evidence_types/multi_step`，不输出置信度、理由、工具或路由；
+  Transformer LLM 只输出一个 `none/rewrite/expand/decompose` 策略和最多 4 条
+  检索查询。`preserve_terms` 是从原问题确定性提取并校验的约束，不再是模型动作。
+- 两个 LLM 角色都请求 JSON Mode，并叠加拒绝额外字段的本地 Schema、枚举和组合
+  校验。首次语义非法时最多纠错重试一次，仍非法或 API 失败才进入有界回退；trace
+  不保存完整 prompt、原始生成或思维链。当前复杂查询仍只做一次静态拆解，不声称
+  具备循环式 Agentic RAG。
 - 显式的物理页、标注页码、内容类型和标题角色约束应在 BM25/稠密候选排序前
   执行；当前仅采用保守的确定性导航语句识别，不把一般语义词误当作字段过滤。
 - Metadata 只用于 BM25/Dense 之前的候选硬过滤，不是独立排序路线，也不参与
@@ -82,6 +86,10 @@ CDC、Demo 和新产品阶段均需要明确的范围决策。
 - 查询重写和查询扩展只改变检索查询；AnswerPolicy 始终接收用户原问题。
 - 多查询只用于扩大 BM25/Dense 候选召回；CrossEncoder 重排以原始用户问题作为
   最终相关性目标，不以任一子查询替代用户问题。
+- 检索和重排按 workflow 执行，不作为所有查询的固定流水线：navigation 默认使用
+  Metadata 前置过滤与 BM25；简单正文事实默认 Hybrid 但不加载 Reranker；复杂或
+  多步正文分析才默认 Hybrid+Reranker；表格工具、视觉、摘要、无需检索和澄清路径
+  不强制执行通用 Hybrid+Reranker。调用方配置是能力上限，查询计划只能降级。
 - `QueryPlan.retrieval_routes` 表示规划能力，检索 trace 另以 `executed_routes`
   记录实际执行的 sparse、dense、metadata filter、multi-query 和结构化表格路径；
   不再用规划标签命中率代替执行路径验证。
