@@ -1,7 +1,7 @@
 # M1 查询意图、路由与查询变换实施计划
 
 > 文件性质：当前阶段临时实施依据
-> 计划版本：2.6
+> 计划版本：2.7
 > 状态：`benchmark_evaluated`
 > 建立日期：2026-07-30
 > 适用范围：从用户查询输入到检索请求输出，不包含最终答案生成
@@ -977,6 +977,38 @@ M1-F2 把“简单正文事实”硬编码为 Hybrid 但不重排，将查询复
 detail 重算 summary/result/manifest/sync pack，不重复调用 LLM API、BGE-M3 或
 Reranker。
 
+#### 验证结果（2026-08-01）
+
+- runner v3 的本地与服务器同范围回归均为 104 项通过；
+- 原始 API/GPU 评测执行版本为 `adc0e22`，最终报告生成版本为 `e03e8b3`；
+  94 条 query prediction、94 条 Gold mapping 和 432 条检索 detail 全部完整；
+- M1-F2 查询合同结果：
+  - intent/workflow accuracy 均为 0.7234，retriever mode accuracy 为 0.8298；
+  - 单一变换策略合法率为 1.0000，transform action EM 为 0.4255，
+    must-preserve micro recall 为 0.5743；
+  - Router/Transformer 实际 fallback 均为 0，纠错重试和校验错误均为 0；
+    6 条为正常 `not_needed`，4 条为正常 short-circuit；
+  - 主要意图薄弱点为 `clarification_required` 0/4、`visual_lookup` 3/15、
+    `complex_analysis` 13/18；该结果只记录，本批未调 Prompt。
+- M1-F3 检索策略结果：
+  - 54/54 条通用文本 workflow 均找到 policy-selected 执行结果，包含
+    12 条 BM25 与 42 条 Hybrid+Reranker；
+  - policy-selected provisional E2E Recall@5/MRR@10 为 0.4118/0.5382，仅已映射
+    Gold 的 Recall@5 为 0.7000；
+  - `semantic_fact` 中 Reranker 相对 Hybrid 的 Recall@5/MRR@10 提升
+    0.0345/0.0854，5 条首个 Gold 排名改善、1 条恶化，无 Top-5 命中得失；
+  - `complex_analysis` 中对应差值为 -0.0625/-0.0012，Top-5 各新增/丢失
+    1 条，排名 4 条改善、5 条恶化；
+  - navigation 的诊断性重排对照为 -0.1600/-0.0452，支持当前生产策略
+    不对该 workflow 默认启用通用 Reranker；
+  - Reranker 相对 Hybrid 的平均检索时延增量约为 74–77 ms；该时延不包含
+    模型加载和预编码查询耗时。
+- 通用检索范围 Gold→Chunk 自动映射率仍为 0.5882，因此检索指标仍为
+  provisional；M1-F4 状态为 `benchmark_evaluated`，不是 `accepted`。
+- 完整产物保留在服务器 `outputs/m1_f2_f3_workflow_eval_20260801/`，精选包
+  保留在 `outputs/sync/m1_f2_f3_workflow_eval_20260801/`；完整/精选 manifest
+  均通过文件大小和 SHA256 核验，精选包约 71 KB。
+
 2026-07-30 服务器预检确认冻结样本的 6 份原始 PDF 已存在，但尚未生成对应的
 MinerU 解析产物、检索 Chunk 和真实稠密索引。因此：
 
@@ -1183,6 +1215,7 @@ M1-E，不以临时自造样本替代冻结评测集。
 | 2026-08-01 | 2.4 | 修正 v3 默认产物路径与 Transformer fallback 报告语义 | 首次运行暴露默认路径可覆盖历史 baseline，且 not-needed 路径可被误读为模型回退 | runner CLI 默认值、查询诊断指标与无模型报告重算 |
 | 2026-08-01 | 2.5 | 为 v3 summary/result/full manifest/sync manifest 增加 Git commit | 紧凑产物已有文件哈希，但缺少代码版本会破坏重现性 | runner 产物可追溯合同与无模型报告重算 |
 | 2026-08-01 | 2.6 | 将评测执行 commit 与报告生成 commit 分开记录 | 原始 API/GPU 运行后只修正了报告程序，单一当前 commit 会误表达原始运行版本 | runner 参数、summary/result 与两层 manifest 可追溯字段 |
+| 2026-08-01 | 2.7 | 记录 M1-F4 真实 API/GPU 评测、重排分意图对照和产物核验结果 | 94 条查询与 432 条检索 detail 已完整运行，可以停止并记录 provisional 结论 | M1-F4 状态、指标、限制、可追溯产物与停止边界 |
 
 ## 13. 外部技术依据
 

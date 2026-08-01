@@ -128,6 +128,14 @@ evidence group、Gold→Chunk 映射率 0.6000，计划查询 Hybrid+Reranker �
 Recall@5/MRR@10 为 0.4000/0.5087。该运行尚未达到 `accepted`；不得将首次基线
 反向用于修改样本、构造样本专属规则或训练模型。
 
+M1-F2/F3 修正后运行 `m1_f2_f3_workflow_eval_20260801` 复用同一冻结集、
+同一六文档 Chunk 和索引，生成 94 条查询预测和 432 条四检索器对照。
+普通正文事实在 Hybrid+Reranker 相对 Hybrid 下的 provisional
+Recall@5/MRR@10 差值为 +0.0345/+0.0854，复杂分析为 -0.0625/-0.0012。
+通用检索范围 Gold→Chunk 自动映射率仍为 0.5882，因此该运行状态为
+`benchmark_evaluated`，不构成未复核 Chunk qrels 上的检索验收。该冻结集仍不得用于
+Prompt、RRF、候选规模或 Reranker 参数调优。
+
 ## 6. 延后数据集
 
 ### TAT-QA

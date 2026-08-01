@@ -76,10 +76,12 @@ Qwen、VLM、SFT/GRPO 或大型数据集的变更，必须先按
 
 ## 当前里程碑
 
-M1-F4 正在构建并执行 M1-F2/F3 修正后的 workflow 评测。本批复用 94 条
-冻结查询、6 份既有 MinerU Chunk 与真实 BGE-M3 索引，补充严格输出/重试/fallback、
-retriever mode accuracy、policy-selected 检索和按意图 Reranker 得失指标。不修改
-冻结样本、Prompt、RRF、候选规模或重排参数。
+M1-F4 已完成并达到 `benchmark_evaluated`：94 条真实 Qwen 查询记录和
+432 条真实 BGE-M3/Reranker 检索 detail 完整，本地/服务器同范围 104 项
+回归通过。普通事实查询使用 Reranker 后 provisional Recall@5/MRR@10
+分别提升 0.0345/0.0854，复杂分析则分别变化 -0.0625/-0.0012。当前
+Gold→Chunk 自动映射未复核，因此不达到 `accepted`；当前停止，不根据
+本冻结集继续调 Prompt、RRF、候选规模或 Reranker。
 
 后续若要评估新契约的整体收益，必须先在临时计划中定义独立开发集与冻结测试重跑
 规则；不得用当前冻结测试集调 prompt、查询融合、reranker 阈值或候选规模，也不
