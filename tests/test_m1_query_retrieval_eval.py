@@ -379,6 +379,11 @@ def test_finalize_outputs_writes_v3_policy_and_ablation_contract(tmp_path) -> No
     summary = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
     assert result["status"] == "success"
     assert summary["runner_version"] == "m1-query-retrieval-eval-v3"
+    assert summary["git_commit"]
+    assert result["git_commit"] == summary["git_commit"]
     assert summary["metrics"]["policy_selected_retrieval"]["selected_sample_count"] == 1
     assert summary["metrics"]["reranker_ablation"]["overall"]["hit_transitions"]["gained"] == 1
-    assert (sync_dir / "manifest.json").is_file()
+    full_manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    sync_manifest = json.loads((sync_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert full_manifest["git_commit"] == summary["git_commit"]
+    assert sync_manifest["git_commit"] == summary["git_commit"]
