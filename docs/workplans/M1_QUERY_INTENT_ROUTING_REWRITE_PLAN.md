@@ -1,7 +1,7 @@
 # M1 查询意图、路由与查询变换实施计划
 
 > 文件性质：当前阶段临时实施依据
-> 计划版本：2.1
+> 计划版本：2.2
 > 状态：`benchmark_evaluated`
 > 建立日期：2026-07-30
 > 适用范围：从用户查询输入到检索请求输出，不包含最终答案生成
@@ -891,6 +891,20 @@ M1-F2 把“简单正文事实”硬编码为 Hybrid 但不重排，将查询复
 - 若真实检索接线因模式变化而受影响，在正式评测前执行一次真实 BGE-M3/reranker
   服务器冒烟，但不在本批调参或重跑冻结 benchmark。
 
+#### 验证结果（2026-08-01）
+
+- 本地查询决策、变换、流水线、CLI、Metadata、表格和 M1 runner 相关回归
+  99 项通过；
+- 服务器 worktree 在执行 `source /etc/network_turbo` 后快进到提交 `6813cd8`；
+- 真实普通事实查询的 planned/effective mode 均为 `hybrid_rerank`，实际使用
+  BGE-M3 与 `bge-reranker-v2-m3` Cross-Encoder；
+- 冒烟返回 3 个候选，3/3 具有重排分数，实际执行路由为 Dense+Sparse，既有
+  稠密索引未重建；
+- 精简证据保存在服务器
+  `outputs/sync/m1_f3_fact_reranker_smoke_20260801/`，不含密钥、全文、数据库或模型；
+- M1-F3 状态为 `real_model_verified`。本批没有重跑冻结 benchmark，不宣称重排已对全部
+  workflow 带来正收益。
+
 2026-07-30 服务器预检确认冻结样本的 6 份原始 PDF 已存在，但尚未生成对应的
 MinerU 解析产物、检索 Chunk 和真实稠密索引。因此：
 
@@ -1092,6 +1106,7 @@ M1-E，不以临时自造样本替代冻结评测集。
 | 2026-08-01 | 1.9 | 增加 M1-F2：正交查询决策、单策略查询变换、JSON Mode 加严格校验/一次纠错重试，以及按 workflow 降级检索和重排 | 修复混合硬分类、11 条 action 合同失败、冗余 LLM 输出和全局 Hybrid+Reranker 执行 | 查询 Schema、两个 LLM 角色、CLI 检索模式适配与定向验证 |
 | 2026-08-01 | 2.0 | 记录 M1-F2 本地/服务器回归、真实 Qwen API 与真实 BGE-M3/reranker 条件化接线结果，并停止在 `real_model_verified` | 当前执行契约已获真实组件证据，但未使用冻结集调优或重跑正式 benchmark | M1-F2 验证结论、状态与停止边界 |
 | 2026-08-01 | 2.1 | 增加 M1-F3：普通正文事实默认恢复 Hybrid+Reranker，专用 workflow 保留有依据的绕过 | M1-F2 错误将查询复杂度与是否精排绑定，且与已有按意图分析证据不符 | 确定性 workflow 策略、检索模式接线与定向测试 |
+| 2026-08-01 | 2.2 | 记录 M1-F3 本地回归与真实 BGE-M3/reranker 事实查询冒烟，并停止在 `real_model_verified` | 修正后的执行模式已获真实组件接线证据，但尚未进行正式分类评测 | M1-F3 验证结论、状态与停止边界 |
 
 ## 13. 外部技术依据
 

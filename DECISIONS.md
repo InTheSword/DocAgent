@@ -87,9 +87,10 @@ CDC、Demo 和新产品阶段均需要明确的范围决策。
 - 多查询只用于扩大 BM25/Dense 候选召回；CrossEncoder 重排以原始用户问题作为
   最终相关性目标，不以任一子查询替代用户问题。
 - 检索和重排按 workflow 执行，不作为所有查询的固定流水线：navigation 默认使用
-  Metadata 前置过滤与 BM25；简单正文事实默认 Hybrid 但不加载 Reranker；复杂或
-  多步正文分析才默认 Hybrid+Reranker；表格工具、视觉、摘要、无需检索和澄清路径
-  不强制执行通用 Hybrid+Reranker。调用方配置是能力上限，查询计划只能降级。
+  Metadata 前置过滤与 BM25；普通正文事实和复杂/多步正文分析默认使用
+  Hybrid+Reranker。查询复杂度只决定是否扩展、拆解或多路检索，不单独决定是否
+  精排。纯表格结构化、纯视觉、摘要、无需检索和澄清路径不强制执行通用文本
+  Reranker。调用方配置是能力上限，查询计划只能降级。
 - `QueryPlan.retrieval_routes` 表示规划能力，检索 trace 另以 `executed_routes`
   记录实际执行的 sparse、dense、metadata filter、multi-query 和结构化表格路径；
   不再用规划标签命中率代替执行路径验证。
