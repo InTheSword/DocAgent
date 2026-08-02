@@ -116,7 +116,13 @@ qrels v2 的样本/corpus/PDF/Chunk hash 与可索引性校验全部通过，生
 其中 55 条可进入检索评测、31 条排除。完整产物位于服务器
 `outputs/m1_g3_frozen_qrels_qwen37_20260802/`，精选同步包位于
 `outputs/sync/m1_g3_frozen_qrels_qwen37_20260802/`。本批未使用 GPU、未重建索引、
-未运行检索指标；M1-G4 保持 `not_started`，等待用户明确批准后再开始。
+未运行检索指标。
+
+当前执行 M1-G4：将 reviewed qrels v2 接入现有评测 runner，严格验证样本/corpus/PDF/
+Chunk hash 和 AND/OR 证据集合；用真实 BGE-M3 重建六文档索引，并在 55 条 eligible
+样本中的 54 条检索 workflow 上运行 original/planned × BM25/Dense/Hybrid/
+Hybrid+Reranker。1 条文档摘要不进入 Top-K 指标。该批禁止根据结果调参，完成正式
+产物和状态更新后以 `benchmark_evaluated` 停止。
 
 ## 停止条件
 

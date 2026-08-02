@@ -31,7 +31,7 @@ from docagent.schemas import Chunk
 from docagent.utils.jsonl import read_jsonl, write_jsonl
 
 
-RUNNER_VERSION = "m1-query-retrieval-eval-v3"
+RUNNER_VERSION = "m1-query-retrieval-eval-v4"
 RETRIEVAL_MODES = ("bm25", "dense", "hybrid", "hybrid_rerank")
 QUERY_VARIANTS = ("original", "planned")
 TRANSFORM_ACTIONS = frozenset(
@@ -39,6 +39,9 @@ TRANSFORM_ACTIONS = frozenset(
 )
 GENERIC_RETRIEVAL_INTENTS = frozenset(
     {"semantic_fact", "navigation", "complex_analysis"}
+)
+EVALUATED_RETRIEVAL_INTENTS = GENERIC_RETRIEVAL_INTENTS | frozenset(
+    {"table_lookup", "table_analysis", "visual_lookup"}
 )
 INTENT_WORKFLOWS = {
     "semantic_fact": "text_retrieval",
@@ -142,6 +145,14 @@ def _generic_retrieval_samples(samples: list[dict[str, Any]]) -> list[dict[str, 
     ]
 
 
+def _retrieval_evaluation_samples(samples: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        sample
+        for sample in samples
+        if sample.get("document_file") and sample.get("intent") in EVALUATED_RETRIEVAL_INTENTS
+    ]
+
+
 def _workflow_coverage(samples: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     counts = Counter(
         _workflow_for_intent(sample.get("intent"))
@@ -151,8 +162,8 @@ def _workflow_coverage(samples: list[dict[str, Any]]) -> dict[str, dict[str, Any
     return {
         workflow: {
             "sample_count": count,
-            "evaluated_by_generic_retrieval_runner": workflow
-            in {"text_retrieval", "complex_text_retrieval"},
+            "evaluated_by_retrieval_runner": workflow
+            in {"text_retrieval", "complex_text_retrieval", "table_retrieval", "visual_retrieval"},
         }
         for workflow, count in sorted(counts.items())
     }
@@ -168,16 +179,121 @@ def load_corpus(
     for document in documents:
         name = str(document.get("document_file") or "")
         doc_id = str(document.get("doc_id") or "")
-        document_dir = _repo_path(str(document.get("document_dir") or ""))
+        evidence_blocks_value = str(document.get("evidence_blocks_path") or "")
+        evidence_blocks_path = _repo_path(evidence_blocks_value) if evidence_blocks_value else None
+        document_dir_value = str(document.get("document_dir") or "")
+        document_dir = _repo_path(document_dir_value) if document_dir_value else None
+        if document_dir is None and evidence_blocks_path is not None:
+            document_dir = evidence_blocks_path.parent
         if not name or not doc_id or document_dir is None:
             raise ValueError("corpus manifest contains an incomplete document")
-        chunks_path = document_dir / "evidence_blocks.jsonl"
+        chunks_path = evidence_blocks_path or document_dir / "evidence_blocks.jsonl"
         chunks = [Chunk.from_dict(item) for item in read_jsonl(chunks_path)]
         if not chunks:
             raise ValueError(f"document has no chunks: {name}")
         by_file[name] = {**document, "document_dir": str(document_dir)}
         blocks_by_doc[doc_id] = chunks
     return by_file, blocks_by_doc
+
+
+def load_reviewed_chunk_qrels(
+    qrels_path: Path,
+    *,
+    samples_path: Path,
+    corpus_manifest_path: Path,
+    samples: list[dict[str, Any]],
+    documents_by_file: dict[str, dict[str, Any]],
+    blocks_by_doc: dict[str, list[Chunk]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    rows = [dict(item) for item in read_jsonl(qrels_path)]
+    by_sample = {str(row.get("sample_id") or ""): row for row in rows}
+    document_samples = {
+        str(sample["sample_id"]): sample for sample in samples if sample.get("document_file")
+    }
+    if len(by_sample) != len(rows) or set(by_sample) != set(document_samples):
+        raise ValueError("reviewed qrels must contain exactly one row per document-bound sample")
+    samples_sha256 = _sha256(samples_path)
+    corpus_sha256 = _sha256(corpus_manifest_path)
+    corpus_manifest = json.loads(corpus_manifest_path.read_text(encoding="utf-8"))
+    corpus_id = str(corpus_manifest.get("corpus_id") or "")
+    chunk_contract_version = str(corpus_manifest.get("chunk_contract_version") or "")
+    mappings: list[dict[str, Any]] = []
+    eligible_count = 0
+    for sample_id, sample in document_samples.items():
+        row = by_sample[sample_id]
+        document_file = str(sample["document_file"])
+        document = documents_by_file.get(document_file)
+        if document is None:
+            raise ValueError(f"qrels sample document is absent from corpus: {document_file}")
+        doc_id = str(document["doc_id"])
+        if row.get("schema_version") != "m1-chunk-qrels-v2" or row.get("review_status") != "reviewed":
+            raise ValueError(f"qrels row is not reviewed v2: {sample_id}")
+        if row.get("samples_sha256") != samples_sha256 or row.get("corpus_manifest_sha256") != corpus_sha256:
+            raise ValueError(f"qrels input hash mismatch: {sample_id}")
+        if str(row.get("corpus_id")) != corpus_id or str(row.get("chunk_contract_version")) != chunk_contract_version:
+            raise ValueError(f"qrels corpus binding mismatch: {sample_id}")
+        if str(row.get("document_file")) != document_file or str(row.get("doc_id")) != doc_id:
+            raise ValueError(f"qrels document binding mismatch: {sample_id}")
+        if str(row.get("source_pdf_sha256")) != str(document.get("source_pdf_sha256")):
+            raise ValueError(f"qrels PDF hash mismatch: {sample_id}")
+        groups_by_id = {str(group.get("group_id") or ""): group for group in row.get("evidence_groups") or []}
+        required_ids = [str(group_id) for group_id in row.get("minimal_required_group_ids") or []]
+        chunks_by_id = {chunk.block_id: chunk for chunk in blocks_by_doc[doc_id]}
+        eligible = bool(row.get("evaluation_eligible"))
+        mapped_groups: list[dict[str, Any]] = []
+        for group_id in required_ids:
+            group = groups_by_id.get(group_id)
+            if group is None or group.get("review_status") != "reviewed":
+                raise ValueError(f"qrels required group is missing or unreviewed: {sample_id}/{group_id}")
+            acceptable_sets = [list(chunk_set) for chunk_set in group.get("acceptable_chunk_sets") or []]
+            if eligible and (group.get("decision") == "exclude" or not acceptable_sets):
+                raise ValueError(f"eligible qrels group has no accepted Chunk set: {sample_id}/{group_id}")
+            hashes = dict(group.get("chunk_content_hashes") or {})
+            for chunk_set in acceptable_sets:
+                if not chunk_set:
+                    raise ValueError(f"qrels contains an empty acceptable Chunk set: {sample_id}/{group_id}")
+                for chunk_id in chunk_set:
+                    chunk = chunks_by_id.get(str(chunk_id))
+                    if chunk is None or not chunk.is_indexable:
+                        raise ValueError(f"qrels references a missing or non-indexable Chunk: {chunk_id}")
+                    if hashes.get(str(chunk_id)) != chunk.metadata.get("content_hash"):
+                        raise ValueError(f"qrels Chunk hash mismatch: {chunk_id}")
+            if eligible:
+                mapped_groups.append(
+                    {
+                        "group_id": group_id,
+                        "acceptable_chunk_sets": acceptable_sets,
+                        "mapped_block_ids": list(dict.fromkeys(chunk_id for chunk_set in acceptable_sets for chunk_id in chunk_set)),
+                        "match_method": "reviewed_chunk_qrels",
+                        "qrel_candidate_status": "reviewed",
+                    }
+                )
+        if eligible:
+            eligible_count += 1
+            mappings.append(
+                {
+                    "sample_id": sample_id,
+                    "document_file": document_file,
+                    "doc_id": doc_id,
+                    "groups": mapped_groups,
+                    "mapped_group_count": len(mapped_groups),
+                    "group_count": len(mapped_groups),
+                    "all_groups_mapped": True,
+                    "qrels_reviewed": True,
+                    "evaluation_eligible": True,
+                }
+            )
+    return mappings, {
+        "schema_version": "m1-chunk-qrels-v2",
+        "qrels_path": str(qrels_path),
+        "qrels_sha256": _sha256(qrels_path),
+        "samples_sha256": samples_sha256,
+        "corpus_manifest_sha256": corpus_sha256,
+        "document_bound_sample_count": len(rows),
+        "evaluation_eligible_sample_count": eligible_count,
+        "excluded_sample_count": len(rows) - eligible_count,
+        "reviewed": True,
+    }
 
 
 def document_profile(chunks: list[Chunk]) -> dict[str, Any]:
@@ -607,6 +723,8 @@ def run_retrieval_stage(
     device: str,
     top_k: int,
     output_path: Path,
+    rebuild_dense_indexes: bool = False,
+    index_report_path: Path | None = None,
 ) -> list[dict[str, Any]]:
     if top_k < 10:
         raise ValueError("top_k must be at least 10 for MRR@10")
@@ -630,7 +748,7 @@ def run_retrieval_stage(
     )
     prediction_by_id = {str(item["sample_id"]): item for item in predictions}
     mapping_by_id = {str(item["sample_id"]): item for item in mappings}
-    document_samples = _generic_retrieval_samples(samples)
+    document_samples = _retrieval_evaluation_samples(samples)
     query_texts: list[str] = []
     for sample in document_samples:
         prediction = prediction_by_id[str(sample["sample_id"])]
@@ -641,10 +759,31 @@ def run_retrieval_stage(
     vector_by_query = {query: vectors[index] for index, query in enumerate(unique_queries)}
 
     retrievers: dict[tuple[str, str], HybridRetriever] = {}
+    index_reports: list[dict[str, Any]] = []
     for doc_id, chunks in blocks_by_doc.items():
         indexable = [chunk for chunk in chunks if chunk.is_indexable]
         document_dir = Path(documents_by_file[_document_name_for_id(documents_by_file, doc_id)]["document_dir"])
+        if rebuild_dense_indexes:
+            document_embeddings = dense_encoder.encode_documents(
+                [chunk.retrieval_text for chunk in indexable]
+            )
+            built_index = DenseIndex.build(
+                blocks=indexable,
+                embeddings=document_embeddings,
+                model_id=dense_encoder.model_id,
+            )
+            built_index.save(document_dir)
         dense_index = DenseIndex.load(index_dir=document_dir, blocks=indexable)
+        index_reports.append(
+            {
+                "doc_id": doc_id,
+                "indexable_chunk_count": len(indexable),
+                "model_id": dense_index.model_id,
+                "embedding_dim": int(dense_index.embeddings.shape[1]),
+                "backend": dense_index.backend,
+                "reloaded": True,
+            }
+        )
         for mode in RETRIEVAL_MODES:
             retrievers[(doc_id, mode)] = HybridRetriever(
                 chunks,
@@ -656,6 +795,19 @@ def run_retrieval_stage(
                 fusion_top_n=20,
                 rrf_k=60,
             )
+    if index_report_path is not None:
+        index_report_path.write_text(
+            json.dumps(
+                {
+                    "document_count": len(index_reports),
+                    "all_reloaded": len(index_reports) == len(blocks_by_doc),
+                    "documents": index_reports,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
 
     details: list[dict[str, Any]] = []
     for sample_index, sample in enumerate(document_samples, start=1):
@@ -739,16 +891,9 @@ def retrieval_detail(
 ) -> dict[str, Any]:
     groups = list(mapping["groups"])
     mapped_groups = [group for group in groups if group["mapped_block_ids"]]
-    top5 = set(ranking[:5])
-    covered_groups = [
-        group
-        for group in groups
-        if set(group["mapped_block_ids"]).intersection(top5)
-    ]
+    covered_groups = [group for group in groups if _group_completion_rank(group, ranking, 5)]
     covered_mapped_groups = [
-        group
-        for group in mapped_groups
-        if set(group["mapped_block_ids"]).intersection(top5)
+        group for group in mapped_groups if _group_completion_rank(group, ranking, 5)
     ]
     all_gold_ids = {
         block_id
@@ -783,9 +928,24 @@ def retrieval_detail(
         "recall_at_5_mapped_only": _rate(len(covered_mapped_groups), len(mapped_groups)),
         "reciprocal_rank_at_10": 1.0 / first_rank if first_rank else 0.0,
         "hit_at_5": bool(covered_groups),
+        "all_required_groups_hit_at_5": bool(groups) and len(covered_groups) == len(groups),
         "all_groups_mapped": mapping["all_groups_mapped"],
+        "qrels_reviewed": bool(mapping.get("qrels_reviewed")),
         "latency_ms": round(latency_ms, 3),
     }
+
+
+def _group_completion_rank(group: dict[str, Any], ranking: list[str], top_k: int) -> int | None:
+    acceptable_sets = group.get("acceptable_chunk_sets")
+    if not acceptable_sets:
+        acceptable_sets = [[block_id] for block_id in group.get("mapped_block_ids") or []]
+    rank_by_id = {block_id: rank for rank, block_id in enumerate(ranking[:top_k], start=1)}
+    completion_ranks = [
+        max(rank_by_id[str(block_id)] for block_id in chunk_set)
+        for chunk_set in acceptable_sets
+        if chunk_set and all(str(block_id) in rank_by_id for block_id in chunk_set)
+    ]
+    return min(completion_ranks) if completion_ranks else None
 
 
 def retrieval_metrics(details: list[dict[str, Any]]) -> dict[str, Any]:
@@ -840,6 +1000,9 @@ def _retrieval_metric_group(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "recall_at_5_mapped_only": _rate(covered_mapped_count, mapped_count),
         "mrr_at_10": _mean(float(row["reciprocal_rank_at_10"]) for row in rows),
         "hit_rate_at_5": _rate(sum(bool(row["hit_at_5"]) for row in rows), len(rows)),
+        "all_required_groups_hit_rate_at_5": _rate(
+            sum(bool(row.get("all_required_groups_hit_at_5")) for row in rows), len(rows)
+        ),
         "planned_routes_all_executed_rate": _rate(
             sum(bool(row["planned_routes_all_executed"]) for row in route_rows), len(route_rows)
         ),
@@ -1035,6 +1198,8 @@ def finalize_outputs(
     mappings: list[dict[str, Any]],
     details: list[dict[str, Any]],
     output_dir: Path,
+    retrieval_samples: list[dict[str, Any]] | None = None,
+    qrels_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     report_git_commit = _git_commit()
     evaluation_git_commit = str(
@@ -1046,8 +1211,10 @@ def finalize_outputs(
     reranker_ablation_report = _reranker_ablation(details)
     failures = build_failures(predictions, mappings, details)
     mapping_groups = [group for row in mappings for group in row["groups"]]
-    workflow_coverage = _workflow_coverage(samples)
-    generic_samples = _generic_retrieval_samples(samples)
+    retrieval_samples = samples if retrieval_samples is None else retrieval_samples
+    workflow_coverage = _workflow_coverage(retrieval_samples)
+    evaluated_samples = _retrieval_evaluation_samples(retrieval_samples)
+    generic_samples = _generic_retrieval_samples(retrieval_samples)
     generic_sample_ids = {str(sample["sample_id"]) for sample in generic_samples}
     generic_mapping_groups = [
         group
@@ -1059,6 +1226,10 @@ def finalize_outputs(
     metrics = {
         "sample_count": len(samples),
         "document_bound_sample_count": sum(bool(sample.get("document_file")) for sample in samples),
+        "qrels_sample_count": int((qrels_summary or {}).get("document_bound_sample_count") or 0),
+        "qrels_eligible_sample_count": int((qrels_summary or {}).get("evaluation_eligible_sample_count") or 0),
+        "qrels_excluded_sample_count": int((qrels_summary or {}).get("excluded_sample_count") or 0),
+        "retrieval_evaluated_sample_count": len(evaluated_samples),
         "generic_retrieval_sample_count": generic_retrieval_sample_count,
         "workflow_coverage": workflow_coverage,
         "gold_group_count": len(mapping_groups),
@@ -1089,8 +1260,8 @@ def finalize_outputs(
         "status": "success",
         "benchmark_status": "benchmark_evaluated",
         "formal_answer_quality_evaluation": False,
-        "chunk_qrels_reviewed": False,
-        "retrieval_metrics_provisional": True,
+        "chunk_qrels_reviewed": qrels_summary is not None,
+        "retrieval_metrics_provisional": qrels_summary is None,
         "used_training": False,
         "validation_subset_used_for_training": False,
         "used_external_llm_api": True,
@@ -1100,13 +1271,16 @@ def finalize_outputs(
         "dense_model_path": args.dense_model_path,
         "reranker_model_path": args.reranker_model_path,
         "top_k": args.top_k,
+        "qrels_validation": qrels_summary,
         "metrics": metrics,
-        "limitations": [
-            "Automatic source-to-chunk alignments are unreviewed qrel candidates, so retrieval metrics are provisional.",
+        "limitations": ([
+            "Automatic source-to-chunk alignments are unreviewed qrel candidates, so retrieval metrics are provisional."
+        ] if qrels_summary is None else []) + [
             "Legacy action and route-label metrics are diagnostics; transform actions, preservation, workflow dispatch, and executed routes are reported separately.",
-            "Generic retrieval metrics only cover semantic_fact, navigation, and the current static complex_analysis text workflow.",
+            "Document-summary samples do not enter Top-K retrieval metrics.",
+            "Table metrics cover serialized table Chunk retrieval, not relational-query or statistical-answer correctness.",
+            "Visual metrics cover existing image/caption/text Chunks, not VLM interpretation of image pixels.",
             "Policy-selected retrieval uses each predicted QueryPlan.retriever_mode and does not replace the four fixed-mode ablations.",
-            "Table, visual, summary, no-retrieval, and clarification workflows require separate evaluators.",
             "The evaluation covers retrieval and query planning, not final answer quality.",
         ],
     }
@@ -1131,10 +1305,14 @@ def finalize_outputs(
                 "summary.md",
                 "failures.jsonl",
                 "manifest.json",
+                "qrels_validation.json",
+                "dense_index_report.json",
             )
         ],
         "metrics": {
             "sample_count": len(samples),
+            "qrels_eligible_sample_count": metrics["qrels_eligible_sample_count"],
+            "retrieval_evaluated_sample_count": metrics["retrieval_evaluated_sample_count"],
             "gold_mapping_rate": metrics["gold_mapping_rate"],
             "generic_retrieval_gold_mapping_rate": metrics["generic_retrieval_gold_mapping_rate"],
             "intent_accuracy": query_report["overall"]["intent_accuracy"],
@@ -1170,10 +1348,11 @@ def _summary_markdown(summary: dict[str, Any]) -> str:
         "",
         f"- status: `{summary['status']}`",
         f"- samples: {summary['metrics']['sample_count']}",
-        f"- generic retrieval samples: {summary['metrics']['generic_retrieval_sample_count']}",
+        f"- retrieval-evaluated samples: {summary['metrics']['retrieval_evaluated_sample_count']}",
+        f"- generic text retrieval samples: {summary['metrics']['generic_retrieval_sample_count']}",
         f"- gold mapping rate (all workflows): {summary['metrics']['gold_mapping_rate']:.4f}",
         f"- gold mapping rate (generic retrieval scope): {summary['metrics']['generic_retrieval_gold_mapping_rate']:.4f}",
-        "- chunk qrels reviewed: `false` (metrics are provisional)",
+        f"- chunk qrels reviewed: `{str(summary['chunk_qrels_reviewed']).lower()}`",
         f"- intent accuracy: {query['intent_accuracy']:.4f}",
         f"- workflow accuracy: {query['workflow_accuracy']:.4f}",
         f"- retriever mode accuracy: {query['retriever_mode_accuracy']:.4f}",
@@ -1186,7 +1365,7 @@ def _summary_markdown(summary: dict[str, Any]) -> str:
         f"- router/transformer runtime fallback count: {query['router_fallback_count']}/{query['transformer_fallback_count']}",
         f"- transformer not-needed/short-circuit count: {query['transformer_not_needed_count']}/{query['transformer_short_circuit_count']}",
         "",
-        "| Variant | Retriever | Recall@5 (E2E) | Recall@5 (mapped) | MRR@10 | Hit@5 |",
+        "| Variant | Retriever | Group Recall@5 | MRR@10 | Any-group Hit@5 | All-groups Hit@5 |",
         "|---|---|---:|---:|---:|---:|",
     ]
     for variant in QUERY_VARIANTS:
@@ -1194,8 +1373,8 @@ def _summary_markdown(summary: dict[str, Any]) -> str:
             row = retrieval[variant][mode]
             lines.append(
                 f"| {variant} | {mode} | {row['recall_at_5_end_to_end']:.4f} | "
-                f"{row['recall_at_5_mapped_only']:.4f} | {row['mrr_at_10']:.4f} | "
-                f"{row['hit_rate_at_5']:.4f} |"
+                f"{row['mrr_at_10']:.4f} | {row['hit_rate_at_5']:.4f} | "
+                f"{row['all_required_groups_hit_rate_at_5']:.4f} |"
             )
     lines.extend(
         [
@@ -1223,7 +1402,8 @@ def _summary_markdown(summary: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
-            "Table, visual, summary, no-retrieval, and clarification workflows are not included in the generic retrieval aggregate.",
+        "Table retrieval covers serialized table Chunks; visual retrieval covers existing image/caption/text Chunks.",
+        "Document-summary, no-retrieval, and clarification workflows are not included in Top-K retrieval metrics.",
             "No final-answer quality metric or training was run.",
         ]
     )
@@ -1247,6 +1427,9 @@ def _write_manifest(
         "failures.jsonl",
         "result.json",
     ]
+    names.extend(
+        name for name in ("qrels_validation.json", "dense_index_report.json") if (output_dir / name).is_file()
+    )
     payload = {
         "run_id": run_id,
         "runner_version": RUNNER_VERSION,
@@ -1292,7 +1475,14 @@ def _write_sync_pack(
     (sync_dir / "preview.json").write_text(json.dumps(preview, ensure_ascii=False, indent=2), encoding="utf-8")
     (sync_dir / "log_tail.txt").write_text("evaluation completed; see result.json and summary.json\n", encoding="utf-8")
     (sync_dir / "stderr_tail.txt").write_text("", encoding="utf-8")
+    for name in ("qrels_validation.json", "dense_index_report.json"):
+        source = output_dir / name
+        if source.is_file():
+            (sync_dir / name).write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
     names = ["result.json", "summary.json", "summary.md", "preview.json", "failures_sample.jsonl", "log_tail.txt", "stderr_tail.txt"]
+    names.extend(
+        name for name in ("qrels_validation.json", "dense_index_report.json") if (sync_dir / name).is_file()
+    )
     manifest = {
         "run_id": summary["run_id"],
         "runner_version": RUNNER_VERSION,
@@ -1362,22 +1552,27 @@ def _git_commit() -> str:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate the frozen M1 query and retrieval workflow.")
-    parser.add_argument("--run-id", default="m1_f2_f3_workflow_eval_20260801")
+    parser.add_argument("--run-id", default="m1_g4_reviewed_retrieval_20260802")
     parser.add_argument("--stage", choices=("query", "retrieval", "all"), default="all")
     parser.add_argument("--samples", default="data/benchmark/m1_query_routing/frozen_query_samples.jsonl")
     parser.add_argument(
         "--corpus-manifest",
-        default="outputs/m1_frozen_corpus_v1_20260730/document_manifest.json",
+        default="outputs/m1_g35_chunk_rebuild_a31f7f3_20260802/corpus_manifest.json",
     )
-    parser.add_argument("--output-dir", default="outputs/m1_f2_f3_workflow_eval_20260801")
-    parser.add_argument("--sync-dir", default="outputs/sync/m1_f2_f3_workflow_eval_20260801")
+    parser.add_argument(
+        "--chunk-qrels",
+        default="outputs/m1_g3_frozen_qrels_qwen37_20260802/frozen_chunk_qrels.jsonl",
+    )
+    parser.add_argument("--output-dir", default="outputs/m1_g4_reviewed_retrieval_20260802")
+    parser.add_argument("--sync-dir", default="outputs/sync/m1_g4_reviewed_retrieval_20260802")
     parser.add_argument("--router-env-file", default=".secrets/router_llm.env")
-    parser.add_argument("--router-model", default="qwen3.7-max-2026-05-17")
+    parser.add_argument("--router-model", default="qwen3.7-max-2026-06-08")
     parser.add_argument("--dense-model-path", default="/root/autodl-tmp/models/bge-m3")
     parser.add_argument("--reranker-model-path", default="/root/autodl-tmp/models/bge-reranker-v2-m3")
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--top-k", type=int, default=10)
     parser.add_argument("--evaluation-git-commit", default="")
+    parser.add_argument("--rebuild-dense-indexes", action="store_true")
     parser.add_argument("--no-resume", action="store_true")
     return parser.parse_args()
 
@@ -1386,16 +1581,37 @@ def main() -> int:
     args = parse_args()
     samples_path = _repo_path(args.samples)
     corpus_manifest_path = _repo_path(args.corpus_manifest)
+    chunk_qrels_path = _repo_path(args.chunk_qrels)
     output_dir = _repo_path(args.output_dir)
     env_file = _repo_path(args.router_env_file)
     dense_model_path = _repo_path(args.dense_model_path)
     reranker_model_path = _repo_path(args.reranker_model_path)
-    if None in (samples_path, corpus_manifest_path, output_dir, env_file, dense_model_path, reranker_model_path):
+    if None in (
+        samples_path,
+        corpus_manifest_path,
+        chunk_qrels_path,
+        output_dir,
+        env_file,
+        dense_model_path,
+        reranker_model_path,
+    ):
         raise ValueError("evaluation paths are incomplete")
     output_dir.mkdir(parents=True, exist_ok=True)
     samples = load_samples(samples_path)
     documents_by_file, blocks_by_doc = load_corpus(corpus_manifest_path)
-    mappings = map_gold_evidence(samples, documents_by_file, blocks_by_doc)
+    mappings, qrels_summary = load_reviewed_chunk_qrels(
+        chunk_qrels_path,
+        samples_path=samples_path,
+        corpus_manifest_path=corpus_manifest_path,
+        samples=samples,
+        documents_by_file=documents_by_file,
+        blocks_by_doc=blocks_by_doc,
+    )
+    eligible_sample_ids = {str(row["sample_id"]) for row in mappings}
+    retrieval_samples = [sample for sample in samples if str(sample["sample_id"]) in eligible_sample_ids]
+    (output_dir / "qrels_validation.json").write_text(
+        json.dumps(qrels_summary, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     write_jsonl(output_dir / "gold_chunk_mapping.jsonl", mappings)
     predictions_path = output_dir / "query_predictions.jsonl"
     if args.stage in {"query", "all"}:
@@ -1423,7 +1639,7 @@ def main() -> int:
         print(json.dumps(result, ensure_ascii=False))
         return 0
     details = run_retrieval_stage(
-        samples=samples,
+        samples=retrieval_samples,
         predictions=predictions,
         mappings=mappings,
         documents_by_file=documents_by_file,
@@ -1433,6 +1649,8 @@ def main() -> int:
         device=args.device,
         top_k=args.top_k,
         output_path=output_dir / "retrieval_details.jsonl",
+        rebuild_dense_indexes=args.rebuild_dense_indexes,
+        index_report_path=output_dir / "dense_index_report.json",
     )
     result = finalize_outputs(
         args=args,
@@ -1441,6 +1659,8 @@ def main() -> int:
         mappings=mappings,
         details=details,
         output_dir=output_dir,
+        retrieval_samples=retrieval_samples,
+        qrels_summary=qrels_summary,
     )
     print(json.dumps(result, ensure_ascii=False))
     return 0

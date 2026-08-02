@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from types import SimpleNamespace
 
@@ -8,12 +9,14 @@ import pytest
 from docagent.schemas import Chunk, EvidenceLocation
 from scripts.eval_m1_query_retrieval import (
     _generic_retrieval_samples,
+    _group_completion_rank,
     _policy_selected_retrieval_metrics,
     _query_prediction,
     _query_metric_group,
     _reranker_ablation,
     _retrieval_metric_group,
     finalize_outputs,
+    load_reviewed_chunk_qrels,
     map_gold_evidence,
     parse_args,
     validate_samples,
@@ -32,6 +35,7 @@ def _chunk(block_id: str, text: str, *, page: int = 2, content_type: str = "body
             "content_type": content_type,
             "source_page_numbers": [page],
             "exclude_from_retrieval": False,
+            "content_hash": f"hash-{block_id}",
         },
     )
 
@@ -81,6 +85,7 @@ def _detail(
         "covered_mapped_group_count_at_5": covered,
         "reciprocal_rank_at_10": reciprocal_rank,
         "hit_at_5": hit,
+        "all_required_groups_hit_at_5": hit,
         "planned_routes_all_executed": True,
         "planned_route_count": 2,
         "executed_planned_route_count": 2,
@@ -93,14 +98,15 @@ def test_validate_samples_rejects_duplicate_ids() -> None:
         validate_samples([_sample(), _sample()])
 
 
-def test_v3_cli_defaults_do_not_target_historical_baseline(monkeypatch) -> None:
+def test_v4_cli_defaults_target_reviewed_qrels_run(monkeypatch) -> None:
     monkeypatch.setattr("sys.argv", ["eval_m1_query_retrieval.py"])
 
     args = parse_args()
 
-    assert args.run_id == "m1_f2_f3_workflow_eval_20260801"
-    assert args.output_dir == "outputs/m1_f2_f3_workflow_eval_20260801"
-    assert args.sync_dir == "outputs/sync/m1_f2_f3_workflow_eval_20260801"
+    assert args.run_id == "m1_g4_reviewed_retrieval_20260802"
+    assert args.output_dir == "outputs/m1_g4_reviewed_retrieval_20260802"
+    assert args.sync_dir == "outputs/sync/m1_g4_reviewed_retrieval_20260802"
+    assert args.chunk_qrels.endswith("frozen_chunk_qrels.jsonl")
     assert args.evaluation_git_commit == ""
 
 
@@ -205,6 +211,81 @@ def test_generic_retrieval_scope_excludes_workflows_with_dedicated_execution_pat
     ]
 
     assert [row["sample_id"] for row in _generic_retrieval_samples(samples)] == ["text", "complex"]
+
+
+def test_reviewed_qrels_loader_validates_bindings_and_preserves_chunk_sets(tmp_path) -> None:
+    sample = _sample()
+    samples_path = tmp_path / "samples.jsonl"
+    samples_path.write_text(json.dumps(sample) + "\n", encoding="utf-8")
+    corpus_path = tmp_path / "corpus.json"
+    corpus_path.write_text(
+        json.dumps({"corpus_id": "corpus", "chunk_contract_version": "docagent_chunk_v3"}),
+        encoding="utf-8",
+    )
+    chunks = [_chunk("a", "A"), _chunk("b", "B"), _chunk("c", "C")]
+    qrels = {
+        "schema_version": "m1-chunk-qrels-v2",
+        "sample_id": "S1",
+        "document_file": "sample.pdf",
+        "doc_id": "doc",
+        "corpus_id": "corpus",
+        "chunk_contract_version": "docagent_chunk_v3",
+        "source_pdf_sha256": "pdf-hash",
+        "samples_sha256": hashlib.sha256(samples_path.read_bytes()).hexdigest(),
+        "corpus_manifest_sha256": hashlib.sha256(corpus_path.read_bytes()).hexdigest(),
+        "review_status": "reviewed",
+        "evaluation_eligible": True,
+        "minimal_required_group_ids": ["G1"],
+        "evidence_groups": [
+            {
+                "group_id": "G1",
+                "review_status": "reviewed",
+                "decision": "accept_candidate",
+                "acceptable_chunk_sets": [["a", "b"], ["c"]],
+                "chunk_content_hashes": {"a": "hash-a", "b": "hash-b", "c": "hash-c"},
+            }
+        ],
+    }
+    qrels_path = tmp_path / "qrels.jsonl"
+    qrels_path.write_text(json.dumps(qrels) + "\n", encoding="utf-8")
+
+    mappings, summary = load_reviewed_chunk_qrels(
+        qrels_path,
+        samples_path=samples_path,
+        corpus_manifest_path=corpus_path,
+        samples=[sample],
+        documents_by_file={
+            "sample.pdf": {"doc_id": "doc", "source_pdf_sha256": "pdf-hash"}
+        },
+        blocks_by_doc={"doc": chunks},
+    )
+
+    assert summary["evaluation_eligible_sample_count"] == 1
+    assert mappings[0]["groups"][0]["acceptable_chunk_sets"] == [["a", "b"], ["c"]]
+    qrels["evidence_groups"][0]["chunk_content_hashes"]["a"] = "wrong"
+    qrels_path.write_text(json.dumps(qrels) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Chunk hash mismatch"):
+        load_reviewed_chunk_qrels(
+            qrels_path,
+            samples_path=samples_path,
+            corpus_manifest_path=corpus_path,
+            samples=[sample],
+            documents_by_file={
+                "sample.pdf": {"doc_id": "doc", "source_pdf_sha256": "pdf-hash"}
+            },
+            blocks_by_doc={"doc": chunks},
+        )
+
+
+def test_group_completion_rank_enforces_and_or_chunk_semantics() -> None:
+    group = {
+        "mapped_block_ids": ["a", "b", "c"],
+        "acceptable_chunk_sets": [["a", "b"], ["c"]],
+    }
+
+    assert _group_completion_rank(group, ["a", "x", "b"], 5) == 3
+    assert _group_completion_rank(group, ["c", "x"], 5) == 1
+    assert _group_completion_rank(group, ["a", "x"], 5) is None
 
 
 def test_query_metrics_keep_ordered_and_set_action_em_separate() -> None:
@@ -319,7 +400,7 @@ def test_reranker_ablation_reports_hit_and_rank_transitions_by_intent() -> None:
     assert report["by_intent"]["complex_analysis"]["recall_at_5_delta"] == -1.0
 
 
-def test_finalize_outputs_writes_v3_policy_and_ablation_contract(tmp_path) -> None:
+def test_finalize_outputs_writes_v4_policy_and_ablation_contract(tmp_path) -> None:
     sample = _sample()
     prediction = _query_prediction(
         sample,
@@ -380,7 +461,7 @@ def test_finalize_outputs_writes_v3_policy_and_ablation_contract(tmp_path) -> No
 
     summary = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
     assert result["status"] == "success"
-    assert summary["runner_version"] == "m1-query-retrieval-eval-v3"
+    assert summary["runner_version"] == "m1-query-retrieval-eval-v4"
     assert summary["git_commit"]
     assert result["git_commit"] == summary["git_commit"]
     assert summary["evaluation_git_commit"] == "evaluation-commit"

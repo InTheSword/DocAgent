@@ -1,8 +1,8 @@
 # M1 Chunk 质量与检索 Qrels 对齐实施计划
 
 > 文件性质：当前阶段临时实施依据
-> 计划版本：2.6
-> 状态：M1-G2/G3.5 `accepted`；M1-G3.6 `frozen`；M1-G4 `not_started`
+> 计划版本：2.7
+> 状态：M1-G2/G3.5 `accepted`；M1-G3.6 `frozen`；M1-G4 执行中
 > 建立日期：2026-08-02
 > 适用范围：六文档 MinerU→Chunk 处理、原文证据到 Chunk qrels 对齐，以及依赖该 qrels 的检索评测
 
@@ -500,6 +500,51 @@ M1-G1 固定参数与角色字段：
 - 本批调用外部 API 但未使用 GPU、未重建索引、未运行检索指标；M1-G3.6 状态为
   `frozen`，并按停止条件保留 M1-G4 为 `not_started`。
 
+### 9.9 M1-G4 reviewed-qrels 正式检索测评（2026-08-02）
+
+#### 当前缺口与冻结口径
+
+1. 现有 `eval_m1_query_retrieval.py` 仍使用原文字符串自动映射，并固定报告
+   `qrels_reviewed=false`，不能作为正式 reviewed-qrels 测评。
+2. 55 条 eligible qrels 中包含 35 条正文检索、8 条表格检索、11 条视觉检索和
+   1 条文档摘要。正文、表格和视觉共 54 条进入检索指标；文档摘要不强制执行 Top-K
+   检索，只保留在 query/workflow 覆盖报告中。
+3. G3.5 隔离 corpus 的 6 个文档目录尚无稠密索引；必须用当前 1,028 个可索引 Chunk
+   和服务器 BGE-M3 重建并保存 FAISS/metadata，再由同一 Chunk hash 重新加载。
+
+#### 本批做什么
+
+1. 为现有 runner 增加 `--chunk-qrels` 正式输入和严格校验：绑定 samples、corpus
+   manifest、PDF、doc_id、Chunk ID/content hash、可索引性与 `review_status`；只允许
+   `evaluation_eligible=true` 的样本进入检索指标。
+2. 直接消费 `acceptable_chunk_sets`：同组不同集合为 OR，单个集合内多个 Chunk 为
+   AND。Top-K 只有完整覆盖任一可接受集合时才算该证据组命中，不再展平为“任一 Chunk
+   命中”。
+3. 基于同一 BGE-M3 实例重建 6 个文档的稠密索引，随后运行 original/planned 两种
+   查询与 BM25、Dense、Hybrid、Hybrid+Reranker 四种固定模式；另报告当前
+   QueryPlan policy-selected 模式和 planned Hybrid→Reranker 对照。
+4. 正式检索主指标限定为容易量化且含义明确的：证据组 Recall@5、任一完整证据组
+   Hit@5、全部必需证据组成功率@5、标准 first-relevant MRR@10，以及 mean/p95 latency。
+   同时按语言、意图和文档分组；小桶只报告样本数和指标，不做显著性结论。
+5. 表格桶只评价 Markdown/文本表格 Chunk 检索，不把关系型精确查询或统计答案正确率
+   混入本次 qrels 指标；视觉桶只评价现有图片/图题/文本 Chunk，不声称验证 VLM/OCR
+   图内信息；文档摘要和最终答案质量均在范围外。
+
+#### 文件、依赖、验收与停止条件
+
+- 只修改 `scripts/eval_m1_query_retrieval.py`、对应定向测试、本计划和验收后的状态文档；
+  不修改 Router、QueryTransformer、BM25/RRF 参数、Reranker、Chunk 或 frozen qrels。
+- 本地用 fixture 验证 qrels 绑定失败关闭、eligible 过滤、AND/OR 命中和 partial/旧自动
+  映射不进入正式指标；相关回归通过后提交并同步服务器。
+- 服务器使用当前 `qwen3.7-max-2026-06-08` API、BGE-M3、
+  bge-reranker-v2-m3 和 RTX 4090 D。不得下载/替换模型或修改稳定环境。
+- 验收要求：86 条 qrels 全部通过绑定校验；55 条 eligible 中 54 条形成检索明细，
+  每条 2 个 query variant × 4 个 mode，共 432 条；6/6 稠密索引按当前 Chunk hash
+  重新加载；完整与精选产物保存且失败可归类。
+- 本批只运行一个冻结配置的正式测评，不根据结果调 prompt、Top-K、RRF、候选规模、
+  Reranker 或 Chunk。完成后状态最高为 `benchmark_evaluated` 并停止，不进入答案评测、
+  训练或下一轮优化。
+
 | 日期 | 版本 | 变更 | 原因 |
 |---|---|---|---|
 | 2026-08-02 | 1.0 | 建立双层 Gold、Chunk 修复先行和分批验收方案 | 六文档实测证明当前自动映射率仅 0.6000，且存在跨 Chunk、页码、OCR/序列化及表题错配问题 |
@@ -519,3 +564,4 @@ M1-G1 固定参数与角色字段：
 | 2026-08-02 | 2.4 | 记录真实 API 额度阻断和可恢复进度 | 修复后已持久化 28/135 个独立 AI 决策；供应商随后统一返回 `insufficient_quota`，剩余 107 组等待恢复额度后从 partial 续跑，不得自动接受 |
 | 2026-08-02 | 2.5 | 剩余复核切换到 `qwen3.7-max-2026-06-08` | 旧模型额度耗尽；保留 partial 中 28 组及其原 reviewer 来源，仅使用 worktree `.secrets/router_llm.env` 的新模型处理剩余 107 组，不重做既有决定 |
 | 2026-08-02 | 2.6 | 完成全部决定与 qrels v2 冻结 | 150/150 组通过绑定、哈希和可索引性校验；55/86 条样本可进入后续检索评测，M1-G4 未启动 |
+| 2026-08-02 | 2.7 | 冻结 M1-G4 reviewed-qrels 正式测评合同 | 只统计 54 条可检索 eligible 样本，严格执行 qrels AND/OR 语义并重建真实 BGE-M3 索引；禁止测后调参 |
