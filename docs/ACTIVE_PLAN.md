@@ -11,10 +11,10 @@ Phase 5 个人使用 DocAgent MVP
 
 ## 当前实施依据
 
-本阶段将升级检索前查询链。实现、范围变更和验收以以下临时计划为准：
+本阶段优先修复 Chunk 质量与检索 qrels 对齐。实现、范围变更和验收以以下临时计划为准：
 
 ```text
-docs/workplans/M1_QUERY_INTENT_ROUTING_REWRITE_PLAN.md
+docs/workplans/M1_CHUNK_QRELS_ALIGNMENT_PLAN.md
 ```
 
 任何方案变化必须先更新该计划的“方案变更记录”，再继续修改代码。
@@ -76,16 +76,14 @@ Qwen、VLM、SFT/GRPO 或大型数据集的变更，必须先按
 
 ## 当前里程碑
 
-M1-F4 已完成并达到 `benchmark_evaluated`：94 条真实 Qwen 查询记录和
-432 条真实 BGE-M3/Reranker 检索 detail 完整，本地/服务器同范围 104 项
-回归通过。普通事实查询使用 Reranker 后 provisional Recall@5/MRR@10
-分别提升 0.0345/0.0854，复杂分析则分别变化 -0.0625/-0.0012。当前
-Gold→Chunk 自动映射未复核，因此不达到 `accepted`；当前停止，不根据
-本冻结集继续调 Prompt、RRF、候选规模或 Reranker。
+M1 Chunk/qrels 只读核查已完成：六文档共有 1,222 个 Chunk、1,016 个可索引
+Chunk；150 个原文证据组只有 90 个被当前自动流程映射。60 个未映射组中，诊断发现
+相邻多 Chunk 覆盖、页码不一致、OCR/公式/表格序列化差异和原文保留不足等多种原因。
+正文 1,200 字符句界切分整体可用，但表格尚无父子 Chunk，且存在相邻表格与表题错配。
 
-后续若要评估新契约的整体收益，必须先在临时计划中定义独立开发集与冻结测试重跑
-规则；不得用当前冻结测试集调 prompt、查询融合、reranker 阈值或候选规模，也不
-启动最终答案质量评测或训练。
+当前里程碑为 M1-G1：只实现并验证通用的表格关联、大表父子 Chunk 和对应质量报告；
+不重建六文档、不生成最终 qrels、不修改 Prompt、RRF、候选规模或 Reranker。实现与
+验收边界以 `docs/workplans/M1_CHUNK_QRELS_ALIGNMENT_PLAN.md` 为准。
 
 ## 停止条件
 
