@@ -136,6 +136,13 @@ Recall@5/MRR@10 差值为 +0.0345/+0.0854，复杂分析为 -0.0625/-0.0012。
 `benchmark_evaluated`，不构成未复核 Chunk qrels 上的检索验收。该冻结集仍不得用于
 Prompt、RRF、候选规模或 Reranker 参数调优。
 
+M1-G3 运行 `m1_g3_chunk_qrels_candidates_v3_20260802` 将这些原文证据与
+M1-G2 冻结 Chunk corpus 建立了可复核 candidate 合同。86 条文档查询的 150 个
+证据组全部进入复核队列：135 组有候选，15 组无候选。机器匹配结果全部为
+`unreviewed`；只有当显式 review decisions 覆盖所有必需证据组，并且
+corpus/PDF/Chunk 哈希均一致时，才能生成 `frozen_chunk_qrels.jsonl`。当前
+没有冻结 qrels，不得用 candidate 直接运行正式 Recall/MRR。
+
 ## 6. 延后数据集
 
 ### TAT-QA

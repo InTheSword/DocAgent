@@ -1,8 +1,8 @@
 # M1 Chunk 质量与检索 Qrels 对齐实施计划
 
 > 文件性质：当前阶段临时实施依据
-> 计划版本：1.6
-> 状态：M1-G2 `accepted`；M1-G3 `not_started`；M1-G4 `not_started`
+> 计划版本：1.7
+> 状态：M1-G2 `accepted`；M1-G3 `ready`；M1-G4 `not_started`
 > 建立日期：2026-08-02
 > 适用范围：六文档 MinerU→Chunk 处理、原文证据到 Chunk qrels 对齐，以及依赖该 qrels 的检索评测
 
@@ -259,6 +259,28 @@ M1-G1 固定参数与角色字段：
 - 停止条件：candidate/review queue 真实运行与 fail-closed 冻结验证完成后停止；
   没有真实 review decisions 时状态最高为 `ready`，不得报告 `frozen`。
 
+### 9.2 M1-G3 执行结果（2026-08-02）
+
+- 实现 `scripts/build_m1_chunk_qrels.py` 及定向测试，本地与服务器同范围
+  17 项回归均通过；
+- 最终服务器运行基于提交 `cdcc6f6` 和 M1-G2 corpus
+  `m1-chunk-v3-g2-bca0893-20260802`；
+- 94 条冻结样本中，86 条文档绑定查询生成 candidate，8 条非文档路由样本
+  按合同排除；150/150 个证据组全部进入复核队列；
+- candidate 分布：60 个 `exact_single`、19 个 `exact_multi`、2 个
+  `exact_ambiguous`、54 个 `fuzzy`、15 个 `unmapped`；135/150 个证据组至少有
+  一组候选；
+- `chunk_qrels_candidates.jsonl`、`qrels_review_queue.jsonl` 和
+  `review_decisions.template.jsonl` 分别为 86、150 和 150 条；
+- 在真实 corpus 上将空白 review template 交给冻结器时，冻结器非零退出且
+  没有产生 `frozen_chunk_qrels.jsonl`；同步包 manifest 与实际文件完全一致；
+- 最终精选产物：
+  `outputs/sync/m1_g3_chunk_qrels_candidates_v3_20260802/`；summary/result/manifest 均绑定
+  同一 Git 提交，sync manifest 的文件范围、大小和 SHA256 全部校验通过。完整 candidate、复核队列和
+  decision 模板仅保存在服务器完整输出目录，不向本地复制六文档 Chunk。
+- 本批没有使用 GPU、LLM/VLM/MinerU API，没有重建索引或运行检索指标。
+  由于尚无显式 review decisions，M1-G3 状态为 `ready`，不是 `frozen`。
+
 ## 10. 方案变更记录
 
 ### M1-G1 本地验证结果（2026-08-02）
@@ -309,3 +331,4 @@ M1-G1 固定参数与角色字段：
 | 2026-08-02 | 1.4 | 增加表题分配后的实际检索文本验收 | 服务器真实 MinerU 产物暴露换行/空格归一化差异，仅检查元数据会误报通过 |
 | 2026-08-02 | 1.5 | 记录 M1-G2 六文档隔离重建验收 | 实际 MinerU 产物上的 Chunk/表格父子合同、表题检索文本与源语料不可变性均通过 |
 | 2026-08-02 | 1.6 | 冻结 M1-G3 candidate、review queue 和 fail-closed 冻结边界 | 自动映射不等于内容复核；在缺少显式 review decisions 时不得伪造 reviewed qrels |
+| 2026-08-02 | 1.7 | 记录 M1-G3 candidate 真实运行与冻结拒绝结果 | 150 个证据组已形成可复核队列，但没有显式复核决策，状态只能是 `ready` |
