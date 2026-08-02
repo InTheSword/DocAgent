@@ -178,6 +178,13 @@ def test_run_without_reviews_writes_candidates_but_not_frozen_qrels(tmp_path: Pa
     assert summary["non_document_sample_count"] == 1
     assert not (output_dir / "frozen_chunk_qrels.jsonl").exists()
     assert len(read_jsonl(output_dir / "qrels_review_queue.jsonl")) == 1
+    sync_manifest = json.loads((sync_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert {Path(item["path"]).name for item in sync_manifest["files"]} == {
+        "preview.json",
+        "result.json",
+        "summary.json",
+        "summary.md",
+    }
 
 
 def test_direct_cli_help_can_import_project_package() -> None:

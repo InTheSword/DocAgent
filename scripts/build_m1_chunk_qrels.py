@@ -520,7 +520,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     _write_json(manifest_output_path, _artifact_manifest(args.run_id, output_dir, files))
     if sync_dir is not None:
         sync_dir.mkdir(parents=True, exist_ok=True)
-        for source in (summary_path, result_path, preview_path, manifest_output_path):
+        for source in (summary_path, result_path, preview_path):
             (sync_dir / source.name).write_bytes(source.read_bytes())
         summary_md = (
             "# M1-G3 qrels candidate summary\n\n"
@@ -533,7 +533,18 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             f"- frozen qrels written: {bool(frozen_rows)}\n"
             "- GPU/API/retrieval evaluation: not used\n"
         )
-        (sync_dir / "summary.md").write_text(summary_md, encoding="utf-8")
+        sync_summary_md = sync_dir / "summary.md"
+        sync_summary_md.write_text(summary_md, encoding="utf-8")
+        sync_files = [
+            sync_dir / "result.json",
+            sync_dir / "summary.json",
+            sync_dir / "preview.json",
+            sync_summary_md,
+        ]
+        _write_json(
+            sync_dir / "manifest.json",
+            _artifact_manifest(args.run_id, sync_dir, sync_files),
+        )
     return result
 
 
