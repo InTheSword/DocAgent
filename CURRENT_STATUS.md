@@ -1,6 +1,6 @@
 # 当前状态
 
-更新日期：2026-08-01
+更新日期：2026-08-02
 
 本文档是项目已验证能力的精简索引。`docs/ACTIVE_PLAN.md` 定义下一步允许
 开展的工作；已被替代的任务日志与过程报告保留在 Git 历史中。
@@ -15,6 +15,7 @@ DocAgent 是本地、CLI 优先的个人使用文档问答 MVP。它接收文件
 |---|---|---|
 | M1 查询意图与查询变换 | `benchmark_evaluated` | M1-F4 已在 94 条冻结查询上重跑 M1-F2/F3 合同：intent/workflow accuracy 均为 0.7234，retriever mode accuracy 为 0.8298，单变换策略合法率为 1.0000，Router/Transformer 实际 fallback 均为 0。普通正文事实使用 Reranker 后 provisional Recall@5/MRR@10 分别提升 0.0345/0.0854，复杂分析则变化 -0.0625/-0.0012。Gold→Chunk 自动映射未复核，因此未达到 `accepted`。 |
 | M1 冻结评测语料准备 | `real_model_verified` | 6 份真实 PDF 已由 MinerU API `vlm` 解析为 1,222 个 `docagent_chunk_v3` Chunk，其中 1,016 个进入真实 BGE-M3 1024 维 FAISS 索引；6/6 索引按 Chunk 哈希重新加载通过，Chunk 契约错误为 0。该状态只证明评测语料与索引就绪，不代表已完成 Recall/MRR 基准。 |
+| M1 Chunk 质量与 qrels 对齐 G2 | `accepted` | 基于六文档既有真实 MinerU JSON 隔离重建 1,233 个 Chunk（1,022 个可索引）；30 个物理表中 5 个大表生成 11 个行组检索子块，结构化索引仍使用 30 个物理表。Chunk/表格父子合同错误为 0，表 14/15 元数据与检索文本均正确分离，旧语料哈希未改变。本批未建立稠密索引或 qrels。 |
 | Phase 5 CLI、导入与输出契约 | `accepted` | 文件和 `doc_id` 路径提供稳定的答案/证据/引用/追踪契约。 |
 | 原始 PDF MinerU API 路径 | `accepted` | 实时 API 冒烟建立了导入和引用契约。 |
 | 混合检索与模型回答工作流 | `real_model_verified` | 真实 BGE-M3、交叉编码器重排序器、Qwen AnswerPolicy、LLM 查询规划与持久化检索追踪均有服务器冒烟证据。 |
@@ -77,6 +78,12 @@ DocAgent 是本地、CLI 优先的个人使用文档问答 MVP。它接收文件
   Chunk；6/6 文档来源哈希、Chunk 契约、索引 Chunk 哈希、嵌入数量与 1024 维
   索引加载检查通过。质量报告保留 origin PDF 二进制差异及部分阅读顺序告警，
   但未触发失败条件。该记录不包含冻结集 Recall/MRR 或 reranker 指标。
+- 服务器 `outputs/sync/m1_g2_chunk_rebuild_bca0893_20260802/`：基于提交
+  `bca0893` 和既有六文档 MinerU JSON 执行隔离 Chunk 重建。1,222 个旧
+  Chunk 重建为 1,233 个，新增 11 个大表行组检索子块；30 个物理表仍全部可供
+  `TableRelationalIndex` 读取。Chunk 合同、表格父子合同、表 14/15 元数据与
+  `retrieval_text` 检查全部通过，且旧 `data/documents` 哈希未改变。该记录
+  不包含 BGE-M3 索引、qrels 或检索指标。
 - 服务器 `outputs/sync/m1_query_retrieval_baseline_20260730/`：基于提交
   `dfb0a2f`，真实 `qwen3.7-max-2026-05-17`、BGE-M3 和
   bge-reranker-v2-m3 完成 94 条查询评测及 688 组原问题/计划查询、四检索器

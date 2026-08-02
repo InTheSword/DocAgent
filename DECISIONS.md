@@ -50,6 +50,13 @@ CDC、Demo 和新产品阶段均需要明确的范围决策。
 - 页聚合块只用于上下文读取和审计，不作为普通检索候选，避免与子 Chunk
   重复召回。Chunk 契约或 `retrieval_text` 变化后，既有文档需要重新转换并
   重建稠密索引。
+- 结构化表格超过 12 行或序列化 Markdown 超过 1,800 字符时，保留完整
+  `structured_parent` 供结构化查询，并生成携带完整表题、表头、单位、脚注、
+  页码和行范围的 `retrieval_child` 供稀疏/稠密检索。父表不进入文本检索，
+  子表不重复进入结构化索引。
+- 检索评测保留两层真值：不随 Chunk 边界变化的原文 `source_evidence`，以及绑定
+  PDF 哈希、MinerU 产物、Chunk 合同和 corpus manifest 的 `chunk_qrels`。未复核的
+  自动对齐只能作为 candidate/诊断产物，不得进入正式 Recall/MRR。
 - 稠密索引必须保存由有序 block ID、`retrieval_text`、内容哈希和 Chunk
   契约版本组成的 evidence hash；该指纹或模型不匹配时索引状态为 stale，
   不允许静默复用。
