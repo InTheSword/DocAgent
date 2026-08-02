@@ -229,3 +229,41 @@ def test_structure_quality_report_supports_current_api_manifest_and_sparse_raw_o
     assert report["reading_order_contiguous"] is False
     assert report["reading_order_valid"] is True
     assert "invalid_reading_order" not in report["warnings"]
+
+
+def test_structure_quality_report_marks_algorithm_fields_as_consumed(tmp_path: Path) -> None:
+    document_dir = tmp_path / "document"
+    mineru_dir = document_dir / "mineru"
+    mineru_dir.mkdir(parents=True)
+    source = document_dir / "original.pdf"
+    source.write_bytes(b"%PDF-1.4\n/Type /Page\n")
+    content_list = mineru_dir / "sample_content_list.json"
+    content_list.write_text(
+        json.dumps(
+            [
+                {
+                    "type": "code",
+                    "sub_type": "algorithm",
+                    "page_idx": 0,
+                    "code_caption": "Algorithm 1",
+                    "code_body": "<div>return result</div>",
+                    "code_footnote": "Example",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    blocks = content_list_to_blocks(doc_id="doc123", content_list_path=content_list)
+
+    report = build_structure_quality_report(
+        doc_id="doc123",
+        source_pdf=source,
+        mineru_output_dir=mineru_dir,
+        document_dir=document_dir,
+        blocks=blocks,
+        page_blocks=build_page_blocks("doc123", blocks),
+    )
+
+    assert "code_caption" not in report["preserved_but_not_consumed_fields"]
+    assert "code_body" not in report["preserved_but_not_consumed_fields"]
+    assert "code_footnote" not in report["preserved_but_not_consumed_fields"]
