@@ -1,6 +1,6 @@
 # 长期决策
 
-更新日期：2026-08-01
+更新日期：2026-08-02
 
 本文档记录约束后续工作的当前选择。它不是按时间排序的任务日志，也不重复
 实现状态；状态请查看 `CURRENT_STATUS.md`。已被替代的讨论和实验细节可在 Git
@@ -57,6 +57,9 @@ CDC、Demo 和新产品阶段均需要明确的范围决策。
 - 检索评测保留两层真值：不随 Chunk 边界变化的原文 `source_evidence`，以及绑定
   PDF 哈希、MinerU 产物、Chunk 合同和 corpus manifest 的 `chunk_qrels`。未复核的
   自动对齐只能作为 candidate/诊断产物，不得进入正式 Recall/MRR。
+- `chunk_qrels` 使用 `acceptable_chunk_sets`：每个内层集合中的 Chunk 必须全部命中，
+  集合之间为 OR 关系。qrels 只能引用可索引 Chunk，并绑定冻结样本、corpus manifest、
+  PDF、Chunk 内容和复核决策哈希；旧 schema、部分候选或无明确来源的复核结果不得冻结。
 - 稠密索引必须保存由有序 block ID、`retrieval_text`、内容哈希和 Chunk
   契约版本组成的 evidence hash；该指纹或模型不匹配时索引状态为 stale，
   不允许静默复用。

@@ -1,7 +1,7 @@
 # M1 Chunk 质量与检索 Qrels 对齐实施计划
 
 > 文件性质：当前阶段临时实施依据
-> 计划版本：1.8
+> 计划版本：1.9
 > 状态：M1-G2 `accepted`；M1-G3 `ready`；M1-G4 `not_started`
 > 建立日期：2026-08-02
 > 适用范围：六文档 MinerU→Chunk 处理、原文证据到 Chunk qrels 对齐，以及依赖该 qrels 的检索评测
@@ -319,6 +319,25 @@ M1-G1 固定参数与角色字段：
 - 停止条件仍为 M1-G3 `ready`：只有用户另行提供真实、完整且通过 v2 校验的 review
   decisions 后才可冻结；不得在本批启动 M1-G4。
 
+### 9.4 M1-G3 v2 加固结果（2026-08-02）
+
+- 提交 `edcc03f` 将 schema 升级为 `m1-chunk-qrels-v2`，以
+  `acceptable_chunk_sets` 表达完整必需集合与等价集合，并移除旧模板中的主块/扁平
+  替代块字段；
+- 冻结器已拒绝部分多块候选、跨候选拼接、不可索引 Chunk、重复样本/证据组、无时区
+  时间、错误 Chunk hash、过期样本/manifest 绑定和旧 schema decision；合法多块及
+  完整替代集合可以冻结；
+- 本地与服务器的 qrels + M1 检索评测同范围 21 项回归通过；
+- 在服务器同一 M1-G2 corpus 上重新生成 86 条 candidate、150 条复核队列和 150 条
+  v2 decision 模板。候选分布保持 60 个 `exact_single`、19 个 `exact_multi`、2 个
+  `exact_ambiguous`、54 个 `fuzzy` 和 15 个 `unmapped`；
+- 所有 candidate、queue、template 与 summary/result 均绑定同一
+  `samples_sha256` 和 `corpus_manifest_sha256`，精选包 manifest 的文件大小与 SHA256
+  校验通过；空白 v2 decision 模板被冻结器非零拒绝，未生成 frozen qrels；
+- 完整产物：`outputs/m1_g3_chunk_qrels_candidates_v4_20260802/`；精选产物：
+  `outputs/sync/m1_g3_chunk_qrels_candidates_v4_20260802/`。本批未使用 GPU/API、未重建
+  索引、未运行检索指标；M1-G3 仍为 `ready`，M1-G4 仍为 `not_started`。
+
 ## 10. 方案变更记录
 
 ### M1-G1 本地验证结果（2026-08-02）
@@ -371,3 +390,4 @@ M1-G1 固定参数与角色字段：
 | 2026-08-02 | 1.6 | 冻结 M1-G3 candidate、review queue 和 fail-closed 冻结边界 | 自动映射不等于内容复核；在缺少显式 review decisions 时不得伪造 reviewed qrels |
 | 2026-08-02 | 1.7 | 记录 M1-G3 candidate 真实运行与冻结拒绝结果 | 150 个证据组已形成可复核队列，但没有显式复核决策，状态只能是 `ready` |
 | 2026-08-02 | 1.8 | 加固 M1-G3 qrels v2 冻结合同并要求重生复核材料 | v1 无法完整表达多 Chunk 等价集合，且对部分候选、不可索引块和样本/决策版本漂移约束不足 |
+| 2026-08-02 | 1.9 | 记录 qrels v2 本地/服务器验收与新复核材料 | v2 契约、输入绑定和 fail-closed 行为已验证，但尚无真实复核决策，不能进入 M1-G4 |

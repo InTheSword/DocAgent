@@ -16,7 +16,7 @@ DocAgent 是本地、CLI 优先的个人使用文档问答 MVP。它接收文件
 | M1 查询意图与查询变换 | `benchmark_evaluated` | M1-F4 已在 94 条冻结查询上重跑 M1-F2/F3 合同：intent/workflow accuracy 均为 0.7234，retriever mode accuracy 为 0.8298，单变换策略合法率为 1.0000，Router/Transformer 实际 fallback 均为 0。普通正文事实使用 Reranker 后 provisional Recall@5/MRR@10 分别提升 0.0345/0.0854，复杂分析则变化 -0.0625/-0.0012。Gold→Chunk 自动映射未复核，因此未达到 `accepted`。 |
 | M1 冻结评测语料准备 | `real_model_verified` | 6 份真实 PDF 已由 MinerU API `vlm` 解析为 1,222 个 `docagent_chunk_v3` Chunk，其中 1,016 个进入真实 BGE-M3 1024 维 FAISS 索引；6/6 索引按 Chunk 哈希重新加载通过，Chunk 契约错误为 0。该状态只证明评测语料与索引就绪，不代表已完成 Recall/MRR 基准。 |
 | M1 Chunk 质量与 qrels 对齐 G2 | `accepted` | 基于六文档既有真实 MinerU JSON 隔离重建 1,233 个 Chunk（1,022 个可索引）；30 个物理表中 5 个大表生成 11 个行组检索子块，结构化索引仍使用 30 个物理表。Chunk/表格父子合同错误为 0，表 14/15 元数据与检索文本均正确分离，旧语料哈希未改变。本批未建立稠密索引或 qrels。 |
-| M1 Chunk qrels candidate G3 | `ready` | 86 条文档查询的 150 个证据组已全部进入复核合同；135 组有候选，其中 60 组精确单块、19 组精确多块、2 组精确歧义、54 组模糊，15 组无候选。候选绑定 corpus/PDF/Chunk 哈希，缺少显式复核时冻结器拒绝输出；尚无 frozen qrels。 |
+| M1 Chunk qrels candidate G3 | `ready` | qrels v2 以完整 `acceptable_chunk_sets` 表达多块与等价证据集合；86 条文档查询的 150 个证据组全部进入复核合同，135 组有候选、15 组无候选。candidate/queue/template 绑定样本、corpus manifest、PDF 与 Chunk hash；部分候选、不可索引块、旧 schema 和空白复核均被拒绝。尚无 frozen qrels。 |
 | Phase 5 CLI、导入与输出契约 | `accepted` | 文件和 `doc_id` 路径提供稳定的答案/证据/引用/追踪契约。 |
 | 原始 PDF MinerU API 路径 | `accepted` | 实时 API 冒烟建立了导入和引用契约。 |
 | 混合检索与模型回答工作流 | `real_model_verified` | 真实 BGE-M3、交叉编码器重排序器、Qwen AnswerPolicy、LLM 查询规划与持久化检索追踪均有服务器冒烟证据。 |
@@ -85,12 +85,12 @@ DocAgent 是本地、CLI 优先的个人使用文档问答 MVP。它接收文件
   `TableRelationalIndex` 读取。Chunk 合同、表格父子合同、表 14/15 元数据与
   `retrieval_text` 检查全部通过，且旧 `data/documents` 哈希未改变。该记录
   不包含 BGE-M3 索引、qrels 或检索指标。
-- 服务器 `outputs/sync/m1_g3_chunk_qrels_candidates_v3_20260802/`：基于提交
-  `cdcc6f6` 为 86 条文档查询生成 86 条 candidate、150 条复核队列和 150 条
-  decision 模板。候选覆盖 135/150 个证据组；真实空白 decision 文件被
-  fail-closed 冻结校验拒绝，未产生 frozen qrels。Git 绑定和精选包大小/SHA256
-  全部校验通过。该记录没有调用 GPU/API，
-  不包含索引重建或检索指标。
+- 服务器 `outputs/sync/m1_g3_chunk_qrels_candidates_v4_20260802/`：基于提交
+  `edcc03f` 为 86 条文档查询生成 86 条 v2 candidate、150 条复核队列和 150 条
+  decision 模板。候选覆盖 135/150 个证据组；样本与 corpus manifest 哈希绑定、
+  新模板字段和精选包大小/SHA256 全部校验通过，真实空白 decision 文件被
+  fail-closed 冻结校验拒绝且未产生 frozen qrels。该记录没有调用 GPU/API，
+  不包含索引重建或检索指标；v3 产物与 v1 模板已被替代。
 - 服务器 `outputs/sync/m1_query_retrieval_baseline_20260730/`：基于提交
   `dfb0a2f`，真实 `qwen3.7-max-2026-05-17`、BGE-M3 和
   bge-reranker-v2-m3 完成 94 条查询评测及 688 组原问题/计划查询、四检索器
