@@ -1,8 +1,8 @@
 # M1 Chunk 质量与检索 Qrels 对齐实施计划
 
 > 文件性质：当前阶段临时实施依据
-> 计划版本：1.5
-> 状态：M1-G2 `accepted`；M1-G3/M1-G4 `not_started`
+> 计划版本：1.6
+> 状态：M1-G2 `accepted`；M1-G3 `not_started`；M1-G4 `not_started`
 > 建立日期：2026-08-02
 > 适用范围：六文档 MinerU→Chunk 处理、原文证据到 Chunk qrels 对齐，以及依赖该 qrels 的检索评测
 
@@ -213,6 +213,52 @@ M1-G1 固定参数与角色字段：
 
 每批完成后停止并报告；不得自动进入下一批，更不得根据冻结评测结果调检索参数。
 
+### 9.1 M1-G3 执行合同（2026-08-02）
+
+#### 本批做什么
+
+1. 新增一个确定性 qrels candidate 工具，只读取：
+   - 94 条 `frozen_query_samples.jsonl`；
+   - M1-G2 冻结的 `corpus_manifest.json`；
+   - 六文档隔离重建的 `evidence_blocks.jsonl`。
+2. 只为 86 条文档绑定查询生成 candidate；8 条非文档路由样本不生成
+   Chunk qrels，但在摘要中显式计数。
+3. 对每个原文证据组保留 `source_evidence`，并根据页码和证据类型约束生成：
+   - 单 Chunk 候选；
+   - 按文档阅读顺序相邻的最小多 Chunk 候选；
+   - 候选 Chunk ID、`content_hash`、页码、类型、匹配方式和有上限的复核预览。
+4. 输出两个分离合同：
+   - `chunk_qrels_candidates.jsonl`：机器候选，始终是 `unreviewed`；
+   - `qrels_review_queue.jsonl`：每个证据组一条，按无候选、多块、模糊、
+     精确单块的优先级排序，同时生成独立的 review decision 模板。
+5. 实现 fail-closed 冻结校验：只有显式 review decision 覆盖所有必需证据组，
+   且 PDF/corpus/Chunk 哈希、Chunk ID 与内容哈希全部一致时，才能生成
+   `frozen_chunk_qrels.jsonl`。
+6. 在服务器对 M1-G2 真实 Chunk corpus 运行一次，保存完整本地产物和
+   `outputs/sync/<run_id>/` 精选包，报告候选覆盖率和复核队列规模。
+
+#### 本批不做什么
+
+- 不把 normalized/compact/fuzzy 匹配自动标记为 `reviewed`；
+- 不伪造人工复核人、复核时间或复核结论；
+- 本轮没有外部复核决策文件，因此预期产出为 candidate + review queue；
+  冻结器必须被测试为“缺少复核时拒绝冻结”，不生成伪 `reviewed` qrels；
+- 不改写 `frozen_query_samples.jsonl`，不修改问题、原文证据或 Chunk；
+- 不调用 LLM/VLM/MinerU API，不加载 BGE-M3/reranker，不重建 FAISS 索引；
+- 不接入正式 Recall/MRR，不执行 M1-G4，不根据 candidate 调整检索参数。
+
+#### 文件、验收和资源边界
+
+- 预计新增 `scripts/build_m1_chunk_qrels.py` 和
+  `tests/test_build_m1_chunk_qrels.py`；只在 reviewed qrels 真正冻结后才修改
+  `scripts/eval_m1_query_retrieval.py`。
+- 定向验收：候选可表达单块/最小多块，证据组和 Chunk 哈希可验证，
+  未复核时冻结失败，缺失/错误决策、过期 corpus 或 Chunk 哈希均失败。
+- 该工具是确定性 JSON/JSONL 处理，实现为 `local_only`；基于服务器既有六文档
+  产物的真实运行为 `server_optional`，即使服务器有 GPU 也不使用。
+- 停止条件：candidate/review queue 真实运行与 fail-closed 冻结验证完成后停止；
+  没有真实 review decisions 时状态最高为 `ready`，不得报告 `frozen`。
+
 ## 10. 方案变更记录
 
 ### M1-G1 本地验证结果（2026-08-02）
@@ -262,3 +308,4 @@ M1-G1 固定参数与角色字段：
 | 2026-08-02 | 1.3 | 记录 M1-G1 实现和 104 项本地回归结果 | 表格父子 Chunk、表题关联、结构化父表接线和质量报告已达到本地 fixture 验证边界 |
 | 2026-08-02 | 1.4 | 增加表题分配后的实际检索文本验收 | 服务器真实 MinerU 产物暴露换行/空格归一化差异，仅检查元数据会误报通过 |
 | 2026-08-02 | 1.5 | 记录 M1-G2 六文档隔离重建验收 | 实际 MinerU 产物上的 Chunk/表格父子合同、表题检索文本与源语料不可变性均通过 |
+| 2026-08-02 | 1.6 | 冻结 M1-G3 candidate、review queue 和 fail-closed 冻结边界 | 自动映射不等于内容复核；在缺少显式 review decisions 时不得伪造 reviewed qrels |

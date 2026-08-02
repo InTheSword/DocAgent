@@ -92,8 +92,10 @@ MinerU JSON 在隔离目录重建为 1,233 个 Chunk（1,022 个可索引），3
 outputs/sync/m1_g2_chunk_rebuild_bca0893_20260802/
 ```
 
-当前停止。下一里程碑 M1-G3 是基于该冻结 corpus 生成 qrels candidate、建立最小复核队列并
-冻结 reviewed qrels；不得在本批自动执行。GPU 索引重建和检索评测属于更后的 M1-G4。
+M1-G3 已由用户明确启动。当前按临时计划 1.6 版实现 qrels candidate、最小复核队列与
+fail-closed 冻结校验。自动匹配始终保持 `unreviewed`；没有显式 review decisions 时不生成
+`frozen_chunk_qrels.jsonl`，里程碑状态最高为 `ready`。GPU 索引重建和检索评测属于
+M1-G4，本批不执行。
 
 ## 停止条件
 
