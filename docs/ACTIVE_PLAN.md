@@ -110,9 +110,9 @@ M1-G3.5 已达到 `accepted`：提交 `a31f7f3` 在真实六文档上完成算�
 编码为 13 个 `replace` 和 2 个 `exclude`；冻结器确认该部分 decision 不能生成正式
 qrels。旧 v4 candidate/template 已失效。
 
-当前停止。M1-G3 仍为 `ready`：其余 135 个证据组需要显式复核并与 15 组部分决策合并，
-完整通过冻结校验后才能进入 M1-G4。BGE-M3/FAISS 索引重建和正式检索评测仍为
-`not_started`。
+当前执行 M1-G3.6：使用已配置 Qwen API 独立复核其余 135 个证据组，与 15 组人工
+decision 合并；只有 150/150 组通过 qrels v2 绑定、内容哈希和可索引性校验后才生成
+frozen qrels。该批不需要 GPU，不重建 BGE-M3/FAISS 索引，也不运行 M1-G4 检索评测。
 
 ## 停止条件
 

@@ -1,8 +1,8 @@
 # M1 Chunk 质量与检索 Qrels 对齐实施计划
 
 > 文件性质：当前阶段临时实施依据
-> 计划版本：2.1
-> 状态：M1-G2/G3.5 `accepted`；M1-G3 `ready`；M1-G4 `not_started`
+> 计划版本：2.2
+> 状态：M1-G2/G3.5 `accepted`；M1-G3.6 执行中；M1-G4 `not_started`
 > 建立日期：2026-08-02
 > 适用范围：六文档 MinerU→Chunk 处理、原文证据到 Chunk qrels 对齐，以及依赖该 qrels 的检索评测
 
@@ -449,6 +449,35 @@ M1-G1 固定参数与角色字段：
   `outputs/sync/m1_g35_unmapped15_chunk_repairs_a31f7f3_20260802/`。本批没有重建
   BGE-M3/FAISS 索引或运行 M1-G4 指标，到此停止。
 
+### 9.7 M1-G3.6 快速完整复核与 qrels 冻结（2026-08-02）
+
+#### 本批做什么
+
+1. 复用 v5 candidate、当前 corpus 和已完成的 15 组人工 decision；不重新解析 PDF、
+   不重建 Chunk，也不修改冻结查询。
+2. 使用项目已配置的 `qwen3.7-max-2026-05-17` API 作为 `independent_ai`，逐组复核
+   剩余 135 个证据组。模型只接收问题、原文证据和有上限的 candidate preview，只能
+   输出 `accept_candidate` 或 `exclude`、完整候选序号和简短理由；不输出置信度、答案、
+   思维链或工具信息。
+3. 对 JSON、字段集合、动作、候选序号和动作组合执行严格校验；首次非法时最多纠错
+   重试一次，仍非法或 API 失败则整批 fail-closed，不自动接受该组。
+4. 将 135 组独立 AI decision 与 15 组人工 decision 合并，调用现有 qrels v2 冻结器。
+   只有 150/150 组完整覆盖、所有绑定/hash/可索引性校验通过时才写
+   `frozen_chunk_qrels.jsonl`。
+5. 保存完整服务器 decision/qrels 产物及不含 prompt、原文全文和原始模型输出的精选
+   同步包，报告接受/排除、可评测样本和重试数量。
+
+#### 文件、验收与资源边界
+
+- 新增一个单用途 `scripts/review_m1_chunk_qrels.py` 和定向测试；不修改 candidate 或
+  frozen qrels 公共 schema，不改 Router/QueryTransformer/检索器。
+- 本地使用 fake client 验证合法接受、排除、非法输出纠错和 fail-closed；服务器使用
+  真实 Qwen API 完成全部 135 组后，再运行现有 qrels/评测合同回归。
+- 该任务属于 `server_required` 的真实外部 API 验证，但不需要 GPU；即使服务器有卡也
+  不加载本地模型。
+- 停止条件：150 组完整 decisions 与 frozen qrels 通过现有冻结器校验，状态更新为
+  `frozen` 后停止。不得自动重建稠密索引或进入 M1-G4 检索评测。
+
 | 日期 | 版本 | 变更 | 原因 |
 |---|---|---|---|
 | 2026-08-02 | 1.0 | 建立双层 Gold、Chunk 修复先行和分批验收方案 | 六文档实测证明当前自动映射率仅 0.6000，且存在跨 Chunk、页码、OCR/序列化及表题错配问题 |
@@ -463,3 +492,4 @@ M1-G1 固定参数与角色字段：
 | 2026-08-02 | 1.9 | 记录 qrels v2 本地/服务器验收与新复核材料 | v2 契约、输入绑定和 fail-closed 行为已验证，但尚无真实复核决策，不能进入 M1-G4 |
 | 2026-08-02 | 2.0 | 纳入 15 个无候选组人工复核和通用 MinerU→Chunk 修复 | 人工复核证明旧候选失败同时包含标注对齐、算法块丢失、视觉图题粘连、全角检索表示和图片 OCR 缺口，必须先产生新 corpus 再编码决策 |
 | 2026-08-02 | 2.1 | 记录 G3.5 通用修复、真实 OCR 对照、新 corpus 与 15 组部分决策 | 修复已通过真实六文档转换，图片内 OCR 缺口仍存在，部分复核不能越过完整冻结合同 |
+| 2026-08-02 | 2.2 | 增加剩余 135 组独立 AI 快速复核与完整冻结批次 | 用户要求快速产生全部可用 frozen qrels；必须保留显式复核来源、严格输出校验和 fail-closed 边界 |
