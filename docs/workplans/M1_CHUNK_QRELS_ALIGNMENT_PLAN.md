@@ -1,8 +1,8 @@
 # M1 Chunk 质量与检索 Qrels 对齐实施计划
 
-> 文件性质：当前阶段临时实施依据
-> 计划版本：2.7
-> 状态：M1-G2/G3.5 `accepted`；M1-G3.6 `frozen`；M1-G4 执行中
+> 文件性质：已完成阶段的临时实施记录
+> 计划版本：2.8
+> 状态：M1-G2/G3.5 `accepted`；M1-G3.6 `frozen`；M1-G4 `benchmark_evaluated`
 > 建立日期：2026-08-02
 > 适用范围：六文档 MinerU→Chunk 处理、原文证据到 Chunk qrels 对齐，以及依赖该 qrels 的检索评测
 
@@ -545,6 +545,36 @@ M1-G1 固定参数与角色字段：
   Reranker 或 Chunk。完成后状态最高为 `benchmark_evaluated` 并停止，不进入答案评测、
   训练或下一轮优化。
 
+### 9.10 M1-G4 正式测评结果（2026-08-02）
+
+- 提交 `f0b92cb` 将 runner 升级为 v4，严格加载 qrels v2、过滤 excluded 样本并按
+  OR-of-AND `acceptable_chunk_sets` 计算证据组命中。本地与服务器相关回归均为
+  84 passed；真实 qrels 只读预检通过 86/86 行和全部输入/hash 绑定。
+- 使用 `qwen3.7-max-2026-06-08` 生成 94 条 QueryPlan；Router 无 fallback，
+  Transformer 1 次 fallback。Intent/workflow/retriever-mode accuracy 分别为
+  0.7021/0.7234/0.8404，单一变换策略合法率为 1.0，变换动作 exact match 为 0.5213。
+- 使用真实 BGE-M3 为 6 份文档、1,028 个可索引 Chunk 重建 1024 维 FAISS 索引，
+  6/6 按当前 Chunk hash 重载；54 条可检索 eligible 样本生成 432 条固定模式明细。
+- Policy-selected planned 检索的证据组 Recall@5/All-groups@5/MRR@10 为
+  0.5125/0.5741/0.7799。固定 planned Hybrid+Reranker 为
+  0.5750/0.5741/0.7780；planned Dense 与 Hybrid 的 Recall@5 也均为 0.5750。
+- 查询变换相对原问题没有整体正收益：planned 相对 original 的 Dense/Hybrid
+  Recall@5 分别变化 -0.0250/-0.0125，Hybrid+Reranker Recall 持平且 MRR 变化
+  -0.0003。该结论只描述当前冻结配置，不触发测后 prompt 或策略调整。
+- Reranker 相对 planned Hybrid 的 Recall@5 变化 0、MRR@10 +0.0412、Hit@5
+  -0.0185，mean/p95 latency 分别增加约 60.2/101.3 ms；1 条获得 Hit、2 条失去 Hit，
+  13 条排名改善、9 条变差。复杂分析桶 MRR 变化 -0.0714。
+- Policy-selected 的 complex_analysis 证据组 Recall@5/All-groups@5 为
+  0.3529/0.1429，navigation 为 0.2609/0.3636，是当前主要薄弱桶。8 条表格文本检索
+  样本均命中，11 条视觉文本 Chunk 样本命中 8 条；前者不代表关系统计答案正确，后者
+  不代表 VLM 图内理解。
+- `failures.jsonl` 共 127 条诊断记录：77 条 query contract 不匹配、13 条 planned
+  Hybrid+Reranker miss、37 条 planned route 未完整执行；运行本身成功。完整/精选
+  manifest 分别校验 10/9 个文件且 SHA256 全部有效。
+- 完整产物位于服务器 `outputs/m1_g4_reviewed_retrieval_20260802/`，精选同步包位于
+  `outputs/sync/m1_g4_reviewed_retrieval_20260802/`。本批状态为
+  `benchmark_evaluated`，未运行答案评测、训练或任何测后调参，到此停止。
+
 | 日期 | 版本 | 变更 | 原因 |
 |---|---|---|---|
 | 2026-08-02 | 1.0 | 建立双层 Gold、Chunk 修复先行和分批验收方案 | 六文档实测证明当前自动映射率仅 0.6000，且存在跨 Chunk、页码、OCR/序列化及表题错配问题 |
@@ -565,3 +595,4 @@ M1-G1 固定参数与角色字段：
 | 2026-08-02 | 2.5 | 剩余复核切换到 `qwen3.7-max-2026-06-08` | 旧模型额度耗尽；保留 partial 中 28 组及其原 reviewer 来源，仅使用 worktree `.secrets/router_llm.env` 的新模型处理剩余 107 组，不重做既有决定 |
 | 2026-08-02 | 2.6 | 完成全部决定与 qrels v2 冻结 | 150/150 组通过绑定、哈希和可索引性校验；55/86 条样本可进入后续检索评测，M1-G4 未启动 |
 | 2026-08-02 | 2.7 | 冻结 M1-G4 reviewed-qrels 正式测评合同 | 只统计 54 条可检索 eligible 样本，严格执行 qrels AND/OR 语义并重建真实 BGE-M3 索引；禁止测后调参 |
+| 2026-08-02 | 2.8 | 完成 reviewed-qrels 正式检索测评 | 94 条查询、54 条检索样本、432 条明细和 6/6 真实索引均完成；记录指标与薄弱桶后停止，不做测后优化 |

@@ -147,7 +147,14 @@ M1-G3.5 使用提交 `a31f7f3` 和既有 MinerU JSON 重建
 `acceptable_chunk_sets` 表达 AND/OR 证据集合，并绑定样本、corpus manifest、PDF、
 Chunk 内容和复核决策哈希；全部校验通过后生成 86 条 `frozen_chunk_qrels.jsonl`，
 其中 55 条可进入后续 Recall/MRR，31 条排除。服务器完整产物位于
-`outputs/m1_g3_frozen_qrels_qwen37_20260802/`；M1-G4 尚未运行。
+`outputs/m1_g3_frozen_qrels_qwen37_20260802/`。
+
+M1-G4 已在上述 55 条 eligible 中的 54 条检索 workflow 上完成正式测评；1 条
+`document_summary` 不进入 Top-K 指标。运行使用当前 Qwen API、真实 BGE-M3/FAISS
+和 bge-reranker-v2-m3，生成 94 条查询预测和 432 条检索明细。Policy-selected 的
+Group Recall@5/All-groups@5/MRR@10 为 0.5125/0.5741/0.7799；该结果状态为
+`benchmark_evaluated`，不得作为训练数据或用于在同一冻结集上反复调参。服务器精选
+产物位于 `outputs/sync/m1_g4_reviewed_retrieval_20260802/`。
 
 ## 6. 延后数据集
 

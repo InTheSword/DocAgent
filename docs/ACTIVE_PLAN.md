@@ -11,13 +11,9 @@ Phase 5 个人使用 DocAgent MVP
 
 ## 当前实施依据
 
-本阶段优先修复 Chunk 质量与检索 qrels 对齐。实现、范围变更和验收以以下临时计划为准：
-
-```text
-docs/workplans/M1_CHUNK_QRELS_ALIGNMENT_PLAN.md
-```
-
-任何方案变化必须先更新该计划的“方案变更记录”，再继续修改代码。
+当前没有执行中的临时实施计划。已完成的 M1 Chunk/qrels 与正式检索测评记录保留在
+`docs/workplans/M1_CHUNK_QRELS_ALIGNMENT_PLAN.md`，不再作为后续工作的当前事实来源。
+进入下一轮优化、答案评测或训练前必须由用户明确批准并建立新的阶段计划。
 
 ## 当前目标
 
@@ -118,11 +114,12 @@ qrels v2 的样本/corpus/PDF/Chunk hash 与可索引性校验全部通过，生
 `outputs/sync/m1_g3_frozen_qrels_qwen37_20260802/`。本批未使用 GPU、未重建索引、
 未运行检索指标。
 
-当前执行 M1-G4：将 reviewed qrels v2 接入现有评测 runner，严格验证样本/corpus/PDF/
-Chunk hash 和 AND/OR 证据集合；用真实 BGE-M3 重建六文档索引，并在 55 条 eligible
-样本中的 54 条检索 workflow 上运行 original/planned × BM25/Dense/Hybrid/
-Hybrid+Reranker。1 条文档摘要不进入 Top-K 指标。该批禁止根据结果调参，完成正式
-产物和状态更新后以 `benchmark_evaluated` 停止。
+M1-G4 已达到 `benchmark_evaluated`：提交 `f0b92cb` 使用 reviewed qrels v2、当前
+Qwen API、真实 BGE-M3/FAISS 与 bge-reranker-v2-m3 完成 94 条查询和 54 条检索样本
+的冻结配置测评，共 432 条检索明细。Policy-selected 的 Group Recall@5、
+All-groups@5、MRR@10 为 0.5125/0.5741/0.7799；planned Hybrid+Reranker 为
+0.5750/0.5741/0.7780。6/6 索引按当前 Chunk hash 重载，正式产物和精选同步包已保存。
+本阶段未进行答案评测、训练或测后调参，现已停止。
 
 ## 停止条件
 

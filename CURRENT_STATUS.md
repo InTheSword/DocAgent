@@ -13,10 +13,11 @@ DocAgent 是本地、CLI 优先的个人使用文档问答 MVP。它接收文件
 
 | 范围 | 状态 | 已验证边界 |
 |---|---|---|
-| M1 查询意图与查询变换 | `benchmark_evaluated` | M1-F4 已在 94 条冻结查询上重跑 M1-F2/F3 合同：intent/workflow accuracy 均为 0.7234，retriever mode accuracy 为 0.8298，单变换策略合法率为 1.0000，Router/Transformer 实际 fallback 均为 0。普通正文事实使用 Reranker 后 provisional Recall@5/MRR@10 分别提升 0.0345/0.0854，复杂分析则变化 -0.0625/-0.0012。Gold→Chunk 自动映射未复核，因此未达到 `accepted`。 |
+| M1 查询意图与查询变换 | `benchmark_evaluated` | M1-G4 使用当前 `qwen3.7-max-2026-06-08` 重跑 94 条冻结查询：intent/workflow/retriever-mode accuracy 为 0.7021/0.7234/0.8404，单一变换策略合法率 1.0，变换动作 exact match 0.5213；Router 无 fallback，Transformer 1 次 fallback。 |
+| M1 reviewed-qrels 检索 G4 | `benchmark_evaluated` | 55 条 eligible 中 54 条检索样本完成 original/planned × 四检索模式共 432 条明细。Policy-selected Group Recall@5/All-groups@5/MRR@10 为 0.5125/0.5741/0.7799；planned Hybrid+Reranker 为 0.5750/0.5741/0.7780。查询变换整体未提升 Recall；Reranker 提升 MRR 0.0412 但 Hit@5 下降 0.0185、平均延迟增加约 60 ms。 |
 | M1 冻结评测语料准备 | `real_model_verified` | 6 份真实 PDF 已由 MinerU API `vlm` 解析为 1,222 个 `docagent_chunk_v3` Chunk，其中 1,016 个进入真实 BGE-M3 1024 维 FAISS 索引；6/6 索引按 Chunk 哈希重新加载通过，Chunk 契约错误为 0。该状态只证明评测语料与索引就绪，不代表已完成 Recall/MRR 基准。 |
 | M1 Chunk 质量与 qrels 对齐 G2 | `accepted` | 基于六文档既有真实 MinerU JSON 隔离重建 1,233 个 Chunk（1,022 个可索引）；30 个物理表中 5 个大表生成 11 个行组检索子块，结构化索引仍使用 30 个物理表。Chunk/表格父子合同错误为 0，表 14/15 元数据与检索文本均正确分离，旧语料哈希未改变。本批未建立稠密索引或 qrels。 |
-| M1 Chunk qrels G3/G3.6 | `frozen` | qrels v2 的 150 个证据组已有 15 组项目所有者人工决定和 135 组独立 AI 决定，分布为 95 个接受候选、13 个替换、42 个排除。样本、corpus manifest、PDF、Chunk 内容 hash 与可索引性校验通过；86 条冻结记录中 55 条可评测、31 条排除。尚未运行 M1-G4 检索指标。 |
+| M1 Chunk qrels G3/G3.6 | `frozen` | qrels v2 的 150 个证据组已有 15 组项目所有者人工决定和 135 组独立 AI 决定，分布为 95 个接受候选、13 个替换、42 个排除。样本、corpus manifest、PDF、Chunk 内容 hash 与可索引性校验通过；86 条冻结记录中 55 条可评测、31 条排除。该 qrels 已用于 M1-G4 正式检索测评。 |
 | M1 无候选组与 Chunk 修复 G3.5 | `accepted` | 六文档重建为 1,239 个 Chunk（1,028 个可索引），新增 3 个算法块、2 个代码块及 1 个恢复正文块，合同错误为 0。检索表示使用 NFKC 而原文不变，IMF Figure 3 图题与正文正确分离并按 bbox 关联。15 组人工结论编码为 13 个替换、2 个排除，并已纳入 G3.6 冻结输入。 |
 | Phase 5 CLI、导入与输出契约 | `accepted` | 文件和 `doc_id` 路径提供稳定的答案/证据/引用/追踪契约。 |
 | 原始 PDF MinerU API 路径 | `accepted` | 实时 API 冒烟建立了导入和引用契约。 |
@@ -104,6 +105,12 @@ DocAgent 是本地、CLI 优先的个人使用文档问答 MVP。它接收文件
   为 `8ea0580cb47c413675361a1aca02d2d843f8a325aaee0fcf7d990c359f3cd815` /
   `c3311ce24c2cb901f5952940ae371d88de652e1c8d6f23e8a520d82169bfe2ce`。该记录未使用
   GPU、未重建索引，也未运行 M1-G4 检索指标。
+- 服务器 `outputs/sync/m1_g4_reviewed_retrieval_20260802/`：基于提交
+  `f0b92cb` 严格消费 qrels v2，在 6 份文档的 1,028 个可索引 Chunk 上重建并重载
+  1024 维 BGE-M3 FAISS 索引，完成 94 条查询预测和 432 条真实检索明细。qrels
+  mapping rate 为 1.0，正式状态为 `benchmark_evaluated`；完整/精选 manifest 的
+  10/9 个文件大小和 SHA256 全部校验通过。表格结果只代表序列化 Chunk 检索，视觉
+  结果只代表现有图片/题注文本，不包含结构化答案或 VLM 图内理解。
 - 服务器 `outputs/sync/m1_query_retrieval_baseline_20260730/`：基于提交
   `dfb0a2f`，真实 `qwen3.7-max-2026-05-17`、BGE-M3 和
   bge-reranker-v2-m3 完成 94 条查询评测及 688 组原问题/计划查询、四检索器
