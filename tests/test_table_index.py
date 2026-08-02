@@ -73,6 +73,84 @@ def test_table_relational_index_filters_selects_and_aggregates_rows() -> None:
     }
 
 
+def test_structured_parent_is_indexed_while_retrieval_child_is_not() -> None:
+    parent = _chunk(
+        "b2",
+        "parent table",
+        block_type="table",
+        headers=["Year", "Revenue"],
+        rows=[["2023", "120"]],
+    )
+    parent.metadata.update(
+        {
+            "exclude_from_retrieval": True,
+            "include_in_structured_table_index": True,
+            "table_role": "structured_parent",
+        }
+    )
+    child = _chunk(
+        "b3",
+        "| Year | Revenue |\n| --- | --- |\n| 2023 | 120 |",
+        block_type="table",
+        headers=["Year", "Revenue"],
+        rows=[["2023", "120"]],
+    )
+    child.metadata.update(
+        {
+            "include_in_structured_table_index": False,
+            "table_role": "retrieval_child",
+            "table_parent_id": parent.block_id,
+        }
+    )
+
+    index = TableRelationalIndex([parent, child])
+    hits = index.search(TableStructuredQuery(filters={"Year": "2023"}), top_k=5)
+
+    assert [hit.block.block_id for hit in hits] == [parent.block_id]
+
+
+def test_table_workflow_can_return_excluded_structured_parent() -> None:
+    parent = _chunk(
+        "b2",
+        "parent table",
+        block_type="table",
+        headers=["Year", "Revenue"],
+        rows=[["2023", "120"]],
+    )
+    parent.metadata.update(
+        {
+            "exclude_from_retrieval": True,
+            "include_in_structured_table_index": True,
+            "table_role": "structured_parent",
+        }
+    )
+    child = _chunk(
+        "b3",
+        "| Year | Revenue |\n| --- | --- |\n| 2023 | 120 |",
+        block_type="table",
+        headers=["Year", "Revenue"],
+        rows=[["2023", "120"]],
+    )
+    child.metadata.update(
+        {
+            "include_in_structured_table_index": False,
+            "table_role": "retrieval_child",
+            "table_parent_id": parent.block_id,
+        }
+    )
+
+    result = IndexedDocumentRetriever([parent, child], mode="bm25").retrieve(
+        doc_id="doc",
+        question="What was the 2023 revenue?",
+        top_k=3,
+        query_intent="table",
+        table_query={"filters": {"Year": "2023"}},
+    )
+
+    assert result.metadata["table_structured_results"][0]["block_id"] == parent.block_id
+    assert any(candidate.block.block_id == parent.block_id for candidate in result.candidates)
+
+
 def test_table_intent_merges_text_and_relational_results_after_prefilter() -> None:
     chunks = _corpus()
     encoder = HashDenseEncoder()

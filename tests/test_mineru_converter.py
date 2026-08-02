@@ -331,6 +331,170 @@ def test_table_html_infers_td_headers_and_expands_rowspan_colspan(tmp_path: Path
     assert table.metadata["table_markdown"].startswith("| Model | Score Dev | Score Test |")
 
 
+def test_adjacent_captionless_table_receives_its_caption_from_combined_caption(tmp_path: Path) -> None:
+    path = tmp_path / "sample_content_list.json"
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "table-14-data",
+                    "type": "table",
+                    "page_idx": 0,
+                    "headers": ["Metric", "Static", "Dynamic"],
+                    "rows": [["Calls", "15", "5.6"]],
+                },
+                {
+                    "id": "table-15-data",
+                    "type": "table",
+                    "page_idx": 0,
+                    "table_caption": (
+                        "Table 14. Static and dynamic generation efficiency. "
+                        "Table 15. End-to-end inference efficiency."
+                    ),
+                    "headers": ["Method", "Time"],
+                    "rows": [["DocAgent", "38.2"]],
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    first, second = content_list_to_chunks(doc_id="doc123", content_list_path=path)
+
+    assert first.metadata["table_caption"] == "Table 14. Static and dynamic generation efficiency."
+    assert second.metadata["table_caption"] == "Table 15. End-to-end inference efficiency."
+    assert first.metadata["table_caption_source_block_id"] == second.block_id
+    assert second.metadata["table_caption_split"] is True
+    assert "Table 14" in first.retrieval_text
+    assert "Table 14" not in second.retrieval_text
+
+
+def test_adjacent_explicit_table_caption_is_copied_to_table(tmp_path: Path) -> None:
+    path = tmp_path / "sample_content_list.json"
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "table-caption",
+                    "type": "caption",
+                    "page_idx": 0,
+                    "text": "Table 1. Regional results.",
+                },
+                {
+                    "id": "table-data",
+                    "type": "table",
+                    "page_idx": 0,
+                    "headers": ["Region", "Revenue"],
+                    "rows": [["East", "120"]],
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    caption, table = content_list_to_chunks(doc_id="doc123", content_list_path=path)
+
+    assert table.metadata["table_caption"] == caption.text
+    assert table.metadata["table_caption_source_block_id"] == caption.block_id
+    assert caption.metadata["related_block_id"] == table.block_id
+    assert caption.text in table.retrieval_text
+
+
+def test_large_table_builds_structured_parent_and_row_group_children(tmp_path: Path) -> None:
+    path = tmp_path / "sample_content_list.json"
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "large-table",
+                    "type": "table",
+                    "page_idx": 0,
+                    "table_caption": "Table 1 Regional results",
+                    "table_unit": "USD million",
+                    "headers": ["Region", "Revenue"],
+                    "rows": [[f"R{index}", str(index)] for index in range(1, 14)],
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    first = content_list_to_chunks(doc_id="doc123", content_list_path=path)
+    second = content_list_to_chunks(doc_id="doc123", content_list_path=path)
+    parent, child_one, child_two = first
+
+    assert [chunk.block_id for chunk in first] == [chunk.block_id for chunk in second]
+    assert parent.metadata["table_role"] == "structured_parent"
+    assert parent.metadata["exclude_from_retrieval"] is True
+    assert parent.metadata["include_in_structured_table_index"] is True
+    assert parent.is_indexable is False
+    assert parent.metadata["child_block_ids"] == [child_one.block_id, child_two.block_id]
+    assert [child_one.metadata["row_start"], child_one.metadata["row_end"]] == [1, 12]
+    assert [child_two.metadata["row_start"], child_two.metadata["row_end"]] == [13, 13]
+    assert child_one.metadata["table_headers"] == ["Region", "Revenue"]
+    assert child_two.metadata["table_caption"] == "Table 1 Regional results"
+    assert child_two.metadata["table_unit"] == "USD million"
+    assert all(child.metadata["table_parent_id"] == parent.block_id for child in first[1:])
+    assert all(child.metadata["table_role"] == "retrieval_child" for child in first[1:])
+    assert all(child.metadata["include_in_structured_table_index"] is False for child in first[1:])
+    assert all(child.is_indexable for child in first[1:])
+    assert validate_mineru_chunk_contract(first) == {}
+
+
+def test_wide_table_splits_on_markdown_size_even_with_few_rows(tmp_path: Path) -> None:
+    path = tmp_path / "sample_content_list.json"
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "type": "table",
+                    "page_idx": 0,
+                    "headers": ["Item", "Description"],
+                    "rows": [
+                        ["A", "a" * 1000],
+                        ["B", "b" * 1000],
+                    ],
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    parent, first_child, second_child = content_list_to_chunks(
+        doc_id="doc123",
+        content_list_path=path,
+    )
+
+    assert parent.metadata["table_role"] == "structured_parent"
+    assert first_child.metadata["table_rows"][0][0] == "A"
+    assert second_child.metadata["table_rows"][0][0] == "B"
+    assert all(len(child.metadata["table_markdown"]) <= 1800 for child in (first_child, second_child))
+
+
+def test_small_table_remains_a_single_retrieval_and_structured_chunk(tmp_path: Path) -> None:
+    path = tmp_path / "sample_content_list.json"
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "type": "table",
+                    "page_idx": 0,
+                    "headers": ["Year", "Revenue"],
+                    "rows": [["2025", "130"]],
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    chunks = content_list_to_chunks(doc_id="doc123", content_list_path=path)
+
+    assert len(chunks) == 1
+    assert chunks[0].metadata["table_role"] == "identity"
+    assert chunks[0].metadata["include_in_structured_table_index"] is True
+    assert chunks[0].is_indexable is True
+
+
 def test_page_aggregate_is_context_only_not_a_retrieval_chunk(tmp_path: Path) -> None:
     path = tmp_path / "sample_content_list.json"
     path.write_text(

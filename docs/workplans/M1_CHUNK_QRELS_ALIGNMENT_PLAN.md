@@ -1,8 +1,8 @@
 # M1 Chunk 质量与检索 Qrels 对齐实施计划
 
 > 文件性质：当前阶段临时实施依据
-> 计划版本：1.0
-> 状态：`ready`
+> 计划版本：1.3
+> 状态：`mock_verified`
 > 建立日期：2026-08-02
 > 适用范围：六文档 MinerU→Chunk 处理、原文证据到 Chunk qrels 对齐，以及依赖该 qrels 的检索评测
 
@@ -127,6 +127,18 @@ outputs/sync/m1_qrels_chunk_audit_20260802/alignment_diagnostics.json
 5. **短块审计**：区分列表项、标题、公式邻接文本和真正的碎片段落。未形成可靠通用
    规则前只报告，不进行全局短块合并。
 
+M1-G1 固定参数与角色字段：
+
+- 当 `table_rows > 12` 或 `table_markdown > 1800` 字符时生成行组子块；
+- 子块按连续行贪心分组，每组最多 12 行，且序列化 Markdown 尽量不超过 1800 字符；
+- 原表设置 `table_role=structured_parent`、`exclude_from_retrieval=true`、
+  `include_in_structured_table_index=true`；
+- 子表设置 `table_role=retrieval_child`、`table_parent_id`、`row_start/row_end`、
+  `include_in_structured_table_index=false`，并复制完整表头、表题、单位、脚注和溯源；
+- 表题修复处理两种确定性模式：同页紧邻的显式表格 `caption` 块，以及连续表格中
+  “前表无题，后表题包含多个明确表号”的合并表题；后者按表号拆分并依阅读顺序
+  回填，不使用文档名、页码或查询文本。
+
 ### 4.2 暂不处理
 
 - 复杂多级表头的完全恢复；
@@ -141,8 +153,11 @@ outputs/sync/m1_qrels_chunk_audit_20260802/alignment_diagnostics.json
 
 - `docagent/parser/mineru_converter.py`
 - `docagent/ingestion/quality.py`
+- `docagent/retrieval/table_index.py`
+- `docagent/retrieval/hybrid_retriever.py`
 - `tests/test_mineru_converter.py`
 - `tests/test_ingestion_quality_report.py`
+- `tests/test_table_index.py`
 - 新增一个只负责生成/校验 Chunk qrels candidate 的脚本及其定向测试
 - `scripts/eval_m1_query_retrieval.py`：只在 reviewed qrels 合同完成后接入，不提前
   改写当前 provisional 结果
@@ -200,6 +215,23 @@ outputs/sync/m1_qrels_chunk_audit_20260802/alignment_diagnostics.json
 
 ## 10. 方案变更记录
 
+### M1-G1 本地验证结果（2026-08-02）
+
+- 已实现同页紧邻显式表题关联，以及连续表格的多表号组合表题拆分；
+- 已实现基于 12 行/1800 Markdown 字符阈值的表格父子 Chunk；
+- 结构化父表退出 BM25/Dense，但仍由 `TableRelationalIndex` 使用；检索子表不重复
+  进入结构化索引；
+- 质量报告新增物理表、表格 Chunk、拆分父表和检索子表计数，通用 Chunk 合同增加
+  父子表角色校验；
+- 正文 1200 字符句界切分、跨页逻辑和短块策略保持不变；
+- MinerU 转换、质量报告、表格索引、metadata/hybrid 检索、Phase 2、文档导入、
+  Phase 5 CLI 与表格工具相关回归共 104 项通过；
+- 本批仅使用本地 fixture 和确定性回归，状态为 `mock_verified`；尚未重建六文档，
+  也未生成新的 Chunk qrels。
+
 | 日期 | 版本 | 变更 | 原因 |
 |---|---|---|---|
 | 2026-08-02 | 1.0 | 建立双层 Gold、Chunk 修复先行和分批验收方案 | 六文档实测证明当前自动映射率仅 0.6000，且存在跨 Chunk、页码、OCR/序列化及表题错配问题 |
+| 2026-08-02 | 1.1 | 冻结 M1-G1 大表阈值、父子角色和表题修复边界 | 避免父表退出文本检索后同时丢失结构化查询能力，并限制表题修复为可验证的通用模式 |
+| 2026-08-02 | 1.2 | 将同页紧邻的显式表格 caption 纳入表题关联 | 表格子块必须携带标题，而 MinerU 可能把标题输出为独立 caption 块 |
+| 2026-08-02 | 1.3 | 记录 M1-G1 实现和 104 项本地回归结果 | 表格父子 Chunk、表题关联、结构化父表接线和质量报告已达到本地 fixture 验证边界 |

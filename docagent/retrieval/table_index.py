@@ -76,10 +76,16 @@ class TableRelationalIndex:
         self.chunks = [
             chunk
             for chunk in chunks
-            if chunk.is_indexable
-            and chunk.block_type == "table"
+            if chunk.block_type == "table"
             and chunk.metadata.get("table_headers")
             and chunk.metadata.get("table_rows")
+            and (
+                chunk.metadata.get("include_in_structured_table_index") is True
+                or (
+                    chunk.metadata.get("include_in_structured_table_index") is not False
+                    and chunk.is_indexable
+                )
+            )
         ]
 
     def search(

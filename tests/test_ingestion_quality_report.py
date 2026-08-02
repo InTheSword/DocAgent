@@ -80,6 +80,50 @@ def test_structure_quality_report_summarizes_real_schema_fixture(tmp_path: Path)
     json.dumps(report, ensure_ascii=False)
 
 
+def test_structure_quality_report_counts_split_table_parent_and_children(tmp_path: Path) -> None:
+    document_dir = tmp_path / "document"
+    mineru_dir = document_dir / "mineru"
+    mineru_dir.mkdir(parents=True)
+    source = document_dir / "original.pdf"
+    source.write_bytes(b"%PDF-1.4\n/Type /Page\n")
+    content_list = mineru_dir / "sample_content_list.json"
+    content_list.write_text(
+        json.dumps(
+            [
+                {
+                    "type": "table",
+                    "page_idx": 0,
+                    "table_caption": "Table 1 Regional results",
+                    "headers": ["Region", "Revenue"],
+                    "rows": [[f"R{index}", str(index)] for index in range(1, 14)],
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    blocks = content_list_to_blocks(doc_id="doc123", content_list_path=content_list)
+    pages = build_page_blocks("doc123", blocks)
+
+    report = build_structure_quality_report(
+        doc_id="doc123",
+        source_pdf=source,
+        mineru_output_dir=mineru_dir,
+        document_dir=document_dir,
+        blocks=blocks,
+        page_blocks=pages,
+    )
+
+    assert report["table_count"] == 1
+    assert report["table_chunk_count"] == 3
+    assert report["split_table_parent_count"] == 1
+    assert report["table_retrieval_child_count"] == 2
+    assert report["structured_table_count"] == 1
+    assert report["indexable_chunk_count"] == 2
+    assert report["chunk_contract_valid"] is True
+    assert report["reading_order_contiguous"] is True
+    assert report["reading_order_valid"] is True
+
+
 def test_structure_quality_report_distinguishes_remote_and_missing_local_resources(tmp_path: Path) -> None:
     document_dir = tmp_path / "document"
     mineru_dir = document_dir / "mineru"

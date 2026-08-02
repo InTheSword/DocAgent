@@ -247,14 +247,26 @@ def build_structure_quality_report(
         warnings.append("invalid_reading_order")
 
     image_ref_count = sum(1 for block in blocks if block.image_path)
-    table_count = sum(1 for block in blocks if block.block_type == "table")
+    table_chunks = [block for block in blocks if block.block_type == "table"]
+    table_retrieval_children = [
+        block
+        for block in table_chunks
+        if block.metadata.get("table_role") == "retrieval_child"
+    ]
+    split_table_parents = [
+        block
+        for block in table_chunks
+        if block.metadata.get("table_role") == "structured_parent"
+    ]
+    table_count = len(table_chunks) - len(table_retrieval_children)
     chart_count = sum(1 for block in blocks if block.metadata.get("raw_mineru_type") == "chart")
     boilerplate_count = sum(1 for block in blocks if block.metadata.get("is_boilerplate"))
     table_html_count = sum(1 for block in blocks if block.table_html)
     structured_table_count = sum(
         1
-        for block in blocks
+        for block in table_chunks
         if block.block_type == "table"
+        and block.metadata.get("table_role") != "retrieval_child"
         and (block.metadata.get("table_headers") or block.metadata.get("table_rows"))
     )
     visual_relation_count = sum(
@@ -316,6 +328,8 @@ def build_structure_quality_report(
         "table_body",
         "table_caption",
         "table_footnote",
+        "table_unit",
+        "unit",
         "caption",
         "image_caption",
         "chart_caption",
@@ -417,6 +431,9 @@ def build_structure_quality_report(
         "empty_boilerplate_count": len(empty_boilerplate_block_ids),
         "empty_boilerplate_block_ids": empty_boilerplate_block_ids,
         "table_count": table_count,
+        "table_chunk_count": len(table_chunks),
+        "split_table_parent_count": len(split_table_parents),
+        "table_retrieval_child_count": len(table_retrieval_children),
         "table_html_count": table_html_count,
         "structured_table_count": structured_table_count,
         "chart_count": chart_count,

@@ -57,6 +57,9 @@ RESOURCE_PATH_KEYS = (
 URL_RE = re.compile(r"^https?://", re.IGNORECASE)
 CHUNK_CONTRACT_VERSION = "docagent_chunk_v3"
 SPLITTABLE_CONTENT_TYPES = {"body", "list_item", "reference"}
+TABLE_SPLIT_MAX_CHARS = 1800
+TABLE_SPLIT_MAX_ROWS = 12
+TABLE_CAPTION_MARKER_RE = re.compile(r"(?i)(?<!\w)(?:table|tab\.)\s*\d+[a-z]?\s*[.:：]?|表\s*\d+\s*[.:：、]?")
 
 
 class _TableParser(HTMLParser):
@@ -396,6 +399,103 @@ def _table_markdown(headers: list[str], rows: list[list[str]]) -> str:
     return "\n".join(lines)
 
 
+def _table_text(
+    *,
+    caption: str = "",
+    context: str = "",
+    markdown: str = "",
+    unit: str = "",
+    footnote: str = "",
+) -> str:
+    return _unique_text_parts(caption, unit, context, markdown, footnote)
+
+
+def _table_caption_segments(value: str) -> list[str]:
+    matches = list(TABLE_CAPTION_MARKER_RE.finditer(value))
+    if len(matches) < 2:
+        return [value.strip()] if value.strip() else []
+    prefix = value[: matches[0].start()].strip()
+    segments = [
+        value[match.start() : matches[index + 1].start()].strip()
+        if index + 1 < len(matches)
+        else value[match.start() :].strip()
+        for index, match in enumerate(matches)
+    ]
+    if prefix:
+        segments[0] = f"{prefix} {segments[0]}".strip()
+    return [segment for segment in segments if segment]
+
+
+def _set_table_caption(block: Chunk, caption: str) -> None:
+    metadata = block.metadata
+    previous_caption = str(metadata.get("table_caption") or "")
+    context = str(metadata.get("table_context") or "")
+    if previous_caption and previous_caption in context:
+        context = context.replace(previous_caption, "", 1).strip()
+    metadata["table_caption"] = caption
+    metadata["summary"] = caption
+    if context:
+        metadata["table_context"] = context
+    else:
+        metadata.pop("table_context", None)
+    block.text = _table_text(
+        caption=caption,
+        context=context,
+        markdown=str(metadata.get("table_markdown") or ""),
+        unit=str(metadata.get("table_unit") or ""),
+        footnote=str(metadata.get("table_footnote") or ""),
+    )
+
+
+def _repair_table_caption_associations(blocks: list[Chunk]) -> None:
+    for index, caption_block in enumerate(blocks):
+        if caption_block.metadata.get("content_type") != "caption":
+            continue
+        caption = caption_block.text.strip()
+        if not TABLE_CAPTION_MARKER_RE.search(caption):
+            continue
+        for candidate_index in (index + 1, index - 1):
+            if not 0 <= candidate_index < len(blocks):
+                continue
+            table = blocks[candidate_index]
+            if (
+                table.page_id == caption_block.page_id
+                and table.block_type == "table"
+                and not table.metadata.get("table_caption")
+            ):
+                _set_table_caption(table, caption)
+                table.metadata["table_caption_source_block_id"] = caption_block.block_id
+                caption_block.metadata["related_block_id"] = table.block_id
+                break
+
+    for index, block in enumerate(blocks):
+        if block.block_type != "table":
+            continue
+        caption = str(block.metadata.get("table_caption") or "").strip()
+        segments = _table_caption_segments(caption)
+        if len(segments) < 2:
+            continue
+        previous_tables: list[Chunk] = []
+        cursor = index - 1
+        while cursor >= 0:
+            previous = blocks[cursor]
+            if previous.page_id != block.page_id or previous.block_type != "table":
+                break
+            if previous.metadata.get("table_caption"):
+                break
+            previous_tables.append(previous)
+            cursor -= 1
+        assign_count = min(len(previous_tables), len(segments) - 1)
+        if assign_count == 0:
+            continue
+        targets = list(reversed(previous_tables[:assign_count]))
+        for target, target_caption in zip(targets, segments[:assign_count]):
+            _set_table_caption(target, target_caption)
+            target.metadata["table_caption_source_block_id"] = block.block_id
+        _set_table_caption(block, " ".join(segments[assign_count:]))
+        block.metadata["table_caption_split"] = True
+
+
 def _caption_text(item: dict[str, Any], *keys: str) -> str:
     parts: list[str] = []
     for key in keys:
@@ -587,11 +687,12 @@ def _make_block(
     text = _item_text(item, raw_type, block_type)
     table_context = text if block_type == "table" else ""
     if block_type == "table" and table_structure.get("table_markdown"):
-        text = _unique_text_parts(
-            _caption_text(item, "table_caption"),
-            table_context,
-            str(table_structure["table_markdown"]),
-            _caption_text(item, "table_footnote"),
+        text = _table_text(
+            caption=_caption_text(item, "table_caption"),
+            context=table_context,
+            markdown=str(table_structure["table_markdown"]),
+            unit=_caption_text(item, "table_unit", "unit"),
+            footnote=_caption_text(item, "table_footnote"),
         )
     boilerplate = _is_boilerplate(raw_type, text)
     raw_image_path, raw_resource_key = _resource_path(item)
@@ -658,14 +759,19 @@ def _make_block(
         metadata["text_level"] = item["text_level"]
     if block_type == "table":
         metadata.update(table_structure)
+        metadata["table_role"] = "identity"
+        metadata["include_in_structured_table_index"] = True
         if table_context:
             metadata["table_context"] = table_context
         table_caption = _caption_text(item, "table_caption")
         table_footnote = _caption_text(item, "table_footnote")
+        table_unit = _caption_text(item, "table_unit", "unit")
         if table_caption:
             metadata["table_caption"] = table_caption
         if table_footnote:
             metadata["table_footnote"] = table_footnote
+        if table_unit:
+            metadata["table_unit"] = table_unit
     elif block_type == "image":
         image_caption = _caption_text(item, "caption", "image_caption", "chart_caption")
         image_footnote = _caption_text(item, "chart_footnote")
@@ -718,6 +824,13 @@ def _source_item_id(item: dict[str, Any]) -> str | None:
 
 
 def _assign_page_reading_order(blocks: list[Chunk]) -> None:
+    reading_orders = [block.metadata.get("reading_order") for block in blocks]
+    if (
+        any(not isinstance(value, int) for value in reading_orders)
+        or len(reading_orders) != len(set(reading_orders))
+    ):
+        for reading_order, block in enumerate(blocks, start=1):
+            block.metadata["reading_order"] = reading_order
     counters: dict[int | None, int] = {}
     for block in blocks:
         counters[block.page_id] = counters.get(block.page_id, 0) + 1
@@ -743,7 +856,12 @@ def _link_related_blocks(blocks: list[Chunk]) -> None:
     for block in blocks:
         by_page.setdefault(block.page_id, []).append(block)
     for page_blocks in by_page.values():
-        targets = [block for block in page_blocks if block.block_type in {"table", "image"}]
+        targets = [
+            block
+            for block in page_blocks
+            if block.block_type in {"table", "image"}
+            and block.metadata.get("table_role") != "retrieval_child"
+        ]
         text_context = [
             block
             for block in page_blocks
@@ -1000,6 +1118,26 @@ def validate_mineru_chunk_contract(blocks: list[Chunk]) -> dict[str, list[str]]:
             block_errors.append("invalid:source_item_hash")
         if not re.fullmatch(r"[0-9a-f]{64}", str(block.metadata.get("content_hash") or "")):
             block_errors.append("invalid:content_hash")
+        if block.block_type == "table":
+            table_role = block.metadata.get("table_role")
+            if table_role not in {"identity", "structured_parent", "retrieval_child"}:
+                block_errors.append("invalid:table_role")
+            elif table_role == "structured_parent":
+                if not block.metadata.get("child_block_ids"):
+                    block_errors.append("invalid:child_block_ids")
+                if block.metadata.get("exclude_from_retrieval") is not True:
+                    block_errors.append("invalid:structured_parent_retrieval")
+                if block.metadata.get("include_in_structured_table_index") is not True:
+                    block_errors.append("invalid:structured_parent_index")
+            elif table_role == "retrieval_child":
+                if not block.metadata.get("table_parent_id"):
+                    block_errors.append("invalid:table_parent_id")
+                if not isinstance(block.metadata.get("row_start"), int) or not isinstance(
+                    block.metadata.get("row_end"), int
+                ):
+                    block_errors.append("invalid:table_row_range")
+                if block.metadata.get("include_in_structured_table_index") is not False:
+                    block_errors.append("invalid:retrieval_child_index")
         if block_errors:
             errors[block.block_id] = block_errors
     return errors
@@ -1055,6 +1193,107 @@ def _split_large_block(block: Chunk, max_chars: int) -> list[Chunk]:
     return result
 
 
+def _split_large_table(
+    block: Chunk,
+    *,
+    max_chars: int,
+    max_rows: int,
+) -> list[Chunk]:
+    headers = [str(value) for value in block.metadata.get("table_headers") or []]
+    rows = [
+        [str(value) for value in row]
+        for row in block.metadata.get("table_rows") or []
+        if isinstance(row, list)
+    ]
+    markdown = str(block.metadata.get("table_markdown") or "")
+    if (
+        block.block_type != "table"
+        or not headers
+        or not rows
+        or (len(rows) <= max_rows and len(markdown) <= max_chars)
+    ):
+        block.metadata.setdefault("table_role", "identity")
+        block.metadata.setdefault("include_in_structured_table_index", True)
+        return [block]
+
+    groups: list[list[list[str]]] = []
+    current: list[list[str]] = []
+    for row in rows:
+        proposed = [*current, row]
+        if current and (
+            len(proposed) > max_rows
+            or len(_table_markdown(headers, proposed)) > max_chars
+        ):
+            groups.append(current)
+            current = [row]
+        else:
+            current = proposed
+    if current:
+        groups.append(current)
+    if len(groups) <= 1:
+        return [block]
+
+    child_ids: list[str] = []
+    children: list[Chunk] = []
+    row_start = 1
+    for group in groups:
+        row_end = row_start + len(group) - 1
+        child_id = f"{block.block_id}_r{row_start:03d}_{row_end:03d}"
+        child_ids.append(child_id)
+        child_markdown = _table_markdown(headers, group)
+        child_metadata = {
+            **block.metadata,
+            "chunk_strategy": "table_row_group_split",
+            "parent_block_id": block.block_id,
+            "container_id": block.block_id,
+            "table_parent_id": block.block_id,
+            "table_role": "retrieval_child",
+            "include_in_structured_table_index": False,
+            "exclude_from_retrieval": False,
+            "table_rows": group,
+            "table_markdown": child_markdown,
+            "row_count": len(group),
+            "table_total_row_count": len(rows),
+            "row_start": row_start,
+            "row_end": row_end,
+        }
+        child_metadata.pop("table_context", None)
+        child_metadata.pop("child_block_ids", None)
+        children.append(
+            Chunk(
+                doc_id=block.doc_id,
+                page_id=block.page_id,
+                block_id=child_id,
+                block_type="table",
+                text=_table_text(
+                    caption=str(child_metadata.get("table_caption") or ""),
+                    markdown=child_markdown,
+                    unit=str(child_metadata.get("table_unit") or ""),
+                    footnote=str(child_metadata.get("table_footnote") or ""),
+                ),
+                location=EvidenceLocation(
+                    page=block.page_id,
+                    block_id=child_id,
+                    table_id=block.block_id,
+                    bbox=block.location.bbox,
+                ),
+                metadata=child_metadata,
+            )
+        )
+        row_start = row_end + 1
+
+    block.metadata.update(
+        {
+            "table_role": "structured_parent",
+            "include_in_structured_table_index": True,
+            "exclude_from_retrieval": True,
+            "child_block_ids": child_ids,
+            "table_total_row_count": len(rows),
+        }
+    )
+    return [block, *children]
+
+
 def _sentence_units(text: str, max_chars: int) -> list[str]:
     sentences = [
         part.strip()
@@ -1094,6 +1333,8 @@ def normalize_blocks(
     merge_small_chars: int = 0,
     merge_max_chars: int = 1000,
     split_max_chars: int = 1200,
+    table_split_max_chars: int = TABLE_SPLIT_MAX_CHARS,
+    table_split_max_rows: int = TABLE_SPLIT_MAX_ROWS,
 ) -> list[Chunk]:
     merged: list[Chunk] = []
     pending: Chunk | None = None
@@ -1138,7 +1379,16 @@ def normalize_blocks(
 
     normalized: list[Chunk] = []
     for block in merged:
-        normalized.extend(_split_large_block(block, split_max_chars))
+        if block.block_type == "table":
+            normalized.extend(
+                _split_large_table(
+                    block,
+                    max_chars=table_split_max_chars,
+                    max_rows=table_split_max_rows,
+                )
+            )
+        else:
+            normalized.extend(_split_large_block(block, split_max_chars))
     _link_neighbors(normalized)
     return normalized
 
@@ -1220,6 +1470,8 @@ def content_list_to_chunks(
     merge_cross_page: bool = True,
     merge_small_chars: int = 0,
     split_max_chars: int = 1200,
+    table_split_max_chars: int = TABLE_SPLIT_MAX_CHARS,
+    table_split_max_rows: int = TABLE_SPLIT_MAX_ROWS,
     resource_root: str | Path | None = None,
     document_dir: str | Path | None = None,
 ) -> list[Chunk]:
@@ -1258,12 +1510,15 @@ def content_list_to_chunks(
     ]
     result = [block for block in blocks if block is not None]
     _apply_heading_hierarchy(result)
+    _repair_table_caption_associations(result)
     if merge_cross_page:
         result = _merge_cross_page_text(result)
     result = normalize_blocks(
         result,
         merge_small_chars=merge_small_chars,
         split_max_chars=split_max_chars,
+        table_split_max_chars=table_split_max_chars,
+        table_split_max_rows=table_split_max_rows,
     )
     _assign_page_reading_order(result)
     _link_neighbors(result)

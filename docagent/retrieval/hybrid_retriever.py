@@ -27,10 +27,11 @@ class HybridRetriever:
         fusion_top_n: int = 20,
         rrf_k: int = 60,
     ) -> None:
+        self.all_blocks = list(blocks)
         self.blocks = [block for block in blocks if block.is_indexable]
         self.bm25 = BM25Index(self.blocks)
         self.dense_index = dense_index
-        self.table_index = TableRelationalIndex(self.blocks)
+        self.table_index = TableRelationalIndex(self.all_blocks)
         self.reranker = reranker
         self.mode = mode
         self.bm25_top_n = bm25_top_n
@@ -121,6 +122,11 @@ class HybridRetriever:
             metadata_filter, filter_conflict = _with_table_constraint(metadata_filter)
             filter_source = "query_intent" if filter_source == "none" else f"{filter_source}+query_intent"
         structured_query = TableStructuredQuery.from_value(table_query) if table_intent else None
+        scoped_all_blocks = [
+            block
+            for block in self.all_blocks
+            if doc_id is None or block.doc_id == doc_id
+        ]
         scoped_blocks = [block for block in self.blocks if doc_id is None or block.doc_id == doc_id]
         candidate_blocks = [
             block
@@ -128,6 +134,11 @@ class HybridRetriever:
             if not filter_conflict and (metadata_filter.is_empty or metadata_filter.matches(block))
         ]
         candidate_block_ids = {block.block_id for block in candidate_blocks}
+        structured_candidate_block_ids = {
+            block.block_id
+            for block in scoped_all_blocks
+            if not filter_conflict and (metadata_filter.is_empty or metadata_filter.matches(block))
+        }
         bm25 = BM25Index(candidate_blocks)
         timings: dict[str, float] = {}
         table_hits: list[TableStructuredHit] = []
@@ -136,8 +147,11 @@ class HybridRetriever:
             table_start = time.perf_counter()
             table_hits = self.table_index.search(
                 structured_query,
-                top_k=min(len(candidate_blocks), max(self.fusion_top_n, top_k)),
-                allowed_block_ids=candidate_block_ids,
+                top_k=min(
+                    len(structured_candidate_block_ids),
+                    max(self.fusion_top_n, top_k),
+                ),
+                allowed_block_ids=structured_candidate_block_ids,
             )
             table_rankings["table_structured"] = [
                 (item.block, item.score)
