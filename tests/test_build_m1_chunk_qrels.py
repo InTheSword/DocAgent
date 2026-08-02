@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from argparse import Namespace
 from pathlib import Path
 
@@ -176,3 +178,15 @@ def test_run_without_reviews_writes_candidates_but_not_frozen_qrels(tmp_path: Pa
     assert summary["non_document_sample_count"] == 1
     assert not (output_dir / "frozen_chunk_qrels.jsonl").exists()
     assert len(read_jsonl(output_dir / "qrels_review_queue.jsonl")) == 1
+
+
+def test_direct_cli_help_can_import_project_package() -> None:
+    completed = subprocess.run(
+        [sys.executable, "scripts/build_m1_chunk_qrels.py", "--help"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0
+    assert "Build reviewable M1 Chunk qrels candidates" in completed.stdout

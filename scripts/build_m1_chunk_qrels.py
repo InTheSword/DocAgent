@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import re
+import sys
 import unicodedata
 from collections import Counter
 from difflib import SequenceMatcher
@@ -11,6 +12,8 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from docagent.schemas import Chunk
 from docagent.utils.jsonl import read_jsonl, write_jsonl
