@@ -347,10 +347,10 @@ def test_adjacent_captionless_table_receives_its_caption_from_combined_caption(t
                     "id": "table-15-data",
                     "type": "table",
                     "page_idx": 0,
-                    "table_caption": (
-                        "Table 14. Static and dynamic generation efficiency. "
-                        "Table 15. End-to-end inference efficiency."
-                    ),
+                    "table_caption": [
+                        "Table 14. Static and dynamic generation efficiency.",
+                        "Table 15. End-to-end inference efficiency.",
+                    ],
                     "headers": ["Method", "Time"],
                     "rows": [["DocAgent", "38.2"]],
                 },
@@ -367,6 +367,7 @@ def test_adjacent_captionless_table_receives_its_caption_from_combined_caption(t
     assert second.metadata["table_caption_split"] is True
     assert "Table 14" in first.retrieval_text
     assert "Table 14" not in second.retrieval_text
+    assert "Table 14" not in second.metadata.get("table_context", "")
 
 
 def test_adjacent_explicit_table_caption_is_copied_to_table(tmp_path: Path) -> None:

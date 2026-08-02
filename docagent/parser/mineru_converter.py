@@ -430,7 +430,10 @@ def _set_table_caption(block: Chunk, caption: str) -> None:
     metadata = block.metadata
     previous_caption = str(metadata.get("table_caption") or "")
     context = str(metadata.get("table_context") or "")
-    if previous_caption and previous_caption in context:
+    normalized_previous_caption = _clean_text(previous_caption)
+    if normalized_previous_caption and normalized_previous_caption in context:
+        context = context.replace(normalized_previous_caption, "", 1).strip()
+    elif previous_caption and previous_caption in context:
         context = context.replace(previous_caption, "", 1).strip()
     metadata["table_caption"] = caption
     metadata["summary"] = caption
