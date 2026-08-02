@@ -136,13 +136,16 @@ Recall@5/MRR@10 差值为 +0.0345/+0.0854，复杂分析为 -0.0625/-0.0012。
 `benchmark_evaluated`，不构成未复核 Chunk qrels 上的检索验收。该冻结集仍不得用于
 Prompt、RRF、候选规模或 Reranker 参数调优。
 
-M1-G3 运行 `m1_g3_chunk_qrels_candidates_v4_20260802` 将这些原文证据与
-M1-G2 冻结 Chunk corpus 建立了可复核 candidate 合同。86 条文档查询的 150 个
-证据组全部进入复核队列：135 组有候选，15 组无候选。机器匹配结果全部为
-`unreviewed`。v2 使用完整 `acceptable_chunk_sets` 表达 AND/OR 证据集合，并绑定
-样本、corpus manifest、PDF、Chunk 内容和复核决策哈希；只有显式 review decisions
-覆盖所有必需证据组且全部绑定一致时，才能生成 `frozen_chunk_qrels.jsonl`。当前没有
-冻结 qrels，不得用 candidate 直接运行正式 Recall/MRR；旧 v1 decision 模板不得复用。
+M1-G3.5 使用提交 `a31f7f3` 和既有 MinerU JSON 重建
+`m1-chunk-v3-g35-a31f7f3-20260802` corpus：1,239 个 Chunk、1,028 个可索引 Chunk。
+旧 v4 candidate/template 因 Chunk 内容哈希和 corpus manifest 变化而失效。v5 仍将
+150 个证据组全部放入复核队列：135 组有自动候选、15 组无自动候选。15 组人工审查
+已单独编码为 13 个 `replace` 和 2 个 `exclude`；其中 D04-009 的真实 MinerU
+`is_ocr=true` 对照仍无法提取图片内数值。该部分 decision 不能冻结；其余 135 组仍需
+显式复核并合并。v2 使用完整 `acceptable_chunk_sets` 表达 AND/OR 证据集合，并绑定
+样本、corpus manifest、PDF、Chunk 内容和复核决策哈希；只有覆盖所有必需证据组且
+全部绑定一致时，才能生成 `frozen_chunk_qrels.jsonl`。当前没有冻结 qrels，不得用
+candidate 或部分 decision 直接运行正式 Recall/MRR。
 
 ## 6. 延后数据集
 

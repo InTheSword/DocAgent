@@ -103,11 +103,16 @@ M1-G2 corpus 重新生成 86 条 candidate、150 条复核队列和 150 条 deci
 outputs/sync/m1_g3_chunk_qrels_candidates_v4_20260802/
 ```
 
-15 个无候选证据组已经完成人工复核，但复核暴露出算法块丢失、图题与正文粘连、全角
-兼容字符影响检索表示和图片 OCR 缺口。当前按临时计划 9.5 执行 M1-G3.5：先修复通用
-MinerU→Chunk 合同并隔离重建六文档 corpus，再重新生成 candidate，并仅编码这 15 组
-已有人工结论。旧 v4 candidate/template 随 Chunk 变化失效，不得继续冻结；剩余证据组
-仍需复核。M1-G4 的 GPU 索引重建和检索评测保持 `not_started`。
+M1-G3.5 已达到 `accepted`：提交 `a31f7f3` 在真实六文档上完成算法/代码块保留、
+检索 NFKC、图题/正文分离和 bbox 图题关联；重建 corpus 含 1,239 个 Chunk、1,028 个
+可索引 Chunk，合同错误为 0。真实 MinerU `is_ocr=true` 对照仍未提取膳食宝塔图片内
+数值，因此未伪造视觉文本。基于新 corpus 的 v5 candidate 已生成，15 个原无候选组
+编码为 13 个 `replace` 和 2 个 `exclude`；冻结器确认该部分 decision 不能生成正式
+qrels。旧 v4 candidate/template 已失效。
+
+当前停止。M1-G3 仍为 `ready`：其余 135 个证据组需要显式复核并与 15 组部分决策合并，
+完整通过冻结校验后才能进入 M1-G4。BGE-M3/FAISS 索引重建和正式检索评测仍为
+`not_started`。
 
 ## 停止条件
 

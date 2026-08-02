@@ -27,8 +27,9 @@ CDC、Demo 和新产品阶段均需要明确的范围决策。
 
 ## PDF、Chunk 与索引
 
-- PDF 和页面图像统一交给 MinerU；DocAgent 不增加 PDF 类型分类器。OCR 默认
-  交由 MinerU 自动判断，显式开关仅用于诊断或兼容。
+- PDF 和页面图像统一交给 MinerU；DocAgent 不增加 PDF 类型分类器。原始 PDF API
+  导入默认显式请求 `is_ocr=true`，仍保留显式关闭开关。公开 API 的该字段不能视为
+  图片区域 OCR 保证；目标图没有产生文本时必须保留视觉证据缺口。
 - `Chunk` 是标准 RAG 检索与引用领域对象，不再新增独立 `RetrievalChunk`
   模型。`EvidenceBlock` 仅作为历史代码、SQLite 表名和 JSONL 文件名的兼容
   别名；新解析与检索代码使用 `Chunk`。
@@ -45,6 +46,12 @@ CDC、Demo 和新产品阶段均需要明确的范围决策。
 - 跨页合并仅处理相邻页面、相同章节和内容类型、前页末尾没有终止标点的正文/
   列表/参考文献；不自动合并标题、表格和图像。超长文本在跨页处理后按句界和
   子句界拆分，并保留来源项 ID/哈希、来源页、父 Chunk 和段序号。
+- MinerU `code/algorithm` 项必须组合 caption、body 与 footnote 后转换为可索引 Chunk；
+  不能因为上游没有通用 `text/content` 字段而丢弃。上游把图题和正文粘在同一项时，
+  只有短行几何、图题标记、紧邻视觉块和空正文槽等通用证据同时成立才允许修复，视觉
+  关系优先使用 bbox 横向重叠与垂直距离。
+- 原始 `Chunk.text` 与引用证据不做 Unicode 兼容折叠；`retrieval_text` 和 BM25 查询侧
+  统一使用 NFKC，避免全角拉丁字母/数字丢失，同时保持原文溯源保真。
 - 稀疏和稠密索引只接收具有非空 `retrieval_text` 的 Chunk。无文本视觉块保留
   来源信息，但需经视觉理解补充文本后才能进入文本索引。
 - 页聚合块只用于上下文读取和审计，不作为普通检索候选，避免与子 Chunk
