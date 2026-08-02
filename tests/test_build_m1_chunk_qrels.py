@@ -176,9 +176,11 @@ def test_run_without_reviews_writes_candidates_but_not_frozen_qrels(tmp_path: Pa
     assert summary["milestone_status"] == "ready"
     assert summary["document_bound_sample_count"] == 1
     assert summary["non_document_sample_count"] == 1
+    assert summary["git_commit"]
     assert not (output_dir / "frozen_chunk_qrels.jsonl").exists()
     assert len(read_jsonl(output_dir / "qrels_review_queue.jsonl")) == 1
     sync_manifest = json.loads((sync_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert sync_manifest["git_commit"] == summary["git_commit"]
     assert {Path(item["path"]).name for item in sync_manifest["files"]} == {
         "preview.json",
         "result.json",

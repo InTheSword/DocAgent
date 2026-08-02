@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 import sys
 import unicodedata
 from collections import Counter
@@ -437,6 +438,9 @@ def _artifact_manifest(run_id: str, output_dir: Path, files: list[Path]) -> dict
     return {
         "run_id": run_id,
         "command": "build_m1_chunk_qrels",
+        "git_commit": subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
+        ).strip(),
         "files": [
             {
                 "path": str(path),
@@ -481,6 +485,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError("stale frozen_chunk_qrels.jsonl exists without review decisions")
     summary = {
         "schema_version": SCHEMA_VERSION,
+        "git_commit": subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
+        ).strip(),
         "corpus_id": manifest["corpus_id"],
         "chunk_contract_version": manifest["chunk_contract_version"],
         "sample_count": len(samples),
@@ -505,6 +512,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     result = {
         "command": "build_m1_chunk_qrels",
         "status": "success",
+        "git_commit": summary["git_commit"],
         "artifact_paths": [str(candidate_path), str(queue_path), str(template_path), str(summary_path)],
         "metrics": summary,
     }
