@@ -1,7 +1,7 @@
 # M1 Chunk 质量与检索 Qrels 对齐实施计划
 
 > 文件性质：当前阶段临时实施依据
-> 计划版本：1.9
+> 计划版本：2.0
 > 状态：M1-G2 `accepted`；M1-G3 `ready`；M1-G4 `not_started`
 > 建立日期：2026-08-02
 > 适用范围：六文档 MinerU→Chunk 处理、原文证据到 Chunk qrels 对齐，以及依赖该 qrels 的检索评测
@@ -379,6 +379,54 @@ M1-G1 固定参数与角色字段：
 - 服务器精选产物：`outputs/sync/m1_g2_chunk_rebuild_bca0893_20260802/`；
 - 本批未调用 MinerU API、未生成 BGE-M3/FAISS 索引、未生成 qrels，到此停止。
 
+### 9.5 M1-G3.5 十五个无候选证据组复核与通用 Chunk 修复（2026-08-02）
+
+人工复核已经覆盖 v4 复核队列中的 15 个无候选证据组。复核结果证明其中既有可直接
+绑定现有 Chunk 的标注对齐问题，也有转换器丢弃算法块、上游图题与正文粘连、图片无
+可检索文本等 Chunk 语料问题。本批先修复通用处理合同并重建候选，不能在旧 corpus
+上写入最终 qrels。
+
+#### 本批做什么
+
+1. 将 15 个无候选组分类为：现有 Chunk 可直接复核绑定、语料修复后绑定、证据不足
+   排除。复核决定只记录到新的 corpus/qrels candidate 配套产物，不改写冻结查询文件。
+2. 补全 MinerU `code`/`algorithm` 原始块转换：组合 `code_caption`、`code_body` 和脚注，
+   保留为可索引的算法/代码 Chunk；不得按具体论文、页码或问题文本特判。
+3. 对兼容全角字符执行 Unicode NFKC 检索规范化。`Chunk.text` 和原文证据保持原样，
+   仅 `retrieval_text` 与 BM25 查询分词使用规范化值，避免破坏引用保真。
+4. 增加保守的同页视觉图题修复：仅当短行几何、显式 Figure/Fig./Chart/Table 标记、
+   紧邻无题视觉块、异常长混合文本和同页空正文槽同时成立时，才把图题前缀与溢出正文
+   分开；修复来源写入 Chunk metadata。规则不得包含文档名、页码或样本措辞。
+5. 原始 PDF 产品导入默认显式请求 MinerU OCR，同时保留 `--no-mineru-ocr`。公开 API
+   没有独立的图片区域 OCR 开关，因此只对缺失图片证据的目标文档执行一次隔离
+   `is_ocr=true` 对照；若仍无可用文本，则该组作为视觉证据缺口排除，不伪造 OCR/VLM
+   内容，也不声称 API 已支持图片内部 OCR。
+6. 本地回归通过后提交并同步服务器；基于修复后的转换器隔离重建六文档 corpus，重新
+   生成 qrels candidate/review queue，并把 15 个已人工复核组编码为与新 corpus 绑定的
+   部分 review decisions。旧 v4 candidate/template 只保留为历史产物。
+
+#### 本批不做什么
+
+- 不针对单个 PDF、页码、问题或答案字符串加入解析规则；
+- 不切换到当前转换器尚不能完整消费的 MinerU v2 分页嵌套 JSON；
+- 不调用额外 VLM，不从图片标题臆造图片内部数据，不修改人工证据原文；
+- 不调整 Router、QueryTransformer、RRF、候选规模、Reranker 或检索参数；
+- 不把 15 条部分决策冒充覆盖全部 150 证据组的 frozen qrels；
+- 不重建 BGE-M3/FAISS 索引，不运行 M1-G4 正式检索评测。
+
+#### 文件、验收和资源边界
+
+- 预计修改 `docagent/parser/mineru_converter.py`、`docagent/schemas.py`、
+  `docagent/retrieval/bm25_index.py`、`docagent/parser/mineru_api.py`、原始 PDF CLI 入口及
+  对应定向测试；只更新与本批结论直接相关的状态/数据文档。
+- 本地验收覆盖算法块保留、图题/正文分离、原文保真与检索 NFKC、OCR 默认及显式关闭、
+  既有表格父子/跨页/句界回归。
+- MinerU API 对照属于 `server_required` 的真实外部依赖验证但不需要 GPU；六文档转换和
+  qrels 重建属于 `server_optional`。服务器即使有 GPU，本批也不加载 GPU 模型。
+- 停止条件：新 corpus、qrels candidate 和 15 组部分复核决策完成并校验；图片 OCR
+  对照若失败，记录为视觉证据缺口后停止。M1-G3 仍最高为 `ready`，M1-G4 保持
+  `not_started`。
+
 | 日期 | 版本 | 变更 | 原因 |
 |---|---|---|---|
 | 2026-08-02 | 1.0 | 建立双层 Gold、Chunk 修复先行和分批验收方案 | 六文档实测证明当前自动映射率仅 0.6000，且存在跨 Chunk、页码、OCR/序列化及表题错配问题 |
@@ -391,3 +439,4 @@ M1-G1 固定参数与角色字段：
 | 2026-08-02 | 1.7 | 记录 M1-G3 candidate 真实运行与冻结拒绝结果 | 150 个证据组已形成可复核队列，但没有显式复核决策，状态只能是 `ready` |
 | 2026-08-02 | 1.8 | 加固 M1-G3 qrels v2 冻结合同并要求重生复核材料 | v1 无法完整表达多 Chunk 等价集合，且对部分候选、不可索引块和样本/决策版本漂移约束不足 |
 | 2026-08-02 | 1.9 | 记录 qrels v2 本地/服务器验收与新复核材料 | v2 契约、输入绑定和 fail-closed 行为已验证，但尚无真实复核决策，不能进入 M1-G4 |
+| 2026-08-02 | 2.0 | 纳入 15 个无候选组人工复核和通用 MinerU→Chunk 修复 | 人工复核证明旧候选失败同时包含标注对齐、算法块丢失、视觉图题粘连、全角检索表示和图片 OCR 缺口，必须先产生新 corpus 再编码决策 |

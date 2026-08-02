@@ -3045,7 +3045,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mineru-model-version", default="vlm")
     parser.add_argument("--mineru-data-id")
     parser.add_argument("--mineru-language", default="en")
-    parser.add_argument("--mineru-ocr", dest="mineru_ocr", action="store_true", default=None)
+    parser.add_argument("--mineru-ocr", dest="mineru_ocr", action="store_true", default=True)
     parser.add_argument("--no-mineru-ocr", dest="mineru_ocr", action="store_false")
     parser.add_argument("--disable-mineru-table", action="store_true")
     parser.add_argument("--disable-mineru-formula", action="store_true")

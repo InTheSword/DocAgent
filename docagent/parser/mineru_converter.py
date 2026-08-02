@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 from collections import Counter
+from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
@@ -20,7 +21,7 @@ KNOWN_RAW_TYPES = (
     | TABLE_TYPES
     | IMAGE_TYPES
     | BOILERPLATE_TYPES
-    | {"aside_text", "code", "equation", "index", "page_footnote", "ref_text"}
+    | {"algorithm", "aside_text", "code", "equation", "index", "page_footnote", "ref_text"}
 )
 TEXTISH_KEYS = (
     "text",
@@ -56,10 +57,14 @@ RESOURCE_PATH_KEYS = (
 )
 URL_RE = re.compile(r"^https?://", re.IGNORECASE)
 CHUNK_CONTRACT_VERSION = "docagent_chunk_v3"
-SPLITTABLE_CONTENT_TYPES = {"body", "list_item", "reference"}
+SPLITTABLE_CONTENT_TYPES = {"algorithm", "body", "code", "list_item", "reference"}
 TABLE_SPLIT_MAX_CHARS = 1800
 TABLE_SPLIT_MAX_ROWS = 12
 TABLE_CAPTION_MARKER_RE = re.compile(r"(?i)(?<!\w)(?:table|tab\.)\s*\d+[a-z]?\s*[.:：]?|表\s*\d+\s*[.:：、]?")
+VISUAL_CAPTION_PREFIX_RE = re.compile(r"(?i)^(?:figure|fig\.?|chart|table)\s+\d+[A-Za-z]?\s*[.:：]?\s*")
+VISUAL_CAPTION_CONNECTORS = {
+    "a", "an", "and", "at", "by", "for", "from", "in", "of", "on", "or", "the", "to", "versus", "vs", "with",
+}
 
 
 class _TableParser(HTMLParser):
@@ -201,7 +206,7 @@ def _is_boilerplate(raw_type: str, text: str) -> bool:
 def _strip_html(value: str | None) -> str:
     if not value:
         return ""
-    return _clean_text(re.sub(r"<[^>]+>", " ", value))
+    return _clean_text(unescape(re.sub(r"<[^>]+>", " ", value)))
 
 
 def _page_idx(item: dict[str, Any]) -> int | None:
@@ -247,6 +252,9 @@ def _block_type(raw_type: str) -> str:
 
 
 def _content_type(item: dict[str, Any], raw_type: str, block_type: str) -> str:
+    source_subtype = _clean_text(item.get("sub_type")).casefold()
+    if raw_type == "algorithm" or source_subtype == "algorithm":
+        return "algorithm"
     if raw_type in {"title", "heading"} or item.get("text_level") is not None:
         return "heading"
     return {
@@ -267,6 +275,7 @@ def _content_type(item: dict[str, Any], raw_type: str, block_type: str) -> str:
         "page_footnote": "footnote",
         "ref_text": "reference",
         "equation": "equation",
+        "algorithm": "algorithm",
         "code": "code",
         "aside_text": "aside",
         "index": "index",
@@ -550,7 +559,101 @@ def _item_text(item: dict[str, Any], raw_type: str, block_type: str) -> str:
             _clean_text(item.get("text")),
             _clean_text(item.get("content")),
         )
+    if raw_type in {"algorithm", "code"} or _clean_text(item.get("sub_type")).casefold() == "algorithm":
+        return _unique_text_parts(
+            _caption_text(item, "code_caption", "algorithm_caption"),
+            _strip_html(str(item.get("code_body") or item.get("algorithm_content") or "")),
+            _caption_text(item, "code_footnote", "algorithm_footnote"),
+            _clean_text(item.get("text")),
+            _clean_text(item.get("content")),
+        )
     return _unique_text_parts(_clean_text(item.get("text")), _clean_text(item.get("content")))
+
+
+def _horizontal_overlap(left: list[float], right: list[float]) -> float:
+    overlap = max(0.0, min(left[2], right[2]) - max(left[0], right[0]))
+    return overlap / max(1.0, min(left[2] - left[0], right[2] - right[0]))
+
+
+def _visual_caption_split(text: str) -> tuple[str, str] | None:
+    if len(text) < 160:
+        return None
+    marker = VISUAL_CAPTION_PREFIX_RE.match(text)
+    if marker is None:
+        return None
+    informative_title_words = 0
+    for token_match in re.finditer(r"\S+", text[marker.end() :]):
+        token = token_match.group(0).strip(".,;:()[]{}")
+        if not token:
+            continue
+        normalized = token.casefold()
+        is_connector = normalized in VISUAL_CAPTION_CONNECTORS
+        is_title_word = token[0].isupper() or token.isupper() or token[0].isdigit()
+        if is_title_word and not is_connector:
+            informative_title_words += 1
+            continue
+        if is_connector:
+            continue
+        if informative_title_words < 3 or not token[0].islower():
+            return None
+        split_at = marker.end() + token_match.start()
+        caption = text[:split_at].rstrip(" ,;:")
+        overflow = text[split_at:].strip()
+        return (caption, overflow) if len(overflow) >= 80 else None
+    return None
+
+
+def _repair_visual_caption_body_mix(data: list[Any]) -> list[Any]:
+    """Repair a narrow MinerU layout failure without document-specific rules."""
+
+    repaired = [dict(item) if isinstance(item, dict) else item for item in data]
+    for index, item in enumerate(repaired):
+        if not isinstance(item, dict) or _raw_type(item) not in {"text", "paragraph"}:
+            continue
+        item_bbox = _bbox(item)
+        split = _visual_caption_split(_clean_text(item.get("text") or item.get("content")))
+        if item_bbox is None or split is None or item_bbox[3] - item_bbox[1] > 32:
+            continue
+        page_idx = _page_idx(item)
+        nearby = [candidate for candidate in repaired[index + 1 : index + 7] if isinstance(candidate, dict)]
+        visual = next(
+            (
+                candidate
+                for candidate in nearby
+                if _page_idx(candidate) == page_idx
+                and _raw_type(candidate) in IMAGE_TYPES
+                and (candidate_bbox := _bbox(candidate)) is not None
+                and candidate_bbox[1] - item_bbox[3] <= 64
+                and _horizontal_overlap(item_bbox, candidate_bbox) >= 0.5
+                and not _caption_text(candidate, "caption", "image_caption", "chart_caption")
+            ),
+            None,
+        )
+        empty_body = next(
+            (
+                candidate
+                for candidate in nearby
+                if _page_idx(candidate) == page_idx
+                and _raw_type(candidate) in {"text", "paragraph"}
+                and not _clean_text(candidate.get("text") or candidate.get("content"))
+                and (candidate_bbox := _bbox(candidate)) is not None
+                and candidate_bbox[3] - candidate_bbox[1] >= 3 * (item_bbox[3] - item_bbox[1])
+            ),
+            None,
+        )
+        if visual is None or empty_body is None:
+            continue
+        caption, overflow = split
+        item["docagent_original_source_hash"] = _stable_hash(item)
+        empty_body["docagent_original_source_hash"] = _stable_hash(empty_body)
+        item["type"] = "caption"
+        item["text"] = caption
+        item.pop("content", None)
+        item["docagent_source_repair"] = "visual_caption_body_separation"
+        empty_body["text"] = overflow
+        empty_body.pop("content", None)
+        empty_body["docagent_source_repair"] = "visual_caption_body_overflow_recovery"
+    return repaired
 
 
 def _visual_summary(item: dict[str, Any]) -> str:
@@ -708,6 +811,7 @@ def _make_block(
 
     safe_page = page if page is not None else 0
     block_id = f"{doc_id}_p{safe_page:03d}_b{index:04d}"
+    source_item_hash = str(item.get("docagent_original_source_hash") or _stable_hash(item))
     metadata: dict[str, Any] = {
         "parser": "mineru",
         "chunk_strategy": "mineru_block_identity",
@@ -715,8 +819,8 @@ def _make_block(
         "source_block_ids": [block_id],
         "source_item_id": _source_item_id(item),
         "source_item_ids": [value for value in [_source_item_id(item)] if value],
-        "source_item_hash": _stable_hash(item),
-        "source_item_hashes": [_stable_hash(item)],
+        "source_item_hash": source_item_hash,
+        "source_item_hashes": [source_item_hash],
         "source_page_numbers": [page] if page is not None else [],
         "document_page_number_start": page,
         "document_page_number_end": page,
@@ -786,7 +890,11 @@ def _make_block(
     if nearby_text:
         metadata["nearby_text"] = nearby_text
     if item.get("sub_type") is not None:
-        metadata["visual_subtype"] = _clean_text(item.get("sub_type"))
+        metadata["source_subtype"] = _clean_text(item.get("sub_type"))
+        if block_type == "image":
+            metadata["visual_subtype"] = metadata["source_subtype"]
+    if item.get("docagent_source_repair"):
+        metadata["source_repair"] = str(item["docagent_source_repair"])
     if raw_image_path is not None:
         metadata["source_resource_path"] = raw_image_path
         if raw_resource_key is not None:
@@ -1069,6 +1177,7 @@ def _finalize_chunk_metadata(blocks: list[Chunk]) -> None:
                 "text": block.text,
                 "table_html": block.table_html,
                 "visual_summary": block.visual_summary,
+                "retrieval_text": block.retrieval_text,
             }
         )
 
@@ -1490,6 +1599,7 @@ def content_list_to_chunks(
         data = data.get("content_list") or data.get("blocks") or []
     if not isinstance(data, list):
         raise ValueError("MinerU content list must be a list or a dict with content_list/blocks")
+    data = _repair_visual_caption_body_mix(data)
     resource_base = Path(resource_root) if resource_root is not None else path.parent
     document_base = Path(document_dir) if document_dir is not None else _default_document_dir(path)
     provenance = _layout_metadata(path, document_base)

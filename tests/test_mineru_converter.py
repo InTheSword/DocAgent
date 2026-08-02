@@ -618,6 +618,55 @@ def test_mineru_image_blocks_mark_visual_readiness(tmp_path: Path) -> None:
     assert blocks[1].metadata["requires_visual_understanding"] is False
 
 
+def test_mineru_algorithm_code_fields_are_preserved_as_indexable_chunks(tmp_path: Path) -> None:
+    content = [
+        {
+            "type": "code",
+            "sub_type": "algorithm",
+            "page_idx": 0,
+            "code_caption": "Algorithm 1 Adaptive Tree Construction",
+            "code_body": "<div>Input: video V<br>Output: tree T &lt;- expand(V)</div>",
+        }
+    ]
+    path = tmp_path / "sample_content_list.json"
+    path.write_text(json.dumps(content), encoding="utf-8")
+
+    blocks = content_list_to_chunks(doc_id="doc123", content_list_path=path)
+
+    assert len(blocks) == 1
+    assert blocks[0].metadata["content_type"] == "algorithm"
+    assert blocks[0].metadata["source_subtype"] == "algorithm"
+    assert "Algorithm 1 Adaptive Tree Construction" in blocks[0].text
+    assert "Input: video V Output: tree T <- expand(V)" in blocks[0].text
+    assert blocks[0].is_indexable is True
+
+
+def test_mineru_repairs_short_visual_caption_mixed_with_body_using_layout_evidence(tmp_path: Path) -> None:
+    mixed = (
+        "Figure 3. US Equities and Credit Indices levels, on average, remained elevated during "
+        "the quarter and the continuation belongs to the body paragraph rather than the figure title."
+    )
+    content = [
+        {"type": "text", "page_idx": 1, "bbox": [101, 363, 359, 377], "text": mixed},
+        {"type": "chart", "page_idx": 1, "bbox": [102, 375, 428, 570], "image_path": "images/chart.jpg"},
+        {"type": "text", "page_idx": 1, "bbox": [442, 98, 875, 229], "text": ""},
+    ]
+    path = tmp_path / "sample_content_list.json"
+    path.write_text(json.dumps(content), encoding="utf-8")
+
+    blocks = content_list_to_chunks(doc_id="doc123", content_list_path=path)
+
+    caption = next(block for block in blocks if block.metadata["content_type"] == "caption")
+    chart = next(block for block in blocks if block.block_type == "image")
+    body = next(block for block in blocks if block.metadata["content_type"] == "body")
+    assert caption.text == "Figure 3. US Equities and Credit Indices"
+    assert body.text.startswith("levels, on average")
+    assert "levels, on average" not in caption.text
+    assert caption.metadata["source_repair"] == "visual_caption_body_separation"
+    assert body.metadata["source_repair"] == "visual_caption_body_overflow_recovery"
+    assert caption.metadata["related_block_id"] == chart.block_id
+
+
 def test_mineru_content_list_to_blocks_preserves_remote_and_table_image_resources(tmp_path: Path) -> None:
     content = [
         {

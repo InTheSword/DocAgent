@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import re
+import unicodedata
 from collections import Counter
 
 from docagent.schemas import Chunk
@@ -10,7 +11,8 @@ TOKEN_RE = re.compile(r"[A-Za-z0-9_]+|[\u4e00-\u9fff]")
 
 
 def tokenize(text: str) -> list[str]:
-    return [token.lower() for token in TOKEN_RE.findall(text or "")]
+    normalized = unicodedata.normalize("NFKC", text or "")
+    return [token.lower() for token in TOKEN_RE.findall(normalized)]
 
 
 class BM25Index:

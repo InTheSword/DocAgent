@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -45,7 +46,7 @@ def _clean_retrieval_value(value: Any) -> str:
         return " ".join(part for item in value if (part := _clean_retrieval_value(item))).strip()
     if isinstance(value, dict):
         return " ".join(part for item in value.values() if (part := _clean_retrieval_value(item))).strip()
-    return re.sub(r"\s+", " ", str(value)).strip()
+    return unicodedata.normalize("NFKC", re.sub(r"\s+", " ", str(value)).strip())
 
 
 def _unique_retrieval_parts(parts: list[Any]) -> list[str]:

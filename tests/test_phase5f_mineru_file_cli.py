@@ -56,10 +56,14 @@ def _mineru_args(source: Path, db_path: Path, document_root: Path, output_dir: P
     ]
 
 
-def test_mineru_ocr_defaults_to_backend_auto_detection() -> None:
+def test_mineru_ocr_defaults_to_enabled_and_can_be_disabled() -> None:
     args = docagent_cli.build_parser().parse_args(["--doc-id", "doc1", "--question", "test"])
+    disabled = docagent_cli.build_parser().parse_args(
+        ["--doc-id", "doc1", "--question", "test", "--no-mineru-ocr"]
+    )
 
-    assert args.mineru_ocr is None
+    assert args.mineru_ocr is True
+    assert disabled.mineru_ocr is False
 
 
 def test_mineru_backend_unavailable_without_existing_output_is_structured(tmp_path: Path) -> None:

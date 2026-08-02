@@ -103,9 +103,11 @@ M1-G2 corpus 重新生成 86 条 candidate、150 条复核队列和 150 条 deci
 outputs/sync/m1_g3_chunk_qrels_candidates_v4_20260802/
 ```
 
-当前停止。下一步只能使用 v4 目录中的 v2 decision 模板完成人工或独立复核；现有 v1
-模板不得继续使用。获得真实显式 review decisions 且通过完整性/哈希校验后，M1-G3
-才能从 `ready` 变为 `frozen`。M1-G4 的 GPU 索引重建和检索评测仍为 `not_started`。
+15 个无候选证据组已经完成人工复核，但复核暴露出算法块丢失、图题与正文粘连、全角
+兼容字符影响检索表示和图片 OCR 缺口。当前按临时计划 9.5 执行 M1-G3.5：先修复通用
+MinerU→Chunk 合同并隔离重建六文档 corpus，再重新生成 candidate，并仅编码这 15 组
+已有人工结论。旧 v4 candidate/template 随 Chunk 变化失效，不得继续冻结；剩余证据组
+仍需复核。M1-G4 的 GPU 索引重建和检索评测保持 `not_started`。
 
 ## 停止条件
 
