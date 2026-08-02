@@ -253,6 +253,7 @@ def run(args: argparse.Namespace, *, llm_client: Any | None = None, model_name: 
     write_jsonl(frozen_path, frozen)
 
     action_counts = Counter(row["decision"] for row in decisions)
+    reviewer_counts = Counter(str(row.get("reviewer") or "unknown") for row in decisions)
     summary = {
         "status": "success",
         "milestone_status": "frozen",
@@ -261,6 +262,7 @@ def run(args: argparse.Namespace, *, llm_client: Any | None = None, model_name: 
         "independent_ai_reviewed_group_count": len(reviewed),
         "evidence_group_count": len(decisions),
         "decision_counts": dict(sorted(action_counts.items())),
+        "reviewer_counts": dict(sorted(reviewer_counts.items())),
         "semantic_retry_count": retried_count,
         "frozen_sample_count": len(frozen),
         "evaluation_eligible_sample_count": sum(bool(row["evaluation_eligible"]) for row in frozen),
@@ -295,6 +297,7 @@ def run(args: argparse.Namespace, *, llm_client: Any | None = None, model_name: 
             f"- status: `frozen`\n- groups: {len(decisions)}\n"
             f"- human / independent AI: {len(human_decisions)} / {len(reviewed)}\n"
             f"- decisions: `{dict(sorted(action_counts.items()))}`\n"
+            f"- reviewers: `{dict(sorted(reviewer_counts.items()))}`\n"
             f"- eligible / excluded samples: {summary['evaluation_eligible_sample_count']} / "
             f"{summary['excluded_sample_count']}\n"
             "- GPU/retrieval evaluation: not used\n",

@@ -160,4 +160,5 @@ def test_run_freezes_when_partial_already_covers_remaining_queue(
 
     assert result["status"] == "success"
     assert result["metrics"]["independent_ai_reviewed_group_count"] == 1
+    assert result["metrics"]["reviewer_counts"] == {"unknown": 1}
     assert client.calls == []
