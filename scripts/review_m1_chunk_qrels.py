@@ -235,7 +235,7 @@ def run(args: argparse.Namespace, *, llm_client: Any | None = None, model_name: 
 
     failure_path = output_dir / "failures.jsonl"
     write_jsonl(failure_path, failures)
-    if failures or len(reviewed) != len(remaining):
+    if failures or len(reviewed) != len(expected_ai_keys):
         raise RuntimeError(f"qrels review failed closed: {len(failures)} failures")
 
     combined_by_key = {**reviewed, **human_by_key}
