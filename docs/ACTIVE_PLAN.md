@@ -113,6 +113,8 @@ qrels。旧 v4 candidate/template 已失效。
 当前执行 M1-G3.6：使用已配置 Qwen API 独立复核其余 135 个证据组，与 15 组人工
 decision 合并；只有 150/150 组通过 qrels v2 绑定、内容哈希和可索引性校验后才生成
 frozen qrels。该批不需要 GPU，不重建 BGE-M3/FAISS 索引，也不运行 M1-G4 检索评测。
+真实 API 首轮出现 HTTP 429/读取超时；按阶段计划先加入可恢复 partial 和瞬时错误
+有界重试，再以较低并发续跑，判定标准与冻结合同不变。
 
 ## 停止条件
 

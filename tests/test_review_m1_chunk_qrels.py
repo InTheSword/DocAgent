@@ -38,6 +38,14 @@ class FakeClient:
         return json.dumps(self.outputs.pop(0))
 
 
+class TransientFailureClient(FakeClient):
+    def complete(self, **kwargs) -> str:
+        self.calls.append(kwargs)
+        if len(self.calls) == 1:
+            raise RuntimeError("HTTP Error 429: Too Many Requests")
+        return json.dumps(self.outputs.pop(0))
+
+
 def test_review_queue_item_accepts_a_complete_candidate() -> None:
     client = FakeClient(
         [
@@ -81,3 +89,22 @@ def test_review_queue_item_fails_closed_after_two_invalid_outputs() -> None:
 
     with pytest.raises(QrelsReviewError):
         review_queue_item(_item(), llm_client=client)
+
+
+def test_review_queue_item_retries_transient_api_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("scripts.review_m1_chunk_qrels.time.sleep", lambda _seconds: None)
+    client = TransientFailureClient(
+        [
+            {
+                "decision": "accept_candidate",
+                "selected_candidate_indexes": [0],
+                "rationale": "The candidate contains the complete source evidence.",
+            }
+        ]
+    )
+
+    result, retried = review_queue_item(_item(), llm_client=client)
+
+    assert result["decision"] == "accept_candidate"
+    assert retried is False
+    assert len(client.calls) == 2

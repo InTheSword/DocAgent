@@ -6,6 +6,7 @@ import json
 import shutil
 import subprocess
 import sys
+import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
@@ -34,6 +35,16 @@ SYSTEM_PROMPT = (
     "confidence, Markdown, citations, chain-of-thought, or extra fields."
 )
 OUTPUT_FIELDS = {"decision", "selected_candidate_indexes", "rationale"}
+TRANSIENT_API_MARKERS = (
+    "429",
+    "too many requests",
+    "timed out",
+    "timeout",
+    "temporarily unavailable",
+    "http error 502",
+    "http error 503",
+    "http error 504",
+)
 
 
 class QrelsReviewError(ValueError):
@@ -107,10 +118,20 @@ def review_queue_item(
 ) -> tuple[dict[str, Any], bool]:
     error = ""
     for attempt in range(2):
-        raw = llm_client.complete(
-            system_prompt=SYSTEM_PROMPT,
-            user_payload=_review_payload(item, correction=error),
-        )
+        request = {
+            "system_prompt": SYSTEM_PROMPT,
+            "user_payload": _review_payload(item, correction=error),
+        }
+        for api_attempt, delay in enumerate((0, 3, 10, 20)):
+            if delay:
+                time.sleep(delay)
+            try:
+                raw = llm_client.complete(**request)
+                break
+            except Exception as exc:
+                transient = any(marker in str(exc).lower() for marker in TRANSIENT_API_MARKERS)
+                if not transient or api_attempt == 3:
+                    raise
         try:
             return _validate_review_output(parse_json_object(raw), len(item["candidates"])), attempt == 1
         except QrelsReviewError as exc:
@@ -183,7 +204,18 @@ def run(args: argparse.Namespace, *, llm_client: Any | None = None, model_name: 
         model_name = config.model
     reviewer = f"{model_name or 'configured_llm'}:m1_qrels_reviewer_v1"
 
-    reviewed: dict[tuple[str, str], dict[str, Any]] = {}
+    output_dir.mkdir(parents=True, exist_ok=True)
+    partial_path = output_dir / "ai_review_decisions.partial.jsonl"
+    partial_rows = list(read_jsonl(partial_path)) if partial_path.is_file() else []
+    reviewed: dict[tuple[str, str], dict[str, Any]] = {
+        (row["sample_id"], row["group_id"]): row for row in partial_rows
+    }
+    if len(reviewed) != len(partial_rows):
+        raise ValueError("partial AI decisions contain duplicate sample/group keys")
+    expected_ai_keys = {(row["sample_id"], row["group_id"]) for row in remaining}
+    if not set(reviewed).issubset(expected_ai_keys):
+        raise ValueError("partial AI decisions do not match the current review queue")
+    remaining = [row for row in remaining if (row["sample_id"], row["group_id"]) not in reviewed]
     retried_count = 0
     failures: list[dict[str, str]] = []
     with ThreadPoolExecutor(max_workers=max(1, args.max_workers)) as executor:
@@ -196,11 +228,11 @@ def run(args: argparse.Namespace, *, llm_client: Any | None = None, model_name: 
                 reviewed[key] = _decision_from_review(
                     template_by_key[key], item, review, reviewer=reviewer
                 )
+                write_jsonl(partial_path, [reviewed[key] for key in sorted(reviewed)])
                 retried_count += int(retried)
             except Exception as exc:
                 failures.append({"sample_id": key[0], "group_id": key[1], "error": str(exc)[:500]})
 
-    output_dir.mkdir(parents=True, exist_ok=True)
     failure_path = output_dir / "failures.jsonl"
     write_jsonl(failure_path, failures)
     if failures or len(reviewed) != len(remaining):
@@ -251,7 +283,7 @@ def run(args: argparse.Namespace, *, llm_client: Any | None = None, model_name: 
     }
     _write_json(result_path, result)
     manifest_path = output_dir / "manifest.json"
-    files = [decisions_path, frozen_path, summary_path, result_path, preview_path, failure_path]
+    files = [decisions_path, frozen_path, summary_path, result_path, preview_path, failure_path, partial_path]
     _write_json(manifest_path, _manifest(args.run_id, output_dir, files))
 
     if sync_dir is not None:
