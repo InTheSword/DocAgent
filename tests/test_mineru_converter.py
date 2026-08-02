@@ -647,6 +647,13 @@ def test_mineru_repairs_short_visual_caption_mixed_with_body_using_layout_eviden
         "the quarter and the continuation belongs to the body paragraph rather than the figure title."
     )
     content = [
+        {
+            "type": "chart",
+            "page_idx": 1,
+            "bbox": [101, 122, 426, 306],
+            "image_path": "images/previous-chart.jpg",
+            "chart_caption": "Figure 2. Previous chart",
+        },
         {"type": "text", "page_idx": 1, "bbox": [101, 363, 359, 377], "text": mixed},
         {"type": "chart", "page_idx": 1, "bbox": [102, 375, 428, 570], "image_path": "images/chart.jpg"},
         {"type": "text", "page_idx": 1, "bbox": [442, 98, 875, 229], "text": ""},
@@ -657,7 +664,10 @@ def test_mineru_repairs_short_visual_caption_mixed_with_body_using_layout_eviden
     blocks = content_list_to_chunks(doc_id="doc123", content_list_path=path)
 
     caption = next(block for block in blocks if block.metadata["content_type"] == "caption")
-    chart = next(block for block in blocks if block.block_type == "image")
+    chart = next(block for block in blocks if block.image_path and block.image_path.endswith("images/chart.jpg"))
+    previous_chart = next(
+        block for block in blocks if block.image_path and block.image_path.endswith("images/previous-chart.jpg")
+    )
     body = next(block for block in blocks if block.metadata["content_type"] == "body")
     assert caption.text == "Figure 3. US Equities and Credit Indices"
     assert body.text.startswith("levels, on average")
@@ -665,6 +675,7 @@ def test_mineru_repairs_short_visual_caption_mixed_with_body_using_layout_eviden
     assert caption.metadata["source_repair"] == "visual_caption_body_separation"
     assert body.metadata["source_repair"] == "visual_caption_body_overflow_recovery"
     assert caption.metadata["related_block_id"] == chart.block_id
+    assert caption.block_id not in previous_chart.metadata["caption_block_ids"]
 
 
 def test_mineru_content_list_to_blocks_preserves_remote_and_table_image_resources(tmp_path: Path) -> None:

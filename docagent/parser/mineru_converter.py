@@ -994,12 +994,25 @@ def _link_related_blocks(blocks: list[Chunk]) -> None:
             if not targets:
                 continue
             caption_order = int(caption.metadata.get("page_reading_order") or 0)
+
+            def caption_target_key(block: Chunk) -> tuple[float, float, int, int]:
+                caption_bbox = caption.location.bbox
+                target_bbox = block.location.bbox
+                if caption_bbox is None or target_bbox is None:
+                    target_order = int(block.metadata.get("page_reading_order") or 0)
+                    return (1.0, float("inf"), abs(target_order - caption_order), target_order)
+                overlap_penalty = 0.0 if _horizontal_overlap(caption_bbox, target_bbox) >= 0.2 else 1.0
+                vertical_gap = max(
+                    0.0,
+                    target_bbox[1] - caption_bbox[3],
+                    caption_bbox[1] - target_bbox[3],
+                )
+                target_order = int(block.metadata.get("page_reading_order") or 0)
+                return (overlap_penalty, vertical_gap, abs(target_order - caption_order), target_order)
+
             target = min(
                 targets,
-                key=lambda block: (
-                    abs(int(block.metadata.get("page_reading_order") or 0) - caption_order),
-                    int(block.metadata.get("page_reading_order") or 0),
-                ),
+                key=caption_target_key,
             )
             target.metadata.setdefault("caption_block_ids", []).append(caption.block_id)
             caption.metadata["related_block_id"] = target.block_id
