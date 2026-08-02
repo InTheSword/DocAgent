@@ -1,7 +1,7 @@
 # M1 Chunk 质量与检索 Qrels 对齐实施计划
 
 > 文件性质：当前阶段临时实施依据
-> 计划版本：1.7
+> 计划版本：1.8
 > 状态：M1-G2 `accepted`；M1-G3 `ready`；M1-G4 `not_started`
 > 建立日期：2026-08-02
 > 适用范围：六文档 MinerU→Chunk 处理、原文证据到 Chunk qrels 对齐，以及依赖该 qrels 的检索评测
@@ -74,8 +74,7 @@ outputs/sync/m1_qrels_chunk_audit_20260802/alignment_diagnostics.json
     {
       "group_id": "g1",
       "requirement": "required",
-      "primary_chunk_ids": ["chunk-A"],
-      "acceptable_alternative_chunk_ids": [],
+      "acceptable_chunk_sets": [["chunk-A"]],
       "review_status": "reviewed"
     }
   ],
@@ -86,15 +85,16 @@ outputs/sync/m1_qrels_chunk_audit_20260802/alignment_diagnostics.json
 
 规则：
 
-- 单点事实优先只标一个包含答案且语义自足的主 Chunk；确有重复文本时，等价块放入
-  `acceptable_alternative_chunk_ids`，不与主 Chunk 混为一个必需集合。
+- 单点事实优先只标一个包含答案且语义自足的 Chunk 集合；确有重复文本时，以新的
+  完整数组记录等价集合，不与首选集合混为一个必需集合。
 - 多跳问题把每个必需事实拆成独立 evidence group；每组至少命中一个主块或等价块，
   所有必需组都命中才算 all-evidence success。
 - 一项原文证据跨 Chunk 时，标注覆盖该事实的最小 Chunk 组合；不得为了获得更高分而
   纳入整页或所有相邻块。
 - 表格事实优先指向实际包含目标行列的表格 Chunk；表题或上下文块只有在回答确实需要
   时才作为另一必需组。
-- qrels 必须记录 Chunk `content_hash`，用于发现 ID 未变但内容变化的失效情况。
+- qrels 必须记录 Chunk `content_hash`，用于发现 ID 未变但内容变化的失效情况；每个
+  `acceptable_chunk_sets` 内层数组必须整体命中，数组之间是 OR 关系。
 
 ### 3.3 Chunk 修复先于最终 qrels 冻结
 
@@ -281,6 +281,44 @@ M1-G1 固定参数与角色字段：
 - 本批没有使用 GPU、LLM/VLM/MinerU API，没有重建索引或运行检索指标。
   由于尚无显式 review decisions，M1-G3 状态为 `ready`，不是 `frozen`。
 
+### 9.3 M1-G3 冻结合同加固（2026-08-02）
+
+现有 v1 candidate 已足以辅助定位原文证据，但在进入人工/独立复核前仍存在会使正式
+评测失真的合同漏洞。本批只加固 qrels 生成与冻结边界，完成后重新生成复核材料；
+不修改 Chunk、检索器、Router、QueryTransformer 或 Reranker，也不进入 M1-G4。
+
+#### 本批必须修复
+
+1. 将证据组输出统一为 `acceptable_chunk_sets`。每个内层数组表示一个完整且最小的
+   必需 Chunk 集合；命中集合中的一部分不算命中，后续数组表示完整等价集合，不再用
+   扁平 `acceptable_alternative_chunk_ids` 表达多 Chunk 替代关系。
+2. `accept_candidate` 只能选择生成器提出的一个或多个完整候选集合，不能截取
+   `exact_multi` 的部分 Chunk，也不能跨候选拼接；`replace` 允许复核者提交新集合，
+   但仍须通过完整合同校验。
+3. 所有进入 qrels 的 Chunk 必须存在、`is_indexable=true`、集合内部无重复，且不同
+   可接受集合不得完全重复。选中 Chunk 的 `content_hash` 必须与冻结 corpus 一致。
+4. 样本 ID、文档内 evidence group ID 必须非空且唯一；必需证据组必须得到且只得到
+   一条显式决策。复核人、复核类型、理由和带时区 ISO-8601 时间均为必填字段。
+5. candidate、review queue、decision template 与 frozen qrels 全部绑定：
+   `samples_sha256`、`corpus_manifest_sha256`、`corpus_id`、Chunk 合同版本和源 PDF
+   哈希。冻结结果额外记录 `review_decisions_sha256`，防止样本、语料或决策文件被
+   替换后静默复用。
+6. qrels schema 升级为 `m1-chunk-qrels-v2`。现有 v1 decision 模板不得迁移或自动
+   继承复核状态；应基于同一冻结 corpus 重新生成 v2 candidate 和空白 decision 模板。
+
+#### 验收与资源边界
+
+- 增加针对性测试覆盖：多 Chunk 部分接受、跨候选拼接、不可索引 Chunk、重复样本或
+  证据组、无时区复核时间、过期样本/manifest 哈希均被拒绝；合法的多 Chunk 主集合
+  与完整替代集合可以冻结。
+- 完成定向测试与既有 qrels/评测回归后，提交并同步服务器；使用 M1-G2 已冻结 corpus
+  重新生成一次 v2 candidate、review queue 和 decision template，并再次验证空白决策
+  无法冻结。
+- 本批为确定性 JSON/JSONL 处理，属于 `local_only + server_optional`，不使用 GPU，
+  不加载真实嵌入或重排序模型。
+- 停止条件仍为 M1-G3 `ready`：只有用户另行提供真实、完整且通过 v2 校验的 review
+  decisions 后才可冻结；不得在本批启动 M1-G4。
+
 ## 10. 方案变更记录
 
 ### M1-G1 本地验证结果（2026-08-02）
@@ -332,3 +370,4 @@ M1-G1 固定参数与角色字段：
 | 2026-08-02 | 1.5 | 记录 M1-G2 六文档隔离重建验收 | 实际 MinerU 产物上的 Chunk/表格父子合同、表题检索文本与源语料不可变性均通过 |
 | 2026-08-02 | 1.6 | 冻结 M1-G3 candidate、review queue 和 fail-closed 冻结边界 | 自动映射不等于内容复核；在缺少显式 review decisions 时不得伪造 reviewed qrels |
 | 2026-08-02 | 1.7 | 记录 M1-G3 candidate 真实运行与冻结拒绝结果 | 150 个证据组已形成可复核队列，但没有显式复核决策，状态只能是 `ready` |
+| 2026-08-02 | 1.8 | 加固 M1-G3 qrels v2 冻结合同并要求重生复核材料 | v1 无法完整表达多 Chunk 等价集合，且对部分候选、不可索引块和样本/决策版本漂移约束不足 |

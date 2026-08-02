@@ -92,7 +92,7 @@ MinerU JSON 在隔离目录重建为 1,233 个 Chunk（1,022 个可索引），3
 outputs/sync/m1_g2_chunk_rebuild_bca0893_20260802/
 ```
 
-M1-G3 已达到 `ready`：基于 M1-G2 冻结 corpus 为 86 条文档查询和 150 个证据组
+M1-G3 v1 candidate 已达到 `ready`：基于 M1-G2 冻结 corpus 为 86 条文档查询和 150 个证据组
 生成 candidate、复核队列与 decision 模板。135 个证据组至少有一组候选，其中 60 个精确
 单块、19 个精确多块、2 个精确歧义、54 个模糊；15 个无候选组位于最高复核优先级。
 本地和服务器同范围 17 项回归通过，真实空白复核模板被冻结器拒绝，未生成
@@ -102,9 +102,10 @@ M1-G3 已达到 `ready`：基于 M1-G2 冻结 corpus 为 86 条文档查询和 1
 outputs/sync/m1_g3_chunk_qrels_candidates_v3_20260802/
 ```
 
-当前停止。下一个动作是对复核队列填写显式 review decisions；完整性与哈希校验通过后
-M1-G3 才能从 `ready` 变为 `frozen`。M1-G4 的 GPU 索引重建和检索评测仍为
-`not_started`。
+进入复核前先执行计划 9.3 的 qrels v2 冻结合同加固，并基于同一 corpus 重新生成复核
+材料；现有 v1 decision 模板不得继续使用。v2 完整性与哈希校验通过且获得真实显式
+review decisions 后，M1-G3 才能从 `ready` 变为 `frozen`。M1-G4 的 GPU 索引重建和
+检索评测仍为 `not_started`。
 
 ## 停止条件
 

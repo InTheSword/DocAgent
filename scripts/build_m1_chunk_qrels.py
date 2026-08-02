@@ -8,6 +8,7 @@ import subprocess
 import sys
 import unicodedata
 from collections import Counter
+from datetime import datetime
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
@@ -20,7 +21,7 @@ from docagent.schemas import Chunk
 from docagent.utils.jsonl import read_jsonl, write_jsonl
 
 
-SCHEMA_VERSION = "m1-chunk-qrels-v1"
+SCHEMA_VERSION = "m1-chunk-qrels-v2"
 EVIDENCE_TYPE_COMPATIBILITY = {
     "table": {"table"},
     "figure": {"image", "figure", "chart"},
@@ -235,6 +236,10 @@ def _load_corpus(manifest_path: Path) -> tuple[dict[str, Any], dict[str, dict[st
             evidence_path_value = str(Path(str(document["document_dir"])) / "evidence_blocks.jsonl")
         if not document_file or not doc_id or not evidence_path_value:
             raise ValueError("corpus manifest contains an incomplete document")
+        if not str(document.get("source_pdf_sha256") or ""):
+            raise ValueError(f"corpus manifest is missing source_pdf_sha256 for {doc_id}")
+        if document_file in documents_by_file or doc_id in chunks_by_doc:
+            raise ValueError(f"corpus manifest contains duplicate document binding: {document_file}/{doc_id}")
         evidence_path = _repo_path(str(evidence_path_value))
         expected_sha = str(document.get("evidence_blocks_sha256") or "")
         if expected_sha and _sha256_file(evidence_path) != expected_sha:
@@ -245,9 +250,67 @@ def _load_corpus(manifest_path: Path) -> tuple[dict[str, Any], dict[str, dict[st
         missing_hashes = [chunk.block_id for chunk in chunks if not chunk.metadata.get("content_hash")]
         if missing_hashes:
             raise ValueError(f"chunks are missing content_hash: {missing_hashes[:3]}")
+        chunk_ids = [chunk.block_id for chunk in chunks]
+        if len(chunk_ids) != len(set(chunk_ids)):
+            raise ValueError(f"document contains duplicate chunk ids: {doc_id}")
         documents_by_file[document_file] = {**document, "evidence_blocks_path": str(evidence_path)}
         chunks_by_doc[doc_id] = chunks
     return manifest, documents_by_file, chunks_by_doc
+
+
+def _validate_samples(samples: list[dict[str, Any]]) -> None:
+    sample_ids: set[str] = set()
+    for sample in samples:
+        sample_id = str(sample.get("sample_id") or "").strip()
+        if not sample_id:
+            raise ValueError("sample is missing sample_id")
+        if sample_id in sample_ids:
+            raise ValueError(f"duplicate sample_id: {sample_id}")
+        sample_ids.add(sample_id)
+        if not sample.get("document_file"):
+            continue
+        groups = list(sample.get("gold_evidence_groups") or [])
+        if not groups:
+            raise ValueError(f"document-bound sample has no evidence groups: {sample_id}")
+        group_ids: set[str] = set()
+        for group in groups:
+            group_id = str(group.get("group_id") or "").strip()
+            if not group_id:
+                raise ValueError(f"sample has an empty group_id: {sample_id}")
+            if group_id in group_ids:
+                raise ValueError(f"duplicate group_id in sample {sample_id}: {group_id}")
+            group_ids.add(group_id)
+            if not str(group.get("verbatim_content") or "").strip():
+                raise ValueError(f"evidence group has empty verbatim_content: {sample_id}/{group_id}")
+
+
+def _validate_reviewed_at(value: str) -> None:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("reviewed_at must be a valid ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError("reviewed_at must include a timezone")
+
+
+def _selected_chunk_sets(decision: dict[str, Any]) -> list[list[str]]:
+    raw_sets = decision.get("selected_chunk_sets")
+    if not isinstance(raw_sets, list):
+        raise ValueError("selected_chunk_sets must be a list")
+    selected: list[list[str]] = []
+    seen_sets: set[tuple[str, ...]] = set()
+    for raw_set in raw_sets:
+        if not isinstance(raw_set, list) or not raw_set:
+            raise ValueError("each selected chunk set must be a non-empty list")
+        chunk_ids = [str(value).strip() for value in raw_set]
+        if any(not block_id for block_id in chunk_ids) or len(chunk_ids) != len(set(chunk_ids)):
+            raise ValueError("selected chunk sets contain empty or duplicate chunk ids")
+        key = tuple(chunk_ids)
+        if key in seen_sets:
+            raise ValueError("selected_chunk_sets contains a duplicate set")
+        seen_sets.add(key)
+        selected.append(chunk_ids)
+    return selected
 
 
 def build_candidates(
@@ -257,7 +320,12 @@ def build_candidates(
     documents_by_file: dict[str, dict[str, Any]],
     chunks_by_doc: dict[str, list[Chunk]],
     max_window: int,
+    samples_sha256: str,
+    corpus_manifest_sha256: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    if not samples_sha256 or not corpus_manifest_sha256:
+        raise ValueError("samples and corpus manifest hashes are required")
+    _validate_samples(samples)
     rows: list[dict[str, Any]] = []
     queue: list[dict[str, Any]] = []
     decisions: list[dict[str, Any]] = []
@@ -272,6 +340,8 @@ def build_candidates(
             raise ValueError(f"sample document is absent from corpus: {document_file}")
         doc_id = str(document["doc_id"])
         source_sha = str(document.get("source_pdf_sha256") or "")
+        if not source_sha:
+            raise ValueError(f"corpus document is missing source_pdf_sha256: {doc_id}")
         groups: list[dict[str, Any]] = []
         for group in sample.get("gold_evidence_groups") or []:
             group_id = str(group.get("group_id") or "")
@@ -297,6 +367,7 @@ def build_candidates(
             groups.append(group_row)
             queue.append(
                 {
+                    "schema_version": SCHEMA_VERSION,
                     "sample_id": str(sample["sample_id"]),
                     "question": str(sample.get("question") or ""),
                     "document_file": str(document_file),
@@ -304,21 +375,26 @@ def build_candidates(
                     "corpus_id": corpus_id,
                     "chunk_contract_version": contract,
                     "source_pdf_sha256": source_sha,
+                    "samples_sha256": samples_sha256,
+                    "corpus_manifest_sha256": corpus_manifest_sha256,
                     **group_row,
                 }
             )
             decisions.append(
                 {
+                    "schema_version": SCHEMA_VERSION,
                     "sample_id": str(sample["sample_id"]),
                     "group_id": group_id,
                     "corpus_id": corpus_id,
                     "chunk_contract_version": contract,
                     "source_pdf_sha256": source_sha,
+                    "samples_sha256": samples_sha256,
+                    "corpus_manifest_sha256": corpus_manifest_sha256,
                     "decision": None,
-                    "primary_chunk_ids": [],
-                    "acceptable_alternative_chunk_ids": [],
+                    "selected_chunk_sets": [],
                     "selected_chunk_hashes": {},
                     "reviewer": "",
+                    "reviewer_type": "",
                     "reviewed_at": "",
                     "rationale": "",
                 }
@@ -332,6 +408,8 @@ def build_candidates(
                 "corpus_id": corpus_id,
                 "chunk_contract_version": contract,
                 "source_pdf_sha256": source_sha,
+                "samples_sha256": samples_sha256,
+                "corpus_manifest_sha256": corpus_manifest_sha256,
                 "evidence_groups": groups,
                 "minimal_required_group_ids": [group["group_id"] for group in groups],
                 "review_status": "unreviewed",
@@ -345,17 +423,27 @@ def freeze_qrels(
     candidates: list[dict[str, Any]],
     decisions: list[dict[str, Any]],
     chunks_by_doc: dict[str, list[Chunk]],
+    *,
+    review_decisions_sha256: str,
 ) -> list[dict[str, Any]]:
-    expected = {
-        (row["sample_id"], group["group_id"]): (row, group)
-        for row in candidates
-        for group in row["evidence_groups"]
-    }
+    if not review_decisions_sha256:
+        raise ValueError("review_decisions_sha256 is required")
+    expected: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]] = {}
+    for row in candidates:
+        if row.get("schema_version") != SCHEMA_VERSION:
+            raise ValueError("candidate schema version is stale")
+        for group in row["evidence_groups"]:
+            key = (str(row["sample_id"]), str(group["group_id"]))
+            if key in expected:
+                raise ValueError(f"duplicate candidate evidence group: {key}")
+            expected[key] = (row, group)
     provided: dict[tuple[str, str], dict[str, Any]] = {}
     for decision in decisions:
         key = (str(decision.get("sample_id") or ""), str(decision.get("group_id") or ""))
         if key in provided:
             raise ValueError(f"duplicate review decision: {key}")
+        if decision.get("schema_version") != SCHEMA_VERSION:
+            raise ValueError(f"review decision schema version is stale: {key}")
         provided[key] = decision
     if set(provided) != set(expected):
         missing = sorted(set(expected) - set(provided))
@@ -368,33 +456,44 @@ def freeze_qrels(
         eligible = True
         for group in row["evidence_groups"]:
             decision = provided[(row["sample_id"], group["group_id"])]
-            for field in ("corpus_id", "chunk_contract_version", "source_pdf_sha256"):
+            for field in (
+                "corpus_id",
+                "chunk_contract_version",
+                "source_pdf_sha256",
+                "samples_sha256",
+                "corpus_manifest_sha256",
+            ):
                 if decision.get(field) != row[field]:
                     raise ValueError(f"stale review decision binding for {row['sample_id']}/{group['group_id']}: {field}")
             action = str(decision.get("decision") or "")
             if action not in {"accept_candidate", "replace", "exclude"}:
                 raise ValueError(f"invalid review decision for {row['sample_id']}/{group['group_id']}")
-            if not all(str(decision.get(field) or "").strip() for field in ("reviewer", "reviewed_at", "rationale")):
+            if not all(
+                str(decision.get(field) or "").strip()
+                for field in ("reviewer", "reviewer_type", "reviewed_at", "rationale")
+            ):
                 raise ValueError(f"incomplete review provenance for {row['sample_id']}/{group['group_id']}")
-            primary = list(dict.fromkeys(str(value) for value in decision.get("primary_chunk_ids") or []))
-            alternatives = list(
-                dict.fromkeys(str(value) for value in decision.get("acceptable_alternative_chunk_ids") or [])
-            )
-            selected_ids = [*primary, *alternatives]
+            if decision["reviewer_type"] not in {"human", "independent_ai"}:
+                raise ValueError("reviewer_type must be human or independent_ai")
+            _validate_reviewed_at(str(decision["reviewed_at"]))
+            selected_sets = _selected_chunk_sets(decision)
+            selected_ids = list(dict.fromkeys(block_id for chunk_set in selected_sets for block_id in chunk_set))
             if action == "exclude":
-                if selected_ids:
+                if selected_sets:
                     raise ValueError("excluded evidence group cannot select chunks")
+                if decision.get("selected_chunk_hashes") not in ({}, None):
+                    raise ValueError("excluded evidence group cannot retain chunk hashes")
                 eligible = False
             else:
-                if not primary or any(block_id not in chunk_map for block_id in selected_ids):
+                if not selected_sets or any(block_id not in chunk_map for block_id in selected_ids):
                     raise ValueError(f"review decision selects invalid chunks for {row['sample_id']}/{group['group_id']}")
-                candidate_ids = {
-                    block_id
-                    for candidate in group["candidates"]
-                    for block_id in candidate["chunk_ids"]
-                }
-                if action == "accept_candidate" and not set(primary).issubset(candidate_ids):
-                    raise ValueError("accept_candidate must select proposed chunk ids")
+                if any(not chunk_map[block_id].is_indexable for block_id in selected_ids):
+                    raise ValueError("qrels may only select indexable chunks")
+                candidate_sets = {tuple(candidate["chunk_ids"]) for candidate in group["candidates"]}
+                if action == "accept_candidate" and any(
+                    tuple(chunk_set) not in candidate_sets for chunk_set in selected_sets
+                ):
+                    raise ValueError("accept_candidate must select complete proposed chunk sets")
                 expected_hashes = {
                     block_id: str(chunk_map[block_id].metadata["content_hash"])
                     for block_id in selected_ids
@@ -406,12 +505,12 @@ def freeze_qrels(
                     "group_id": group["group_id"],
                     "requirement": "required",
                     "source_evidence_sha256": group["source_evidence"]["verbatim_content_sha256"],
-                    "primary_chunk_ids": primary,
-                    "acceptable_alternative_chunk_ids": alternatives,
+                    "acceptable_chunk_sets": selected_sets,
                     "chunk_content_hashes": dict(decision.get("selected_chunk_hashes") or {}),
                     "decision": action,
                     "review_status": "reviewed",
                     "reviewer": decision["reviewer"],
+                    "reviewer_type": decision["reviewer_type"],
                     "reviewed_at": decision["reviewed_at"],
                     "rationale": decision["rationale"],
                 }
@@ -425,6 +524,9 @@ def freeze_qrels(
                 "corpus_id": row["corpus_id"],
                 "chunk_contract_version": row["chunk_contract_version"],
                 "source_pdf_sha256": row["source_pdf_sha256"],
+                "samples_sha256": row["samples_sha256"],
+                "corpus_manifest_sha256": row["corpus_manifest_sha256"],
+                "review_decisions_sha256": review_decisions_sha256,
                 "evidence_groups": frozen_groups,
                 "minimal_required_group_ids": row["minimal_required_group_ids"],
                 "review_status": "reviewed",
@@ -461,14 +563,21 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     sync_dir = _repo_path(args.sync_dir) if args.sync_dir else None
     samples = [dict(item) for item in read_jsonl(sample_path)]
     manifest, documents_by_file, chunks_by_doc = _load_corpus(manifest_path)
+    samples_sha256 = _sha256_file(sample_path)
+    corpus_manifest_sha256 = _sha256_file(manifest_path)
     candidates, queue, template = build_candidates(
         samples=samples,
         manifest=manifest,
         documents_by_file=documents_by_file,
         chunks_by_doc=chunks_by_doc,
         max_window=args.max_window,
+        samples_sha256=samples_sha256,
+        corpus_manifest_sha256=corpus_manifest_sha256,
     )
     output_dir.mkdir(parents=True, exist_ok=True)
+    frozen_path = output_dir / "frozen_chunk_qrels.jsonl"
+    if frozen_path.exists():
+        raise ValueError("output directory contains a stale frozen_chunk_qrels.jsonl")
     candidate_path = output_dir / "chunk_qrels_candidates.jsonl"
     queue_path = output_dir / "qrels_review_queue.jsonl"
     template_path = output_dir / "review_decisions.template.jsonl"
@@ -476,13 +585,18 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     write_jsonl(queue_path, queue)
     write_jsonl(template_path, template)
     classes = Counter(item["candidate_class"] for item in queue)
-    frozen_path = output_dir / "frozen_chunk_qrels.jsonl"
     frozen_rows: list[dict[str, Any]] = []
+    review_decisions_sha256 = ""
     if args.review_decisions:
-        frozen_rows = freeze_qrels(candidates, read_jsonl(_repo_path(args.review_decisions)), chunks_by_doc)
+        review_path = _repo_path(args.review_decisions)
+        review_decisions_sha256 = _sha256_file(review_path)
+        frozen_rows = freeze_qrels(
+            candidates,
+            read_jsonl(review_path),
+            chunks_by_doc,
+            review_decisions_sha256=review_decisions_sha256,
+        )
         write_jsonl(frozen_path, frozen_rows)
-    elif frozen_path.exists():
-        raise ValueError("stale frozen_chunk_qrels.jsonl exists without review decisions")
     summary = {
         "schema_version": SCHEMA_VERSION,
         "git_commit": subprocess.check_output(
@@ -490,6 +604,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         ).strip(),
         "corpus_id": manifest["corpus_id"],
         "chunk_contract_version": manifest["chunk_contract_version"],
+        "samples_sha256": samples_sha256,
+        "corpus_manifest_sha256": corpus_manifest_sha256,
+        "review_decisions_sha256": review_decisions_sha256 or None,
         "sample_count": len(samples),
         "document_bound_sample_count": len(candidates),
         "non_document_sample_count": len(samples) - len(candidates),
@@ -513,6 +630,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "command": "build_m1_chunk_qrels",
         "status": "success",
         "git_commit": summary["git_commit"],
+        "samples_sha256": samples_sha256,
+        "corpus_manifest_sha256": corpus_manifest_sha256,
+        "review_decisions_sha256": review_decisions_sha256 or None,
         "artifact_paths": [str(candidate_path), str(queue_path), str(template_path), str(summary_path)],
         "metrics": summary,
     }
