@@ -141,11 +141,13 @@ M1-G3.5 使用提交 `a31f7f3` 和既有 MinerU JSON 重建
 旧 v4 candidate/template 因 Chunk 内容哈希和 corpus manifest 变化而失效。v5 仍将
 150 个证据组全部放入复核队列：135 组有自动候选、15 组无自动候选。15 组人工审查
 已单独编码为 13 个 `replace` 和 2 个 `exclude`；其中 D04-009 的真实 MinerU
-`is_ocr=true` 对照仍无法提取图片内数值。该部分 decision 不能冻结；其余 135 组仍需
-显式复核并合并。v2 使用完整 `acceptable_chunk_sets` 表达 AND/OR 证据集合，并绑定
-样本、corpus manifest、PDF、Chunk 内容和复核决策哈希；只有覆盖所有必需证据组且
-全部绑定一致时，才能生成 `frozen_chunk_qrels.jsonl`。当前没有冻结 qrels，不得用
-candidate 或部分 decision 直接运行正式 Recall/MRR。
+`is_ocr=true` 对照仍无法提取图片内数值。其余 135 组独立复核已在 M1-G3.6 完成；
+合并后的 150 个证据组决定分布为 95 个
+`accept_candidate`、13 个 `replace`、42 个 `exclude`。v2 使用完整
+`acceptable_chunk_sets` 表达 AND/OR 证据集合，并绑定样本、corpus manifest、PDF、
+Chunk 内容和复核决策哈希；全部校验通过后生成 86 条 `frozen_chunk_qrels.jsonl`，
+其中 55 条可进入后续 Recall/MRR，31 条排除。服务器完整产物位于
+`outputs/m1_g3_frozen_qrels_qwen37_20260802/`；M1-G4 尚未运行。
 
 ## 6. 延后数据集
 

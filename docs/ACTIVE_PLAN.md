@@ -110,16 +110,13 @@ M1-G3.5 已达到 `accepted`：提交 `a31f7f3` 在真实六文档上完成算�
 编码为 13 个 `replace` 和 2 个 `exclude`；冻结器确认该部分 decision 不能生成正式
 qrels。旧 v4 candidate/template 已失效。
 
-当前执行 M1-G3.6：使用已配置 Qwen API 独立复核其余 135 个证据组，与 15 组人工
-decision 合并；只有 150/150 组通过 qrels v2 绑定、内容哈希和可索引性校验后才生成
-frozen qrels。该批不需要 GPU，不重建 BGE-M3/FAISS 索引，也不运行 M1-G4 检索评测。
-真实 API 首轮出现 HTTP 429/读取超时；按阶段计划先加入可恢复 partial 和瞬时错误
-有界重试，再以较低并发续跑，判定标准与冻结合同不变。
-可恢复续跑已保存 28/135 个独立 AI 决策；供应商随后返回 `insufficient_quota`，剩余
-107 组的旧模型依赖为 `blocked`。用户已将当前 worktree `.secrets/router_llm.env` 切换为
-`qwen3.7-max-2026-06-08`；保留既有 28 组 reviewer 来源，只续跑剩余 107 组。服务器 partial 位于
-`outputs/m1_g3_frozen_qrels_qwen37_20260802/ai_review_decisions.partial.jsonl`；不得用自动
-候选替代复核决定，也不得在 150/150 组完成前生成正式 frozen qrels。
+M1-G3.6 已达到 `frozen`：15 组项目所有者人工决定与 135 组独立 AI 决定完整覆盖
+150 个证据组，分布为 95 个 `accept_candidate`、13 个 `replace`、42 个 `exclude`。
+qrels v2 的样本/corpus/PDF/Chunk hash 与可索引性校验全部通过，生成 86 条冻结记录，
+其中 55 条可进入检索评测、31 条排除。完整产物位于服务器
+`outputs/m1_g3_frozen_qrels_qwen37_20260802/`，精选同步包位于
+`outputs/sync/m1_g3_frozen_qrels_qwen37_20260802/`。本批未使用 GPU、未重建索引、
+未运行检索指标；M1-G4 保持 `not_started`，等待用户明确批准后再开始。
 
 ## 停止条件
 
