@@ -116,7 +116,8 @@ frozen qrels。该批不需要 GPU，不重建 BGE-M3/FAISS 索引，也不运�
 真实 API 首轮出现 HTTP 429/读取超时；按阶段计划先加入可恢复 partial 和瞬时错误
 有界重试，再以较低并发续跑，判定标准与冻结合同不变。
 可恢复续跑已保存 28/135 个独立 AI 决策；供应商随后返回 `insufficient_quota`，剩余
-107 组在恢复 API 额度前为 `blocked`。服务器 partial 位于
+107 组的旧模型依赖为 `blocked`。用户已将当前 worktree `.secrets/router_llm.env` 切换为
+`qwen3.7-max-2026-06-08`；保留既有 28 组 reviewer 来源，只续跑剩余 107 组。服务器 partial 位于
 `outputs/m1_g3_frozen_qrels_qwen37_20260802/ai_review_decisions.partial.jsonl`；不得用自动
 候选替代复核决定，也不得在 150/150 组完成前生成正式 frozen qrels。
 
