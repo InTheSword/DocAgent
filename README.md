@@ -112,7 +112,7 @@ outputs/final_eval/
 - 确定性的抽取式文档摘要；
 - 基于持久化证据的确定性结构化提取；
 - 确定性的表格查找和简单、可追踪的计算；
-- `local_fact_qa` 工作流包装器；
+- 文档事实问答工作流包装器（历史内部名称仍为 `local_fact_qa`）；
 - AnswerPolicy 候选输出模式和引用白名单过滤；
 - 本地 TAT-QA / MP-DocVQA 验证子集准备；
 - 用于 MinerU API 生成证据映射的 MP-DocVQA 证据物化运行器；
@@ -133,11 +133,13 @@ outputs/final_eval/
 
 - [docs/ACTIVE_PLAN.md](docs/ACTIVE_PLAN.md)：当前里程碑和停止条件。
 - [CURRENT_STATUS.md](CURRENT_STATUS.md)：当前已验证的能力状态。
+- [DECISIONS.md](DECISIONS.md)：约束后续实现的长期决策。
+- [docs/workplans/README.md](docs/workplans/README.md)：阶段方案目录、状态和读取条件。
 - [docs/FINAL_DELIVERY_CLI.md](docs/FINAL_DELIVERY_CLI.md)：当前 CLI 交付指南。
-- [CURRENT_STATUS.md](CURRENT_STATUS.md)：当前已验证能力和证据边界。
 - [docs/DATASETS.md](docs/DATASETS.md)：数据集角色、划分策略和下载约束。
 - [AGENTS.md](AGENTS.md)：实现和验证的仓库规则。
 
 面向 PM 的交接文档已弃用，并非当前规划来源。
 
-历史阶段过程记录已从工作树中清除；需要审计时请查看 Git 历史，而不是将其作为当前规划来源。
+历史 workplan、设计和报告按需保留用于审计，但不自动成为当前规划来源；当前唯一实施
+依据始终以 `docs/ACTIVE_PLAN.md` 的精确引用为准。

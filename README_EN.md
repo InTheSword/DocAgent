@@ -131,7 +131,8 @@ commits.
 - deterministic extractive document summary;
 - deterministic structured extraction over persisted evidence;
 - deterministic table lookup and simple traceable calculations;
-- `local_fact_qa` workflow wrapper;
+- document fact-QA workflow wrapper (the legacy internal name remains
+  `local_fact_qa`);
 - AnswerPolicy candidate output schema and citation allowlist filtering;
 - local TAT-QA / MP-DocVQA validation-subset preparation;
 - MP-DocVQA evidence materialization runner for MinerU API-produced evidence maps;
@@ -158,10 +159,11 @@ commits.
 - [docs/ACTIVE_PLAN.md](docs/ACTIVE_PLAN.md): current milestone and stop
   condition.
 - [CURRENT_STATUS.md](CURRENT_STATUS.md): current verified capability status.
+- [DECISIONS.md](DECISIONS.md): durable decisions that constrain future work.
+- [docs/workplans/README.md](docs/workplans/README.md): workplan index, status,
+  and read conditions.
 - [docs/FINAL_DELIVERY_CLI.md](docs/FINAL_DELIVERY_CLI.md): current CLI
   delivery guide.
-- [CURRENT_STATUS.md](CURRENT_STATUS.md): current verified capabilities and
-  evidence boundaries.
 - [docs/DATASETS.md](docs/DATASETS.md): dataset roles, split policy, and
   download constraints.
 - [AGENTS.md](AGENTS.md): repository rules for implementation and validation.
@@ -169,5 +171,6 @@ commits.
 PM-oriented handoff documents are deprecated and are not current planning
 sources.
 
-Historical phase process records are removed from the working tree; use Git
-history for audit rather than treating them as current planning sources.
+Historical workplans, designs, and reports are retained when useful for audit,
+but do not become current planning sources automatically. The exact reference
+in `docs/ACTIVE_PLAN.md` is the only active implementation basis.

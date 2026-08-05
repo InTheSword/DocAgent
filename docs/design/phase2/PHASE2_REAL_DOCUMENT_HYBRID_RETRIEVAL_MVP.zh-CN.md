@@ -1,6 +1,9 @@
 # DocAgent Phase 2：真实文档接入与混合检索 MVP
 
-> 用途：供 Codex 继续推进 DocAgent 项目。  
+> 文档状态：历史设计参考。不得据此判断当前实现状态或直接启动新工作；当前事实与实施
+> 授权以 `CURRENT_STATUS.md`、`DECISIONS.md` 和 `docs/ACTIVE_PLAN.md` 为准。
+>
+> 历史用途：记录 Phase 2 真实文档接入与混合检索方案。
 > 前置状态：Phase 1 已完成，Qwen3 Base / SFT / GRPO Answer Policy 已接入 LangGraph，结构化输出、位置校验、有界修复和 SQLite Trace 已跑通。  
 > 核心原则：**优先补齐真实文档问答主链，先让系统成型，再优化检索与模型效果。**
 >

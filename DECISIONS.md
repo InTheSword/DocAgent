@@ -1,144 +1,127 @@
 # 长期决策
 
-更新日期：2026-08-02
+更新日期：2026-08-05
 
-本文档记录约束后续工作的当前选择。它不是按时间排序的任务日志，也不重复
-实现状态；状态请查看 `CURRENT_STATUS.md`。已被替代的讨论和实验细节可在 Git
-历史中查阅。
+> 本文档只记录会约束后续实现的稳定选择。当前完成状态和指标见
+> `CURRENT_STATUS.md`，当前实施授权见 `docs/ACTIVE_PLAN.md`，历史方案演进见
+> `docs/workplans/README.md`。
 
-## 产品边界
+## 1. 产品与执行边界
 
-DocAgent 仍是本地、CLI 优先的个人使用文档问答 MVP。UI、云存储、多用户服务、
-CDC、Demo 和新产品阶段均需要明确的范围决策。
+- DocAgent 是本地、CLI 优先的个人复杂文档问答 MVP。UI、云存储、多用户服务、
+  CDC、Demo 和新产品阶段必须单独立项。
+- 规范主路径为：文档输入或 `doc_id` → MinerU 原始结果 → 规范 Chunk → 查询决策与
+  按需查询变换 → 路由化检索/确定性工具 → AnswerPolicy → 答案、证据、引用与 trace。
+- RAG 查询侧使用外部 LLM API 的两个独立角色：`QueryDecision` 负责识别任务需求，
+  `QueryPlan` 负责决定是否 rewrite、expand 或 decompose。旧 Router/Planner 仅保留兼容，
+  不再是目标主路径。
+- 本地小模型保留给 AnswerPolicy 和后续有明确训练价值的垂直任务；不能为了满足“包含
+  微调”而仅训练输出格式。
 
-## 执行路径
+## 2. PDF、Chunk 与索引
 
-支持的路径是：文档输入或 `doc_id` 经持久化 Chunk、查询意图识别、按需查询
-变换、检索、AnswerPolicy、引用和追踪产物。RAG 问答使用外部 LLM API 驱动的
-两阶段 `QueryDecision -> QueryPlan`；确定性逻辑仅负责显式文档操作、约束
-提取、Schema 校验和 API 失败时的有界回退。旧 Router/QueryPlanner 只保留
-兼容，不再是 RAG 主路径。
+### 2.1 MinerU 边界
 
-## 模型与证据主张
+- PDF 统一交给 MinerU，不新增 PDF 类型分类器。原始 PDF API 默认请求 OCR，但公开
+  `is_ocr` 不能被解释为图片区域一定产生 OCR/VLM 内容。
+- 请求模型和实际解析后端分别记录；执行事实以 MinerU 返回的 layout backend、version
+  和 effort 为准。没有 image/chart 内容时保留视觉证据缺口，不伪造摘要。
+- MinerU 原始项不能直接索引。索引与引用只能消费经过字段规范化、结构恢复、关系处理、
+  跨页处理和长度切分后的 Chunk。
 
-关于真实 BGE-M3、重排序器、Qwen、MinerU API 和视觉 API 的主张必须有保存的
-服务器冒烟证据。本地 fixture、hash dense、关键词重排序、启发式 AnswerPolicy
-和 dry-run 路径不能证明真实组件完成。
+### 2.2 统一 Chunk 对象
 
-## PDF、Chunk 与索引
+- `Chunk` 是检索和引用的唯一领域对象，不再新建 `RetrievalChunk`。
+  `EvidenceBlock` 只作为历史代码、SQLite 表名和 JSONL 文件名的兼容名称。
+- Chunk 至少保留内容类型、物理页、可用的标注页码、标题层级/章节路径、来源项 ID、
+  全局 ID、内容哈希、关系字段和可用的上游摘要/标签。字段没有可靠来源时不得补造。
+- 原始 `Chunk.text` 与引用证据保持原文；`retrieval_text` 和 BM25 查询使用 NFKC，解决
+  全角拉丁字母和数字召回问题而不破坏溯源。
+- 同页邻接与全文阅读顺序使用不同关系字段；表格、图片、caption 和邻近正文的关系保存
+  在 Chunk 元数据中，不建立第二套内容对象。
 
-- PDF 和页面图像统一交给 MinerU；DocAgent 不增加 PDF 类型分类器。原始 PDF API
-  导入默认显式请求 `is_ocr=true`，仍保留显式关闭开关。公开 API 的该字段不能视为
-  图片区域 OCR 保证；目标图没有产生文本时必须保留视觉证据缺口。
-- `Chunk` 是标准 RAG 检索与引用领域对象，不再新增独立 `RetrievalChunk`
-  模型。`EvidenceBlock` 仅作为历史代码、SQLite 表名和 JSONL 文件名的兼容
-  别名；新解析与检索代码使用 `Chunk`。
-- MinerU 原始项不得直接进入索引。稳定边界为“原始 MinerU JSON → 字段规范化
-  → 标题层级 → 保守跨页正文合并 → 超长正文句界拆分 → Chunk 元数据与关系
-  定稿”；索引和引用只消费该过程输出的 Chunk。
-- 每个 Chunk 的统一元数据至少保留内容类型、文档物理页、可用的标注页码、
-  标题层级/章节路径、来源块 ID、全局 Chunk ID、内容哈希及可用的上游摘要/
-  标签。没有可靠来源时不为满足字段完整性而伪造 LLM 摘要。
-- `previous_block_id` / `next_block_id` 仅表示同页邻接；
-  `previous_document_block_id` / `next_document_block_id` 表示全文阅读顺序。
-  表格结构和图片/caption/邻近文本关系保存在 Chunk 元数据中，不另建第二套
-  内容对象。
-- 跨页合并仅处理相邻页面、相同章节和内容类型、前页末尾没有终止标点的正文/
-  列表/参考文献；不自动合并标题、表格和图像。超长文本在跨页处理后按句界和
-  子句界拆分，并保留来源项 ID/哈希、来源页、父 Chunk 和段序号。
-- MinerU `code/algorithm` 项必须组合 caption、body 与 footnote 后转换为可索引 Chunk；
-  不能因为上游没有通用 `text/content` 字段而丢弃。上游把图题和正文粘在同一项时，
-  只有短行几何、图题标记、紧邻视觉块和空正文槽等通用证据同时成立才允许修复，视觉
-  关系优先使用 bbox 横向重叠与垂直距离。
-- 原始 `Chunk.text` 与引用证据不做 Unicode 兼容折叠；`retrieval_text` 和 BM25 查询侧
-  统一使用 NFKC，避免全角拉丁字母/数字丢失，同时保持原文溯源保真。
-- 稀疏和稠密索引只接收具有非空 `retrieval_text` 的 Chunk。无文本视觉块保留
-  来源信息，但需经视觉理解补充文本后才能进入文本索引。
-- 页聚合块只用于上下文读取和审计，不作为普通检索候选，避免与子 Chunk
-  重复召回。Chunk 契约或 `retrieval_text` 变化后，既有文档需要重新转换并
-  重建稠密索引。
-- 结构化表格超过 12 行或序列化 Markdown 超过 1,800 字符时，保留完整
-  `structured_parent` 供结构化查询，并生成携带完整表题、表头、单位、脚注、
-  页码和行范围的 `retrieval_child` 供稀疏/稠密检索。父表不进入文本检索，
-  子表不重复进入结构化索引。
-- 检索评测保留两层真值：不随 Chunk 边界变化的原文 `source_evidence`，以及绑定
-  PDF 哈希、MinerU 产物、Chunk 合同和 corpus manifest 的 `chunk_qrels`。未复核的
-  自动对齐只能作为 candidate/诊断产物，不得进入正式 Recall/MRR。
-- `chunk_qrels` 使用 `acceptable_chunk_sets`：每个内层集合中的 Chunk 必须全部命中，
-  集合之间为 OR 关系。qrels 只能引用可索引 Chunk，并绑定冻结样本、corpus manifest、
-  PDF、Chunk 内容和复核决策哈希；旧 schema、部分候选或无明确来源的复核结果不得冻结。
-- 稠密索引必须保存由有序 block ID、`retrieval_text`、内容哈希和 Chunk
-  契约版本组成的 evidence hash；该指纹或模型不匹配时索引状态为 stale，
-  不允许静默复用。
-- MinerU image/chart 的非空 `content` 视为其内置视觉分析结果并直接进入
-  `visual_summary`；只有图注而没有该内容时仍标记为需要视觉理解。
-- 公开 MinerU v4 API 的请求模型与实际解析后端必须分开记录，以 `layout.json`
-  的 backend/version/effort 作为执行事实。当前 API 未公开 `image_analysis`
-  参数，真实 `vlm` 请求返回的 `hybrid/medium` 产物没有生成 image/chart
-  `content`，因此像素依赖问题仍保留按需外部 VLM 路径，不使用未文档化参数。
+### 2.3 合并、切分与特殊内容
 
-## 查询、工具与上下文
+- 跨页合并只处理相邻页面、相同章节与兼容类型，且前页末尾没有终止标点的正文、列表
+  或参考文献；标题、表格和图片不得自动跨页合并。
+- 超长正文在跨页处理后按句子/子句边界拆分，并保留来源项、父 Chunk、来源页和段序号。
+- MinerU 的 code/algorithm 项组合 caption、body 和 footnote 后形成可索引 Chunk，不能
+  因缺少通用 `text/content` 字段而丢弃。
+- 图题和正文分离必须基于可复用的文本、邻接和 bbox 证据，不能为单个样本增加特例。
+- 页聚合块只用于上下文读取和审计，不进入普通 Top-K 检索。
 
-- LLM 查询判断使用正交字段：`task_type` 表示事实查找、定位、分析、摘要或
-  控制状态，`evidence_types` 可同时选择 text/table/visual，`multi_step` 表示
-  是否需要独立子问题。旧 `semantic_fact/navigation/table_lookup/...` intent 仅由
-  代码确定性派生，用于现有 CLI、评测和产物兼容；内部工具名不属于 LLM 契约。
-- 意图路由与查询变换使用不同版本化角色提示词和精确输出 Schema。Router LLM
-  只输出 `task_type/evidence_types/multi_step`，不输出置信度、理由、工具或路由；
-  Transformer LLM 只输出一个 `none/rewrite/expand/decompose` 策略和最多 4 条
-  检索查询。`preserve_terms` 是从原问题确定性提取并校验的约束，不再是模型动作。
-- 两个 LLM 角色都请求 JSON Mode，并叠加拒绝额外字段的本地 Schema、枚举和组合
-  校验。首次语义非法时最多纠错重试一次，仍非法或 API 失败才进入有界回退；trace
-  不保存完整 prompt、原始生成或思维链。当前复杂查询仍只做一次静态拆解，不声称
-  具备循环式 Agentic RAG。
-- 显式的物理页、标注页码、内容类型和标题角色约束应在 BM25/稠密候选排序前
-  执行；当前仅采用保守的确定性导航语句识别，不把一般语义词误当作字段过滤。
-- Metadata 只用于 BM25/Dense 之前的候选硬过滤，不是独立排序路线，也不参与
-  RRF。无关键词命中的纯导航查询可以直接返回过滤后的文档顺序结果，但不得将其
-  表述为第三路检索分数。
-- 普通 Hybrid 仅融合 BM25 与 Dense。显式表格意图先把候选限制为表格 Chunk：
-  Markdown 序列化文本进入 BM25/Dense，`table_headers/table_rows` 进入确定性
-  关系查询；两类结果按 Chunk 合并。当前只接收上游显式意图与结构化查询，不在
-  检索器内部推测表格意图。
-- 查询重写和查询扩展只改变检索查询；AnswerPolicy 始终接收用户原问题。
-- 多查询只用于扩大 BM25/Dense 候选召回；CrossEncoder 重排以原始用户问题作为
-  最终相关性目标，不以任一子查询替代用户问题。
-- 检索和重排按 workflow 执行，不作为所有查询的固定流水线：navigation 默认使用
-  Metadata 前置过滤与 BM25；普通正文事实和复杂/多步正文分析默认使用
-  Hybrid+Reranker。查询复杂度只决定是否扩展、拆解或多路检索，不单独决定是否
-  精排。纯表格结构化、纯视觉、摘要、无需检索和澄清路径不强制执行通用文本
-  Reranker。调用方配置是能力上限，查询计划只能降级。
-- `QueryPlan.retrieval_routes` 表示规划能力，检索 trace 另以 `executed_routes`
-  记录实际执行的 sparse、dense、metadata filter、multi-query 和结构化表格路径；
-  不再用规划标签命中率代替执行路径验证。
-- 中英文统一使用 BGE-M3 与 bge-reranker-v2-m3；查询变换默认保持文档和问题
-  语言，不对中文查询无条件生成英文扩展。只有冻结评测证明持续语言差距时才
-  另立语言专用模型方案。
-- 输入超限时优先减少检索证据，不允许通过保留提示词尾部而截掉系统指令或问题。
-- 现有精确页读取、全量结构抽取、表格单元格选择和确定性计算继续作为文档操作
-  保留；它们不能被仅返回 Top-K Chunk 的普通检索等价替换。视觉分析只在已检索
-  图像/图表文本证据不足时按需执行。
+### 2.4 表格与视觉内容
 
-## 第一阶段评测
+- 长表保留一个 `structured_parent` 供关系查询，并生成携带表题、完整表头、单位、脚注、
+  页码和行范围的 `retrieval_child` 供文本检索。父表不进入文本检索，子表不重复进入
+  结构化索引。
+- 当前长表触发条件为超过 12 行或 Markdown 序列化超过 1,800 字符；修改阈值必须通过
+  新的阶段评测，而不是针对单表调参。
+- 无文本视觉块保留来源与关系，但只有获得可靠视觉摘要后才可进入文本索引。图题命中
+  不能被描述为图内理解；像素依赖问题按需调用外部 VLM。
 
-第一阶段 RAG 报告只保留可直接量化的核心指标：Chunk 可索引数量、空检索文本
-比例、来源可追溯率、Recall@5、MRR@5、平均延迟和 P95 延迟。依赖人工细粒度
-标注或 LLM Judge 的忠实度、Context Precision 和引用蕴含暂不作为本阶段门禁。
+### 2.5 索引一致性
 
-## 答案质量与训练
+- 稀疏和稠密索引只接收非空 `retrieval_text` 的可索引 Chunk。
+- 稠密索引保存由有序 Chunk ID、检索文本、内容哈希、Chunk 契约版本和嵌入模型组成的
+  指纹；任一不匹配即为 stale，不得静默复用。
+- Chunk 契约或检索文本变化后，受影响文档必须重新转换并重建稠密索引。
 
-全路径 Qwen 运行属于执行诊断，不是最终答案质量验收。正式答案质量评测、新的
-SFT/GRPO 运行、检查点替换、奖励变更或训练数据构建均需明确批准。验证子集绝不
-得成为训练输入。
+## 3. 查询、路由与检索
 
-## 数据与产物
+### 3.1 LLM 输出合同
 
-只保留当前 Phase 5 诊断路径所需的验证输入。大型下载需要批准。生成输出、日志、
-检查点、数据库和原始数据集不进入 Git；精简服务器同步包是可选排障证据，而不是
-项目归档。
+- `QueryDecision` 使用正交字段表达任务类型、证据类型和是否多步；不让 LLM 输出置信度、
+  理由、工具名或内部 workflow。
+- `QueryPlan` 只输出一个 `none/rewrite/expand/decompose` 动作和最多 4 条检索查询。
+  `preserve_terms` 由确定性逻辑提取和校验，不是模型动作。
+- 两个角色使用独立、版本化提示词和拒绝额外字段的 Schema。首次语义非法最多纠错一次，
+  仍非法或 API 失败时进入有界回退；trace 不保存完整 prompt、原始生成或思维链。
+- 当前复杂查询只进行一次静态拆解，不声称已经实现循环式 Agentic RAG。
 
-## 文档策略
+### 3.2 检索执行
 
-当前规划、状态、决策、操作指南、数据集和服务器职责已在
-`docs/ACTIVE_PLAN.md` 中分离。历史阶段计划、PM 任务包和过程报告被有意移除，
-而非作为相互竞争的事实来源继续维护。
+- 显式物理页、标注页码、内容类型和标题角色约束在 BM25/Dense 前执行。Metadata 是前置
+  过滤，不是参与 RRF 的第三路检索分数。
+- 普通 Hybrid 只融合 BM25 与 Dense；RRF 按规范 Chunk ID 去重。多查询用于扩大候选，
+  CrossEncoder 最终始终以用户原问题重排。
+- 检索和精排按 workflow 执行，而不是所有查询固定通过同一流水线。调用方配置是能力
+  上限，查询计划只能降级。
+- 显式表格查询并行使用表格 Chunk 的 BM25/Dense 召回与确定性关系查询，再按 Chunk
+  合并；纯结构化、纯视觉、摘要、无需检索和澄清路径不强制执行通用文本 Reranker。
+- `QueryPlan.retrieval_routes` 表示计划能力，trace 的 `executed_routes` 记录实际稀疏、
+  稠密、Metadata、多查询和结构化路径；不得用计划标签冒充实际执行。
+
+### 3.3 问题、上下文与工具
+
+- 查询重写、扩展和拆解只改变检索查询；AnswerPolicy 始终接收用户原问题。
+- 输入超限时优先裁减检索证据，不允许截掉系统指令或用户问题。
+- 精确页读取、全量结构抽取、表格单元格选择和确定性计算是文档操作能力，不能被普通
+  Top-K 检索等价替换。视觉分析只在已召回文本证据不足时按需执行。
+- 中英文统一使用 BGE-M3 与 bge-reranker-v2-m3；只有新的冻结评测证明持续语言差距时，
+  才考虑语言专用嵌入模型。
+
+## 4. 评测、训练与证据
+
+- 检索评测保留不随 Chunk 边界变化的 `source_evidence` 和绑定具体 corpus 的
+  `chunk_qrels`。未复核自动对齐只能作为 candidate，不能进入正式 Recall/MRR。
+- `acceptable_chunk_sets` 的内层 Chunk 为 AND、不同集合为 OR；qrels 只能引用可索引
+  Chunk，并绑定样本、PDF、corpus manifest、Chunk 内容和复核决策哈希。
+- 正式检索至少报告 evidence-group Recall@5、Any-group Hit@5、All-required-groups
+  Hit@5、MRR@10、平均延迟和 P95；表格结构化答案与视觉理解另行评测。
+- 冻结评测集不得用于训练，也不得在同一小集合上反复调参。一次正式评测后的优化需要
+  新 workplan，并保留原始结果。
+- 全路径真实模型运行只证明执行链可用。最终答案正确性、忠实度、引用支持度、视觉答案
+  质量和新的 SFT/GRPO 均需要独立目标、独立数据与验收合同。
+- Mock、fixture、hash dense、关键词 reranker、启发式 AnswerPolicy 和 dry-run 不能证明
+  真实模型能力。涉及真实模型的主张必须有服务器/API 验证和紧凑可核验产物。
+
+## 5. 数据、产物与文档治理
+
+- 大型模型、数据集、数据库、完整日志、原始输出树和密钥不进入 Git；服务器只按需要
+  生成紧凑同步包，本地无需复制非必要大型结果。
+- `AGENTS.md` 规定执行规则；`ACTIVE_PLAN.md` 只登记唯一活动方案；
+  `docs/workplans/README.md` 负责方案发现；`CURRENT_STATUS.md` 记录当前事实；本文记录
+  长期决策。任何历史报告、旧设计或审查文档都不能自行授权实施。
+- 大范围实现完成后，稳定结论进入本文或 `CURRENT_STATUS.md`，活动引用从
+  `ACTIVE_PLAN.md` 移除；已完成 workplan 保留用于审计，但不继续充当当前事实来源。

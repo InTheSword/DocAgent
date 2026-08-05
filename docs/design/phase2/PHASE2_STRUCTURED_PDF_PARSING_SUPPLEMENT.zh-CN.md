@@ -1,6 +1,9 @@
 # DocAgent Phase 2 补充实施任务：结构感知 PDF 解析与上下文保留
 
-> 目的：补充 `DocAgent_Phase2_RealDocument_HybridRetrieval_MVP.md`。  
+> 文档状态：历史设计参考。不得据此判断当前实现状态或直接启动新工作；当前事实与实施
+> 授权以 `CURRENT_STATUS.md`、`DECISIONS.md` 和 `docs/ACTIVE_PLAN.md` 为准。
+>
+> 历史目的：补充 Phase 2 真实文档接入与混合检索方案。
 > 原则：不扩大 Phase 2 的总体范围，只补齐避免“PDF 全量转文本 + 固定切片”所必须的结构化处理能力。  
 > 优先级：先形成可用闭环，再优化复杂版面、跨页表格和视觉理解效果。
 >

@@ -1,7 +1,10 @@
 # 当前计划
 
-> 当前里程碑、范围边界和停止条件的唯一来源。历史任务记录保留在 Git
-> 历史中，不作为当前规划输入。
+更新日期：2026-08-05
+
+> 本文档是“现在可以做什么”的唯一来源，只记录当前阶段、活动实施依据、范围、
+> 资源边界和停止条件。已验证能力见 `CURRENT_STATUS.md`，长期架构决策见
+> `DECISIONS.md`。
 
 ## 当前阶段
 
@@ -9,134 +12,78 @@
 Phase 5 个人使用 DocAgent MVP
 ```
 
+当前没有执行中的产品实现里程碑。M1 Chunk/qrels、查询决策与正式检索测评已经结束，
+Markdown 文档治理修订也已完成；后续产品优化方向尚未选定。
+
 ## 当前实施依据
 
-当前没有执行中的临时实施计划。已完成的 M1 Chunk/qrels 与正式检索测评记录保留在
-`docs/workplans/M1_CHUNK_QRELS_ALIGNMENT_PLAN.md`，不再作为后续工作的当前事实来源。
-进入下一轮优化、答案评测或训练前必须由用户明确批准并建立新的阶段计划。
+当前没有活动 workplan。不得把 `docs/workplans/` 中任意已完成方案自动当作当前任务。
 
-## 当前目标
+开始新的跨模块实现、公共契约变更、正式评测或训练前，必须：
 
-维护已验收的本地、CLI 优先的文档问答交付路径：
+1. 由用户明确选择目标；
+2. 查看 `docs/workplans/README.md`，确认是延续历史问题还是新阶段；
+3. 在 `docs/workplans/` 新建临时方案，并在本节写出唯一的精确路径；
+4. 先冻结范围、接口、验收、资源边界和停止条件，再修改代码。
+
+若本节没有列出具体文件，则旧 workplan 只可用于历史追溯，不能授权实施。
+
+## 维护中的交付路径
 
 ```text
 文件或既有文档
--> 导入 / 持久化 Chunk
--> 路由与检索
+-> MinerU 解析与规范 Chunk 持久化
+-> 查询决策与按需查询变换
+-> Metadata 前置约束与路由化检索
 -> AnswerPolicy
 -> answer + reasoning_summary + evidence_used + citations + trace_path
 ```
 
-本阶段将把 RAG 问答主路径迁移为外部 LLM API 驱动的查询意图识别和按需查询
-变换。确定性逻辑只承担显式文档操作、契约校验和 API 失败时的有界回退；旧
-规则路由与旧查询规划器在新链路验收前保留兼容，但不再作为目标架构。
+产品边界仍是本地、CLI 优先的个人文档问答 MVP。当前目标是维护这条已经建立的交付
+路径，不在没有新计划时静默扩展产品范围。
 
-## 已验证的交付状态
+## 当前允许范围
 
-| 能力 | 状态 | 边界 |
-|---|---|---|
-| 旧路由与查询规划兼容 | `accepted` | 仅保留显式文档操作与旧产物字段兼容，不再是 RAG 问答主路径。 |
-| 统一 CLI 与文件到答案导入 | `accepted` | 已接入文本、既有 MinerU 输出和原始 PDF MinerU API 输入。 |
-| 全模型工作流 | `real_model_verified` | 真实 API 路由/规划、BGE-M3、重排序器、Qwen AnswerPolicy、引用和追踪产物均有服务器冒烟证据。 |
-| 证据恢复与仅 stderr 进度反馈 | `real_model_verified` | `user_best` 启用有界替换检索，JSON stdout 仍兼容。 |
-| 确定性文档摘要、表格查找和简单计算 | `implemented` | 已有本地定向和 Phase 5 回归覆盖。 |
-| MinerU Chunk 与索引契约 | `real_model_verified` | 12 页真实 VideoTree MinerU 产物在本地与服务器均重建为 184 个 `docagent_chunk_v3` Chunk（171 个可索引、3 个跨页、12 个句界拆分），契约错误为 0，并已用真实 BGE-M3 建立索引。 |
-| 多路检索与结构化约束 | `real_model_verified` | 不经意图路由、查询规划和查询重写的真实 BGE-M3＋重排序器验证中，普通查询 Hit@5 为 18/18，表格文本 Hit@5 为 6/6，4 个结构化查询精确匹配；Metadata 仅作前置过滤。该小型回归集不是正式检索基准。 |
-| 原问题/检索查询分离与证据优先截断 | `implemented` | 查询变换只进入检索；问答保留原问题，超限时先裁减证据。新的 AnswerPolicy 联合冒烟尚未执行。 |
-| 新查询意图、路由与查询变换链 | `real_model_verified` | M1-F2 当前契约已改为正交任务/证据/复杂度字段、单一变换策略、JSON Mode＋严格校验＋一次纠错重试，并按 workflow 选择 BM25/Hybrid/Hybrid+Reranker。提交 `d2b52b6` 的真实 Qwen API 与 BGE-M3/reranker 接线冒烟通过；F1 冻结指标属于旧契约，当前契约尚未重新 benchmark。 |
-| 最终答案质量基准 | `not_started` | 现有诊断运行不构成正式答案质量验收。 |
-| 新的 SFT/GRPO 训练与检查点变更 | `not_started` | 需要明确批准及独立训练数据。 |
-| 正式视觉问答基准 | `not_started` | 现有视觉 API 执行证据不构成基准验收。 |
+- 用户明确要求的只读检查、解释和状态核对；
+- 不改变公共契约的局部缺陷修复及最小充分验证；
+- 当前执行链、证据、引用、CLI 或确定性工具的维护；
+- 仓库、文档和不改变产品行为的工程维护。
 
-## 允许范围
+出现跨模块修改、执行链变化、公共 Schema 变化、正式模型质量主张或需要反复调参时，
+必须停止并先建立新的 workplan。
 
-- 按当前临时实施计划升级查询意图、查询变换和检索前路由，并完成对应的最小验证。
-- 修复当前“文件/文档到答案”执行链、证据与引用契约、确定性工具或 CLI
-  可用性。
-- 仅在变更主张涉及真实依赖时运行定向本地测试和既有服务器冒烟。
-- 执行不改变交付契约的仓库与文档维护。
+## 未经新计划不得开展
 
-## 未经明确批准不得开展
+- 在 M1-G4 冻结查询集上继续调参或重复追逐指标；
+- 新的答案质量基准、视觉问答基准或大型数据集评测；
+- SFT/GRPO 数据重建、训练、奖励修改或检查点替换；
+- UI、云服务、多用户系统、CDC、Demo 或新产品阶段；
+- 自动恢复任何已经完成的历史 workplan。
 
-- 新训练运行、检查点替换、奖励变更，或将验证子集用作训练数据。
-- 正式 MP-DocVQA/TAT-QA 答案基准，或以单样本指标为目的的修复。
-- UI、云服务、VLM 基准、CDC、Demo 或新阶段。
+## 资源与验证边界
 
-## 验证边界
-
-M1-A 至 M1-D 的确定性实现属于 `local_only`；M1-E 的 MinerU 语料准备和真实
-BGE-M3/重排序器评测属于 `server_required`。凡涉及 MinerU API、BGE-M3、重排序器、
-Qwen、VLM、SFT/GRPO 或大型数据集的变更，必须先按
-`docs/GPU_SERVER_BOUNDARY.md` 分类；执行服务器操作前必须阅读
-`docs/SERVER_SETUP.md`。
-
-## 当前里程碑
-
-M1 Chunk/qrels 修复前只读核查已完成：六文档共有 1,222 个 Chunk、1,016 个可索引
-Chunk；150 个原文证据组只有 90 个被当前自动流程映射。60 个未映射组中，诊断发现
-相邻多 Chunk 覆盖、页码不一致、OCR/公式/表格序列化差异和原文保留不足等多种原因。
-正文 1,200 字符句界切分整体可用，但表格尚无父子 Chunk，且存在相邻表格与表题错配。
-
-M1-G2 已达到 `accepted`：提交 `bca0893` 修复了 MinerU 多项组合表题中
-换行/空格归一化差异导致的检索文本污染；服务器相关回归 90 项通过。六文档使用既有
-MinerU JSON 在隔离目录重建为 1,233 个 Chunk（1,022 个可索引），30 个物理表生成
-5 个结构化父块和 11 个行组检索子块；Chunk 合同和表格父子合同错误均为 0，
-表 14/表 15 的元数据与实际检索文本均已分离。旧 `data/documents` 的 Chunk 文件哈希
-未改变；本批未调用 MinerU API、未重建稠密索引、未生成 qrels。验收产物位于服务器：
-
-```text
-outputs/sync/m1_g2_chunk_rebuild_bca0893_20260802/
-```
-
-M1-G3 qrels v2 candidate 已达到 `ready`：提交 `edcc03f` 使用完整
-`acceptable_chunk_sets` 表达多 Chunk 与等价证据集合，并对可索引性、唯一性、复核
-来源、样本/corpus manifest/decision 哈希和 schema 版本执行 fail-closed 校验。基于
-M1-G2 corpus 重新生成 86 条 candidate、150 条复核队列和 150 条 decision 模板；
-135 个证据组有候选，15 个无候选。服务器同范围 21 项回归通过，真实空白 v2 模板被
-拒绝且未生成 `frozen_chunk_qrels.jsonl`。最终服务器精选产物：
-
-```text
-outputs/sync/m1_g3_chunk_qrels_candidates_v4_20260802/
-```
-
-M1-G3.5 已达到 `accepted`：提交 `a31f7f3` 在真实六文档上完成算法/代码块保留、
-检索 NFKC、图题/正文分离和 bbox 图题关联；重建 corpus 含 1,239 个 Chunk、1,028 个
-可索引 Chunk，合同错误为 0。真实 MinerU `is_ocr=true` 对照仍未提取膳食宝塔图片内
-数值，因此未伪造视觉文本。基于新 corpus 的 v5 candidate 已生成，15 个原无候选组
-编码为 13 个 `replace` 和 2 个 `exclude`；冻结器确认该部分 decision 不能生成正式
-qrels。旧 v4 candidate/template 已失效。
-
-M1-G3.6 已达到 `frozen`：15 组项目所有者人工决定与 135 组独立 AI 决定完整覆盖
-150 个证据组，分布为 95 个 `accept_candidate`、13 个 `replace`、42 个 `exclude`。
-qrels v2 的样本/corpus/PDF/Chunk hash 与可索引性校验全部通过，生成 86 条冻结记录，
-其中 55 条可进入检索评测、31 条排除。完整产物位于服务器
-`outputs/m1_g3_frozen_qrels_qwen37_20260802/`，精选同步包位于
-`outputs/sync/m1_g3_frozen_qrels_qwen37_20260802/`。本批未使用 GPU、未重建索引、
-未运行检索指标。
-
-M1-G4 已达到 `benchmark_evaluated`：提交 `f0b92cb` 使用 reviewed qrels v2、当前
-Qwen API、真实 BGE-M3/FAISS 与 bge-reranker-v2-m3 完成 94 条查询和 54 条检索样本
-的冻结配置测评，共 432 条检索明细。Policy-selected 的 Group Recall@5、
-All-groups@5、MRR@10 为 0.5125/0.5741/0.7799；planned Hybrid+Reranker 为
-0.5750/0.5741/0.7780。6/6 索引按当前 Chunk hash 重载，正式产物和精选同步包已保存。
-本阶段未进行答案评测、训练或测后调参，现已停止。
+- Markdown、确定性逻辑、CLI 胶水、SQLite/JSON 契约通常为 `local_only`。
+- 真实 BGE-M3、重排序器、Qwen、VLM、在线 MinerU、训练或正式模型评测为
+  `server_required` 或需要真实 API 验证。
+- 具体判定以 `docs/GPU_SERVER_BOUNDARY.md` 为准；服务器执行前读取
+  `docs/SERVER_SETUP.md`。
 
 ## 停止条件
 
-不得自动切换阶段或开始基准/训练工作。完成一项维护请求所需的定向验证与
-文档更新（如有）后即停止。
+没有活动 workplan 时，完成用户明确要求的维护或分析后即停止。不得自动选择下一阶段，
+也不得从历史报告、审查文档或旧 workplan 推导新的实施授权。
 
-## 文档职责图
+## 文档导航
 
-| 文档 | 职责 |
+| 文档 | 唯一职责 |
 |---|---|
-| `README.md` / `README_EN.md` | 面向使用者的入口、输出契约和导航。 |
 | `AGENTS.md` | 仓库执行、范围、测试和服务器规则。 |
-| `docs/ACTIVE_PLAN.md` | 当前里程碑与允许范围。 |
-| `docs/workplans/` | 当前大范围实现的临时计划；方案变化先更新计划，验收后不作为长期事实来源。 |
-| `CURRENT_STATUS.md` | 精简的已验证能力与证据状态索引。 |
-| `DECISIONS.md` | 约束后续工作的长期决策。 |
-| `docs/FINAL_DELIVERY_CLI.md` | 实用 CLI 操作指南与限制。 |
-| `docs/DATASETS.md` | 数据集角色、划分与下载策略。 |
-| `docs/GPU_SERVER_BOUNDARY.md` / `docs/SERVER_SETUP.md` | 资源分类与稳定服务器流程。 |
-| `docs/design/phase2/` 与 `docs/DocAgent 技术文档 3.0.pdf` | 历史技术设计参考，绝不可作为当前状态来源。 |
+| `docs/ACTIVE_PLAN.md` | 当前阶段、活动实施依据、允许范围和停止条件。 |
+| `docs/workplans/README.md` | workplan 目录、状态和读取条件。 |
+| `CURRENT_STATUS.md` | 当前已验证能力、指标、边界和规范证据入口。 |
+| `DECISIONS.md` | 约束后续实现的长期产品与技术决策。 |
+| `docs/FINAL_DELIVERY_CLI.md` | 当前 CLI 使用方式和输出契约。 |
+| `docs/DATASETS.md` | 数据集角色、划分和使用限制。 |
+| `docs/GPU_SERVER_BOUNDARY.md` / `docs/SERVER_SETUP.md` | 资源分类和稳定服务器流程。 |
+| `docs/reports/` | 特定运行的分析报告，不定义当前状态或实施授权。 |
+| `docs/design/` | 历史设计参考，不定义当前状态或实施授权。 |
